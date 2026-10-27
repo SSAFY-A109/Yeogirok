@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "$description": "스킬의 출처 기록. project 출처는 이 저장소에서 작성한 스킬이다. 웹 전제의 외부 스킬 5종(frontend-design, ui-ux-pro-max, vercel-react-best-practices, design-system, brand)은 규칙과 내용이 겹치고 세션 토큰을 크게 먹어 2026-09-08 제거했다. 다시 들이지 않는다. 2026-10-27 fintech-ui-patterns(KeyFin)를 yeogirok-ui-patterns로 교체했다.",
+  "skills": {
+    "pencil-design": {
+      "source": "project",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pencil-design/SKILL.md"
+    },
+    "yeogirok-ui-patterns": {
+      "source": "project",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/yeogirok-ui-patterns/SKILL.md"
+    }
+  }
+}

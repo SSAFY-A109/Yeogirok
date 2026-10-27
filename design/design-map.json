@@ -1,0 +1,93 @@
+{
+  "$description": "화면·컴포넌트 → design.pen(Pencil) 노드 매핑과 팀 Figma 참고 위치. 코드 구현의 확정본은 Pencil이다. 화면·컴포넌트를 구현하기 전에 여기서 pencil 노드 id를 찾아 Pencil MCP `Get`(구조·프레임 자체의 fill·좌표)과 `TakeScreenshot`(시각)으로 대조한다. pencil이 '없음'이면 DESIGN.md 기준으로 구현하고 보고서에 'Pencil 미대조'로 표시한다. figma 필드는 팀 Figma의 참고 위치(구성·문구·흐름)이며 값·토큰의 근거로 쓰지 않는다.",
+  "pencil": {
+    "file": "design.pen",
+    "updatedAt": "2026-10-27",
+    "note": "2026-10-27 KeyFin(이전 핀테크 프로젝트) 아트보드 16개와 이미지 14장을 제거하고, 문서 변수 49개를 여기록 Figma 디자인 시스템 값으로 교체했다. 여기록 화면 아트보드는 아직 없다 — pencil-design 절차 A로 그리면서 아래 screens에 기록한다.",
+    "variables": "문서 변수 49개 = 시맨틱 색 34(라이트 단일 값) + white/black + radius-xs·sm·md·lg·xl + size-touch·button-sm·button-md·button-lg·input·icon·icon-sm + font-sans(Noto Sans KR). 이름이 곧 tokens.json 경로다."
+  },
+  "figma": {
+    "file": "자율 A109 (t6whqCoBlVvwqBs8aCCuvG)",
+    "designSystem": "Design 페이지(414:485) — Design System 프레임(414:486: 색·타이포·간격·사용 규칙), Design System Components 프레임(418:407)",
+    "variables": "여기록 · Primitives(22) · 여기록 · Semantic Colors(26, Light) · 여기록 · Layout(18). 대응표는 DESIGN.md §2",
+    "wireframe": "Wireframe 페이지(260:408) — 화면 번호 Wxx. Pencil 아트보드 이름에 같은 번호를 쓴다",
+    "userFlow": "User Flow 페이지(0:1) — 아래쪽 다이어그램이 기준(기능 명세서 v2)",
+    "role": "참고 전용. 화면 구성·문구·흐름과 변수 값의 출처이며, 코드는 Figma를 직접 읽지 않는다. 팀원 레이어가 있으므로 쓰기는 사용자가 요청한 범위만 한다."
+  },
+  "components": {
+    "Text": {
+      "code": "components/ui/text.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "텍스트 스타일 여기록/* (Design 페이지)"
+    },
+    "Button": {
+      "code": "components/ui/button.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Action / Button (418:440) — Size Medium·Large × Style Primary·Secondary·Outline × State Default·Disabled"
+    },
+    "Input": {
+      "code": "components/ui/input.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Search / TextField (418:454)의 입력 영역"
+    },
+    "SearchField": {
+      "code": "components/ui/search-field.tsx",
+      "pencil": "없음",
+      "figma": "Search / TextField (418:454) — State Default·Focused·Error"
+    },
+    "FilterChip": {
+      "code": "components/ui/filter-chip.tsx",
+      "pencil": "없음",
+      "figma": "Selection / FilterChip (418:471) — Size Small·Medium × State Default·Selected·Disabled"
+    },
+    "Badge": {
+      "code": "components/ui/badge.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Feedback / Badge (418:484) — Tone Neutral·Brand·Coral·Success"
+    },
+    "Card": {
+      "code": "components/ui/card.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Skeleton": {
+      "code": "components/ui/skeleton.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Separator": {
+      "code": "components/ui/separator.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Icon": {
+      "code": "components/ui/icon.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음 (lucide icon 노드)"
+    },
+    "Dialog": {
+      "code": "components/ui/dialog.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "TabBar": {
+      "code": "components/ui/tab-bar.tsx",
+      "pencil": "없음",
+      "figma": "Wireframe 페이지 컴포넌트 '공통 / 하단 탭' — 탭 5개: 메인 페이지·여행방 관리·AR 팁·기록·지도"
+    },
+    "EmptyState": {
+      "code": "components/ui/empty-state.tsx",
+      "pencil": "없음"
+    },
+    "BottomSheet": {
+      "code": "components/ui/bottom-sheet.tsx",
+      "pencil": "없음"
+    }
+  },
+  "screens": {},
+  "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."
+}

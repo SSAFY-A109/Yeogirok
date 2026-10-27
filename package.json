@@ -1,0 +1,52 @@
+{
+  "name": "yeogirok-fe",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.13.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "ui:add": "pnpm dlx shadcn@latest add --yes",
+    "tokens:sync": "node scripts/sync-pen-tokens.cjs && node scripts/sync-tokens.cjs",
+    "tokens:check": "node scripts/sync-pen-tokens.cjs --check && node scripts/sync-tokens.cjs --check && node scripts/check-tokens.cjs",
+    "harness:sync": "node scripts/sync-harness.cjs",
+    "harness:check": "node scripts/check-harness.cjs",
+    "harness:backup": "node scripts/harness-backup.cjs",
+    "harness:restore": "node scripts/harness-restore.cjs",
+    "e2e": "maestro test .maestro/flows"
+  },
+  "dependencies": {
+    "@expo/ui": "~58.0.23",
+    "expo": "~58.0.19",
+    "expo-constants": "~58.0.13",
+    "expo-device": "~58.0.5",
+    "expo-font": "~58.0.10",
+    "expo-glass-effect": "~58.0.5",
+    "expo-image": "~58.0.17",
+    "expo-linking": "~58.0.14",
+    "expo-router": "~58.0.26",
+    "expo-splash-screen": "~58.0.11",
+    "expo-status-bar": "~58.0.4",
+    "expo-symbols": "~58.0.4",
+    "expo-system-ui": "~58.0.6",
+    "expo-web-browser": "~58.0.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-gesture-handler": "~3.3.0",
+    "react-native-reanimated": "4.7.1",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0",
+    "react-native-web": "~0.21.4",
+    "react-native-worklets": "0.13.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3"
+  }
+}
