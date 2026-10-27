@@ -88,6 +88,14 @@
       "pencil": "없음"
     }
   },
-  "screens": {},
+  "screens": {
+    "kakao-map-test": {
+      "route": "/kakao-map-test",
+      "pencil": "없음",
+      "figma": "없음 — 개발 전용 SDK 연결 테스트",
+      "features": [],
+      "note": "사용자 요청에 따른 네이티브 카카오맵 검증 화면. DESIGN.md 토큰 기준, Pencil 미대조."
+    }
+  },
   "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."
 }
