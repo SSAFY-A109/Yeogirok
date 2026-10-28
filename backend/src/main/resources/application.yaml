@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: yeogirok
+  profiles:
+    default: local
+  # backend/.env 가 있으면 환경 변수처럼 읽는다(.env.example 참고). 없으면 OS 환경 변수만 쓴다.
+  config:
+    import: optional:file:.env[.properties]
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마 관리 도구는 ERD 확정 뒤에 정한다. 그 전까지 로컬에서만 엔티티 기준으로 테이블을 만든다(application-local.yaml).
+      ddl-auto: none
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
