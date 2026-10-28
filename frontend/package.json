@@ -22,8 +22,6 @@
   },
   "dependencies": {
     "@expo/ui": "~58.0.23",
-    "@react-native-kakao/core": "2.2.7",
-    "@react-native-kakao/map": "2.2.7",
     "expo": "~58.0.19",
     "expo-build-properties": "~58.0.11",
     "expo-constants": "~58.0.13",
