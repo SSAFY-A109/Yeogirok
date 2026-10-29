@@ -43,6 +43,8 @@ import { Text } from "@/components/ui/text";
 
 Dropdown의 바깥 누르기·뒤로가기·웹 키보드 이동은 RNR Select가 처리한다. 네이티브 메뉴를 위한 `PortalHost`는 `app/_layout.tsx`에 있다. TabBar는 SafeAreaProvider 안에서 사용하며, OS 홈 인디케이터를 직접 그리지 않고 실제 하단 안전 영역을 사용한다. 탭 목록과 라우팅, 검색·인증·저장 같은 업무 로직은 호출 화면에서 연결한다.
 
+Switch는 RNR Root·Thumb으로 구성한다. `checked`가 바뀌면 손잡이가 18px 이동하고 트랙 색이 `duration-fast`(150ms) 동안 전환된다. NativeWind 전환을 사용하며 OS의 동작 줄이기 설정에서는 즉시 전환한다. On·Off 이미지는 사용하지 않는다.
+
 Figma 로고·아이콘·선택 링과 사용자 제공 발자취 WebP는 `assets/ui/`에 로컬로 보관했다. 소셜 로그인 색은 승인된 `auth-kakao`, `auth-google-border`, `auth-google-foreground` 토큰이다. Brand·Success 배지는 기존 사용자 결정에 따라 `DESIGN.md`의 쇼케이스 색을 쓴다. 선택된 FilterChip은 현재 원본처럼 체크 아이콘 없이 테두리·배경으로 표시한다.
 
 로딩 스켈레톤의 너비는 `w-skeleton-heading`(116), `w-skeleton-line`(168) 토큰을 쓴다. Pencil 대응 노드는 없어 **Pencil 미대조**다. `pnpm ui:check`로 타이포·크기 클래스 충돌과 에셋 파일을 검사한다. SVG 의존성을 추가했으므로 기존 개발 클라이언트는 네이티브 빌드 재생성이 필요하다.

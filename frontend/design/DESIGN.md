@@ -161,7 +161,7 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 | `Selection / DayChip` (616:1502) | `components/ui/day-chip.tsx` | 68×52, `rounded-md`. Default `bg-card border-border` 요일 `text-label text-foreground` + 날짜 `text-caption text-foreground-secondary` · Selected `bg-primary` + `text-primary-foreground`. Alert On/Off(알림 점) |
 | `Selection / Checkbox` (578:711) | `components/ui/checkbox.tsx` (RNR) | 24×24, `rounded-xs`. Off `bg-card border-input`(1.5) · On `bg-primary` + 체크 아이콘. 터치 영역 44 |
 | `Selection / Radio` (578:712) | `components/ui/radio-group.tsx` (RNR) | 22×22 원형. Off `bg-card border-input`(1.5) · On `border-2 border-primary` + 안쪽 점. 터치 영역 44 |
-| `Selection / Switch` (611:1380) | `components/ui/switch.tsx` (RNR) | 44×26 원형 트랙. Off `bg-border-strong` · On `bg-primary` |
+| `Selection / Switch` (611:1380) | `components/ui/switch.tsx` (RNR) | 44×26 원형 트랙, 22×22 손잡이. Off `bg-border-strong` · On `bg-primary`. 손잡이 18px 이동과 트랙 색을 `duration-fast`(150ms)로 전환. 동작 줄이기 설정에서는 즉시 전환 |
 | `Feedback / Badge` (418:484) | RNR `Badge` + 프로젝트 variant | `rounded-xs`, 글자 `text-label-sm`, 높이 24. 쇼케이스 기준(사용자 결정 2026-10-29): Tone Neutral `bg-muted text-foreground-secondary` · Brand `bg-primary-pressed text-primary-foreground` · Coral `bg-muted text-foreground-secondary`(코랄 포인트는 시안 확인) · Success `bg-badge-correct text-primary-foreground`. Figma 원본 컴포넌트의 Brand·Success는 아직 회색 배경이다(5-4 후속 작업) |
 | `Feedback / PageLoading` (489:459) | `components/ui/page-loading.tsx` | Type Skeleton(`Skeleton` + `text-caption text-muted-foreground` 안내) · Spinner(스피너 + `text-label` 제목 + `text-caption` 설명). 카드 `bg-card border-border rounded-sm`, 패딩 24 |
 | `Map / FootprintMarker` (555:517) | `components/ui/footprint-marker.tsx` (지도 SDK와 무관한 마커 뷰) | State Default·Selected·Cluster, 56×64. 사용자 제공 발자취 WebP와 Figma 선택 링 사용, Cluster 숫자 `text-label-sm text-highlight`. WebP에 흰 테두리 포함 |
@@ -206,7 +206,7 @@ Figma 후속 작업(사용자 요청 2026-10-29 — 팀원 작업이 끝난 뒤 
 
 브랜드 규격용 색 3개는 사용자 승인(2026-10-29)에 따라 추가한 **코드 전용 고정 토큰**이다. `auth-kakao=#FEE500`, `auth-google-border=#747775`, `auth-google-foreground=#1F1F1F`. Figma Auth 설명에서 지정한 값이며 기존 팔레트와 별도로 취급한다. Pencil 에디터에 열린 파일이 없어 변수 대조는 하지 못했다. 해당 값과 컴포넌트는 Pencil 미대조로 기록한다. 생성 파일은 `pnpm tokens:sync`로 갱신한다.
 
-로딩 스켈레톤의 116·168 너비는 코드 전용 치수 `size.skeleton-heading`, `size.skeleton-line`으로 추가했다(Figma `489:444`). 선택 컨트롤의 현재 프레임 노드는 Checkbox `716:2670`, Radio `716:2674`, Switch `716:2681`이다. 원본 SVG를 RNR 상호작용 요소 안에 렌더한다. Dropdown은 RNR Select를 조합하고 루트 레이아웃의 `PortalHost`를 사용한다.
+로딩 스켈레톤의 116·168 너비는 코드 전용 치수 `size.skeleton-heading`, `size.skeleton-line`으로 추가했다(Figma `489:444`). 선택 컨트롤의 현재 프레임 노드는 Checkbox `716:2670`, Radio `716:2674`, Switch `716:2681`이다. Checkbox·Radio는 원본 SVG를 RNR 상호작용 요소 안에 렌더한다. Switch는 RNR 트랙·손잡이로 구성해 위치와 색을 애니메이션으로 전환한다. Dropdown은 RNR Select를 조합하고 루트 레이아웃의 `PortalHost`를 사용한다.
 
 ## 6. 화면 패턴
 

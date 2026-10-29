@@ -12,8 +12,6 @@ export const assets = {
   footprintSelection: require("@/assets/ui/footprint-selection.svg"),
   check: require("@/assets/ui/check.svg"),
   radioOn: require("@/assets/ui/radio-on.svg"),
-  switchOff: require("@/assets/ui/switch-off.svg"),
-  switchOn: require("@/assets/ui/switch-on.svg"),
   spinner: require("@/assets/ui/spinner.svg"),
   spinnerLight: require("@/assets/ui/spinner-light.svg"),
   spinnerBrand: require("@/assets/ui/spinner-brand.svg"),
