@@ -47,13 +47,12 @@ metadata:
 
 ### 토큰과 변수
 
-- 문서 변수 56개의 구성(2026-10-29)
-  - `tokens.json`의 시맨틱 색 39개(라이트 단일 값). Figma Semantic Colors 외에 Layout 컬렉션의 색 `badge/correct`·`font/select`도 포함한다
+- 문서 변수 49개의 구성
+  - `tokens.json`의 시맨틱 색 34개(라이트 단일 값)
   - `white`/`black`
   - `radius-xs·sm·md·lg·xl`
-  - `size-touch·button-sm·button-md·button-lg·input·chip-sm·chip-md·icon·icon-sm`
+  - `size-touch·button-sm·button-md·button-lg·input·icon·icon-sm`
   - `font-sans`
-- 새 변수를 추가하면 `tokens.json`에도 같은 이름의 항목을 추가한다(승인 필요). `sync-pen-tokens.cjs`는 기존 항목의 값만 갱신한다.
 - 변수 이름이 곧 `tokens.json` 경로다(`primary` → `semantic.color.primary`, `radius-md` → `semantic.radius.md`).
 - 이름은 shadcn 규약이고, 값은 Figma 변수다. 대응표는 `design/DESIGN.md` §2에 있다(`$primary` = Figma `action/primary` = `#1A73A3`).
 - 도형·텍스트 색은 `$변수`만 참조한다(`fill: "$primary"`). 임의 hex를 아트보드에 직접 찍지 않는다.
@@ -84,7 +83,7 @@ metadata:
 1. `design-map.json`의 `screens`에 키가 있는지 확인한다. 없으면 라우트와 함께 추가한다(`pencil: "없음"`, `figma: "Wxx"`).
 2. Figma Wireframe 페이지에서 해당 화면(Wxx)을 읽는다(구성·문구·흐름). 와이어프레임의 색은 변수와 연결되어 있지 않으므로 값으로 쓰지 않는다.
 3. `get_app_state` → `read_skill`.
-4. 토큰 변수가 파일에 있는지 확인한다(현재 56개 — `Print(GetVariables())`).
+4. 토큰 변수가 파일에 있는지 확인한다(현재 49개 — `Print(GetVariables())`).
 5. `FindEmptySpace`로 빈자리를 잡고 아트보드를 그린다. 대안은 가로로 나란히 둔다.
 6. `TakeScreenshot`으로 확인해 사용자에게 보여주고 방향을 확정한다.
 7. 확정되면 `design-map.json`의 `screens.<key>.pencil`에 `Wxx 화면명 (노드id)`를 기록한다. 이 기록이 절차 B의 입력이다.

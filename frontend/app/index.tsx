@@ -12,7 +12,7 @@ export default function Index() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="카카오맵 테스트 화면 열기"
-            className="min-h-touch items-center justify-center rounded-sm bg-primary px-4 active:bg-primary-pressed"
+            className="min-h-touch items-center justify-center rounded-md bg-primary px-4 active:bg-primary-pressed"
             testID="home.kakao-map-test"
           >
             <Text className="text-button text-primary-foreground">카카오맵 테스트</Text>

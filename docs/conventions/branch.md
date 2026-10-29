@@ -9,7 +9,7 @@
 | 항목 | 규칙 |
 | --- | --- |
 | `part` | `frontend` \| `backend` \| `ai` \| `infra` \| `common` |
-| `type` | 커밋 Type을 소문자로 쓴다 (`feat`, `fix`, `refactor` 등). 파트별 추가 type은 각 파트에서 정한다. |
+| `type` | 커밋 type을 그대로 쓴다 (`feat`, `fix`, `refactor` 등). 파트별 추가 type은 각 파트에서 정한다. |
 | `issue_no` | Jira 이슈 키. 예: `S15P31A109-4` |
 | `작업내용` | 짧은 영문 kebab-case. 예: `kakao-login` |
 
