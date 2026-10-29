@@ -46,11 +46,12 @@ pnpm expo install expo-secure-store
 
 ```bash
 pnpm expo install jest-expo jest
-pnpm add -D @testing-library/react-native msw@2 react-native-url-polyfill fast-text-encoding
+pnpm add -D @testing-library/react-native msw@2.3.5 react-native-url-polyfill fast-text-encoding
 ```
 
 - `package.json`에 `"test": "jest"`, jest preset `jest-expo`를 추가한다.
 - MSW는 **v2**로 고정한다(v3은 React Native용 `msw/native`가 없다). 앱 목·jest 목 구성은 `docs/api-guide.md` §9.
+- 현재 MSW와 앱용 폴리필은 설치되어 있다. MSW `2.3.5` 고정 이유, 실행·핸들러 추가·검증 방법은 `docs/msw.md`를 따른다. jest-expo와 Testing Library는 아직 설치하지 않았다.
 - 개발은 전체 API 핸들러를 라우터 시작 전에 준비한다. 서비스 API의 미처리 요청은 오류로 처리한다. 서버 없는 Maestro E2E도 `__DEV__ === true`인 개발 빌드를 사용한다.
 - Maestro CLI는 npm 패키지가 아니다 — https://maestro.dev 에서 각자 설치한다(`.maestro/README.md`).
 

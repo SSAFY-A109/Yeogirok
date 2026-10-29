@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": false,
   "packageManager": "pnpm@11.13.0",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "msw:check": "tsc --ignoreConfig --module node16 --moduleResolution node16 --target es2022 --skipLibCheck --outDir .expo/msw-check api/mocks/native.ts api/mocks/server.ts api/mocks/on-unhandled-request.ts && node scripts/check-msw.cjs",
     "ui:check": "node scripts/check-ui.cjs",
     "ui:add": "pnpm dlx shadcn@latest add --yes",
     "tokens:sync": "node scripts/sync-pen-tokens.cjs && node scripts/sync-tokens.cjs",
@@ -68,7 +69,15 @@
     "babel-preset-expo": "~58.0.20",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~58.0.4",
+    "fast-text-encoding": "^1.0.6",
+    "msw": "2.3.5",
+    "react-native-url-polyfill": "^4.0.0",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.3"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
