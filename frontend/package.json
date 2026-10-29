@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "msw:check": "tsc --ignoreConfig --module node16 --moduleResolution node16 --target es2022 --skipLibCheck --outDir .expo/msw-check api/mocks/native.ts api/mocks/server.ts api/mocks/on-unhandled-request.ts && node scripts/check-msw.cjs",
     "ui:check": "node scripts/check-ui.cjs",
     "ui:add": "pnpm dlx shadcn@latest add --yes",
     "tokens:sync": "node scripts/sync-pen-tokens.cjs && node scripts/sync-tokens.cjs",
