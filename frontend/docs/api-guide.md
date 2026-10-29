@@ -186,7 +186,7 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
       <GuestbookInput value={guestbook} onChangeText={setGuestbook} />
       {error ? <FootprintError error={error} /> /* C012~C014는 '위치 다시 확인' 버튼 */ : null}
       <Button size="lg" className="h-button-lg" disabled={isPending} onPress={onSubmit}>
-        <Text className="text-button-lg">발자취 남기기</Text>
+        <Text className="text-button">발자취 남기기</Text>
       </Button>
     </>
   );

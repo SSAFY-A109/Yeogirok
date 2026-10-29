@@ -1,5 +1,5 @@
 {
-  "version": "2.21",
+  "version": "2.17",
   "children": [],
   "themes": {
     "mode": [
@@ -41,7 +41,7 @@
     },
     "primary-pressed": {
       "type": "color",
-      "value": "#104B6B"
+      "value": "#145C83"
     },
     "secondary": {
       "type": "color",
@@ -117,7 +117,7 @@
     },
     "input": {
       "type": "color",
-      "value": "#D4DAE0"
+      "value": "#E6EAEE"
     },
     "ring": {
       "type": "color",
@@ -202,34 +202,6 @@
     "font-sans": {
       "type": "string",
       "value": "Noto Sans KR"
-    },
-    "primary-hover": {
-      "type": "color",
-      "value": "#145C83"
-    },
-    "positive-strong": {
-      "type": "color",
-      "value": "#13664B"
-    },
-    "chip-selected": {
-      "type": "color",
-      "value": "#E8F2F8"
-    },
-    "size-chip-sm": {
-      "type": "number",
-      "value": 32
-    },
-    "size-chip-md": {
-      "type": "number",
-      "value": 36
-    },
-    "badge-correct": {
-      "type": "color",
-      "value": "#289D77"
-    },
-    "font-select": {
-      "type": "color",
-      "value": "#FF4100"
     }
   },
   "fileToken": "fa071aad-4c02-4bd9-ae73-c573c1b78a6e"

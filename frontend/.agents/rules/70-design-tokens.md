@@ -27,29 +27,22 @@ paths:
 ## 토큰 사용
 
 - 색상 className에는 시맨틱 토큰만 쓴다. 이름은 shadcn/React Native Reusables 규약(`X`, `X-foreground`, `X-muted`)을 따르고, 값은 Figma 변수다(사용자 결정 2026-10-27). 대응표와 전체 목록은 `design/DESIGN.md` 2장에 있다.
-  - 공통: `bg-background`, `text-foreground`, `text-foreground-secondary`, `text-muted-foreground`, `bg-card`, `bg-primary text-primary-foreground`, `bg-secondary text-secondary-foreground`, `bg-accent`, `bg-brand-muted`, `bg-chip-selected`, `text-primary-hover`, `bg-disabled text-disabled-foreground`
-  - 눌림: `active:bg-primary-pressed`(Primary 버튼), `active:bg-accent`(Secondary·Outline 버튼). `primary-hover`는 RN에 hover가 없어 배경으로 쓰지 않고 글자색으로만 쓴다.
-  - 상태: `text-destructive`, `text-positive`(상태 점·아이콘), `text-positive-strong`(흰·옅은 배경 위 성공 글자), `bg-badge-correct`(Success 배지 배경, 글자는 흰색), `text-highlight`, `bg-highlight-muted`
-  - `font-select`는 팀이 정한 색이지만 용도가 미정이다. 용도가 정해지기 전에는 쓰지 않는다.
+  - 공통: `bg-background`, `text-foreground`, `text-foreground-secondary`, `text-muted-foreground`, `bg-card`, `bg-primary text-primary-foreground`, `bg-secondary text-secondary-foreground`, `bg-brand-muted`, `bg-disabled text-disabled-foreground`
+  - 상태: `text-destructive`, `text-positive`, `bg-positive-muted`, `text-highlight`, `bg-highlight-muted`
   - 테두리: `border-border`, `border-border-strong`, `border-input`, `border-ring`
   - 아이콘: `text-icon`, `text-icon-active`
 - 지도 색(`map-route`, `map-pin`, `map-footprint`)은 className이 아니라 `lib/theme.ts`의 `getColors()`로 지도 SDK에 넘긴다.
 - 프리미티브 팔레트(`bg-sky-700`, `text-neutral-500`)는 테마에 존재하지 않으므로 쓰지 않는다. `white`, `black`은 모드 무관 고정 토큰으로 허용한다(`text-white`, `bg-black/50`).
 - hex, `rgb()`, arbitrary value(`p-[13px]`, `bg-[#fff]`)를 UI 코드에 쓰지 않는다. 필요한 값이 토큰에 없으면 기존 토큰으로 표현할 수 있는지 먼저 검토한다. 그래도 필요하면 Figma 디자인 시스템에 해당 값이 있는지 확인하고, Pencil 변수에 추가한 뒤 동기화한다.
 - 라이트 고정이다(사용자 결정 2026-10-27). `dark:` variant를 쓰지 않는다. 테마 전환 UI를 만들지 않는다. `global.css`의 dark 블록은 라이트와 같은 값으로 생성된다.
-- 타이포는 토큰 클래스를 쓴다: `text-display`, `text-h1`, `text-h2`, `text-h3`, `text-body`, `text-body-sm`, `text-label`, `text-label-sm`, `text-button`, `text-button-lg`, `text-caption`, `text-micro`.
+- 타이포는 토큰 클래스를 쓴다: `text-display`, `text-h1`, `text-h2`, `text-h3`, `text-body`, `text-body-sm`, `text-label`, `text-button`, `text-caption`, `text-micro`.
   - 이 클래스는 크기·행간·자간·굵기를 함께 설정하므로 `text-2xl font-semibold`처럼 조합하지 않는다.
   - Tailwind 기본 `text-sm` 등은 RNR 컴포넌트 내부에서만 쓴다.
   - `text-micro`(11)는 보조 메타 정보에만 쓴다.
 - 금액과 숫자 열에는 `tabular-nums` 클래스를 항상 함께 쓴다.
 - 간격은 Tailwind 기본 4px 스케일만 쓴다(Figma spacing과 같다).
-- 모서리는 `rounded-xs|sm|md|lg|xl|2xl|3xl|full`만 쓴다(Figma 컴포넌트 기준, 2026-10-29).
-  - 배지·체크박스: `rounded-xs`(6)
-  - 버튼·입력·FilterChip: `rounded-sm`(8)
-  - 카드·DayChip: `rounded-md`(12). 히어로·권한 안내 같은 큰 카드는 `rounded-lg`(16)
-  - 바텀시트: `rounded-t-xl`(20)
-  - 라디오·스위치 같은 원형 요소: `rounded-full`
-- 크기 토큰 `h-touch`, `h-button-sm`, `h-button-md`, `h-button-lg`, `h-input`, `h-chip-sm`, `h-chip-md`, `w-icon`, `w-icon-sm`을 우선한다.
+- 모서리는 `rounded-xs|sm|md|lg|xl|2xl|3xl|full`만 쓴다. 버튼·입력은 `rounded-md`, 카드는 `rounded-lg`, 바텀시트는 `rounded-xl`, 칩·배지는 `rounded-full`이다.
+- 크기 토큰 `h-touch`, `h-button-sm`, `h-button-md`, `h-button-lg`, `h-input`, `w-icon`, `w-icon-sm`을 우선한다.
 - 그림자는 쓰지 않는다(Figma에 정의 없음). 카드 구분은 `border-border`로 한다.
 - className으로 표현할 수 없는 값(StatusBar, 내비게이션 테마, 지도 색, Reanimated 보간)은 `lib/theme.ts`의 `getColors(scheme)`, `typography`, `radius` 등을 쓴다.
 
@@ -61,12 +54,10 @@ paths:
 - RNR `Text`의 `variant`(`h1`~`h4`, `lead`, `muted` 등)는 웹 기본값(`text-4xl font-extrabold` 등)이므로 화면 코드에서 쓰지 않는다. 크기·굵기는 타이포 토큰 클래스(`className="text-h1"`)로만 지정한다. `variant`는 RNR 내부 컴포넌트(`CardTitle` 등)가 쓰는 것만 허용한다.
 - 버튼은 RNR `Button`을 쓰고, 새 버튼 컴포넌트를 만들지 않는다. Figma `Action / Button`과의 대응은 다음과 같다.
   - Style Primary → `variant="default"`, Secondary → `"secondary"`, Outline → `"outline"`
-  - Size Large → `size="lg"` + `h-button-lg` + 글자 `text-button-lg`, Medium → `h-button-md` + 글자 `text-button`
-  - 모서리 `rounded-sm`. 눌림은 Primary `active:bg-primary-pressed`, Secondary·Outline `active:bg-accent`
-  - 처리 중(Loading) → 스피너와 진행 문구를 보여주고 중복 실행을 막는다
+  - Size Large → `size="lg"` + `h-button-lg`, Medium → `h-button-md`
   - 비활성 → `disabled`
   - 주요 CTA는 하단에 고정한 Large다.
-- RNR에 없는 컴포넌트는 RNR 컴포넌트를 조합해 `components/ui/`에 kebab-case 파일로 만든다. 대상은 `SearchField`, `FilterChip`, `DayChip`, `Dropdown`, `PageLoading`, `EmptyState`, `BottomSheet`, `Toast`, `TabBar`, `PermissionGate`이고, 이름과 variant는 `design/DESIGN.md` 5장 인벤토리를 따른다.
+- RNR에 없는 컴포넌트는 RNR 컴포넌트를 조합해 `components/ui/`에 kebab-case 파일로 만든다. 대상은 `SearchField`, `FilterChip`, `EmptyState`, `BottomSheet`, `Toast`, `TabBar`, `PermissionGate`이고, 이름과 variant는 `design/DESIGN.md` 5장 인벤토리를 따른다.
 - 경로 별칭 `@/`는 프로젝트 루트다(`tsconfig.json` paths).
 
 ## 컴포넌트와 Pencil·Figma 대응
