@@ -112,7 +112,7 @@ export function KakaoMapTestScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="지도 다시 불러오기"
-              className="min-h-touch items-center justify-center rounded-sm bg-primary px-4 active:bg-primary-pressed"
+              className="min-h-touch items-center justify-center rounded-md bg-primary px-4 active:bg-primary-pressed"
               onPress={() => {
                 setState({ phase: "loading" });
                 setAttempt((value) => value + 1);
@@ -161,8 +161,8 @@ export function KakaoMapTestScreen() {
                     accessibilityState={{ selected: isSelected }}
                     className={
                       isSelected
-                        ? "min-h-touch flex-1 items-center justify-center rounded-sm bg-primary active:bg-primary-pressed"
-                        : "min-h-touch flex-1 items-center justify-center rounded-sm bg-secondary active:bg-accent"
+                        ? "min-h-touch flex-1 items-center justify-center rounded-md bg-primary active:bg-primary-pressed"
+                        : "min-h-touch flex-1 items-center justify-center rounded-md bg-secondary active:bg-accent"
                     }
                     onPress={() => setMarkerCount(count)}
                     testID={`kakao-map-test.markers-${count}`}

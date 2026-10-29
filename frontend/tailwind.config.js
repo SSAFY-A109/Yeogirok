@@ -23,14 +23,12 @@ module.exports = {
       "primary": "rgb(var(--color-primary) / <alpha-value>)",
       "primary-foreground": "rgb(var(--color-primary-foreground) / <alpha-value>)",
       "primary-pressed": "rgb(var(--color-primary-pressed) / <alpha-value>)",
-      "primary-hover": "rgb(var(--color-primary-hover) / <alpha-value>)",
       "secondary": "rgb(var(--color-secondary) / <alpha-value>)",
       "secondary-foreground": "rgb(var(--color-secondary-foreground) / <alpha-value>)",
       "muted": "rgb(var(--color-muted) / <alpha-value>)",
       "muted-foreground": "rgb(var(--color-muted-foreground) / <alpha-value>)",
       "foreground-secondary": "rgb(var(--color-foreground-secondary) / <alpha-value>)",
       "brand-muted": "rgb(var(--color-brand-muted) / <alpha-value>)",
-      "chip-selected": "rgb(var(--color-chip-selected) / <alpha-value>)",
       "accent": "rgb(var(--color-accent) / <alpha-value>)",
       "accent-foreground": "rgb(var(--color-accent-foreground) / <alpha-value>)",
       "disabled": "rgb(var(--color-disabled) / <alpha-value>)",
@@ -38,10 +36,7 @@ module.exports = {
       "destructive": "rgb(var(--color-destructive) / <alpha-value>)",
       "destructive-foreground": "rgb(var(--color-destructive-foreground) / <alpha-value>)",
       "positive": "rgb(var(--color-positive) / <alpha-value>)",
-      "positive-strong": "rgb(var(--color-positive-strong) / <alpha-value>)",
       "positive-muted": "rgb(var(--color-positive-muted) / <alpha-value>)",
-      "badge-correct": "rgb(var(--color-badge-correct) / <alpha-value>)",
-      "font-select": "rgb(var(--color-font-select) / <alpha-value>)",
       "highlight": "rgb(var(--color-highlight) / <alpha-value>)",
       "highlight-muted": "rgb(var(--color-highlight-muted) / <alpha-value>)",
       "border": "rgb(var(--color-border) / <alpha-value>)",
@@ -128,14 +123,6 @@ module.exports = {
             "fontWeight": "500"
           }
         ],
-        "label-sm": [
-          "12px",
-          {
-            "lineHeight": "16px",
-            "letterSpacing": "0px",
-            "fontWeight": "500"
-          }
-        ],
         "caption": [
           "12px",
           {
@@ -159,14 +146,6 @@ module.exports = {
             "letterSpacing": "0px",
             "fontWeight": "500"
           }
-        ],
-        "button-lg": [
-          "15px",
-          {
-            "lineHeight": "22px",
-            "letterSpacing": "0px",
-            "fontWeight": "500"
-          }
         ]
       },
       height: {
@@ -175,8 +154,6 @@ module.exports = {
         "button-md": "44px",
         "button-lg": "52px",
         "input": "52px",
-        "chip-sm": "32px",
-        "chip-md": "36px",
         "icon": "24px",
         "icon-sm": "20px"
       },
@@ -186,8 +163,6 @@ module.exports = {
         "button-md": "44px",
         "button-lg": "52px",
         "input": "52px",
-        "chip-sm": "32px",
-        "chip-md": "36px",
         "icon": "24px",
         "icon-sm": "20px"
       },
@@ -197,8 +172,6 @@ module.exports = {
         "button-md": "44px",
         "button-lg": "52px",
         "input": "52px",
-        "chip-sm": "32px",
-        "chip-md": "36px",
         "icon": "24px",
         "icon-sm": "20px"
       },
@@ -208,8 +181,6 @@ module.exports = {
         "button-md": "44px",
         "button-lg": "52px",
         "input": "52px",
-        "chip-sm": "32px",
-        "chip-md": "36px",
         "icon": "24px",
         "icon-sm": "20px"
       },
