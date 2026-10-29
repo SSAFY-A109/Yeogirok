@@ -8,7 +8,7 @@ export { Image as DesignAsset };
 export const assets = {
   google: require("@/assets/ui/google-logo.svg"),
   kakao: require("@/assets/ui/kakao-logo.svg"),
-  footprint: require("@/assets/ui/footprint.png"),
+  footprint: require("@/assets/ui/footprint.webp"),
   footprintSelection: require("@/assets/ui/footprint-selection.svg"),
   check: require("@/assets/ui/check.svg"),
   radioOn: require("@/assets/ui/radio-on.svg"),

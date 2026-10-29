@@ -164,7 +164,7 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 | `Selection / Switch` (611:1380) | `components/ui/switch.tsx` (RNR) | 44×26 원형 트랙. Off `bg-border-strong` · On `bg-primary` |
 | `Feedback / Badge` (418:484) | RNR `Badge` + 프로젝트 variant | `rounded-xs`, 글자 `text-label-sm`, 높이 24. 쇼케이스 기준(사용자 결정 2026-10-29): Tone Neutral `bg-muted text-foreground-secondary` · Brand `bg-primary-pressed text-primary-foreground` · Coral `bg-muted text-foreground-secondary`(코랄 포인트는 시안 확인) · Success `bg-badge-correct text-primary-foreground`. Figma 원본 컴포넌트의 Brand·Success는 아직 회색 배경이다(5-4 후속 작업) |
 | `Feedback / PageLoading` (489:459) | `components/ui/page-loading.tsx` | Type Skeleton(`Skeleton` + `text-caption text-muted-foreground` 안내) · Spinner(스피너 + `text-label` 제목 + `text-caption` 설명). 카드 `bg-card border-border rounded-sm`, 패딩 24 |
-| `Map / FootprintMarker` (555:517) | `components/ui/footprint-marker.tsx` (지도 SDK와 무관한 마커 뷰) | State Default·Selected·Cluster, 56×64. Figma 원본 발자취 PNG와 선택 링 사용, Cluster 숫자 `text-label-sm text-highlight`. 원본 PNG에 흰 테두리 포함 |
+| `Map / FootprintMarker` (555:517) | `components/ui/footprint-marker.tsx` (지도 SDK와 무관한 마커 뷰) | State Default·Selected·Cluster, 56×64. 사용자 제공 발자취 WebP와 Figma 선택 링 사용, Cluster 숫자 `text-label-sm text-highlight`. WebP에 흰 테두리 포함 |
 
 ### 5-3. 프로젝트 전용
 
