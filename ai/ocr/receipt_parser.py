@@ -80,8 +80,9 @@ NOISE_WORDS = [
     "영수증", "매출전표", "신용카드", "카드", "전화", "TEL", "Tel", "사업자", "대표", "주소",
     "POS", "포스", "번호", "합계", "금액", "부가세", "과세", "승인", "고객용", "가맹점용",
     "감사합니다", "www", "http", "SYNTHETIC", "테스트용", "진동벨", "주문번호", "모니터", "와이파이",
-    "고객용", "영수증 ]", "[영수증]", "카드판매", "사업", "DATE", "Date",
+    "고객용", "영수증 ]", "[영수증]", "카드판매", "사업", "DATE", "Date", "재발행",
 ]
+BIZ_NO_RE = re.compile(r"\d{3}-\d{2}-\d{5}")   # 사업자번호 123-45-67890
 
 
 # ---------- 3. 추출 ----------
@@ -165,12 +166,23 @@ def _looks_like_name(text: str) -> bool:
         return False
     if ADDR_RE.search(text):          # 주소 줄은 상호명 아님
         return False
-    if any(w in text for w in NOISE_WORDS):
+    squashed = re.sub(r"\s+", "", text)   # '영 수 증'처럼 글자 사이가 띄어진 제목 줄도 거른다
+    if any(w in text or w in squashed for w in NOISE_WORDS):
+        return False
+    if BIZ_NO_RE.search(text):
         return False
     if DATE_RE.search(text) or TIME_RE.search(text):
         return False
     letters = re.findall(r"[가-힣A-Za-z]", text)
     return len(letters) >= 2 and len(text) <= 30
+
+
+def _squash_label(text: str) -> str:
+    """줄 앞쪽 라벨 글자 사이 공백을 붙인다: '점 포명:948키친' -> '점포명:948키친'"""
+    m = re.match(r"^\s*([가-힣](?:\s?[가-힣]){1,4})\s*([:：])", text)
+    if not m:
+        return text
+    return m.group(1).replace(" ", "") + m.group(2) + text[m.end():]
 
 
 def _join_wrapped(text: str, lines, i: int) -> str:
@@ -189,7 +201,7 @@ def extract_place(lines: list[tuple[str, float]]):
 
     for i, (text, score) in enumerate(lines):
         if not name:
-            v = _after_label(text, PLACE_LABELS)
+            v = _after_label(_squash_label(text), PLACE_LABELS)
             if v:
                 name, name_score = _join_wrapped(v, lines, i), score
         if not address:
@@ -209,6 +221,9 @@ def extract_place(lines: list[tuple[str, float]]):
             text = _join_wrapped(text, lines, i)
             cleaned = re.sub(r"[\[\]<>*=]+", " ", text).strip(" -")
             cleaned = re.sub(r"\s+", " ", cleaned.replace("_", " "))
+            # 'OO식당/123-45-67890/홍길동' → 사업자번호 앞까지만 상호명으로 쓴다
+            if BIZ_NO_RE.search(cleaned):
+                cleaned = re.split(r"\s*/?\s*\d{3}-\d{2}-\d{5}", cleaned)[0].strip(" /")
             m = re.match(r"^(.{2,25}?점(?:#\d+|\([^)]*\))?)(?=\s|$)", cleaned)
             if m and cleaned[m.end():].strip():
                 cleaned = m.group(1)
