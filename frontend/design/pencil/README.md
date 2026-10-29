@@ -11,7 +11,7 @@ Figma 자율 A109 › Design 페이지 (팀 디자인 시스템: 변수·텍스�
 Figma 자율 A109 › Wireframe 페이지 (팀 와이어프레임 Wxx — 화면 구성·문구·흐름 참고)
    │  (에이전트가 읽어서 옮긴다. 코드는 Figma를 읽지 않는다)
    ▼
-design.pen (Pencil: 변수 49개 + 아트보드) ── 확정 원천
+design.pen (Pencil: 변수 56개 + 아트보드) ── 확정 원천
    ├─ sync-pen-tokens.cjs ──▶ design/tokens.json ──sync-tokens.cjs──▶ tailwind.config.js · global.css · lib/theme.ts
    └─ 구현 전 대조 (MCP Get · TakeScreenshot, design-map.json의 노드 id) ──▶ app/ features/ components/
 ```
