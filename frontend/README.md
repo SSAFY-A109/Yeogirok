@@ -4,7 +4,7 @@
 
 - 스택: Expo SDK 58 · React Native 0.88 · TypeScript · Expo Router · pnpm
 - 기능 범위와 우선순위: [`docs/frontend-spec.md`](docs/frontend-spec.md) (원천: 팀 Notion 기능 명세서 v2)
-- API 계약 사본(미확정 초안): [`docs/api-contract.md`](docs/api-contract.md)
+- API 연결 규칙: [`docs/api-guide.md`](docs/api-guide.md) — 개발은 MSW, 배포는 실제 백엔드. 명세는 팀 Notion·Swagger를 확인합니다.
 - 디자인: 팀 Figma `자율 A109` → Pencil(`design.pen`) → [`design/DESIGN.md`](design/DESIGN.md)
 
 ## 시작하기
@@ -26,7 +26,7 @@ pnpm start          # Expo 개발 서버
 | `components/ui/` | 공용 UI(React Native Reusables 기반) |
 | `lib/`, `hooks/`, `api/` | 순수 유틸·공용 훅·HTTP 클라이언트와 MSW 목 |
 | `design/`, `design.pen` | 디자인 토큰·의도·Pencil 작업 파일 |
-| `docs/` | 기능 명세 요약·API 계약·API 가이드·설치 순서·하네스 설명 |
+| `docs/` | 기능 명세 요약·API 가이드·설치 순서·하네스 설명 |
 | `.agents/`, `.claude/`, `AGENTS.md` | AI 코딩 에이전트 규칙(하네스) |
 | `.maestro/` | E2E 테스트(Maestro) |
 

@@ -14,7 +14,7 @@
 .maestro/           # Maestro E2E flow
 AGENTS.md           # 에이전트 진입점 — 프로젝트 정보·디렉토리·승인·보고
 CLAUDE.md           # @AGENTS.md
-docs/               # frontend-spec · api-contract · api-guide · worklog-guide · setup · harness(이 문서)
+docs/               # frontend-spec · api-guide · worklog-guide · setup · harness(이 문서)
 design.pen          # Pencil 작업 파일 = 코드 구현의 확정 원천
 design/             # tokens.json(값) · DESIGN.md(의도·Figma 대응표) · design-map.json(노드 id) · pencil/
 scripts/            # sync-harness · check-harness · harness-backup/restore · sync-pen-tokens · sync-tokens · check-tokens · hooks/

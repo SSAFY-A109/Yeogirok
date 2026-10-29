@@ -39,6 +39,9 @@ pnpm expo install expo-secure-store
 
 `api/client.ts`·`api/envelope.ts`·`api/errors.ts`는 `docs/api-guide.md` §3 목표 형태로 만든다.
 
+- `EXPO_PUBLIC_API_URL`에는 호스트만 지정한다(`/api/v1` 제외). 개발은 MSW 요청용 HTTPS 주소, 배포는 실제 백엔드 HTTPS 주소를 설정한다.
+- 개발 환경에서는 아래 MSW 구성을 함께 적용한다. 배포 환경에서는 MSW를 불러오거나 시작하지 않는다.
+
 ## 4. 테스트 — jest-expo · Testing Library · MSW
 
 ```bash
@@ -48,6 +51,7 @@ pnpm add -D @testing-library/react-native msw@2 react-native-url-polyfill fast-t
 
 - `package.json`에 `"test": "jest"`, jest preset `jest-expo`를 추가한다.
 - MSW는 **v2**로 고정한다(v3은 React Native용 `msw/native`가 없다). 앱 목·jest 목 구성은 `docs/api-guide.md` §9.
+- 개발은 전체 API 핸들러를 라우터 시작 전에 준비한다. 서비스 API의 미처리 요청은 오류로 처리한다. 서버 없는 Maestro E2E도 `__DEV__ === true`인 개발 빌드를 사용한다.
 - Maestro CLI는 npm 패키지가 아니다 — https://maestro.dev 에서 각자 설치한다(`.maestro/README.md`).
 
 ## 5. 확인

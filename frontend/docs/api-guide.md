@@ -1,13 +1,23 @@
 # API 통신 가이드
 
 서버 통신 코드를 쓸 때 반드시 이 가이드를 따른다.
-- **무엇을 주고받는지**(엔드포인트·DTO·열거형·공통 규약 값): [`docs/api-contract.md`](./api-contract.md)
+- **무엇을 주고받는지**(엔드포인트·DTO·열거형·공통 규약 값): 팀 Notion "API 명세". 서버에 반영된 API는 Swagger를 우선한다. 별도 계약 사본은 두지 않는다.
 - **규칙**: `.agents/rules/20-api-data.md`(호출 계층·Query·작업·업로드), `.agents/rules/90-backend-contract.md`(계약·MSW)
 - 이 문서는 그것을 **코드로 옮기는 절차와 예시**다.
 
-> 예시 코드의 DTO 필드는 계약 상세를 읽기 전의 **가정**이다(api-contract §3 상세 미확인). 실제 구현 전에 명세·Swagger로 필드를 확인하고 바꾼다.
+> 예시 코드는 구현 목표이며, DTO 필드는 명세 상세를 확인하기 전의 **가정**이다. 실제 구현 전에 Notion·Swagger로 필드를 확인하고 바꾼다.
 
 ## 1. 아키텍처
+
+| 환경 | API 연결 | MSW |
+| --- | --- | --- |
+| 개발(`__DEV__ === true`) | 같은 HTTP 클라이언트의 요청을 MSW가 가로채 응답 | 전 도메인 사용, 라우터 시작 전에 준비 완료 |
+| 배포(`__DEV__ === false`) | `EXPO_PUBLIC_API_URL`의 실제 백엔드 서버 | 불러오거나 시작하지 않음 |
+| jest·서버 없는 E2E | 명세에 맞춘 fixture 응답 | jest는 `msw/node`, E2E는 개발 빌드의 `msw/native` |
+
+- 화면·Query·도메인 API 함수는 환경에 따라 달라지지 않는다. 환경별 연결은 API 호스트 설정과 앱 진입점의 MSW 초기화로 처리한다.
+- `EXPO_PUBLIC_API_URL`은 호스트만 지정한다. 개발에서는 `https://api.yeogirok.test` 같은 MSW 요청용 주소, 배포에서는 실제 백엔드 HTTPS 주소를 설정한다. `/api/v1`은 `api/client.ts`가 붙인다.
+- 개발 중 미처리 서비스 API는 오류로 처리한다. 실제 백엔드로 자동 통과시키거나 일부 도메인만 실제 서버에 연결하지 않는다.
 
 ```
 app/ 화면 ──▶ features/<domain>/api/queries.ts ──▶ features/<domain>/api/<domain>.api.ts ──▶ api/client.ts ──▶ <호스트>/api/v1
@@ -23,7 +33,7 @@ app/ 화면 ──▶ features/<domain>/api/queries.ts ──▶ features/<domai
 | 통신 | `api/client.ts` | axios 인스턴스(`baseURL`, 타임아웃 상수), 요청 인터셉터(인증 헤더), 응답 인터셉터(봉투 벗기기, 401 갱신 단일 실행, `ApiError` 정규화) | 도메인 함수 밖에서 `api` import |
 | 공통 오류 | `api/errors.ts` | `ApiError`, `isApiError`, 공통 code(C001~C017) 처리와 문구 | 도메인 code 처리 |
 | 도메인 API | `features/<domain>/api/<domain>.api.ts` | 엔드포인트 1:1 함수. 인자는 도메인 타입이고, 안에서 path·params·body로 매핑한다 | TanStack Query import, 헤더 조립, 목 분기 |
-| 화면 모델 | `features/<domain>/model.ts` | DTO 타입(계약 사본과 1:1) + `toXxx` 변환 + 계약 검증 | UI 문구, 포맷팅 이외의 로직 |
+| 화면 모델 | `features/<domain>/model.ts` | DTO 타입(Notion·Swagger 명세와 1:1) + `toXxx` 변환 + 계약 검증 | UI 문구, 포맷팅 이외의 로직 |
 | 서버 상태 | `features/<domain>/api/queries.ts` | `<domain>Keys` 팩토리, `queryOptions`, `useXxx` 훅, 뮤테이션 훅과 무효화 | axios·fetcher 직접 호출 |
 | 오류 문구 | `features/<domain>/errors.ts` | 도메인 `code` → 사용자 문구 | 서버 `message`를 보여주거나 분기 기준으로 사용 |
 | 목 | `api/mocks/handlers/<domain>.ts`, `api/mocks/fixtures/<domain>.ts` | MSW 핸들러와 계약 예시 응답(봉투 포함) | 실제 개인 정보·좌표·영수증 |
@@ -56,7 +66,8 @@ app/ 화면 ──▶ features/<domain>/api/queries.ts ──▶ features/<domai
 
 ```ts
 // api/client.ts — 목표 형태
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? ""; // 호스트만
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL; // 호스트만, 개발·배포 모두 필수
+if (!API_BASE_URL) throw new Error("EXPO_PUBLIC_API_URL을 설정해야 합니다.");
 export const TIMEOUT_QUERY_MS = 10_000;     // 조회
 export const TIMEOUT_MUTATION_MS = 30_000;  // 생성·변경
 export const TIMEOUT_UPLOAD_MS = 60_000;    // 파일 업로드
@@ -76,7 +87,7 @@ export const api = axios.create({
 - 도메인 함수는 경로만 쓴다: `api.get("/rooms")`. Base path를 붙이지 않는다.
 - 빈 본문 성공(`data: null`)은 `Promise<void>`로 다룬다.
 - 헤더는 `client.ts` 인터셉터만 붙인다. 예외는 두 가지다.
-  - 멱등성 키: 해당 도메인 함수가 인자로 받은 키를 `config.headers`에 넣는다. 헤더 이름은 계약 §1을 따르며 상세 미확인이다.
+  - 멱등성 키: 해당 도메인 함수가 인자로 받은 키를 `config.headers`에 넣는다. 헤더 이름은 Notion·Swagger 명세를 따르며 상세 미확인이다.
   - 버전 값: 계약이 헤더로 정하면 위와 같이 처리한다.
 - 생성·변경 요청은 `{ timeout: TIMEOUT_MUTATION_MS }`, 업로드는 `{ timeout: TIMEOUT_UPLOAD_MS }`를 넘긴다.
 
@@ -94,7 +105,7 @@ export const api = axios.create({
 | `null` 가능 필드 | `T \| null` | `T \| null` | 상태 의미가 있는 `null`(예: 주차 정보 없음)은 `??`로 기본값을 만들지 않는다. "정보 없음"으로 표시한다 |
 
 - 서버 파생값(방문 집계, 영수증 합계, 이동 시간, 반응 수)은 **검증만 하고 계산하지 않는다**.
-- DTO 타입 이름은 계약 사본과 같게 하고 `Dto` 접미만 붙인다. 두 도메인이 같이 쓰는 타입은 소유 도메인의 `model.ts`에서 export한다.
+- DTO 타입 이름은 Notion·Swagger 명세와 같게 하고 `Dto` 접미만 붙인다. 두 도메인이 같이 쓰는 타입은 소유 도메인의 `model.ts`에서 export한다.
 
 ## 4. 새 도메인 API 추가하는 법 — 예시: 방문 분포도 조회와 발자취 저장
 
@@ -285,7 +296,7 @@ export function useUploadMedia() {
 
 - 모든 통신 실패는 `ApiError(status, code, message)`로 정규화된다.
   - `status`: HTTP 상태. 네트워크 단절·타임아웃은 `0`.
-  - `code`: 계약의 오류 코드(api-contract §3-0).
+  - `code`: Notion·Swagger 명세의 오류 코드.
   - `message`: **개발자용**. 사용자에게 보여주지 않는다(이 프로젝트 계약).
 - 분기는 `isApiError(error)` 타입 가드를 거친 뒤 `error.code`로 한다.
   - 공통 code는 `api/errors.ts`, 도메인 code는 `features/<domain>/errors.ts`에서 처리한다.
@@ -307,7 +318,7 @@ export function useUploadMedia() {
 - 구조:
   - `api/mocks/handlers/<domain>.ts`: `http.get("*/api/v1/rooms", …)` 형태의 핸들러
   - `api/mocks/fixtures/<domain>.ts`: 계약 예시 응답
-  - `api/mocks/handlers/index.ts`: 도메인별 핸들러를 모으고, `handlersFor(설정값)`을 내보낸다
+  - `api/mocks/handlers/index.ts`: 전 도메인 핸들러를 모은 `handlers` 배열을 내보낸다
   - `api/mocks/polyfills.ts`, `api/mocks/native.ts`: 앱용
   - `api/mocks/server.ts`: jest용
 - 앱(개발 빌드) — 목표 형태 `[확인]`(처음 구현할 때 기기에서 동작을 확인한다):
@@ -318,25 +329,34 @@ export function useUploadMedia() {
 
   // api/mocks/native.ts
   import { setupServer } from "msw/native";
-  import { handlersFor } from "./handlers";
-  export const server = setupServer(...handlersFor(process.env.EXPO_PUBLIC_API_MOCKING));
+  import { handlers } from "./handlers";
+  export const server = setupServer(...handlers);
 
   // index.ts (package.json "main": "index.ts")
   async function enableMocking() {
-    if (!__DEV__ || (process.env.EXPO_PUBLIC_API_MOCKING ?? "off") === "off") return;
+    if (!__DEV__) return;
     await import("./api/mocks/polyfills");
     const { server } = await import("./api/mocks/native");
-    server.listen({ onUnhandledRequest: "bypass" }); // 핸들러가 없는 요청은 실서버로
+    server.listen({
+      onUnhandledRequest(request, print) {
+        const { pathname } = new URL(request.url);
+        if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
+          print.error(); // 미처리 서비스 API는 실제 서버로 보내지 않는다
+        }
+        // 외부 SDK·정적 리소스 등 서비스 API 밖의 요청은 통과
+      },
+    });
   }
   void enableMocking().then(() => import("expo-router/entry"));
   ```
-  - `handlersFor`는 `all`이면 전 도메인을, `room,record`처럼 목록이면 그 도메인 핸들러만 돌려준다.
+  - 개발에서는 항상 전체 핸들러를 사용한다. MSW 준비가 실패하면 라우터도 시작하지 않는다.
+  - 배포에서는 `__DEV__` 가드로 목 모듈·폴리필을 불러오거나 서버를 시작하지 않는다. 연결 대상은 배포 환경에 설정한 실제 백엔드다.
   - 진입점을 `index.ts`로 바꾸는 것은 MSW를 처음 설치할 때 한다. 그 전까지 `package.json`의 `main`은 `expo-router/entry`다.
 - jest:
   - `jest.setup`에서 `msw/node`의 `setupServer(...handlers)`를 쓴다.
   - 순서: `beforeAll(listen)` → `afterEach(resetHandlers)` → `afterAll(close)`.
   - 오류 시나리오는 테스트 안에서 `server.use(http.post(..., () => HttpResponse.json({ success: false, code: "C014", message: "" }, { status: 422 })))`처럼 덮어쓴다.
-- E2E(Maestro): E2E용 빌드는 `EXPO_PUBLIC_API_MOCKING=all`로 만들어 서버 없이 같은 결과를 낸다(규칙 60).
+- E2E(Maestro): `__DEV__ === true`인 개발 빌드에서 전체 API를 MSW로 처리해 서버 없이 같은 결과를 낸다(규칙 60). 배포 빌드는 실제 백엔드에 연결하므로 서버 없는 E2E에 쓰지 않는다.
 - 목 응답은 **봉투 포함 계약 형태 그대로**다. 필드를 더하거나 빼지 않는다. 계약이 바뀌면 `fixtures`·핸들러·`model.ts`를 같이 고친다.
 - 실제 개인 정보·좌표·영수증을 넣지 않는다. 공개 장소 좌표와 더미 값만 쓴다.
 - `.env`는 추적하지 않는다(`.gitignore`). 공유할 형식·설명은 `.env.example`에만 둔다.
@@ -349,11 +369,11 @@ export function useUploadMedia() {
 - `useEffect` + `useState`로 서버 데이터를 보관하지 않는다. 서버 상태는 TanStack Query가 소유한다.
 - 집계·합계·이동 시간 같은 서버 파생값을 클라이언트에서 계산해 표시하지 않는다.
 - 도메인 함수에 목 분기를 두지 않는다(MSW 사용).
-- 계약 사본에 없는 엔드포인트·필드·열거형 값을 가정해 코드에 넣지 않는다. 필요하면 백엔드에 요청하고 보고서에 `TBD`로 남긴다.
+- Notion·Swagger 명세에 없는 엔드포인트·필드·열거형 값을 가정해 코드에 넣지 않는다. 필요하면 백엔드에 요청하고 보고서에 `TBD`로 남긴다.
 - 스펙과 실제 응답이 다르면 `model.ts`에서 우회하지 않는다. `ContractMismatchError`로 드러내고 보고한다.
 
 ## 11. 미확정 (TBD)
 
-- 엔드포인트별 요청·응답 상세, 멱등성 헤더 이름, 버전 값 전달 방식, 위치 증거 필드, 커서 파라미터(api-contract §1·§3)
-- API-033과 API-080의 중복, API-015와 API-083의 관계, API-084·085 URL(api-contract §2)
+- 엔드포인트별 요청·응답 상세, 멱등성 헤더 이름, 버전 값 전달 방식, 위치 증거 필드, 커서 파라미터(Notion·Swagger에서 확인)
+- API-033과 API-080의 중복, API-015와 API-083의 관계, API-084·085 URL(Notion·Swagger에서 확인)
 - 작업 상태 열거형과 폴링 간격·최대 대기 시간 기준(서버와 합의)

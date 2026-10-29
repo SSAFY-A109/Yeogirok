@@ -12,19 +12,19 @@ paths:
 
 # 백엔드 API 계약
 
-이 규칙은 백엔드 계약을 소비하는 클라이언트 코드에 적용한다. 프로젝트마다 달라지는 값은 이 규칙에 적지 않고 `docs/api-contract.md` §1 공통 규약에 적는다(Base path, 응답 봉투, 명명, 날짜 형식, 인증 헤더와 토큰 수명, 페이지네이션, 멱등성, 버전 충돌, 위치 증거, 오류 코드). 이 규칙은 그 값을 코드에서 어떻게 다루는지만 정한다. 두 문서가 다르면 계약 사본이 우선하고 이 규칙을 고친다.
+이 규칙은 백엔드 계약을 소비하는 클라이언트 코드에 적용한다. Base path, 응답 봉투, 명명, 날짜 형식, 인증, 페이지네이션, 멱등성, 버전 충돌, 위치 증거, 오류 코드는 팀 Notion "API 명세"와 Swagger에서 확인한다. 별도 계약 사본은 두지 않는다. 이 규칙과 원천이 다르면 원천을 따르고 규칙을 고친다.
 
 ## 계약 원천
 
-- 계약의 원천은 팀 Notion의 "API 명세"다. 서버에 반영된 API는 Swagger가 가장 정확하다(명세 머리말). 클라이언트 쪽 계약 사본은 `docs/api-contract.md`이며, 원천과 대조한 일시를 적는다.
-- OpenAPI 스펙이 제공되면 `openapi/openapi.yaml`(또는 `.json`)로 복사본을 두고, 버전(`info.version`)과 출처 커밋을 `openapi/README.md`에 기록한다. 그 뒤 `docs/api-contract.md`의 엔드포인트 상세는 삭제하고 §1 공통 규약만 남긴다.
+- 계약의 원천은 팀 Notion의 "API 명세"다. 서버에 반영된 API는 Swagger를 우선한다.
+- OpenAPI 스펙이 제공되면 `openapi/openapi.yaml`(또는 `.json`)로 복사본을 두고, 버전(`info.version`)과 출처 커밋을 `openapi/README.md`에 기록한다.
 - `api/generated/`는 스펙에서 생성한 타입·클라이언트 코드다. 직접 수정하지 않고 `pnpm api:generate`로 재생성한다. 생성 도구(`openapi-typescript` 등)의 도입은 승인 후 진행한다.
 - 스펙에 없는 엔드포인트·필드·상태값을 클라이언트에서 가정하지 않는다. 필요한 변경은 백엔드에 요청하고 보고서에 `TBD`로 남긴다.
 - 스펙과 실제 응답이 다르면 클라이언트에서 우회하지 않고 불일치를 보고한다.
 
 ## DTO와 화면 모델
 
-- 요청·응답 DTO는 계약 사본(또는 생성된 타입)을 그대로 쓴다. 화면에서 쓰는 모델은 `features/<domain>/model.ts`에서 변환한다. 화면 컴포넌트가 DTO 필드명에 직접 의존하지 않게 한다.
+- 요청·응답 DTO는 Notion·Swagger 명세(또는 생성된 타입)를 그대로 쓴다. 화면에서 쓰는 모델은 `features/<domain>/model.ts`에서 변환한다. 화면 컴포넌트가 DTO 필드명에 직접 의존하지 않게 한다.
 - 명명(`camelCase`·`snake_case`)은 계약을 따르고, 클라이언트에서 임의로 변환 레이어를 두지 않는다. 변환이 필요하면 `api/client.ts` 인터셉터 한 곳에서 한다.
 - 응답이 공통 봉투(이 프로젝트: `{ success, data }` / `{ success: false, code, message }`)로 오면, 봉투를 벗기는 일은 응답 인터셉터가 호출하는 `api/envelope.ts`의 `unwrapEnvelope`만 한다. 도메인 함수와 `model.ts`는 봉투를 모른다. 빈 본문 성공(`data: null`)은 `void`로 다룬다.
 - 금액(영수증 합계 등) 필드의 형식은 계약을 따른다. `model.ts`에서 형식을 검증한 뒤 `lib/money.ts`의 `KRW`(문자열)로 바꿔 화면에 넘긴다. 합계·통계 같은 서버 파생값은 검증만 하고 다시 계산하지 않는다.
@@ -54,24 +54,22 @@ paths:
 - 중복되면 안 되는 생성 요청에는 계약의 멱등성 키를 붙인다. 대상은 발자취 저장, 팁 등록, 기록 초안·일정 초안 생성, 코스 공개, 초대 수락, 자료 연결이다.
   - 키는 사용자가 제출을 시작할 때 한 번 만들고, 재시도에도 같은 키를 쓴다.
   - 같은 키로 다른 내용을 보내면 C009다.
-  - 헤더 이름은 계약 §1을 따른다.
+  - 헤더 이름은 Notion·Swagger 명세를 따른다.
   - 이 요청들은 자동 재시도하지 않는다. 네트워크 오류 시 서버 상태를 다시 조회해 처리 여부를 확정한 뒤 다음 행동을 제시한다.
 - 페이지네이션은 계약의 커서 방식을 따른다. 응답의 다음 커서(마지막 페이지는 `null`)를 `useInfiniteQuery`와 연결한다. 페이지 크기는 계약의 허용 범위 안에서 Options 팩토리에 고정한다(C011).
-- 요청 타임아웃은 `api/client.ts`의 상수로 둔다. 기본값은 조회 10초, 변경 30초, 파일 업로드 60초다. 계약이 다른 값을 정하면 `docs/api-contract.md` §5에 적고 그 값을 쓴다.
+- 요청 타임아웃은 `api/client.ts`의 상수로 둔다. 기본값은 조회 10초, 변경 30초, 파일 업로드 60초다. Notion·Swagger 명세가 다른 값을 정하면 그 값을 쓴다.
 - 서버 시각과 기기 시각의 차이는 응답 헤더 `Date`로 보정하며, 보정 로직은 `lib/date.ts`에 둔다. 위치 증거의 측정 시각은 기기 시각이므로 계약이 정한 형식으로 그대로 보낸다.
 
 ## 목 서버(MSW)와 테스트
 
-- 백엔드가 준비되지 않았거나 E2E·테스트에서 서버를 대신할 때는 **MSW**를 쓴다(사용자 결정 2026-10-27). 도메인 API 함수에는 목 분기를 두지 않는다.
+- **개발 환경(`__DEV__ === true`)은 전체 API를 MSW로 처리하고, 배포 환경(`__DEV__ === false`)은 실제 백엔드 서버에 연결한다**(사용자 결정 2026-10-29). 도메인 API 함수에는 환경별 분기를 두지 않는다.
+- 두 환경 모두 같은 `api/client.ts`와 도메인 API 함수를 쓴다. `EXPO_PUBLIC_API_URL`에는 호스트만 설정하고, 클라이언트가 `/api/v1`을 붙인다. 개발은 MSW 요청용 HTTPS 주소, 배포는 실제 백엔드 HTTPS 주소를 필수로 설정한다. 값이 없으면 앱 초기화 시 설정 오류로 처리한다.
 - 핸들러는 `api/mocks/handlers/<domain>.ts`에 도메인별로 두고, `api/mocks/handlers/index.ts`에서 모은다. 응답 예시는 `api/mocks/fixtures/<domain>.ts`에 둔다.
 - MSW는 네트워크 계층에서 가로채므로 응답이 인터셉터를 거친다. 그래서 목 응답은 **계약의 봉투 그대로**(`{ success: true, data }`, 오류는 HTTP 상태 + `{ success: false, code, message }`) 만든다.
 - 버전은 **`msw@2`**로 고정한다. `msw@3`은 React Native용 `msw/native`를 없앴고, 대체 패키지 `@msw/react-native`는 npm에 아직 없다(2026-10-27 확인). 대체 패키지가 배포되면 그때 옮긴다.
-- 앱 실행 중 목: `api/mocks/native.ts`에서 `msw/native`의 `setupServer(...handlers)`로 서버를 만든다. 앱 진입점(`index.ts`)에서 `__DEV__`이고 `EXPO_PUBLIC_API_MOCKING`이 `off`가 아닐 때만 폴리필(`api/mocks/polyfills.ts`)을 불러오고 `server.listen()`을 실행한 뒤 `expo-router/entry`를 불러온다.
-- `EXPO_PUBLIC_API_MOCKING` 값
-  - `off`: 목 없음
-  - `all`: 전 도메인 목
-  - `room,record`처럼 도메인 목록: 적힌 도메인만 목, 나머지는 실서버
-  - 처리하지 않은 요청은 실서버로 그대로 보낸다.
+- 앱 실행 중 목: `api/mocks/native.ts`에서 `msw/native`의 `setupServer(...handlers)`로 서버를 만든다. 앱 진입점(`index.ts`)에서 `__DEV__`일 때만 폴리필(`api/mocks/polyfills.ts`)과 목 모듈을 동적으로 불러오고 `server.listen()`을 실행한 뒤 `expo-router/entry`를 불러온다. MSW 시작이 실패하면 앱도 시작하지 않는다.
+- 개발에서는 전 도메인 핸들러를 사용한다. 핸들러가 없는 서비스 API(`/api/v1` 하위)는 오류로 처리하고 실제 서버로 넘기지 않는다. 외부 SDK·정적 리소스 등 서비스 API 밖의 요청은 통과시킨다.
+- 배포에서는 MSW·목 데이터·목 폴리필을 불러오거나 시작하지 않는다. 개발 중 일부 도메인만 실제 서버로 보내는 선택 설정은 두지 않는다.
 - 테스트(jest)의 목: `jest.setup`에서 `msw/node`의 `setupServer(...handlers)`를 쓴다. 테스트마다 `server.use(...)`로 오류 시나리오를 덮어쓰고, 끝나면 `resetHandlers()`로 되돌린다.
-- 목 데이터는 계약 사본의 응답 예시를 그대로 옮긴다. 실제 개인 정보·좌표·영수증을 넣지 않고, 서울 시청 같은 공개 좌표와 더미 값만 쓴다. 계약이 바뀌면 핸들러, `fixtures`, `model.ts`를 함께 고친다.
-- API 함수·모델 테스트는 계약 사본의 예시 응답을 기준으로 쓴다. 오류 응답, `null` 필드, 커서 경계(다음 커서 `null`), 작업 상태 전이(진행 중 → 완료·실패)를 포함한다.
+- 목 데이터는 Notion·Swagger 명세의 응답 형식을 따른다. 실제 개인 정보·좌표·영수증을 넣지 않고, 서울 시청 같은 공개 좌표와 더미 값만 쓴다. 계약이 바뀌면 핸들러, `fixtures`, `model.ts`를 함께 고친다.
+- API 함수·모델 테스트는 명세에 맞춘 fixture를 기준으로 쓴다. 오류 응답, `null` 필드, 커서 경계(다음 커서 `null`), 작업 상태 전이(진행 중 → 완료·실패)를 포함한다.

@@ -11,7 +11,7 @@ MAESTRO_APP_ID=<번들 id> maestro test .maestro/flows/00-app-launch.yaml   # �
 ```
 
 - 대상 앱은 개발 빌드나 E2E용 빌드다. Expo Go로는 네이티브 모듈 화면을 확인할 수 없다(규칙 85).
-- 서버 없이 같은 결과를 내도록 E2E 빌드는 `EXPO_PUBLIC_API_MOCKING=all`로 MSW 목을 켠다.
+- 서버 없이 같은 결과를 내도록 `__DEV__ === true`인 개발 빌드를 사용한다. 전체 API는 MSW 목으로 처리한다. 배포 빌드는 실제 백엔드에 연결하므로 서버 없는 E2E에 쓰지 않는다.
 - AR 카메라 화면은 자동화하지 않는다. 권한 거부·미지원 폴백만 다룬다.
 
 ## 폴더

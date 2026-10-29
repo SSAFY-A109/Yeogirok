@@ -43,7 +43,7 @@ paths:
 | E2E | Maestro | P0 시연 흐름(`docs/frontend-spec.md` §0) | 해당 흐름이 완성될 때 flow 1개 |
 
 - 화면 통합 테스트(`*.test.tsx`)는 요청이 있을 때만 새로 만든다(사용자 결정 2026-09-08). 화면 동작은 Maestro E2E로 확인한다.
-- `model.ts` 테스트는 계약 사본의 예시 응답으로 쓴다. 다음을 포함한다.
+- `model.ts` 테스트는 Notion·Swagger 명세에 맞춘 fixture로 쓴다. 다음을 포함한다.
   - `null` 필드
   - 모르는 열거형(`UNKNOWN` 흡수)
   - 날짜·시각 형식 위반(`2026-07-27 15:30:00+09` 외 형식 → `ContractMismatchError`)
@@ -58,7 +58,7 @@ paths:
 
 - 핸들러·응답 예시 위치, 봉투 형식, 켜는 방법은 규칙 90 "목 서버(MSW)와 테스트"와 `docs/api-guide.md` §9를 따른다.
 - jest는 `jest.setup`에서 `setupServer`를 켠다. 순서는 `beforeAll(listen)` → `afterEach(resetHandlers)` → `afterAll(close)`다. 테스트 안의 오류 시나리오는 `server.use(...)`로 덮어쓴다. 처리되지 않은 요청은 테스트 실패로 본다(`onUnhandledRequest: "error"`).
-- 앱 실행 중 목(`msw/native`)은 개발 빌드에서만 켠다. 출시 빌드에는 포함되지 않게 `__DEV__`로 막는다.
+- 앱 실행 중 목(`msw/native`)은 개발 환경에서 항상 켠다. 배포 환경에서는 목 모듈을 불러오거나 시작하지 않도록 `__DEV__` 분기 안에서 동적으로 import한다.
 
 ## E2E (Maestro)
 
@@ -69,7 +69,7 @@ paths:
 - 실행: `pnpm e2e`(= `maestro test .maestro/flows`).
   - 앱 id는 flow에 직접 쓰지 않는다. 환경 변수 `MAESTRO_APP_ID`로 넘기고 flow에서 `${MAESTRO_APP_ID}`로 받는다(Maestro는 `MAESTRO_` 접두 변수를 자동으로 읽는다).
   - Maestro CLI는 npm 패키지가 아니므로 각자 설치한다. CI는 두지 않는다.
-- 빌드: 개발 빌드나 E2E용 빌드에서 실행한다(규칙 85). 서버에 의존하지 않도록 E2E 빌드는 `EXPO_PUBLIC_API_MOCKING=all`로 MSW를 켠다.
+- 빌드: `__DEV__ === true`인 개발 빌드에서 실행해 전체 API를 MSW로 처리한다(규칙 85·90). 서버 없이 실행하는 E2E에 배포 빌드를 쓰지 않는다.
 - 요소 찾기
   - 요소는 `testID`로 찾는다. Maestro에서는 `id:` 선택자다. 화면 문구는 바뀌기 쉬우므로 텍스트 매칭은 `assertVisible` 확인에만 쓴다.
   - `testID` 이름은 `<화면>.<요소>` kebab-case로 짓는다. 예: `room-list.create-button`, `footprint.submit`.
