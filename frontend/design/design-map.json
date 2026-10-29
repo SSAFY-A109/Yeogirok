@@ -36,7 +36,7 @@
     "SearchField": {
       "code": "components/ui/search-field.tsx",
       "pencil": "없음",
-      "figma": "Search / TextField (418:454) — State Default·Focused·Error"
+      "figma": "Search / SearchField (584:1051, 원본 프레임 인스턴스 716:2680) — 검색 아이콘 포함, 44px"
     },
     "FilterChip": {
       "code": "components/ui/filter-chip.tsx",
@@ -77,7 +77,7 @@
     "TabBar": {
       "code": "components/ui/tab-bar.tsx",
       "pencil": "없음",
-      "figma": "Wireframe 페이지 컴포넌트 '공통 / 하단 탭' — 탭 5개: 메인 페이지·여행방 관리·AR 팁·기록·지도"
+      "figma": "Navigation / TabBar (578:649, 원본 프레임 인스턴스 716:2714) — items·value·onValueChange로 화면에서 탭 구성을 전달. 프로젝트 명세와 Figma 예시의 탭 구성이 달라 고정하지 않음"
     },
     "EmptyState": {
       "code": "components/ui/empty-state.tsx",
@@ -107,19 +107,19 @@
       "code": "components/ui/checkbox.tsx",
       "source": "react-native-reusables",
       "pencil": "없음",
-      "figma": "Selection / Checkbox (578:711) — State Off·On"
+      "figma": "Selection / Checkbox (716:2670) — Off·On"
     },
     "RadioGroup": {
       "code": "components/ui/radio-group.tsx",
       "source": "react-native-reusables",
       "pencil": "없음",
-      "figma": "Selection / Radio (578:712) — State Off·On"
+      "figma": "Selection / Radio (716:2674) — Off·On"
     },
     "Switch": {
       "code": "components/ui/switch.tsx",
       "source": "react-native-reusables",
       "pencil": "없음",
-      "figma": "Selection / Switch (611:1380) — State Off·On"
+      "figma": "Selection / Switch (716:2681) — Off·On"
     },
     "PageLoading": {
       "code": "components/ui/page-loading.tsx",
@@ -127,9 +127,25 @@
       "figma": "Feedback / PageLoading (489:459) — Type Skeleton·Spinner"
     },
     "FootprintMarker": {
-      "code": "features/map/components/footprint-marker.tsx",
+      "code": "components/ui/footprint-marker.tsx",
       "pencil": "없음",
       "figma": "Map / FootprintMarker (555:517) — State Default·Selected·Cluster"
+    },
+    "TextField": {
+      "code": "components/ui/text-field.tsx (Input 별칭)",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Search / TextField (418:454) — Default·Focused·Error, 52px"
+    },
+    "KakaoLoginButton": {
+      "code": "components/ui/social-login-button.tsx",
+      "pencil": "없음",
+      "figma": "Auth / KakaoLoginButton (692:2863) — 원본 로고, 브랜드 규격"
+    },
+    "GoogleLoginButton": {
+      "code": "components/ui/social-login-button.tsx",
+      "pencil": "없음",
+      "figma": "Auth / GoogleLoginButton (692:2867) — 원본 로고, 브랜드 규격"
     }
   },
   "screens": {

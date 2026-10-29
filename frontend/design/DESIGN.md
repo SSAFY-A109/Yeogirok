@@ -147,24 +147,24 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 | `icon.tsx` | `Icon` | lucide 래퍼 |
 | `dialog.tsx` | `Dialog` 외 | 루트 레이아웃의 `PortalHost` 필요 |
 
-### 5-2. Figma 디자인 시스템 대응 (Design 페이지 컴포넌트 12종, 2026-10-29 확인)
+### 5-2. Figma 디자인 시스템 기본 대응표 (2026-10-29 확인, 원본 프레임 추가분은 5-5)
 
 원본 컴포넌트는 `Design System / 원본 컴포넌트`(488:411) 프레임에 있다. 코드에 아직 없는 컴포넌트는 이 표의 이름·variant로 만든다.
 
 | Figma 컴포넌트 (노드) | 코드 | 대응 |
 |---|---|---|
 | `Action / Button` (418:440) | RNR `Button` | Style Primary → `variant="default"`, Secondary → `"secondary"`, Outline → `"outline"`(`bg-card border-ring text-secondary-foreground`). Size Medium → `h-button-md` + `text-button`, Large → `size="lg"` + `h-button-lg` + `text-button-lg`. 모서리 `rounded-sm`. State: Pressed → Primary `active:bg-primary-pressed`, Secondary·Outline `active:bg-accent` / Loading → 스피너 + 진행 문구(예: "담는 중"), 중복 실행 막기 / Disabled → `disabled`(`bg-disabled text-disabled-foreground`, Outline은 `border-border`). Hover는 RN에서 쓰지 않는다 |
-| `Search / TextField` (418:454) | `components/ui/search-field.tsx` (RNR `Input` 조합) | `bg-card border-input`, `rounded-sm`, 높이 `h-input`, 좌우 패딩 16, 글자 `text-body-sm`. State Focused → `border-2 border-ring`, Error → `border-destructive` + 필드 아래 오류 문구 |
+| `Search / TextField` (418:454) | `components/ui/text-field.tsx` (`Input` 별칭) | `bg-card border-input`, `rounded-sm`, 높이 `h-input`, 좌우 패딩 16, 글자 `text-body-sm`. State Focused → `border-2 border-ring`, Error → `border-destructive` + 필드 아래 오류 문구 |
 | `Search / Textarea` (489:413) | RNR `Textarea` 또는 `Input multiline` | TextField와 같은 테두리·상태·`rounded-sm`. 높이 144, 패딩 16 |
 | `Selection / Dropdown` (489:443) | `components/ui/dropdown.tsx` | State Default·Focused·Open·Disabled. 트리거 높이 52, 글자 `text-label`, 열린 목록의 선택 항목에 체크 아이콘 |
-| `Selection / FilterChip` (418:471) | `components/ui/filter-chip.tsx` | Size Small `h-chip-sm` · Medium `h-chip-md`, 글자는 두 크기 모두 `text-label`, `rounded-sm`. Default `bg-card border-border-strong text-foreground-secondary` · Selected `bg-chip-selected border-ring text-primary-hover` + 체크 아이콘 · Disabled `bg-muted text-muted-foreground`(테두리 없음). 터치 영역은 `hitSlop`으로 44 확보 |
+| `Selection / FilterChip` (418:471) | `components/ui/filter-chip.tsx` | Size Small `h-chip-sm` · Medium `h-chip-md`, 글자는 두 크기 모두 `text-label`, `rounded-sm`. Default `bg-card border-border-strong text-foreground-secondary` · Selected `bg-chip-selected border-ring text-primary-hover`(현재 Figma 원본에는 체크 아이콘 없음) · Disabled `bg-muted text-muted-foreground`(테두리 없음). 터치 영역은 `hitSlop`으로 44 확보 |
 | `Selection / DayChip` (616:1502) | `components/ui/day-chip.tsx` | 68×52, `rounded-md`. Default `bg-card border-border` 요일 `text-label text-foreground` + 날짜 `text-caption text-foreground-secondary` · Selected `bg-primary` + `text-primary-foreground`. Alert On/Off(알림 점) |
 | `Selection / Checkbox` (578:711) | `components/ui/checkbox.tsx` (RNR) | 24×24, `rounded-xs`. Off `bg-card border-input`(1.5) · On `bg-primary` + 체크 아이콘. 터치 영역 44 |
 | `Selection / Radio` (578:712) | `components/ui/radio-group.tsx` (RNR) | 22×22 원형. Off `bg-card border-input`(1.5) · On `border-2 border-primary` + 안쪽 점. 터치 영역 44 |
-| `Selection / Switch` (611:1380) | `components/ui/switch.tsx` (RNR) | 44×26 원형 트랙. Off `bg-border-strong` · On `bg-primary` |
+| `Selection / Switch` (611:1380) | `components/ui/switch.tsx` (RNR) | 44×26 원형 트랙, 22×22 손잡이. Off `bg-border-strong` · On `bg-primary`. 손잡이 18px 이동과 트랙 색을 `duration-fast`(150ms)로 전환. 동작 줄이기 설정에서는 즉시 전환 |
 | `Feedback / Badge` (418:484) | RNR `Badge` + 프로젝트 variant | `rounded-xs`, 글자 `text-label-sm`, 높이 24. 쇼케이스 기준(사용자 결정 2026-10-29): Tone Neutral `bg-muted text-foreground-secondary` · Brand `bg-primary-pressed text-primary-foreground` · Coral `bg-muted text-foreground-secondary`(코랄 포인트는 시안 확인) · Success `bg-badge-correct text-primary-foreground`. Figma 원본 컴포넌트의 Brand·Success는 아직 회색 배경이다(5-4 후속 작업) |
 | `Feedback / PageLoading` (489:459) | `components/ui/page-loading.tsx` | Type Skeleton(`Skeleton` + `text-caption text-muted-foreground` 안내) · Spinner(스피너 + `text-label` 제목 + `text-caption` 설명). 카드 `bg-card border-border rounded-sm`, 패딩 24 |
-| `Map / FootprintMarker` (555:517) | `features/map/components/` (지도 SDK 마커) | State Default·Selected·Cluster, 56×64. 색은 `map-footprint`(`lib/theme.ts`), Cluster 숫자 `text-label-sm text-highlight`. 흰 테두리 필수(대비 주의 참고) |
+| `Map / FootprintMarker` (555:517) | `components/ui/footprint-marker.tsx` (지도 SDK와 무관한 마커 뷰) | State Default·Selected·Cluster, 56×64. 사용자 제공 발자취 WebP와 Figma 선택 링 사용, Cluster 숫자 `text-label-sm text-highlight`. WebP에 흰 테두리 포함 |
 
 ### 5-3. 프로젝트 전용
 
@@ -193,6 +193,21 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 
 Figma 후속 작업(사용자 요청 2026-10-29 — 팀원 작업이 끝난 뒤 진행): 사용 규칙 04 문구를 `#D4DAE0`으로 고치고, Badge 원본 컴포넌트 Brand·Success를 쇼케이스 기준으로 맞춘다. Design System 프레임의 색 스와치에 새 변수(`action/primary-pressed`, `text/success`, `chip/selected-bg`, `badge/correct`, `font/select`)를 추가할지도 함께 정한다.
 
+### 5-5. 원본 프레임 구현 추가분 (2026-10-29, S15P31A109-81)
+
+사용자가 지정한 `488:411` 프레임은 구현 시점에 15종이다. 위 인벤토리의 DayChip은 이 프레임에 없으며, 이번 구현 범위에 포함하지 않았다. 실제 내보내기·props·사용 예시는 `components/ui/README.md`를 따른다.
+
+| Figma | 코드 | 규격 |
+| --- | --- | --- |
+| `Search / SearchField` (584:1051, 716:2680) | `search-field.tsx` · `SearchField` | 기존 TextField와 별도. 높이 44, `rounded-md`, `border-border`, 패딩 12, 원본 검색 아이콘 20 |
+| `Auth / KakaoLoginButton` (692:2863) | `social-login-button.tsx` · `KakaoLoginButton` | 높이 52, 원형 모서리, 원본 카카오 심볼 20, `auth-kakao` 배경, `text-black/85` |
+| `Auth / GoogleLoginButton` (692:2867) | `social-login-button.tsx` · `GoogleLoginButton` | 높이 52, 원형 모서리, 원본 G 로고 20, 흰 배경, `auth-google-border` 테두리, `auth-google-foreground` 글자 |
+| `Navigation / TabBar` (578:649, 716:2714) | `tab-bar.tsx` · `TabBar` | `items`, `value`, `onValueChange`. Figma 예시와 아래 명세의 탭 구성이 달라 라우팅·탭 목록을 고정하지 않음. OS 하단 안전 영역 적용 |
+
+브랜드 규격용 색 3개는 사용자 승인(2026-10-29)에 따라 추가한 **코드 전용 고정 토큰**이다. `auth-kakao=#FEE500`, `auth-google-border=#747775`, `auth-google-foreground=#1F1F1F`. Figma Auth 설명에서 지정한 값이며 기존 팔레트와 별도로 취급한다. Pencil 에디터에 열린 파일이 없어 변수 대조는 하지 못했다. 해당 값과 컴포넌트는 Pencil 미대조로 기록한다. 생성 파일은 `pnpm tokens:sync`로 갱신한다.
+
+로딩 스켈레톤의 116·168 너비는 코드 전용 치수 `size.skeleton-heading`, `size.skeleton-line`으로 추가했다(Figma `489:444`). 선택 컨트롤의 현재 프레임 노드는 Checkbox `716:2670`, Radio `716:2674`, Switch `716:2681`이다. Checkbox·Radio는 원본 SVG를 RNR 상호작용 요소 안에 렌더한다. Switch는 RNR 트랙·손잡이로 구성해 위치와 색을 애니메이션으로 전환한다. Dropdown은 RNR Select를 조합하고 루트 레이아웃의 `PortalHost`를 사용한다.
+
 ## 6. 화면 패턴
 
 - 하단 탭은 5개다(기능 명세서 v2 §3, Figma 사용자 흐름 10/23).
@@ -218,6 +233,6 @@ Figma 후속 작업(사용자 요청 2026-10-29 — 팀원 작업이 끝난 뒤 
 | 토큰 동기화 | `pnpm tokens:sync` = `scripts/sync-pen-tokens.cjs`(design.pen 변수 → tokens.json, 같은 hex는 프리미티브 참조) → `scripts/sync-tokens.cjs`(→ tailwind.config.js · global.css · lib/theme.ts). 불일치는 `tokens:check`·`harness:check`가 잡는다. CI는 두지 않는다(2026-09-01 결정) |
 | 마지막 동기화 | `tokens.json` `$source.pencilSyncedAt` |
 | 구현 전 대조 | `design/design-map.json`의 Pencil 노드 id → MCP `Get`·`TakeScreenshot`(`pencil-design` 절차 B) |
-| Pencil 변수에 없는 토큰 | `radius.2xl·3xl·full`, 타이포 12종, 모션 — 코드 전용. 승인 후 `tokens.json`에서 직접 관리 |
+| Pencil 변수에 없는 토큰 | `radius.2xl·3xl·full`, 타이포 12종, 모션, `auth-*` 색 3개, `size.skeleton-heading·skeleton-line` — 코드 전용. 승인 후 `tokens.json`에서 직접 관리 |
 | 새 토큰 추가 | `sync-pen-tokens.cjs`는 기존 항목의 값만 갱신하고 새 항목을 만들지 않는다. 새 Pencil 변수는 `tokens.json`에 같은 이름의 항목을 함께 추가한다(승인 필요) |
 | Figma 내보내기 | 없음 — KeyFin 때 만든 `pnpm figma:build`(Pencil → Figma)는 2026-10-27 제거했다(사용자 결정: 유지 금지). 방향은 Figma → Pencil 한쪽뿐이다 |

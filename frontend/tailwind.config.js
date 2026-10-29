@@ -53,6 +53,9 @@ module.exports = {
       "map-route": "rgb(var(--color-map-route) / <alpha-value>)",
       "map-pin": "rgb(var(--color-map-pin) / <alpha-value>)",
       "map-footprint": "rgb(var(--color-map-footprint) / <alpha-value>)",
+      "auth-kakao": "rgb(var(--color-auth-kakao) / <alpha-value>)",
+      "auth-google-border": "rgb(var(--color-auth-google-border) / <alpha-value>)",
+      "auth-google-foreground": "rgb(var(--color-auth-google-foreground) / <alpha-value>)",
       "white": "rgb(var(--color-white) / <alpha-value>)",
       "black": "rgb(var(--color-black) / <alpha-value>)"
     },
@@ -178,7 +181,9 @@ module.exports = {
         "chip-sm": "32px",
         "chip-md": "36px",
         "icon": "24px",
-        "icon-sm": "20px"
+        "icon-sm": "20px",
+        "skeleton-heading": "116px",
+        "skeleton-line": "168px"
       },
       minHeight: {
         "touch": "44px",
@@ -189,7 +194,9 @@ module.exports = {
         "chip-sm": "32px",
         "chip-md": "36px",
         "icon": "24px",
-        "icon-sm": "20px"
+        "icon-sm": "20px",
+        "skeleton-heading": "116px",
+        "skeleton-line": "168px"
       },
       minWidth: {
         "touch": "44px",
@@ -200,7 +207,9 @@ module.exports = {
         "chip-sm": "32px",
         "chip-md": "36px",
         "icon": "24px",
-        "icon-sm": "20px"
+        "icon-sm": "20px",
+        "skeleton-heading": "116px",
+        "skeleton-line": "168px"
       },
       width: {
         "touch": "44px",
@@ -211,7 +220,9 @@ module.exports = {
         "chip-sm": "32px",
         "chip-md": "36px",
         "icon": "24px",
-        "icon-sm": "20px"
+        "icon-sm": "20px",
+        "skeleton-heading": "116px",
+        "skeleton-line": "168px"
       },
       transitionDuration: {
         "fast": "150ms",
