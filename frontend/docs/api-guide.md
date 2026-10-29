@@ -314,6 +314,7 @@ export function useUploadMedia() {
 
 ## 9. 목(MSW)
 
+- 현재 설치와 실행 방법은 `docs/msw.md`를 따른다. MSW는 React Native 호환성을 위해 `2.3.5`로 고정했고, `index.ts`에서 네이티브·웹 초기화를 마친 뒤 라우터를 시작한다.
 - 버전: **`msw@2`** 고정. `msw@3`은 `msw/native`를 없앴고, 대체 패키지 `@msw/react-native`는 npm에 아직 없다(2026-10-27 확인).
 - 구조:
   - `api/mocks/handlers/<domain>.ts`: `http.get("*/api/v1/rooms", …)` 형태의 핸들러

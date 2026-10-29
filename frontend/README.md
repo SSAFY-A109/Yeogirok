@@ -14,8 +14,19 @@ pnpm install
 pnpm start          # Expo 개발 서버
 ```
 
-- 아직 Expo 기본 템플릿 의존성만 설치되어 있습니다. NativeWind·RNR·TanStack Query 등 나머지 스택과 테스트 도구 설치 순서는 [`docs/setup.md`](docs/setup.md)에 있습니다.
+- 설치된 패키지는 `package.json`이 기준입니다. 나머지 스택과 테스트 도구 설치 순서는 [`docs/setup.md`](docs/setup.md)에 있습니다.
 - 지도·AR·카메라 같은 네이티브 모듈은 Expo Go에서 동작하지 않으므로 개발 빌드(`expo-dev-client`)로 실행합니다.
+
+## 백엔드 없이 개발하기 (MSW)
+
+`.env.example`의 `EXPO_PUBLIC_API_URL`을 `.env.local`에 추가한 뒤 `pnpm start`로 실행합니다. 기존 `.env.local`이 없다면 `.env.example`을 복사합니다.
+
+개발 앱은 MSW를 준비한 다음 Expo Router를 시작합니다. Android·iOS는 `msw/native`, `pnpm web`은 Service Worker를 사용합니다. 배포 앱은 MSW 초기화를 실행하지 않습니다.
+
+- 핸들러 등록: `api/mocks/handlers/index.ts` — 도메인 API 구현 시 명세에 맞는 핸들러를 추가합니다. 초기 목록은 비어 있습니다.
+- 미등록 `/api/v1` 요청은 오류로 처리합니다. 외부 SDK·정적 리소스 요청은 통과합니다.
+- 설정 검증: `pnpm msw:check` — 실제 백엔드 없이 네이티브·Node용 MSW의 응답, 오류, 초기화, 미등록 API 차단, 외부 요청 통과를 확인합니다.
+- 사용법과 테스트 연결: [`docs/msw.md`](docs/msw.md).
 
 ## 폴더
 
