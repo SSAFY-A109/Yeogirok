@@ -1,0 +1,22 @@
+{
+  "source_lists": [
+    "train.txt",
+    "aihub_train.txt"
+  ],
+  "source_lines": 84935,
+  "ratio": 0.3,
+  "aug_lines": 25480,
+  "ops_per_image_max": 2,
+  "seed": 0,
+  "op_counts": {
+    "blur": 4211,
+    "motion": 4268,
+    "noise": 4256,
+    "dark": 4316,
+    "bright": 4213,
+    "shadow": 4208,
+    "rotate": 4153,
+    "jpeg": 4313,
+    "fade": 4258
+  }
+}
