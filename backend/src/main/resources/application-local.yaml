@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/yeogirok}
+    username: ${DB_USERNAME:yeogirok}
+    password: ${DB_PASSWORD:yeogirok}
+  jpa:
+    hibernate:
+      ddl-auto: update
