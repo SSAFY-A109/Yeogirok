@@ -44,7 +44,7 @@ Figma 자율 A109 › Design 페이지 (팀 디자인 시스템: 변수 66 · �
 Figma 자율 A109 › Wireframe 페이지 (Wxx) ─ 화면 구성·문구·흐름 참고
    │ 에이전트가 읽어 옮긴다 (코드는 Figma를 읽지 않는다)
    ▼
-design.pen (Pencil — 확정 원천: 변수 49개 + 아트보드)
+design.pen (Pencil — 확정 원천: 변수 56개 + 아트보드)
    ├─ sync-pen-tokens.cjs ──▶ design/tokens.json ──sync-tokens.cjs──▶ tailwind.config.js · global.css · lib/theme.ts
    │                                                                         │  규칙 70: 시맨틱 토큰만 사용
    └─ 구현 전 대조 (Pencil MCP Get · TakeScreenshot, design-map.json 노드 id) ─▶ components/ui(RNR) · features 구현 → tokens:check
