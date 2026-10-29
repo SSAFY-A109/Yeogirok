@@ -43,6 +43,9 @@ export const colors = {
     "map-route": "#49B5E7",
     "map-pin": "#1A73A3",
     "map-footprint": "#FFAA8D",
+    "auth-kakao": "#FEE500",
+    "auth-google-border": "#747775",
+    "auth-google-foreground": "#1F1F1F",
     white: "#FFFFFF",
     black: "#000000",
   },
@@ -86,6 +89,9 @@ export const colors = {
     "map-route": "#49B5E7",
     "map-pin": "#1A73A3",
     "map-footprint": "#FFAA8D",
+    "auth-kakao": "#FEE500",
+    "auth-google-border": "#747775",
+    "auth-google-foreground": "#1F1F1F",
     white: "#FFFFFF",
     black: "#000000",
   },
@@ -211,6 +217,8 @@ export const size = {
   "chip-md": 36,
   icon: 24,
   "icon-sm": 20,
+  "skeleton-heading": 116,
+  "skeleton-line": 168,
 } as const;
 
 export const motion = {
