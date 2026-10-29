@@ -39,6 +39,9 @@
     --color-map-route: 73 181 231;
     --color-map-pin: 26 115 163;
     --color-map-footprint: 255 170 141;
+    --color-auth-kakao: 254 229 0;
+    --color-auth-google-border: 116 119 117;
+    --color-auth-google-foreground: 31 31 31;
     --color-white: 255 255 255;
     --color-black: 0 0 0;
   }
@@ -78,6 +81,9 @@
     --color-map-route: 73 181 231;
     --color-map-pin: 26 115 163;
     --color-map-footprint: 255 170 141;
+    --color-auth-kakao: 254 229 0;
+    --color-auth-google-border: 116 119 117;
+    --color-auth-google-foreground: 31 31 31;
     --color-white: 255 255 255;
     --color-black: 0 0 0;
   }

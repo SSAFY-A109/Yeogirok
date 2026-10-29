@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "ui:check": "node scripts/check-ui.cjs",
     "ui:add": "pnpm dlx shadcn@latest add --yes",
     "tokens:sync": "node scripts/sync-pen-tokens.cjs && node scripts/sync-tokens.cjs",
     "tokens:check": "node scripts/sync-pen-tokens.cjs --check && node scripts/sync-tokens.cjs --check && node scripts/check-tokens.cjs",
@@ -22,6 +23,14 @@
   },
   "dependencies": {
     "@expo/ui": "~58.0.23",
+    "@rn-primitives/checkbox": "^1.5.2",
+    "@rn-primitives/portal": "^1.5.3",
+    "@rn-primitives/radio-group": "^1.5.2",
+    "@rn-primitives/select": "^1.5.2",
+    "@rn-primitives/slot": "^1.5.2",
+    "@rn-primitives/switch": "^1.5.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "expo": "~58.0.19",
     "expo-build-properties": "~58.0.11",
     "expo-constants": "~58.0.13",
@@ -37,6 +46,7 @@
     "expo-symbols": "~58.0.4",
     "expo-system-ui": "~58.0.6",
     "expo-web-browser": "~58.0.6",
+    "lucide-react-native": "^1.62.0",
     "nativewind": "^4.2.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -46,9 +56,11 @@
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
+    "react-native-svg": "15.16.0",
     "react-native-web": "~0.21.4",
     "react-native-webview": "14.0.1",
-    "react-native-worklets": "0.13.0"
+    "react-native-worklets": "0.13.0",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@babel/plugin-transform-react-jsx": "^7.29.7",

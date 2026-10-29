@@ -2,14 +2,14 @@
   "$description": "화면·컴포넌트 → design.pen(Pencil) 노드 매핑과 팀 Figma 참고 위치. 코드 구현의 확정본은 Pencil이다. 화면·컴포넌트를 구현하기 전에 여기서 pencil 노드 id를 찾아 Pencil MCP `Get`(구조·프레임 자체의 fill·좌표)과 `TakeScreenshot`(시각)으로 대조한다. pencil이 '없음'이면 DESIGN.md 기준으로 구현하고 보고서에 'Pencil 미대조'로 표시한다. figma 필드는 팀 Figma의 참고 위치(구성·문구·흐름)이며 값·토큰의 근거로 쓰지 않는다.",
   "pencil": {
     "file": "design.pen",
-    "updatedAt": "2026-10-27",
-    "note": "2026-10-27 KeyFin(이전 핀테크 프로젝트) 아트보드 16개와 이미지 14장을 제거하고, 문서 변수 49개를 여기록 Figma 디자인 시스템 값으로 교체했다. 여기록 화면 아트보드는 아직 없다 — pencil-design 절차 A로 그리면서 아래 screens에 기록한다.",
-    "variables": "문서 변수 49개 = 시맨틱 색 34(라이트 단일 값) + white/black + radius-xs·sm·md·lg·xl + size-touch·button-sm·button-md·button-lg·input·icon·icon-sm + font-sans(Noto Sans KR). 이름이 곧 tokens.json 경로다."
+    "updatedAt": "2026-10-29",
+    "note": "2026-10-27 KeyFin(이전 핀테크 프로젝트) 아트보드 16개와 이미지 14장을 제거하고, 문서 변수를 여기록 Figma 디자인 시스템 값으로 교체했다. 2026-10-29 Figma 추가분을 반영해 변수 56개가 됐다. 여기록 화면 아트보드는 아직 없다 — pencil-design 절차 A로 그리면서 아래 screens에 기록한다.",
+    "variables": "문서 변수 56개 = 시맨틱 색 39(라이트 단일 값, Figma Layout 컬렉션의 badge/correct·font/select 포함) + white/black + radius-xs·sm·md·lg·xl + size-touch·button-sm·button-md·button-lg·input·chip-sm·chip-md·icon·icon-sm + font-sans(Noto Sans KR). 이름이 곧 tokens.json 경로다."
   },
   "figma": {
     "file": "자율 A109 (t6whqCoBlVvwqBs8aCCuvG)",
-    "designSystem": "Design 페이지(414:485) — Design System 프레임(414:486: 색·타이포·간격·사용 규칙), Design System Components 프레임(418:407)",
-    "variables": "여기록 · Primitives(22) · 여기록 · Semantic Colors(26, Light) · 여기록 · Layout(18). 대응표는 DESIGN.md §2",
+    "designSystem": "Design 페이지(414:485) — Design System 프레임(414:486: 색·타이포·간격·사용 규칙), Design System Components 프레임(418:407: 쇼케이스), Design System / 원본 컴포넌트 프레임(488:411: 컴포넌트 12종 원본)",
+    "variables": "여기록 · Primitives(25) · 여기록 · Semantic Colors(29, Light) · 여기록 · Layout(22). 텍스트 스타일 12개. 2026-10-29 확인. 대응표는 DESIGN.md §2",
     "wireframe": "Wireframe 페이지(260:408) — 화면 번호 Wxx. Pencil 아트보드 이름에 같은 번호를 쓴다",
     "userFlow": "User Flow 페이지(0:1) — 아래쪽 다이어그램이 기준(기능 명세서 v2)",
     "role": "참고 전용. 화면 구성·문구·흐름과 변수 값의 출처이며, 코드는 Figma를 직접 읽지 않는다. 팀원 레이어가 있으므로 쓰기는 사용자가 요청한 범위만 한다."
@@ -25,7 +25,7 @@
       "code": "components/ui/button.tsx",
       "source": "react-native-reusables",
       "pencil": "없음",
-      "figma": "Action / Button (418:440) — Size Medium·Large × Style Primary·Secondary·Outline × State Default·Disabled"
+      "figma": "Action / Button (418:440) — Size Medium·Large × Style Primary·Secondary·Outline × State Default·Hover·Pressed·Loading·Disabled"
     },
     "Input": {
       "code": "components/ui/input.tsx",
@@ -36,7 +36,7 @@
     "SearchField": {
       "code": "components/ui/search-field.tsx",
       "pencil": "없음",
-      "figma": "Search / TextField (418:454) — State Default·Focused·Error"
+      "figma": "Search / SearchField (584:1051, 원본 프레임 인스턴스 716:2680) — 검색 아이콘 포함, 44px"
     },
     "FilterChip": {
       "code": "components/ui/filter-chip.tsx",
@@ -77,7 +77,7 @@
     "TabBar": {
       "code": "components/ui/tab-bar.tsx",
       "pencil": "없음",
-      "figma": "Wireframe 페이지 컴포넌트 '공통 / 하단 탭' — 탭 5개: 메인 페이지·여행방 관리·AR 팁·기록·지도"
+      "figma": "Navigation / TabBar (578:649, 원본 프레임 인스턴스 716:2714) — items·value·onValueChange로 화면에서 탭 구성을 전달. 프로젝트 명세와 Figma 예시의 탭 구성이 달라 고정하지 않음"
     },
     "EmptyState": {
       "code": "components/ui/empty-state.tsx",
@@ -86,6 +86,66 @@
     "BottomSheet": {
       "code": "components/ui/bottom-sheet.tsx",
       "pencil": "없음"
+    },
+    "Textarea": {
+      "code": "components/ui/textarea.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Search / Textarea (489:413) — State Default·Focused·Error"
+    },
+    "Dropdown": {
+      "code": "components/ui/dropdown.tsx",
+      "pencil": "없음",
+      "figma": "Selection / Dropdown (489:443) — State Default·Focused·Open·Disabled"
+    },
+    "DayChip": {
+      "code": "components/ui/day-chip.tsx",
+      "pencil": "없음",
+      "figma": "Selection / DayChip (616:1502) — State Default·Selected × Alert On·Off"
+    },
+    "Checkbox": {
+      "code": "components/ui/checkbox.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Selection / Checkbox (716:2670) — Off·On"
+    },
+    "RadioGroup": {
+      "code": "components/ui/radio-group.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Selection / Radio (716:2674) — Off·On"
+    },
+    "Switch": {
+      "code": "components/ui/switch.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Selection / Switch (716:2681) — Off·On"
+    },
+    "PageLoading": {
+      "code": "components/ui/page-loading.tsx",
+      "pencil": "없음",
+      "figma": "Feedback / PageLoading (489:459) — Type Skeleton·Spinner"
+    },
+    "FootprintMarker": {
+      "code": "components/ui/footprint-marker.tsx",
+      "pencil": "없음",
+      "figma": "Map / FootprintMarker (555:517) — State Default·Selected·Cluster"
+    },
+    "TextField": {
+      "code": "components/ui/text-field.tsx (Input 별칭)",
+      "source": "react-native-reusables",
+      "pencil": "없음",
+      "figma": "Search / TextField (418:454) — Default·Focused·Error, 52px"
+    },
+    "KakaoLoginButton": {
+      "code": "components/ui/social-login-button.tsx",
+      "pencil": "없음",
+      "figma": "Auth / KakaoLoginButton (692:2863) — 원본 로고, 브랜드 규격"
+    },
+    "GoogleLoginButton": {
+      "code": "components/ui/social-login-button.tsx",
+      "pencil": "없음",
+      "figma": "Auth / GoogleLoginButton (692:2867) — 원본 로고, 브랜드 규격"
     }
   },
   "screens": {
