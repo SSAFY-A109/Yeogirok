@@ -1,0 +1,70 @@
+# 서버용 Compose. 서버의 ~/yeogirok/infra-src/infra 에서 실행한다.
+#
+#   docker compose up -d --build     # 전체 켜기 (처음 한 번)
+#   docker compose ps                # 상태 보기
+#   docker compose logs -f backend   # 백엔드 로그 보기
+#
+# 값은 같은 폴더의 .env 에서 읽는다(.env.example 참고, 커밋 금지).
+#
+# 포트는 모두 127.0.0.1 에만 연다. Docker는 방화벽(ufw) 규칙을 건너뛰고 포트를 열기 때문에,
+# "5432:5432"처럼 쓰면 DB가 인터넷에 그대로 노출된다. 바깥에서 들어오는 길은 Nginx(80·443) 하나뿐이다.
+
+name: yeogirok
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"   # 서버 안에서만 접속 가능 (SSH 터널로 조회할 때 사용)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    # 서버에 따로 받아 둔 backend/dev 코드로 이미지를 만든다 (가이드 3단계 폴더 구조).
+    build: ../../backend-src/backend
+    image: yeogirok-backend:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy   # DB가 준비된 뒤에 백엔드를 띄운다
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+      # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
+      # JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "127.0.0.1:8080:8080"   # Nginx만 접근
+
+  # AI 서버는 FastAPI 앱이 준비되면 주석을 푼다 (가이드 9단계).
+  # 앱에서 직접 부르지 않고 백엔드가 내부망(http://ai:8000)으로 부르므로 포트를 열지 않는다.
+  # ai:
+  #   build: ../../ai-src/ai
+  #   image: yeogirok-ai:latest
+  #   restart: unless-stopped
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   environment:
+  #     DB_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_NAME}
+  #     GMS_KEY: ${GMS_KEY}
+  #     TZ: Asia/Seoul
+  #   volumes:
+  #     - paddle-models:/root/.paddlex   # OCR 모델 파일을 배포 때마다 다시 받지 않게 보관
+
+volumes:
+  db-data:
+  # paddle-models:
