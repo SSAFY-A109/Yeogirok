@@ -27,7 +27,10 @@ def warmup():
 
 
 def decode(raw: bytes) -> np.ndarray:
-    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    try:
+        img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    except cv2.error:                             # 디코딩 중 예외도 400 (이전: 500)
+        img = None
     if img is None:
         raise HTTPException(400, "이미지를 읽을 수 없습니다.")
     return img
@@ -36,6 +39,8 @@ def decode(raw: bytes) -> np.ndarray:
 @app.post("/ocr/receipt")
 async def ocr_receipt(file: UploadFile = File(...)):
     raw = await file.read()
+    if not raw:                                   # 빈 파일(0바이트) → 400 (이전: cv2 예외로 500)
+        raise HTTPException(400, "빈 파일입니다.")
     if len(raw) > MAX_BYTES:
         raise HTTPException(413, "10MB 이하 이미지만 받습니다.")
     texts, scores, polys = get_runner()(decode(raw))
