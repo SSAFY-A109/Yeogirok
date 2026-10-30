@@ -45,9 +45,31 @@ def test_errors_are_json():
         assert r.headers["content-type"].startswith("application/json")
 
 
+
+def _png_bytes():
+    import cv2
+    import numpy as np
+    ok, buf = cv2.imencode(".png", np.full((40, 40, 3), 255, np.uint8))
+    return buf.tobytes()
+
+
+def test_ocr_internal_error_is_json_500_without_details():
+    def boom(img):
+        raise RuntimeError("secret internal path /home/x/model")
+    server.get_runner = lambda: boom
+    try:
+        r = post(_png_bytes(), name="ok.png")
+    finally:
+        server.get_runner = lambda: _ocr_must_not_run
+    assert r.status_code == 500
+    assert r.headers["content-type"].startswith("application/json")
+    assert r.json() == {"detail": "OCR 처리 중 오류가 발생했습니다."}
+    assert "secret" not in r.text
+
 if __name__ == "__main__":
     tests = [v for k, v in dict(globals()).items() if k.startswith("test_")]
     for t in tests:
         t()
         print("PASS", t.__name__)
     print(f"{len(tests)}/{len(tests)} 통과")
+
