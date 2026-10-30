@@ -69,6 +69,33 @@ def test_spaced_label_is_removed():
     assert r.placeName == "948키친"
 
 
+def test_v0r2_slash_bizno_and_price_line():
+    r = parse_receipt(L("[영수증]", "서울 강남구 테헤란로1길 9(역삼동,가나 바다초밥/123-45-67890/홍길동",
+                        "2026-10-27 18:42:03", "회덮밥 10,000 1 10,000"))
+    assert r.placeName == "바다초밥"
+
+
+def test_v0r2_two_line_name():
+    r = parse_receipt(L("가나커피", "1234호점 다라빌딩점", "일자:2026-10-28 08:52:37"))
+    assert r.placeName == "가나커피 1234호점 다라빌딩점"
+
+
+def test_v0r2_cut_corp_suffix():
+    r = parse_receipt(L("AB마트 (주)가나유통 마트|", "864-87-02077홍길동 043-724-4989", "26-08-29 18:32"))
+    assert r.placeName == "AB마트"
+
+
+def test_v0r2_cut_duplicate():
+    r = parse_receipt(L("가나다라제과(마바)(가나다라제과(마", "2026-10-01 10:00"))
+    assert r.placeName == "가나다라제과(마바)"
+
+
+def test_v0r2b_spaced_name_with_slash_bizno():
+    r = parse_receipt(L("[영수증]-재발행", "가나다 라마식당/123-45-67890! 홍길동", "부산 부산진구 서전로 75",
+                        "2026-02-25 21:26:03"))
+    assert r.placeName == "가나다 라마식당"
+
+
 if __name__ == "__main__":   # pytest 없이도 실행: python test_parser.py
     tests = [f for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
