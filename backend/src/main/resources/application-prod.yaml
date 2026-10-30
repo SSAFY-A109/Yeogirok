@@ -1,0 +1,16 @@
+# 서버(EC2) 프로필. infra/docker-compose.yml 이 SPRING_PROFILES_ACTIVE=prod 와 아래 환경 변수를 넘긴다.
+spring:
+  datasource:
+    # local 과 같은 이름이지만 기본값을 두지 않는다. 값이 없으면 잘못된 DB에 붙지 않고 실행이 바로 실패한다.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      # Flyway(V1) 도입 전까지만 update 로 둔다. V1 이 들어오는 날 validate 로 바꾸고 서버 DB를 한 번 비운다.
+      ddl-auto: update
+
+server:
+  # Nginx(HTTPS) 뒤에서 X-Forwarded-* 헤더로 원래 주소(https, 도메인)를 복원한다.
+  # 없으면 Swagger 가 서버 주소를 http://127.0.0.1:8080 으로 잡아 HTTPS 페이지에서 요청이 깨진다.
+  forward-headers-strategy: framework
