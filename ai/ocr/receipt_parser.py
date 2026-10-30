@@ -85,6 +85,8 @@ NOISE_WORDS = [
 BIZ_NO_RE = re.compile(r"\d{3}-\d{2}-\d{5}")   # 사업자번호 123-45-67890
 
 
+NOISE_WORDS += ["전표"]   # v0r2
+
 # ---------- 3. 추출 ----------
 
 def _valid_date(y: int, m: int, d: int) -> bool:
@@ -158,6 +160,8 @@ def _after_label(text: str, labels: list[str]) -> Optional[str]:
 
 
 def _looks_like_name(text: str) -> bool:
+    if re.search(r"\d{1,3},\d{3}", text):   # v0r2 ① 금액이 있는 줄(품목·합계)은 상호명 아님
+        return False
     if text.strip().upper() in ("DATE", "NO", "NO."):
         return False
     if re.search(r"\d{6,}", text):   # 사업자번호·전화번호처럼 긴 숫자가 있는 줄은 상호명 아님
@@ -221,6 +225,7 @@ def extract_place(lines: list[tuple[str, float]]):
             text = _join_wrapped(text, lines, i)
             cleaned = re.sub(r"[\[\]<>*=]+", " ", text).strip(" -")
             cleaned = re.sub(r"\s+", " ", cleaned.replace("_", " "))
+            cleaned = _clean_name_v0r2(cleaned)   # v0r2 ②③④
             # 'OO식당/123-45-67890/홍길동' → 사업자번호 앞까지만 상호명으로 쓴다
             if BIZ_NO_RE.search(cleaned):
                 cleaned = re.split(r"\s*/?\s*\d{3}-\d{2}-\d{5}", cleaned)[0].strip(" /")
@@ -233,7 +238,47 @@ def extract_place(lines: list[tuple[str, float]]):
             branch = [c for c in cands if re.search(r"점\b|점[#(]|점\)", c[0])]   # 'OO점' 지점명 줄이 1순위
             corp = [c for c in cands if re.search(r"\(주\)|㈜", c[0])]            # 법인 표기 줄이 2순위
             name, name_score = (branch or corp or cands)[0]
+            name = _join_two_line_name_v0r2(name, lines)   # v0r2 ⑤
     return name, address, name_score
+
+
+
+# ---------- v0r2 상호명 규칙 ----------
+
+def _clean_name_v0r2(c: str) -> str:
+    # ② 'OO초밥/123-45-67890/홍길동' → 사업자번호 바로 앞 토큰
+    m = re.search(r"^(.*?)\s*/\s*\d{3}-\d{2}-\d{5}", c)   # v0r2b
+    if m:
+        head = m.group(1).strip(" ,")
+        # '/' 앞 전체가 상호명처럼 보이면 그대로 (띄어쓰기 있는 상호명), 주소가 섞였으면 마지막 단어만
+        c = head if _looks_like_name(head) else re.split(r"[\s,()]+", head)[-1]
+    # ③ 'OO마트 (주)OO유통' → 'OO마트' (법인 표기 앞에 글자 2개 이상 이름이 있을 때만)
+    m = re.match(r"^(.*?[가-힣A-Za-z].*?[가-힣A-Za-z].*?)\s*(\(주\)|㈜)", c)
+    if m and m.group(1).strip():
+        c = m.group(1).strip()
+    # ④ 'OO제과(OO)(OO제과(O' → 'OO제과(OO)' : 괄호 뒤가 앞부분의 반복이면 자름
+    for k in range(2, len(c)):
+        if c[k] == "(" and len(c) - k - 1 >= 4 and c.startswith(c[k + 1:]):
+            c = c[:k]
+            break
+    return c.strip(" |")
+
+
+def _join_two_line_name_v0r2(name: str, lines) -> str:
+    # ⑤ 지점 줄이 숫자로 시작('123호점 OO점')하면 바로 윗줄 짧은 이름을 앞에 붙임
+    if not re.match(r"^\d", name):
+        return name
+    for j, (t, _) in enumerate(lines[:12]):
+        if name in t and j > 0:
+            prev = re.sub(r"[\[\]<>*=]+", " ", lines[j - 1][0]).strip(" -|")
+            if _looks_like_name(prev) and len(prev) <= 15 and "점" not in prev:
+                full = re.sub(r"[\[\]<>*=]+", " ", t).strip(" -|")
+                # '123호점 OO점' 처럼 줄 전체가 지점명이면 줄 전체를 사용 (첫 '점'에서 잘리는 것 방지)
+                if re.fullmatch(r"[\d가-힣A-Za-z()# ]{2,30}", full) and full.endswith("점"):
+                    name = full
+                return f"{prev} {name}"
+            break
+    return name
 
 
 @dataclass
