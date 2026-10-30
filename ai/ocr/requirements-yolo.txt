@@ -1,0 +1,8 @@
+# YOLO 영수증 검출 전용 환경 (OCR 환경과 분리). torch는 CUDA 12.8용: pip install -r requirements-yolo.txt --extra-index-url https://download.pytorch.org/whl/cu128
+opencv-python==5.0.0.93
+opencv-python-headless==5.0.0.93
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+ultralytics==8.4.192
+ultralytics-platform==0.1.101
+ultralytics-thop==2.2.3
