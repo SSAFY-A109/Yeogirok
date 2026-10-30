@@ -1,5 +1,6 @@
 """영수증 OCR 서버 (FastAPI + PaddleOCR). OCR 설정은 eval_baseline.run_ocr_factory 를 그대로 사용."""
 from __future__ import annotations
+import logging
 import os
 import cv2
 import numpy as np
@@ -11,6 +12,7 @@ from receipt_parser import boxes_from_polys, group_lines, parse_receipt
 app = FastAPI(title="Receipt OCR")
 _run = None
 MAX_BYTES = 10 * 1024 * 1024
+log = logging.getLogger("uvicorn.error")
 
 
 def get_runner():
@@ -43,8 +45,14 @@ async def ocr_receipt(file: UploadFile = File(...)):
         raise HTTPException(400, "빈 파일입니다.")
     if len(raw) > MAX_BYTES:
         raise HTTPException(413, "10MB 이하 이미지만 받습니다.")
-    texts, scores, polys = get_runner()(decode(raw))
-    return to_response(parse_receipt(group_lines(boxes_from_polys(texts, scores, polys))))   # rawLines(OCR 원문)는 반환하지 않음
+    img = decode(raw)                             # 이미지 오류(400)는 OCR 전에 먼저 걸러냄
+    try:
+        texts, scores, polys = get_runner()(img)
+        return to_response(parse_receipt(group_lines(boxes_from_polys(texts, scores, polys))))   # rawLines(OCR 원문)는 반환하지 않음
+    except Exception:
+        # 로그에는 예외 종류·트레이스백만 남기고, 응답에는 내부 정보를 넣지 않음
+        log.exception("OCR 처리 실패")
+        raise HTTPException(500, "OCR 처리 중 오류가 발생했습니다.")
 
 
 @app.get("/health")
