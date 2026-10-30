@@ -27,3 +27,10 @@ venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# YOLO 전처리 산출물 (S15P31A109-72~74)
+det_data/
+runs/
+rect/
+venv_yolo/
+*.pt
