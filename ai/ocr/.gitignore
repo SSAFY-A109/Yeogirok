@@ -34,3 +34,6 @@ runs/
 rect/
 venv_yolo/
 *.pt
+
+# 학습한 검출 모델은 저장소에 포함 (AGPL-3.0 공개, models/README.md)
+!models/receipt_det_yolo11n_seg.pt
