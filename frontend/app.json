@@ -25,6 +25,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-ar-tip.cjs",
       [
         "expo-splash-screen",
         {
