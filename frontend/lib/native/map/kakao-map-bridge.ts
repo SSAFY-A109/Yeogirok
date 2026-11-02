@@ -183,12 +183,17 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
 }
 
 export function buildSetMarkersScript(markers: readonly MapMarker[]): string {
-  const points = markers.map(({ lat, lng }) => ({ lat, lng }));
+  const points = markers.map(({ lat, lng }) => {
+    return { lat, lng };
+  });
+
   return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}); true;`;
 }
 
 function isPageFailureReason(value: unknown): value is KakaoMapFailure {
-  return pageFailureReasons.some((reason) => reason === value);
+  return pageFailureReasons.some((reason) => {
+    return reason === value;
+  });
 }
 
 function isInteractionKind(value: unknown): value is MapInteractionKind {
@@ -201,17 +206,25 @@ function isFiniteNumber(value: unknown): value is number {
 
 export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
   let value: unknown;
+
   try {
     value = JSON.parse(data);
   } catch {
     return null;
   }
-  if (typeof value !== "object" || value === null || !("type" in value)) return null;
 
-  if (value.type === "ready") return { type: "ready" };
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return null;
+  }
+
+  if (value.type === "ready") {
+    return { type: "ready" };
+  }
+
   if (value.type === "error" && "reason" in value && isPageFailureReason(value.reason)) {
     return { type: "error", reason: value.reason };
   }
+
   if (
     value.type === "markers-rendered" &&
     "count" in value &&
@@ -221,6 +234,7 @@ export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
   ) {
     return { type: "markers-rendered", count: value.count, renderMs: value.renderMs };
   }
+
   if (
     value.type === "interaction-perf" &&
     "kind" in value &&
@@ -243,5 +257,6 @@ export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
       heapMb: value.heapMb,
     };
   }
+
   return null;
 }

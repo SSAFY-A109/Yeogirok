@@ -1,9 +1,9 @@
 // vendor: react-native-reusables
-import { TextClassContext } from '@/components/ui/text';
-import { cn } from '@/lib/utils';
-import type { LucideIcon, LucideProps } from 'lucide-react-native';
-import { cssInterop } from 'nativewind';
-import * as React from 'react';
+import { TextClassContext } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
+import type { LucideIcon, LucideProps } from "lucide-react-native";
+import { cssInterop } from "nativewind";
+import * as React from "react";
 
 type IconProps = LucideProps & {
   as: LucideIcon;
@@ -15,10 +15,10 @@ function IconImpl({ as: IconComponent, ...props }: IconProps) {
 
 cssInterop(IconImpl, {
   className: {
-    target: 'style',
+    target: "style",
     nativeStyleToProp: {
-      height: 'size',
-      width: 'size',
+      height: "size",
+      width: "size",
     },
   },
 });
@@ -48,7 +48,7 @@ function Icon({ as: IconComponent, className, size = 24, ...props }: IconProps) 
   return (
     <IconImpl
       as={IconComponent}
-      className={cn('text-foreground', textClass, className)}
+      className={cn("text-foreground", textClass, className)}
       size={size}
       {...props}
     />

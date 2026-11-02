@@ -21,17 +21,28 @@ type DropdownProps = {
 export function Dropdown({ options, value, onValueChange, onOpenChange, disabled = false, placeholder = "선택해 주세요", accessibilityLabel, className, testID }: DropdownProps) {
   const [width, setWidth] = useState(0);
   const insets = useSafeAreaInsets();
-  const selected = options.find((option) => option.value === value);
+
+  const selected = options.find((option) => {
+    return option.value === value;
+  });
 
   return (
-    <Select value={selected} onValueChange={(option) => { if (option) onValueChange(option.value); }} onOpenChange={onOpenChange} disabled={disabled} className={cn("w-full", className)}>
-      <SelectTrigger accessibilityLabel={accessibilityLabel} testID={testID} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+    <Select value={selected} onValueChange={(option) => {
+      if (option) {
+        onValueChange(option.value);
+      }
+    }} onOpenChange={onOpenChange} disabled={disabled} className={cn("w-full", className)}>
+      <SelectTrigger accessibilityLabel={accessibilityLabel} testID={testID} onLayout={(event) => {
+        return setWidth(event.nativeEvent.layout.width);
+      }}>
         <SelectValue placeholder={placeholder} className={cn("min-w-0 flex-1 font-sans text-label", disabled && "text-muted-foreground")} />
       </SelectTrigger>
       <SelectContent insets={insets} sideOffset={4} style={width > 0 ? { width } : undefined}>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value} label={option.label} disabled={option.disabled} className={cn("min-h-touch", option.value === value && "bg-brand-muted")} />
-        ))}
+        {options.map((option) => {
+          return (
+            <SelectItem key={option.value} value={option.value} label={option.label} disabled={option.disabled} className={cn("min-h-touch", option.value === value && "bg-brand-muted")} />
+          );
+        })}
       </SelectContent>
     </Select>
   );

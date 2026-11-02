@@ -5,7 +5,9 @@ import { KakaoMapTestScreen } from "@/features/explore/components/kakao-map-test
 export { ErrorBoundary } from "expo-router";
 
 export default function KakaoMapTestRoute() {
-  if (!__DEV__) return <Redirect href="/" />;
+  if (!__DEV__) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <>

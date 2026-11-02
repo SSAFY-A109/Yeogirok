@@ -26,8 +26,12 @@ export function SearchField({ className, containerClassName, error, onFocus, onB
           aria-invalid={Boolean(error)}
           editable={editable}
           returnKeyType="search"
-          onFocus={(event) => { setFocused(true); onFocus?.(event); }}
-          onBlur={(event) => { setFocused(false); onBlur?.(event); }}
+          onFocus={(event) => {
+            setFocused(true); onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false); onBlur?.(event);
+          }}
           {...props}
         />
       </View>

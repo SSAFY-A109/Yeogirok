@@ -42,20 +42,29 @@ export function KakaoMapView({
   accessibilityLabel,
 }: KakaoMapViewProps) {
   const source = useMemo(
-    () => ({ html: buildKakaoMapHtml(javascriptKey, initialCamera), baseUrl: KAKAO_JS_SDK_DOMAIN }),
+    () => {
+      return { html: buildKakaoMapHtml(javascriptKey, initialCamera), baseUrl: KAKAO_JS_SDK_DOMAIN };
+    },
     [javascriptKey, initialCamera],
   );
+
   const webViewRef = useRef<WebView<object>>(null);
   const hasResponded = useRef(false);
   const isMapReady = useRef(false);
   const markersSentAt = useRef(0);
 
   const reportNoResponse = useEffectEvent(() => {
-    if (!hasResponded.current) onError("no-response");
+    if (!hasResponded.current) {
+      onError("no-response");
+    }
   });
+
   useEffect(() => {
     const timer = setTimeout(reportNoResponse, NO_RESPONSE_TIMEOUT_MS);
-    return () => clearTimeout(timer);
+
+    return () => {
+      return clearTimeout(timer);
+    };
   }, []);
 
   function sendMarkers(nextMarkers: readonly MapMarker[]) {
@@ -64,20 +73,34 @@ export function KakaoMapView({
   }
 
   useEffect(() => {
-    if (isMapReady.current && markers) sendMarkers(markers);
+    if (isMapReady.current && markers) {
+      sendMarkers(markers);
+    }
   }, [markers]);
 
   function handleMessage(event: WebViewMessageEvent) {
     const message = parseKakaoMapMessage(event.nativeEvent.data);
-    if (!message) return;
+
+    if (!message) {
+      return;
+    }
+
     hasResponded.current = true;
 
     if (message.type === "ready") {
       isMapReady.current = true;
-      if (markers) sendMarkers(markers);
+
+      if (markers) {
+        sendMarkers(markers);
+      }
+
       onReady();
     }
-    if (message.type === "error") onError(message.reason);
+
+    if (message.type === "error") {
+      onError(message.reason);
+    }
+
     if (message.type === "markers-rendered") {
       onPerformance?.({
         type: "markers",
@@ -86,6 +109,7 @@ export function KakaoMapView({
         totalMs: Date.now() - markersSentAt.current,
       });
     }
+
     if (message.type === "interaction-perf") {
       onPerformance?.({
         type: "interaction",

@@ -29,12 +29,15 @@ export function TabBar({ items, value, onValueChange, className, style, ...props
   const colors = getColors("light");
 
   return (
-    <View accessibilityRole="tablist" className={cn("border-t border-border bg-card", className)} style={[{ paddingBottom: insets.bottom }, style]} {...props}>
+    <View accessibilityRole="tablist" className={cn("shrink-0 border-t border-border bg-card", className)} style={[{ paddingBottom: insets.bottom }, style]} {...props}>
       <View className="h-14 flex-row px-2 pt-2">
         {items.map((item) => {
           const selected = item.key === value;
+
           return (
-            <Pressable key={item.key} accessibilityRole="tab" accessibilityLabel={item.accessibilityLabel ?? item.label} accessibilityState={{ selected, disabled: item.disabled }} disabled={item.disabled} testID={item.testID} onPress={() => onValueChange(item.key)} className={cn("min-h-touch min-w-touch flex-1 items-center justify-center gap-1", item.disabled && "opacity-50")}>
+            <Pressable key={item.key} accessibilityRole="tab" accessibilityLabel={item.accessibilityLabel ?? item.label} accessibilityState={{ selected, disabled: item.disabled }} disabled={item.disabled} testID={item.testID} onPress={() => {
+              return onValueChange(item.key);
+            }} className={cn("min-h-touch min-w-touch flex-1 items-center justify-center gap-1", item.disabled && "opacity-50")}>
               <DesignAsset source={item.icon} contentFit="contain" tintColor={selected ? colors["icon-active"] : colors.icon} className="h-icon w-icon" accessible={false} />
               <Text numberOfLines={1} className={cn("text-micro text-foreground-secondary", selected && "text-label-sm text-primary")}>{item.label}</Text>
             </Pressable>

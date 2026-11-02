@@ -119,8 +119,11 @@ async function invalidateSession(): Promise<void> {
         // 저장소 삭제가 실패해도 앱의 인증 실패 처리는 실행한다.
         await onUnauthorized?.();
       }
-    })().finally(() => { unauthorizedPromise = undefined; });
+    })().finally(() => {
+      unauthorizedPromise = undefined;
+    });
   }
+
   await unauthorizedPromise;
 }
 
@@ -143,6 +146,7 @@ async function refreshAccessToken(): Promise<string> {
       const { data } = await api.post<unknown>("/auth/token/refresh", {
         refreshToken: tokens.refreshToken,
       }, { timeout: TIMEOUT_MUTATION_MS });
+
       // 현재 B안의 두 만료 필드까지 확인해 폐기된 응답 계약을 받아들이지 않는다.
       if (
         !isTokenPair(data) ||
@@ -153,14 +157,18 @@ async function refreshAccessToken(): Promise<string> {
       ) {
         throw new ApiError(200, "CONTRACT_MISMATCH", "토큰 갱신 응답이 현재 계약과 다릅니다.");
       }
+
       // 회전 전 리프레시 토큰은 즉시 무효이므로 새 토큰 쌍을 함께 저장한다.
       await setTokens(data);
       return data.accessToken;
     })().catch(async (error: unknown) => {
       await invalidateSession();
       throw toApiError(error);
-    }).finally(() => { refreshPromise = undefined; });
+    }).finally(() => {
+      refreshPromise = undefined;
+    });
   }
+
   return refreshPromise;
 }
 
@@ -205,6 +213,7 @@ api.interceptors.response.use(
     if (apiError.status !== 401 || !config || isPublicAuthRequest(config)) {
       throw apiError;
     }
+
     // 액세스 토큰 만료(C005)만 갱신한다. 재요청도 401이면 세션을 종료한다.
     if (config.authRetried || apiError.code !== "C005") {
       await invalidateSession();
@@ -216,13 +225,14 @@ api.interceptors.response.use(
     try {
       const tokens = await getTokens();
       const currentAuthorization = tokens ? `Bearer ${tokens.accessToken}` : undefined;
+
       // 다른 요청이 이미 갱신했다면, 늦게 도착한 이전 토큰의 401은 새 토큰으로 재요청한다.
       if (!currentAuthorization || config.headers.get("Authorization") === currentAuthorization) {
         await refreshAccessToken();
       }
+
       return api.request(config);
     } catch (refreshError) {
-
       if (isCancel(refreshError)) {
         throw refreshError;
       }

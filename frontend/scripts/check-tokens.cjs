@@ -36,35 +36,62 @@ const RULES = [
 ];
 
 function listFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
+  if (!fs.existsSync(dir)) {
+    return [];
+  }
+
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const abs = path.join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : listFiles(abs);
+
+    if (entry.isDirectory()) {
+      return entry.name === "node_modules" ? [] : listFiles(abs);
+    }
+
     return /\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith(".d.ts") ? [abs] : [];
   });
 }
 
-const files = DIRS.flatMap((d) => listFiles(path.join(ROOT, d))).filter((f) => !EXCLUDE.has(f));
+const files = DIRS.flatMap((d) => {
+  return listFiles(path.join(ROOT, d));
+}).filter((f) => {
+  return !EXCLUDE.has(f);
+});
+
 const violations = [];
 
 for (const file of files) {
   const lines = fs.readFileSync(file, "utf8").split("\n");
   const isVendor = VENDOR_MARK.test(lines[0] ?? "");
+
   lines.forEach((line, i) => {
     const trimmed = line.trim();
-    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return;
+
+    if (trimmed.startsWith("//") || trimmed.startsWith("*")) {
+      return;
+    }
+
     for (const rule of RULES) {
-      if (rule.vendorExempt && isVendor) continue;
+      if (rule.vendorExempt && isVendor) {
+        continue;
+      }
+
       rule.re.lastIndex = 0;
       const m = rule.re.exec(line);
-      if (m) violations.push({ file: path.relative(ROOT, file), line: i + 1, id: rule.id, match: m[0], msg: rule.msg });
+
+      if (m) {
+        violations.push({ file: path.relative(ROOT, file), line: i + 1, id: rule.id, match: m[0], msg: rule.msg });
+      }
     }
   });
 }
 
 if (violations.length) {
-  for (const v of violations) console.error(`${v.file}:${v.line}  [${v.id}] ${v.match}  — ${v.msg}`);
+  for (const v of violations) {
+    console.error(`${v.file}:${v.line}  [${v.id}] ${v.match}  — ${v.msg}`);
+  }
+
   console.error(`\n토큰 위반 ${violations.length}건`);
   process.exit(1);
 }
+
 console.log(`토큰 검사 통과 (${files.length}개 파일)`);

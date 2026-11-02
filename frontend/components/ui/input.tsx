@@ -24,8 +24,12 @@ function Input({ className, containerClassName, error, onFocus, onBlur, editable
         accessibilityHint={error || props.accessibilityHint}
         aria-invalid={Boolean(error)}
         editable={editable}
-        onFocus={(event) => { setFocused(true); onFocus?.(event); }}
-        onBlur={(event) => { setFocused(false); onBlur?.(event); }}
+        onFocus={(event) => {
+          setFocused(true); onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false); onBlur?.(event);
+        }}
         {...props}
       />
       {error && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="text-caption text-destructive">{error}</Text>}

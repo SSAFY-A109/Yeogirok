@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="28" height="10" viewBox="0 0 28 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Ground">
+<path d="M28 5C28 7.76142 21.732 10 14 10C6.26801 10 0 7.76142 0 5C0 2.23858 6.26801 0 14 0C21.732 0 28 2.23858 28 5Z" fill="#1A73A3"/>
+<mask id="stroke0_0_186" fill="white">
+<path d="M28 5C28 7.76142 21.732 10 14 10C6.26801 10 0 7.76142 0 5C0 2.23858 6.26801 0 14 0C21.732 0 28 2.23858 28 5Z"/>
+</mask>
+<path d="M28 5C28 7.76142 21.732 10 14 10C6.26801 10 0 7.76142 0 5C0 2.23858 6.26801 0 14 0C21.732 0 28 2.23858 28 5Z" stroke-width="4" stroke="white" mask="url(#stroke0_0_186)"/>
+</g>
+</svg>

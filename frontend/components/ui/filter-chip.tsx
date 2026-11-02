@@ -19,7 +19,9 @@ export function FilterChip({ children, className, size = "sm", selected = false,
       hitSlop={{ top: size === "sm" ? 6 : 4, bottom: size === "sm" ? 6 : 4, left: 8, right: 8 }}
       className={cn("items-center justify-center rounded-sm border border-border-strong bg-card px-3", size === "sm" ? "h-chip-sm" : "h-chip-md", selected && "border-ring bg-chip-selected", disabled && "border-transparent bg-muted", className)}
       disabled={disabled}
-      onPress={(event) => { onSelectedChange?.(!selected); onPress?.(event); }}
+      onPress={(event) => {
+        onSelectedChange?.(!selected); onPress?.(event);
+      }}
       {...props}
     >
       <Text className={cn("text-label text-foreground-secondary", selected && "text-primary-hover", disabled && "text-muted-foreground")}>{children}</Text>

@@ -10,4 +10,6 @@ export {
   type MapPerformanceReport,
 } from "./kakao-map-bridge";
 
-export const KakaoMapView: (props: ComponentProps<typeof NativeKakaoMapView>) => null = () => null;
+export const KakaoMapView: (props: ComponentProps<typeof NativeKakaoMapView>) => null = () => {
+  return null;
+};

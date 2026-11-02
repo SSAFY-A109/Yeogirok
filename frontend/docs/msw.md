@@ -15,7 +15,7 @@ API URL에는 호스트만 넣는다. 도메인 API 요청 경로의 기준은 `
 | 파일 | 역할 |
 | --- | --- |
 | `index.ts` | 환경 변수 확인 → 개발 환경 MSW 준비 → Expo Router 시작 |
-| `api/mocks/start.ts` | 네이티브 폴리필을 먼저 적용한 뒤 서버 시작 |
+| `api/mocks/start.ts` | 네이티브 폴리필을 먼저 적용한 뒤 서버를 동기로 시작(앱 등록 지연 방지) |
 | `api/mocks/start.web.ts` | 웹 Service Worker 준비 완료 후 반환 |
 | `api/mocks/native.ts` | Android·iOS용 `msw/native` 서버 |
 | `api/mocks/server.ts` | 향후 jest에서 사용할 `msw/node` 서버 |

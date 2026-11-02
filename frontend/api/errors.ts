@@ -27,19 +27,26 @@ export function isErrorEnvelope(
 }
 
 export function toApiError(error: unknown): ApiError {
-  if (isApiError(error)) return error;
+  if (isApiError(error)) {
+    return error;
+  }
+
   if (isAxiosError(error)) {
     const status = error.response?.status ?? 0;
+
     if (error.response) {
       return isErrorEnvelope(error.response.data)
         ? new ApiError(status, error.response.data.code, error.response.data.message)
         : new ApiError(status, "CONTRACT_MISMATCH", "오류 응답이 공통 봉투 형식과 다릅니다.");
     }
+
     if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
       return new ApiError(0, "TIMEOUT", "API 요청 시간이 초과되었습니다.");
     }
+
     return new ApiError(0, "NETWORK", "API 서버에 연결할 수 없습니다.");
   }
+
   return new ApiError(0, "UNKNOWN", "API 요청을 처리하지 못했습니다.");
 }
 
