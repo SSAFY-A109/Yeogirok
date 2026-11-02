@@ -1,0 +1,13 @@
+# 실제 카메라/Cloud Anchor는 현장에서 수동 검증한다. 기존 저장 데이터를 지우지 않는다.
+# Metro에 연결된 Android 개발 빌드에서 실행한다.
+appId: ${MAESTRO_APP_ID}
+name: 20 AR 팁 진입 안내
+---
+- launchApp:
+    clearState: false
+- openLink: "yeogirokfe://ar-tip"
+- assertVisible:
+    id: "ar-tip.continue"
+- assertVisible: "카메라와 위치를 사용해요"
+- assertVisible:
+    id: "tabs.ar-tip"
