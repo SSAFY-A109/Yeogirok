@@ -155,6 +155,24 @@
       "figma": "없음 — 개발 전용 SDK 연결 테스트",
       "features": [],
       "note": "사용자 요청에 따른 네이티브 카카오맵 검증 화면. DESIGN.md 토큰 기준, Pencil 미대조."
+    },
+    "ar-tip": {
+      "route": "/ar-tip",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · AR 팁 (2:4438) · W17 (2:4439), W17-A (4:2630), W18 (2:4493), W19 (2:4525), W19-1 (2:4561)",
+      "features": [
+        "TIP-01",
+        "TIP-02",
+        "TIP-03",
+        "TIP-04",
+        "TIP-05",
+        "TIP-06",
+        "TIP-07",
+        "TIP-08",
+        "TIP-09",
+        "TIP-10"
+      ],
+      "note": "2026-11-02 사용자 지정 Figma 직접 대조. 로컬 PoC: 사진 선택/본문 필수 2,000자, + 즉시 위치 저장 유지, 서버 공개 연동 없음. Pencil 미대조."
     }
   },
   "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."
