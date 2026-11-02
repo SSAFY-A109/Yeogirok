@@ -67,7 +67,7 @@ paths:
 - 핸들러는 `api/mocks/handlers/<domain>.ts`에 도메인별로 두고, `api/mocks/handlers/index.ts`에서 모은다. 응답 예시는 `api/mocks/fixtures/<domain>.ts`에 둔다.
 - MSW는 네트워크 계층에서 가로채므로 응답이 인터셉터를 거친다. 그래서 목 응답은 **계약의 봉투 그대로**(`{ success: true, data }`, 오류는 HTTP 상태 + `{ success: false, code, message }`) 만든다.
 - 버전은 **`msw@2`**로 고정한다. `msw@3`은 React Native용 `msw/native`를 없앴고, 대체 패키지 `@msw/react-native`는 npm에 아직 없다(2026-10-27 확인). 대체 패키지가 배포되면 그때 옮긴다.
-- 앱 실행 중 목: `api/mocks/native.ts`에서 `msw/native`의 `setupServer(...handlers)`로 서버를 만든다. 앱 진입점(`index.ts`)에서 `__DEV__`일 때만 폴리필(`api/mocks/polyfills.ts`)과 목 모듈을 동적으로 불러오고 `server.listen()`을 실행한 뒤 `expo-router/entry`를 불러온다. MSW 시작이 실패하면 앱도 시작하지 않는다.
+- 앱 실행 중 목: `api/mocks/native.ts`에서 `msw/native`의 `setupServer(...handlers)`로 서버를 만든다. 앱 진입점(`index.ts`)에서 `__DEV__`일 때만 폴리필(`api/mocks/polyfills.ts`)과 목 모듈을 동기 `require`로 불러오고 `server.listen()`을 실행한 뒤 `expo-router/entry`를 불러온다. 네이티브는 번들 실행 직후 앱을 실행하므로 등록을 `await` 뒤로 미루지 않는다(웹만 Worker 준비를 기다린다). MSW 시작이 실패하면 앱도 시작하지 않는다.
 - 개발에서는 전 도메인 핸들러를 사용한다. 핸들러가 없는 서비스 API(`/api/v1` 하위)는 오류로 처리하고 실제 서버로 넘기지 않는다. 외부 SDK·정적 리소스 등 서비스 API 밖의 요청은 통과시킨다.
 - 배포에서는 MSW·목 데이터·목 폴리필을 불러오거나 시작하지 않는다. 개발 중 일부 도메인만 실제 서버로 보내는 선택 설정은 두지 않는다.
 - 테스트(jest)의 목: `jest.setup`에서 `msw/node`의 `setupServer(...handlers)`를 쓴다. 테스트마다 `server.use(...)`로 오류 시나리오를 덮어쓰고, 끝나면 `resetHandlers()`로 되돌린다.
