@@ -199,12 +199,13 @@ git clone --single-branch --branch backend/dev https://github.com/SSAFY-A109/Yeo
 ```bash
 cd ~/yeogirok/infra-src/infra
 cp .env.example .env
-openssl rand -base64 24      # 나온 값을 DB_PASSWORD 에 넣는다
+openssl rand -hex 24         # 나온 값을 DB_PASSWORD 에 넣는다
 nano .env                    # 저장: Ctrl+O, Enter / 나가기: Ctrl+X
 chmod 600 .env               # 나만 읽을 수 있게
 ```
 
 - `.env`는 커밋하지 않습니다(`infra/.gitignore`에 들어 있음). 노션에는 키 **이름**과 발급처만 적고 값은 적지 않습니다.
+- 비밀번호는 `-hex`로 만듭니다(숫자와 a~f만 나옴). `-base64`는 `/`, `+` 같은 기호가 섞이는데, 9단계 AI 서버는 비밀번호를 DB 주소(`postgresql://계정:비밀번호@db:5432/...`) 안에 넣기 때문에 이런 기호가 있으면 주소가 깨질 수 있습니다.
 - **`DB_PASSWORD`는 DB를 처음 만들 때만 적용됩니다.** 나중에 `.env`만 바꾸면 접속이 거부됩니다. 바꾸려면 7단계처럼 DB 볼륨을 지우고 다시 만듭니다.
 
 ---
