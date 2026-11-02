@@ -367,9 +367,13 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 - `ai/ocr/requirements.txt`는 GPU용 `paddlepaddle-gpu`를 씁니다. GPU가 없는 서버에서는 CPU용 `paddlepaddle`로 설치해야 합니다.
 - 백엔드는 `http://ai:8000`으로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다.
 
-**파일 저장소 (API-012 업로드, API-013 조회)**
-- S3를 쓸 수 있으면 S3, 없으면 서버 디스크 볼륨에 저장하고 백엔드가 권한을 확인한 뒤 내려줍니다.
-- 업로드 한도를 세 곳에서 맞춥니다: Nginx `client_max_body_size 20m`(설정됨), Spring `spring.servlet.multipart.max-file-size`(기본 1MB) · `max-request-size`(기본 10MB).
+**파일 저장소 (API-012 업로드, API-086 완료 확인, API-013 조회)**
+- 사진·영수증 파일은 **S3에 저장합니다** (2026-11-02 결정). 서버 디스크에는 저장하지 않습니다.
+- 버킷: 개발용 `yeogirok-a109-files-dev`, 서버용 `yeogirok-a109-files-prod` (서울 리전, 비공개)
+- 서버는 서버 전용 IAM 사용자의 접근 키로 S3에 접근합니다. 값은 서버 `.env`에 넣고, 키 이름은 `.env.example`의 `AWS_*`, `S3_BUCKET`을 참고합니다.
+- 접근 키는 Git·노션·메신저에 올리지 않습니다.
+- 앱은 서버가 발급한 Presigned URL로 S3에 직접 올리고 받으므로 파일이 Nginx·백엔드를 거치지 않습니다. Nginx `client_max_body_size`와 Spring multipart 한도는 파일 업로드와 관계없고, 허용 크기는 백엔드 설정값으로 정합니다.
+- 구성과 확인 방법: [여기록 S3 파일 저장소 구성 가이드](https://claude.ai/artifact/9aLhLYienyLD2TevfE43Xh)
 
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
