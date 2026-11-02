@@ -22,7 +22,9 @@ assert.equal(cn("min-h-button-md", "min-h-button-lg"), "min-h-button-lg");
 assert.equal(cn("rounded-md", "rounded-sm"), "rounded-sm");
 
 const assetDirectory = path.resolve(__dirname, "../assets/ui");
+
 for (const file of fs.readdirSync(assetDirectory)) {
   assert.ok(fs.statSync(path.join(assetDirectory, file)).size > 0, `Empty UI asset: ${file}`);
 }
+
 console.log("UI 검사 통과 (클래스 충돌 6건, 로컬 에셋)");

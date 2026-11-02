@@ -7,7 +7,10 @@ export async function getTokens(): Promise<TokenPair | null> {
 }
 
 export async function setTokens(tokens: TokenPair): Promise<void> {
-  if (!isTokenPair(tokens)) throw new Error("인증 토큰 형식이 올바르지 않습니다.");
+  if (!isTokenPair(tokens)) {
+    throw new Error("인증 토큰 형식이 올바르지 않습니다.");
+  }
+
   currentTokens = { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
 }
 
