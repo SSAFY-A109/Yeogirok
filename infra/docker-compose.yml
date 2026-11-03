@@ -46,7 +46,8 @@ services:
       TZ: Asia/Seoul
       # S3 파일 저장소 (값은 .env)
       AWS_REGION: ${AWS_REGION}
-      S3_BUCKET: ${S3_BUCKET}
+      S3_PHOTO_BUCKET: ${S3_PHOTO_BUCKET}
+      S3_RECEIPT_BUCKET: ${S3_RECEIPT_BUCKET}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:

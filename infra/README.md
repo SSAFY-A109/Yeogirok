@@ -369,8 +369,14 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 
 **파일 저장소 (API-012 업로드, API-086 완료 확인, API-013 조회)**
 - 사진·영수증 파일은 **S3에 저장합니다** (2026-11-02 결정). 서버 디스크에는 저장하지 않습니다.
-- 버킷: 개발용 `yeogirok-a109-files-dev`, 서버용 `yeogirok-a109-files-prod` (서울 리전, 비공개)
-- 서버는 서버 전용 IAM 사용자의 접근 키로 S3에 접근합니다. 값은 서버 `.env`에 넣고, 키 이름은 `.env.example`의 `AWS_*`, `S3_BUCKET`을 참고합니다.
+- 버킷은 사진과 영수증을 나눕니다 (2026-11-03 분리). 영수증은 결제 정보라 보관 기간·암호화·공개 범위를 사진과 따로 정하기 위해서입니다. 모두 서울 리전, 퍼블릭 액세스 차단, SSE-S3 암호화입니다.
+
+  | 용도 | 개발용 (`yeogirok-dev`) | 서버용 (`yeogirok-server-prod`) |
+  | --- | --- | --- |
+  | 사진 | `yeogirok-a109-photos-dev` | `yeogirok-a109-photos-prod` |
+  | 영수증 | `yeogirok-a109-receipts-dev` | `yeogirok-a109-receipts-prod` |
+
+- 서버는 서버 전용 IAM 사용자의 접근 키로 S3에 접근합니다. 값은 서버 `.env`에 넣고, 키 이름은 `.env.example`의 `AWS_*`, `S3_PHOTO_BUCKET`, `S3_RECEIPT_BUCKET`을 참고합니다. 백엔드는 파일 종류에 따라 버킷을 골라 Presigned URL을 발급합니다.
 - 접근 키는 Git·노션·메신저에 올리지 않습니다.
 - 앱은 서버가 발급한 Presigned URL로 S3에 직접 올리고 받으므로 파일이 Nginx·백엔드를 거치지 않습니다. Nginx `client_max_body_size`와 Spring multipart 한도는 파일 업로드와 관계없고, 허용 크기는 백엔드 설정값으로 정합니다.
 - 구성과 확인 방법: [여기록 S3 파일 저장소 구성 가이드](https://claude.ai/artifact/9aLhLYienyLD2TevfE43Xh)
