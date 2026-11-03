@@ -18,6 +18,7 @@ function Input({ className, containerClassName, error, onFocus, onBlur, editable
   return (
     <View className={cn("w-full gap-1", containerClassName)}>
       <TextInput
+        textAlignVertical="center"
         className={cn("h-input w-full min-w-0 rounded-sm border border-input bg-card px-4 py-3 font-sans text-body-sm text-foreground", focused && "border-2 border-ring", error && "border-destructive", !editable && "bg-muted text-muted-foreground", className)}
         placeholderTextColor={placeholderTextColor}
         accessibilityLabel={props.accessibilityLabel ?? props.placeholder}
