@@ -17,10 +17,11 @@ export function FilterChip({ children, className, size = "sm", selected = false,
       accessibilityRole="button"
       accessibilityState={{ selected, disabled }}
       hitSlop={{ top: size === "sm" ? 6 : 4, bottom: size === "sm" ? 6 : 4, left: 8, right: 8 }}
-      className={cn("items-center justify-center rounded-sm border border-border-strong bg-card px-3", size === "sm" ? "h-chip-sm" : "h-chip-md", selected && "border-ring bg-chip-selected", disabled && "border-transparent bg-muted", className)}
+      className={cn("items-center justify-center rounded-sm border border-border-strong bg-card px-3 py-1", size === "sm" ? "h-chip-sm" : "h-chip-md", selected && "border-ring bg-chip-selected", disabled && "border-transparent bg-muted", className)}
       disabled={disabled}
       onPress={(event) => {
-        onSelectedChange?.(!selected); onPress?.(event);
+        onSelectedChange?.(!selected);
+        onPress?.(event);
       }}
       {...props}
     >
