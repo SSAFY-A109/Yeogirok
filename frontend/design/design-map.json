@@ -195,11 +195,11 @@
     "courses": {
       "route": "/courses",
       "pencil": "없음",
-      "figma": "gzYo8vG6h2LrKGOa22UCFP · 진입 탐색 장소 가져오기 (20:3782) · W03 코스 검색 결과 (20:3959)",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · 코스 검색 조건 (39:3040) · W03-A 검색 진입 (39:3041) · W03-B 검색 조건 시트 (39:3142) · W03-C 조건 적용 결과 (39:3266)",
       "features": [
         "EXP-03"
       ],
-      "note": "필터 칩·정렬은 DEC-20(TBD)이라 제외. Pencil 미대조."
+      "note": "2026-11-03 사용자 요청으로 야놀자 검색 흐름(검색 진입 → 조건 시트 → 결과)을 따름. 조건은 지역·기간·이동 수단(DEC-20 사용자 결정). 최근 검색은 앱 실행 중에만 유지(보관 위치 TBD). 정렬은 표시만. Pencil 미대조."
     },
     "courses/[courseId]": {
       "route": "/courses/[courseId]",
