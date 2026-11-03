@@ -12,6 +12,21 @@ spring:
       # 스키마 관리 도구는 ERD 확정 뒤에 정한다. 그 전까지 로컬에서만 엔티티 기준으로 테이블을 만든다(application-local.yaml).
       ddl-auto: none
 
+auth:
+  jwt:
+    issuer: yeogirok
+    secret: ${JWT_SECRET}
+    # TBD: 토큰 수명은 팀 결정 전이다(04-auth-api.md §6). 30분 / 14일은 제안값.
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d
+  oidc:
+    google:
+      allowed-audiences:
+        - ${GOOGLE_WEB_CLIENT_ID}
+    kakao:
+      allowed-audiences:
+        - ${KAKAO_APP_KEY}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
