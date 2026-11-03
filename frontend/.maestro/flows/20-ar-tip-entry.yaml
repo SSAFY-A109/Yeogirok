@@ -5,6 +5,15 @@ name: 20 AR 팁 진입 안내
 ---
 - launchApp:
     clearState: false
+- runFlow:
+    when:
+      visible:
+        id: "login.screen"
+    commands:
+      - tapOn:
+          id: "login.kakao"
+      - assertVisible:
+          id: "home.screen"
 - openLink: "yeogirokfe://ar-tip"
 - assertVisible:
     id: "ar-tip.continue"

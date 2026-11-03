@@ -149,6 +149,15 @@
     }
   },
   "screens": {
+    "login": {
+      "route": "/login",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · Design v3 전체 화면 (20:3234) · W01 로그인 (20:3783)",
+      "features": [
+        "COM-01"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 대조. 미인증 첫 진입 로그인, 헤더·스크롤 없음. 개발 MSW·배포 네이티브 SDK 로그인 성공 후 메인 / 이동. 공개 앱 키 등록·실제 SDK 검증은 미완료. Pencil 미대조."
+    },
     "kakao-map-test": {
       "route": "/kakao-map-test",
       "pencil": "없음",
@@ -173,6 +182,34 @@
         "TIP-10"
       ],
       "note": "2026-11-02 사용자 지정 Figma 직접 대조. 로컬 PoC: 사진 선택/본문 필수 2,000자, + 즉시 위치 저장 유지, 서버 공개 연동 없음. Pencil 미대조."
+    },
+    "home": {
+      "route": "/",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · 진입 탐색 장소 가져오기 (20:3782) · W02-2 메인 페이지 (20:4280) · W05-2 인기 장소 바로 담기 (32:2956)",
+      "features": [
+        "EXP-04"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 대조. 사진·지도는 자리표시(API 미정), mock은 features/explore/mocks. 인기 장소를 누르면 room-select-sheet에 장소 위치 지도(place-location-map)를 얹어 바로 담는다(사용자 요청 2026-11-03, Figma W05-2 32:2956에 W05 기반으로 작성). Pencil 미대조."
+    },
+    "courses": {
+      "route": "/courses",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · 코스 검색 조건 (39:3040) · W03-A 검색 진입 (39:3041) · W03-B 검색 조건 시트 (39:3142) · W03-C 조건 적용 결과 (39:3266)",
+      "features": [
+        "EXP-03"
+      ],
+      "note": "2026-11-03 사용자 요청으로 야놀자 검색 흐름(검색 진입 → 조건 시트 → 결과)을 따름. 조건은 지역·기간·이동 수단(DEC-20 사용자 결정). 최근 검색은 앱 실행 중에만 유지(보관 위치 TBD). 정렬은 표시만. Pencil 미대조."
+    },
+    "courses/[courseId]": {
+      "route": "/courses/[courseId]",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · 진입 탐색 장소 가져오기 (20:3782) · W04 코스 상세 장소 선택 (20:4027)",
+      "features": [
+        "EXP-05",
+        "EXP-07"
+      ],
+      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 미구현이라 비활성. Pencil 미대조."
     }
   },
   "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."

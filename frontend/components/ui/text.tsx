@@ -80,6 +80,7 @@ function Text({
   return (
     <Component
       className={cn(textVariants({ variant }), textClass, className)}
+      includeFontPadding={false} // project: Android 글자 위아래 여백 제거(행 높이가 다른 글자의 세로 정렬 유지)
       role={variant ? ROLE[variant] : undefined}
       aria-level={variant ? ARIA_LEVEL[variant] : undefined}
       {...props}

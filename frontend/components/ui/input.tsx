@@ -1,5 +1,5 @@
 // vendor: react-native-reusables
-// project: Figma input tokens, focus, and error message
+// project: Figma input tokens, focus, and error message; py-0 so Android text is not clipped in the fixed h-input
 import { useState, type ComponentProps } from "react";
 import { TextInput, View } from "react-native";
 
@@ -18,7 +18,8 @@ function Input({ className, containerClassName, error, onFocus, onBlur, editable
   return (
     <View className={cn("w-full gap-1", containerClassName)}>
       <TextInput
-        className={cn("h-input w-full min-w-0 rounded-sm border border-input bg-card px-4 py-3 font-sans text-body-sm text-foreground", focused && "border-2 border-ring", error && "border-destructive", !editable && "bg-muted text-muted-foreground", className)}
+        textAlignVertical="center"
+        className={cn("h-input w-full min-w-0 rounded-sm border border-input bg-card px-4 py-0 font-sans text-body-sm text-foreground", focused && "border-2 border-ring", error && "border-destructive", !editable && "bg-muted text-muted-foreground", className)}
         placeholderTextColor={placeholderTextColor}
         accessibilityLabel={props.accessibilityLabel ?? props.placeholder}
         accessibilityHint={error || props.accessibilityHint}

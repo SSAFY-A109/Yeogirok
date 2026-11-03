@@ -39,7 +39,7 @@ export function TabBar({ items, value, onValueChange, className, style, ...props
               return onValueChange(item.key);
             }} className={cn("min-h-touch min-w-touch flex-1 items-center justify-center gap-1", item.disabled && "opacity-50")}>
               <DesignAsset source={item.icon} contentFit="contain" tintColor={selected ? colors["icon-active"] : colors.icon} className="h-icon w-icon" accessible={false} />
-              <Text numberOfLines={1} className={cn("text-micro text-foreground-secondary", selected && "text-label-sm text-primary")}>{item.label}</Text>
+              <Text numberOfLines={1} className={cn("text-micro text-foreground-secondary", selected && "text-primary")}>{item.label}</Text>
             </Pressable>
           );
         })}

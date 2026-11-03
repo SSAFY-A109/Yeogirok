@@ -126,6 +126,14 @@ module.exports = {
             "fontWeight": "500"
           }
         ],
+        "label-sm": [
+          "12px",
+          {
+            "lineHeight": "16px",
+            "letterSpacing": "0px",
+            "fontWeight": "500"
+          }
+        ],
         "caption": [
           "12px",
           {
@@ -146,6 +154,14 @@ module.exports = {
           "14px",
           {
             "lineHeight": "20px",
+            "letterSpacing": "0px",
+            "fontWeight": "500"
+          }
+        ],
+        "button-lg": [
+          "15px",
+          {
+            "lineHeight": "22px",
             "letterSpacing": "0px",
             "fontWeight": "500"
           }
