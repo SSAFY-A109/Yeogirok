@@ -21,26 +21,27 @@ import { RoomSelectSheet } from "./room-select-sheet";
 
 export function HomeScreen() {
   const home = useHome();
-  const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryId>("NATURE");
   const [subcategory, setSubcategory] = useState("전체");
-
-  function search() {
-    router.push({ pathname: "/courses", params: { query: query.trim() } });
-  }
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background" testID="home.screen">
       <View className="flex-row items-center gap-3 px-5 pb-4 pt-2">
         <DesignAsset source={require("@/assets/images/logo/logo-text.webp")} contentFit="contain" style={{ width: 90, height: 30 }} accessibilityLabel="여기록" />
-        <SearchField
-          containerClassName="flex-1"
-          placeholder="지역, 장소, 코스 검색"
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={search}
+        <Pressable
+          accessibilityRole="search"
+          accessibilityLabel="지역, 장소, 코스 검색"
+          accessibilityHint="검색 화면을 열어요"
+          onPress={() => {
+            router.push("/courses");
+          }}
+          className="flex-1"
           testID="home.search"
-        />
+        >
+          <View className="pointer-events-none">
+            <SearchField placeholder="지역, 장소, 코스 검색" accessible={false} />
+          </View>
+        </Pressable>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="pb-4" keyboardShouldPersistTaps="handled">
         {home.isPending && <HomeSkeleton />}
