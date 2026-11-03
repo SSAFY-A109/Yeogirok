@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const { createServer } = require("node:http");
 const { once } = require("node:events");
 const { http, HttpResponse } = require("msw");
-const { onUnhandledRequest } = require("../.expo/msw-check/on-unhandled-request");
+const { onUnhandledRequest } = require("../.expo/msw-check/api/mocks/on-unhandled-request");
 
 async function check() {
   let networkRequests = 0;
@@ -18,7 +18,7 @@ async function check() {
 
   try {
     for (const name of ["native", "server"]) {
-      const { server } = require(`../.expo/msw-check/${name}`);
+      const { server } = require(`../.expo/msw-check/api/mocks/${name}`);
       const url = `${origin}/api/v1/__msw_check__`;
       const fixture = { success: true, data: { mocked: true } };
       server.listen({ onUnhandledRequest });
