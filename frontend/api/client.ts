@@ -1,7 +1,7 @@
 import { create, isAxiosError, isCancel, type InternalAxiosRequestConfig } from "axios";
 
 import { clearTokens, getTokens, setTokens } from "../features/auth/token-store";
-import { isTokenPair } from "../features/auth/tokens";
+import { isServiceTokenPair } from "../features/auth/tokens";
 import { unwrapEnvelope } from "./envelope";
 import { ApiError, toApiError } from "./errors";
 
@@ -148,14 +148,7 @@ async function refreshAccessToken(): Promise<string> {
         refreshToken: tokens.refreshToken,
       }, { timeout: TIMEOUT_MUTATION_MS });
 
-      // 현재 B안의 두 만료 필드까지 확인해 폐기된 응답 계약을 받아들이지 않는다.
-      if (
-        !isTokenPair(data) ||
-        !("accessTokenExpiresIn" in data) || typeof data.accessTokenExpiresIn !== "number" ||
-        !Number.isFinite(data.accessTokenExpiresIn) ||
-        !("refreshTokenExpiresIn" in data) || typeof data.refreshTokenExpiresIn !== "number" ||
-        !Number.isFinite(data.refreshTokenExpiresIn)
-      ) {
+      if (!isServiceTokenPair(data)) {
         throw new ApiError(200, "CONTRACT_MISMATCH", "토큰 갱신 응답이 현재 계약과 다릅니다.");
       }
 

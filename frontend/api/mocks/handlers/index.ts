@@ -1,3 +1,5 @@
 import type { RequestHandler } from "msw";
 
-export const handlers: RequestHandler[] = [];
+import { authHandlers } from "./auth";
+
+export const handlers: RequestHandler[] = [...authHandlers];

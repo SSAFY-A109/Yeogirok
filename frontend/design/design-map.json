@@ -149,6 +149,15 @@
     }
   },
   "screens": {
+    "login": {
+      "route": "/login",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · Design v3 전체 화면 (20:3234) · W01 로그인 (20:3783)",
+      "features": [
+        "COM-01"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 대조. 미인증 첫 진입 로그인, 헤더·스크롤 없음. 개발 MSW·배포 네이티브 SDK 로그인 성공 후 메인 / 이동. 공개 앱 키 등록·실제 SDK 검증은 미완료. Pencil 미대조."
+    },
     "kakao-map-test": {
       "route": "/kakao-map-test",
       "pencil": "없음",
