@@ -118,7 +118,9 @@ export function TripDateSheet({ open, onOpenChange, value, onConfirm }: TripDate
   };
 
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange} accessibilityLabel="여행 날짜 선택" testID="trip-date-sheet">
+    <BottomSheet visible={open} onClose={() => {
+      onOpenChange(false);
+    }} closeLabel="여행 날짜 선택 닫기">
       <View className="gap-4 px-5 pb-4 pt-2">
         <View className="flex-row items-center justify-between">
           <View className="gap-1">

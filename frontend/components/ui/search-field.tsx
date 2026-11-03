@@ -19,6 +19,7 @@ export function SearchField({ className, containerClassName, error, onFocus, onB
       <View className={cn("h-button-md flex-row items-center gap-2 rounded-md border border-border bg-card px-3", focused && "border-ring", error && "border-destructive", !editable && "bg-muted")}>
         <DesignAsset source={assets.search} className="size-5" contentFit="contain" accessible={false} />
         <TextInput
+          textAlignVertical="center"
           className={cn("h-full min-w-0 flex-1 py-0 font-sans text-body-sm text-foreground", !editable && "text-muted-foreground", className)}
           placeholder={placeholder}
           placeholderTextColor={getColors("light")["muted-foreground"]}

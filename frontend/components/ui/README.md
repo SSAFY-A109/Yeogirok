@@ -27,7 +27,7 @@
 | — | `screen.tsx` · `Screen` | View props. 흰 배경 + 위쪽 안전 영역 |
 | Navigation / AppBar | `screen-header.tsx` · `ScreenHeader`, `HeaderIconButton` | `title`, `titleAlign="center\|start"`, `leading`(기본 뒤로가기, `null`이면 빈자리), `trailing`, `onBack` / `icon`, `accessibilityLabel`, `onPress` |
 | Bottom CTA | `bottom-cta.tsx` · `BottomCta` | `children`(안내 줄 + `Button size="lg"`) |
-| BottomSheet | `bottom-sheet.tsx` · `BottomSheet` | `open`, `onOpenChange`, `accessibilityLabel` |
+| BottomSheet | `bottom-sheet.tsx` · `BottomSheet` | `visible`, `onClose`, `closeLabel`, `expandable` (아래 BottomSheet 절) |
 | Dialog | `confirm-dialog.tsx` · `ConfirmDialog` | `open`, `onOpenChange`, `title`, `description`, `children`, `confirmLabel`, `onConfirm`, `confirmTone="primary\|destructive"`, `loading` |
 | Media / Photo | `media-photo.tsx` · `MediaPhoto` | `uri`, `className`(크기) |
 | — | `toast.tsx` · `ToastProvider`, `useToast` | `show({ message, action?, durationMs? })`. Provider는 루트 레이아웃에 있다 |
@@ -60,3 +60,7 @@ Switch는 RNR Root·Thumb으로 구성한다. `checked`가 바뀌면 손잡이�
 Figma 로고·아이콘·선택 링과 사용자 제공 발자취 WebP는 `assets/ui/`에 로컬로 보관했다. 소셜 로그인 색은 승인된 `auth-kakao`, `auth-google-border`, `auth-google-foreground` 토큰이다. Brand·Success 배지는 기존 사용자 결정에 따라 `DESIGN.md`의 쇼케이스 색을 쓴다. 선택된 FilterChip은 현재 원본처럼 체크 아이콘 없이 테두리·배경으로 표시한다.
 
 로딩 스켈레톤의 너비는 `w-skeleton-heading`(116), `w-skeleton-line`(168) 토큰을 쓴다. Pencil 대응 노드는 없어 **Pencil 미대조**다. `pnpm ui:check`로 타이포·크기 클래스 충돌과 에셋 파일을 검사한다. SVG 의존성을 추가했으므로 기존 개발 클라이언트는 네이티브 빌드 재생성이 필요하다.
+
+## BottomSheet
+
+`bottom-sheet.tsx` · `BottomSheet` — props `visible`, `onClose`, `closeLabel`, `expandable`(기본 true). 기본은 내용 높이로 열리고, 맨 윗부분(핸들)을 위로 끌어올리거나 탭하면 화면(상태 표시줄 아래)을 채운다. 아래로 끌면 기본 높이로 줄고, 기본 높이에서 더 끌면(80 이상 또는 빠른 스와이프) 닫힌다. 스크림을 눌러도 닫힌다. 스크린 리더는 핸들의 `increment`·`decrement` 동작으로 펼치고 줄인다. 열 때마다 새로 마운트되어 기본 높이로 시작한다.

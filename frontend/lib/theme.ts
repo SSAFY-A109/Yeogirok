@@ -147,6 +147,13 @@ export const typography = {
     fontWeight: "500",
     letterSpacing: 0,
   },
+  "label-sm": {
+    fontFamily: "Noto Sans KR",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    letterSpacing: 0,
+  },
   caption: {
     fontFamily: "Noto Sans KR",
     fontSize: 12,
@@ -165,6 +172,13 @@ export const typography = {
     fontFamily: "Noto Sans KR",
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: "500",
+    letterSpacing: 0,
+  },
+  "button-lg": {
+    fontFamily: "Noto Sans KR",
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: "500",
     letterSpacing: 0,
   },

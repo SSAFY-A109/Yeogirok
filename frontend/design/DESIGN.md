@@ -172,7 +172,7 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 |---|---|---|
 | `TabBar` | `components/ui/tab-bar.tsx` | 탭 5개(6장). Figma Wireframe 페이지의 `공통 / 하단 탭` 참고 |
 | `EmptyState` | `components/ui/empty-state.tsx` | 아이콘·제목·설명·액션 1개. 빈 목록·오류·권한 필요 |
-| `BottomSheet` | `components/ui/bottom-sheet.tsx` | `bg-popover rounded-t-xl`, 손잡이 36×4(`bg-border-strong`), 바깥 `bg-black/50`. Figma `BottomSheet / 장소 담기`(복제본 1:7198). 지도 위 목록·여행방 선택·장소 담기·여행 날짜 |
+| `BottomSheet` | `components/ui/bottom-sheet.tsx` | `bg-popover rounded-t-xl`, 손잡이 36×4(`bg-border-strong`), 바깥 `bg-black/45`. 손잡이를 끌어 화면을 채우거나 닫는다(`components/ui/README.md` BottomSheet 절). Figma `BottomSheet / 장소 담기`(복제본 1:7198). 지도 위 목록·여행방 선택·장소 담기·여행 날짜 |
 | `Toast` | `components/ui/toast.tsx` | Figma에 없음 — 임시로 `bg-foreground` + 흰 글자, 동작 글자 `text-secondary`. 시안이 생기면 토큰을 정한다 `[확인]` |
 | `Screen` | `components/ui/screen.tsx` | 화면 틀. 흰 배경 + 위쪽 안전 영역 |
 | `ScreenHeader` | `components/ui/screen-header.tsx` | Figma `Navigation / AppBar`(56px, 제목 Title/18 `text-h3`). 가운데 제목(기본) 또는 뒤로가기 옆 제목(`titleAlign="start"`). 규칙 40의 `text-h1` 제목과 다르다 `[확인]` |

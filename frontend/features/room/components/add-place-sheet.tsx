@@ -13,7 +13,9 @@ type AddPlaceSheetProps = {
 /** 장소 담기 시트(Figma W09-A). 코스·AI 추천·검색 세 경로를 한곳에 모은다. */
 export function AddPlaceSheet({ open, onOpenChange, onSelect }: AddPlaceSheetProps) {
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange} accessibilityLabel="장소 담기" testID="add-place-sheet">
+    <BottomSheet visible={open} onClose={() => {
+      onOpenChange(false);
+    }} closeLabel="장소 담기 닫기">
       <View className="gap-2 px-5 pb-4 pt-2">
         <AddPlaceHeading />
         <AddPlaceOptions onSelect={onSelect} testIDPrefix="add-place-sheet." />

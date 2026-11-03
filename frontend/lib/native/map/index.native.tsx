@@ -4,12 +4,15 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import {
   buildKakaoMapHtml,
   buildSetMarkersScript,
+  buildSetRouteScript,
   KAKAO_JS_SDK_DOMAIN,
   parseKakaoMapMessage,
   type KakaoMapFailure,
   type MapCamera,
   type MapMarker,
+  type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRoute,
 } from "./kakao-map-bridge";
 
 export {
@@ -17,8 +20,14 @@ export {
   type KakaoMapFailure,
   type MapCamera,
   type MapMarker,
+  type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRoute,
+  type MapRouteColors,
+  type MapRoutePoint,
 } from "./kakao-map-bridge";
+
+export { placePinImage } from "./place-pin";
 
 const NO_RESPONSE_TIMEOUT_MS = 20000;
 
@@ -26,6 +35,9 @@ type KakaoMapViewProps = {
   javascriptKey: string;
   initialCamera: MapCamera;
   markers?: readonly MapMarker[];
+  markerImage?: MapMarkerImage;
+  route?: MapRoute;
+  onPressPoint?: (id: string) => void;
   onReady: () => void;
   onError: (reason: KakaoMapFailure) => void;
   onPerformance?: (report: MapPerformanceReport) => void;
@@ -36,6 +48,9 @@ export function KakaoMapView({
   javascriptKey,
   initialCamera,
   markers,
+  markerImage,
+  route,
+  onPressPoint,
   onReady,
   onError,
   onPerformance,
@@ -52,6 +67,7 @@ export function KakaoMapView({
   const hasResponded = useRef(false);
   const isMapReady = useRef(false);
   const markersSentAt = useRef(0);
+  const routeSignature = useRef("");
 
   const reportNoResponse = useEffectEvent(() => {
     if (!hasResponded.current) {
@@ -67,16 +83,31 @@ export function KakaoMapView({
     };
   }, []);
 
-  function sendMarkers(nextMarkers: readonly MapMarker[]) {
+  function sendMarkers(nextMarkers: readonly MapMarker[], image: MapMarkerImage | undefined) {
     markersSentAt.current = Date.now();
-    webViewRef.current?.injectJavaScript(buildSetMarkersScript(nextMarkers));
+    webViewRef.current?.injectJavaScript(buildSetMarkersScript(nextMarkers, image));
   }
 
   useEffect(() => {
     if (isMapReady.current && markers) {
-      sendMarkers(markers);
+      sendMarkers(markers, markerImage);
     }
-  }, [markers]);
+  }, [markers, markerImage]);
+
+  function sendRoute(nextRoute: MapRoute) {
+    const signature = nextRoute.points.map(({ id }) => {
+      return id;
+    }).join(",");
+
+    webViewRef.current?.injectJavaScript(buildSetRouteScript(nextRoute, signature !== routeSignature.current));
+    routeSignature.current = signature;
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && route) {
+      sendRoute(route);
+    }
+  }, [route]);
 
   function handleMessage(event: WebViewMessageEvent) {
     const message = parseKakaoMapMessage(event.nativeEvent.data);
@@ -91,7 +122,11 @@ export function KakaoMapView({
       isMapReady.current = true;
 
       if (markers) {
-        sendMarkers(markers);
+        sendMarkers(markers, markerImage);
+      }
+
+      if (route) {
+        sendRoute(route);
       }
 
       onReady();
@@ -99,6 +134,10 @@ export function KakaoMapView({
 
     if (message.type === "error") {
       onError(message.reason);
+    }
+
+    if (message.type === "point-pressed") {
+      onPressPoint?.(message.id);
     }
 
     if (message.type === "markers-rendered") {
