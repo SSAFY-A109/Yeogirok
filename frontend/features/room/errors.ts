@@ -1,0 +1,17 @@
+import { getErrorMessage } from "@/api/errors";
+
+/** 여행방(RO) 도메인 code별 문구. 도메인 code는 명세 미확정이라 아직 없다(TBD). */
+const ROOM_ERROR_MESSAGES: Readonly<Record<string, string>> = {};
+
+export const ROOM_ERROR_FALLBACK = {
+  load: "여행방 정보를 불러오지 못했어요.",
+  save: "저장하지 못했어요. 다시 시도해 주세요.",
+  leave: "여행방에서 나가지 못했어요. 다시 시도해 주세요.",
+  invitation: "초대 링크를 만들지 못했어요.",
+  addPlaces: "장소를 담지 못했어요. 다시 시도해 주세요.",
+  deletePlace: "장소를 빼지 못했어요. 다시 시도해 주세요.",
+} as const;
+
+export function getRoomErrorMessage(error: unknown, fallback: string): string {
+  return getErrorMessage(error, ROOM_ERROR_MESSAGES, fallback);
+}
