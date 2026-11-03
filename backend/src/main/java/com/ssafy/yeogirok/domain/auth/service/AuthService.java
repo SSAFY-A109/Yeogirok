@@ -1,0 +1,103 @@
+package com.ssafy.yeogirok.domain.auth.service;
+
+import java.time.Clock;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import com.ssafy.yeogirok.domain.auth.dto.TokenIssueResponse;
+import com.ssafy.yeogirok.domain.auth.dto.TokenRefreshResponse;
+import com.ssafy.yeogirok.domain.auth.token.AccessTokenIssuer;
+import com.ssafy.yeogirok.domain.auth.token.RefreshTokenService;
+import com.ssafy.yeogirok.domain.user.domain.User;
+import com.ssafy.yeogirok.domain.user.repository.UserRepository;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.oauth.OAuthProvider;
+import com.ssafy.yeogirok.global.oauth.oidc.IdTokenVerifier;
+import com.ssafy.yeogirok.global.oauth.oidc.OidcIdentity;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+	private final IdTokenVerifier idTokenVerifier;
+	private final UserRepository userRepository;
+	private final AccessTokenIssuer accessTokenIssuer;
+	private final RefreshTokenService refreshTokenService;
+	private final TransactionTemplate transactionTemplate;
+	private final Clock clock;
+
+	private record SignIn(
+		User user,
+		boolean isNewUser
+	) {
+	}
+
+	/** API-005. 소셜 ID 토큰 검증 → 회원 조회·가입(커밋) → 서비스 토큰 발급. */
+	public TokenIssueResponse login(String providerValue, String idToken, String nonce) {
+		OAuthProvider provider = OAuthProvider.fromValue(providerValue)
+			.orElseThrow(() -> new BusinessException(ExceptionType.UNSUPPORTED_PROVIDER));
+
+		OidcIdentity identity = idTokenVerifier.verify(provider, idToken, nonce);
+
+		SignIn signIn = findOrSignUp(identity);
+		User user = signIn.user();
+		boolean isNewUser = signIn.isNewUser();
+
+		log.info("Social login. userId={}, provider={}, isNewUser={}", user.getId(), provider, isNewUser);
+
+		return new TokenIssueResponse(
+			accessTokenIssuer.issue(user), accessTokenIssuer.ttlSeconds(),
+			refreshTokenService.issueForNewLogin(user.getId()), refreshTokenService.ttlSeconds(),
+			isNewUser);
+	}
+
+	/** API-006. */
+	@Transactional(readOnly = true)
+	public TokenRefreshResponse refresh(String rawRefreshToken) {
+		RefreshTokenService.Rotated rotated = refreshTokenService.rotate(rawRefreshToken);
+		User user = userRepository.findById(rotated.userId())
+			.orElseThrow(() -> new BusinessException(ExceptionType.REFRESH_TOKEN_REVOKED));
+
+		return new TokenRefreshResponse(
+			accessTokenIssuer.issue(user), accessTokenIssuer.ttlSeconds(),
+			rotated.rawToken(), refreshTokenService.ttlSeconds());
+	}
+
+	/** API-007. */
+	public void logout(Long userId, String rawRefreshToken) {
+		refreshTokenService.revoke(userId, rawRefreshToken);
+	}
+
+	/**
+	 * 처음 로그인하는 계정이 동시에 두 번 오면 한쪽 가입이 (provider, provider_subject) 유일 제약에 걸린다.
+	 * 그 트랜잭션은 롤백하고, 새 트랜잭션에서 먼저 가입된 회원을 읽어 로그인시킨다.
+	 */
+	private SignIn findOrSignUp(OidcIdentity identity) {
+		try {
+			return transactionTemplate.execute(status -> findOrCreate(identity));
+		} catch (DataIntegrityViolationException e) {
+			log.info("Concurrent first login. Using the user created by the other request. provider={}",
+				identity.provider());
+			return transactionTemplate.execute(status -> findOrCreate(identity));
+		}
+	}
+
+	private SignIn findOrCreate(OidcIdentity identity) {
+		return userRepository.findByProviderAndProviderSubject(identity.provider(), identity.subject())
+			.map(user -> new SignIn(user, false))
+			.orElseGet(() -> new SignIn(signUp(identity), true));
+	}
+
+	private User signUp(OidcIdentity identity) {
+		return userRepository.saveAndFlush(User.signUp(identity.provider(), identity.subject(), identity.email(),
+			identity.nickname(), identity.profileImageUrl(), clock.instant()));
+	}
+}
