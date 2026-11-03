@@ -69,6 +69,7 @@ export const TIMEOUT_UPLOAD_MS = 60_000;
  * ```
  */
 export const api = create({
+  adapter: "fetch",
   baseURL: `${API_BASE_URL}/api/v1`,
   timeout: TIMEOUT_QUERY_MS,
   headers: { Accept: "application/json", "Content-Type": "application/json" },

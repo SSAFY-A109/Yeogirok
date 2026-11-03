@@ -27,6 +27,8 @@ MSW는 **2.3.5로 고정**한다. 설치 시 확인한 2.15.0의 루트 모듈�
 
 `pnpm-workspace.yaml`의 `allowBuilds.msw: false`는 설치 후 Worker를 자동 복사하는 스크립트를 실행하지 않는 설정이다. Worker 갱신은 위 명령으로 명시적으로 수행한다.
 
+공통 axios 클라이언트는 `fetch` 어댑터를 사용한다. React Native의 `whatwg-fetch` Response에는 스트림 `body`가 없고, 현재 MSW 2.3.5의 XHR 경로는 이를 빈 응답으로 전달한다. 따라서 기본 XHR 어댑터를 사용하면 로그인 성공 목도 `CONTRACT_MISMATCH`로 실패한다(2026-11-03 재현). HTTP 요청을 MSW에서 가로채는 구조는 유지한다.
+
 ## 도메인 핸들러 추가
 
 현재 도메인 API가 구현되지 않아 `handlers`는 빈 배열이다. 서비스 API를 호출하기 전에 해당 핸들러를 추가한다.
@@ -45,9 +47,12 @@ MSW는 **2.3.5로 고정**한다. 설치 시 확인한 2.15.0의 루트 모듈�
 pnpm typecheck
 pnpm lint
 pnpm msw:check
+pnpm native:check
 ```
 
 `msw:check`는 기존 TypeScript 컴파일러와 Node의 기본 assert만 사용한다. 임시 산출물은 git에서 제외된 `.expo/msw-check/`에 생성한다. 네이티브·Node 서버 각각에 대해 정상 JSON 응답, 오류 응답 덮어쓰기, 핸들러 초기화, 미등록 서비스 API의 네트워크 차단, 외부 요청 통과를 검사한다. 점검용 핸들러는 이 명령에서만 추가되며 앱에는 등록되지 않는다.
+
+`native:check`는 React Native가 사용하는 실제 `whatwg-fetch`의 Request·Response와 네트워크 전송을 차단하는 XHR 대역을 Node에 적용한다. 공통 API 클라이언트의 설정을 덮어쓰지 않고 MSW 응답 본문·봉투 해제가 유지되는지 검사한다. Node의 표준 Response만 사용하는 검사에서 놓친 스트림 없는 응답 문제를 다룬다.
 
 이 검사는 실제 기기에서의 Hermes·네트워크 동작을 대신하지 않는다. 개발 빌드에서 화면과 도메인 API를 연결할 때 기기에서도 확인한다.
 

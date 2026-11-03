@@ -29,7 +29,6 @@ Module._load = function (id, ...args) {
 
 process.env.EXPO_PUBLIC_API_URL = "https://api.yeogirok.test/";
 const { api, setUnauthorizedHandler, TIMEOUT_MUTATION_MS, TIMEOUT_UPLOAD_MS } = require("../.expo/api-check/api/client");
-api.defaults.adapter = "fetch";
 const { ApiError, isApiError } = require("../.expo/api-check/api/errors");
 const { clearTokens, getTokens, setTokens } = require("../.expo/api-check/features/auth/token-store");
 Module._load = load;
