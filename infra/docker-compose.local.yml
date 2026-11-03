@@ -1,0 +1,33 @@
+# 로컬 개발용 DB. 백엔드 팀원이 각자 노트북에서 같은 DB를 쓰기 위한 파일이다.
+#
+#   docker compose -f infra/docker-compose.local.yml up -d     # 켜기
+#   docker compose -f infra/docker-compose.local.yml down      # 끄기 (데이터는 남는다)
+#   docker compose -f infra/docker-compose.local.yml down -v   # 끄고 데이터까지 지우기
+#
+# 접속 정보는 backend/src/main/resources/application-local.yaml 의 기본값과 같다.
+# 그래서 백엔드는 .env 없이 바로 실행된다.
+
+name: yeogirok-local
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    # Apple Silicon Mac(M1~M4)에서 이미지가 안 받아지면 아래 줄의 주석을 푼다.
+    # platform: linux/amd64
+    environment:
+      POSTGRES_DB: yeogirok
+      POSTGRES_USER: yeogirok
+      POSTGRES_PASSWORD: yeogirok
+      TZ: Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  db-local:
