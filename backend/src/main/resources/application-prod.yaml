@@ -20,3 +20,9 @@ server:
   # Nginx(HTTPS) 뒤에서 X-Forwarded-* 헤더로 원래 주소(https, 도메인)를 복원한다.
   # 없으면 Swagger 가 서버 주소를 http://127.0.0.1:8080 으로 잡아 HTTPS 페이지에서 요청이 깨진다.
   forward-headers-strategy: framework
+
+yeogirok:
+  idempotency:
+    # 정하지 않은 수치는 기본값 없이 받는다. 값이 없으면 실행이 바로 실패한다.
+    retention: ${IDEMPOTENCY_RETENTION}
+    processing-timeout: ${IDEMPOTENCY_PROCESSING_TIMEOUT}

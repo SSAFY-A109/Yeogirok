@@ -45,6 +45,8 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	// 테스트는 PostgreSQL 없이 돌도록 H2(PostgreSQL 모드)를 쓴다.
 	testRuntimeOnly 'com.h2database:h2'
+	// Redis 를 쓰는 테스트는 Testcontainers 로 실제 Redis 를 띄운다(로컬·GitHub Actions 모두 Docker 필요).
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

@@ -12,3 +12,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+yeogirok:
+  idempotency:
+    # 멱등키 보관 기간(11/3 결정, 요청 종류와 상관없이 같다)과 처리 중 표시 수명(제안값).
+    retention: ${IDEMPOTENCY_RETENTION:24h}
+    processing-timeout: ${IDEMPOTENCY_PROCESSING_TIMEOUT:30s}
