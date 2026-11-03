@@ -5,6 +5,12 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+  data:
+    redis:
+      # DB 와 같이 기본값을 두지 않는다. 값이 없으면 실행이 바로 실패한다.
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
   jpa:
     hibernate:
       # Flyway(V1) 도입 전까지만 update 로 둔다. V1 이 들어오는 날 validate 로 바꾸고 서버 DB를 한 번 비운다.
