@@ -30,6 +30,8 @@ public enum ExceptionType {
 	RESOURCE_NOT_FOUND(NOT_FOUND, "C015", "요청한 경로를 찾을 수 없습니다."),
 	HTTP_METHOD_NOT_ALLOWED(METHOD_NOT_ALLOWED, "C016", "허용되지 않은 HTTP 메서드입니다."),
 	MEDIA_TYPE_NOT_SUPPORTED(UNSUPPORTED_MEDIA_TYPE, "C017", "지원하지 않는 Content-Type 입니다."),
+	/** 11/3 제안. 공통 오류표 추가는 팀 합의가 필요하다. */
+	IDEMPOTENT_REQUEST_IN_PROGRESS(CONFLICT, "C018", "같은 요청을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
 
 	/* ── 인증·인가 A ─────────────────────────────────────────── */
 

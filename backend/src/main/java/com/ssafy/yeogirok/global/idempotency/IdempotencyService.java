@@ -24,11 +24,13 @@ import tools.jackson.databind.json.JsonMapper;
  * <ol>
  *   <li>Redis 에 '처리 중' 표시를 SET NX 로 건다. 건 요청만 실제 처리를 한다.</li>
  *   <li>처리가 끝나면 값을 {@code {요청 해시, 결과 ID}} 로 바꾸고 보관 기간 동안 둔다.</li>
+ *   <li>처리가 실패하면 표시를 지워 같은 키로 다시 시도할 수 있게 한다.</li>
  * </ol>
  *
  * <p>표시를 못 건 요청은 저장된 값으로 판단한다.
  * <ul>
  *   <li>요청 내용이 다르면 → C005</li>
+ *   <li>같은 요청이 아직 처리 중이면 → C018</li>
  *   <li>같은 요청이 끝났으면 → 저장된 결과 ID로 다시 조회해 돌려준다</li>
  * </ul>
  *
@@ -40,6 +42,14 @@ import tools.jackson.databind.json.JsonMapper;
 @Slf4j
 @Component
 public class IdempotencyService {
+
+	/** 내가 건 처리 중 표시일 때만 지운다. 수명이 지나 다른 요청이 새로 건 표시는 건드리지 않는다. */
+	private static final RedisScript<Long> RELEASE = RedisScript.of("""
+		if redis.call('get', KEYS[1]) == ARGV[1] then
+		  return redis.call('del', KEYS[1])
+		end
+		return 0
+		""", Long.class);
 
 	/** 내 처리 중 표시가 그대로이거나 수명이 지나 사라졌을 때만 결과를 저장한다. */
 	private static final RedisScript<Long> COMPLETE = RedisScript.of("""
@@ -94,7 +104,7 @@ public class IdempotencyService {
 				throw new BusinessException(ExceptionType.IDEMPOTENCY_KEY_REUSED);
 			}
 			if (record.resultId() == null) {
-				throw new IllegalStateException("같은 요청을 아직 처리하고 있습니다: " + redisKey);
+				throw new BusinessException(ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS);
 			}
 			return findByResultId.apply(record.resultId());
 		}
@@ -103,7 +113,13 @@ public class IdempotencyService {
 
 	private <R> R runAndRecord(String redisKey, String marker, String requestHash, Supplier<R> action,
 		Function<R, ?> resultIdOf) {
-		R result = action.get();
+		R result;
+		try {
+			result = action.get();
+		} catch (RuntimeException | Error e) {
+			release(redisKey, marker);
+			throw e;
+		}
 
 		// 처리는 이미 끝났다. 여기서 Redis 저장이 실패해도 결과는 돌려주고, 처리 중 표시는 수명이 지나면 풀린다.
 		try {
@@ -121,6 +137,15 @@ public class IdempotencyService {
 			log.error("멱등키 결과 저장에 실패했습니다: {}", redisKey, e);
 		}
 		return result;
+	}
+
+	/** 실패한 처리의 원래 예외를 가리지 않도록, 표시 삭제가 실패해도 로그만 남긴다. */
+	private void release(String redisKey, String marker) {
+		try {
+			redis.execute(RELEASE, List.of(redisKey), marker);
+		} catch (RuntimeException e) {
+			log.error("멱등키 처리 중 표시를 지우지 못했습니다. 수명이 지나면 풀립니다: {}", redisKey, e);
+		}
 	}
 
 	private String hash(Object request) {

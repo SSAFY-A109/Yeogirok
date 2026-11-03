@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -216,6 +217,80 @@ class IdempotencyServiceTest {
 		}
 	}
 
+	/* ── AC-05 처리 중 ─────────────────────────────────────────── */
+
+	@Nested
+	class AC05_처리_중 {
+
+		@Test
+		void 같은_키_요청이_처리_중이면_C018_이고_끝난_뒤에는_처음_결과를_받는다() throws Exception {
+			CountDownLatch started = new CountDownLatch(1);
+			CountDownLatch release = new CountDownLatch(1);
+
+			CompletableFuture<Footprint> first = CompletableFuture.supplyAsync(() ->
+				service.execute(key("k1"), seoul, () -> {
+					started.countDown();
+					await(release);
+					return store.create(seoul);
+				}, Footprint::id, store::find));
+			assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+
+			assertBusiness(() -> create(key("k1"), seoul), ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS);
+
+			release.countDown();
+			Footprint firstResult = first.get(5, TimeUnit.SECONDS);
+
+			assertThat(create(key("k1"), seoul)).isEqualTo(firstResult);
+			assertThat(store.created).hasValue(1);
+		}
+
+		@Test
+		void 처리_중이라도_요청_내용이_다르면_C005_다() throws Exception {
+			CountDownLatch started = new CountDownLatch(1);
+			CountDownLatch release = new CountDownLatch(1);
+			CompletableFuture<Footprint> first = CompletableFuture.supplyAsync(() ->
+				service.execute(key("k1"), seoul, () -> {
+					started.countDown();
+					await(release);
+					return store.create(seoul);
+				}, Footprint::id, store::find));
+			assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+
+			assertBusiness(() -> create(key("k1"), busan), ExceptionType.IDEMPOTENCY_KEY_REUSED);
+
+			release.countDown();
+			first.get(5, TimeUnit.SECONDS);
+		}
+	}
+
+	/* ── AC-06 처리 실패 ───────────────────────────────────────── */
+
+	@Nested
+	class AC06_처리_실패 {
+
+		@Test
+		void 처리가_실패하면_처리_중_표시를_지워_같은_키로_다시_시도할_수_있다() {
+			assertThatThrownBy(() -> service.execute(key("k1"), seoul, () -> {
+				throw new IllegalStateException("외부 서비스 오류");
+			}, Footprint::id, store::find)).hasMessage("외부 서비스 오류");
+			assertThat(redis.hasKey("request:1:footprint-create:-:k1")).isFalse();
+
+			Footprint retried = create(key("k1"), seoul);
+
+			assertThat(retried).isNotNull();
+			assertThat(store.created).hasValue(1);
+		}
+
+		@Test
+		void 업무_오류로_실패해도_표시를_지운다() {
+			assertBusiness(() -> service.execute(key("k1"), seoul, () -> {
+				throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE);
+			}, Footprint::id, store::find), ExceptionType.NOT_ALLOWED_VALUE);
+
+			assertThat(redis.hasKey("request:1:footprint-create:-:k1")).isFalse();
+		}
+	}
+
 	/* ── AC-07 보관 기간과 처리 중 표시 수명 ───────────────────── */
 
 	@Nested
@@ -249,6 +324,9 @@ class IdempotencyServiceTest {
 			redis.opsForValue().set("request:1:footprint-create:-:k1",
 				JSON.writeValueAsString(IdempotencyRecord.processing(hashOf(shortLived, seoul))),
 				Duration.ofSeconds(1));
+
+			assertBusiness(() -> shortLived.execute(key("k1"), seoul, () -> store.create(seoul), Footprint::id,
+				store::find), ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS);
 
 			Thread.sleep(1500);
 
