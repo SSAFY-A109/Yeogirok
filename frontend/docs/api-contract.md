@@ -165,6 +165,22 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 // 422 C012·C013·C014, 도메인 F*** 상세 미확인
 ```
 
+### 3-1. 화면 선개발용 가정 DTO (2026-11-03, S15P31A109-83)
+
+2026-11-03 기준 Swagger(`https://k15a109.p.ssafy.io/v3/api-docs`)에 등록된 경로가 없고, 팀 Notion API 명세의 상세도 대조하지 못했다. "여행방 함께 장소 모으기" 화면을 MSW로 먼저 만들기 위해 아래 엔드포인트의 요청·응답을 Figma 화면에서 역산해 **가정**했다. 명세가 나오면 이 표의 타입과 `api/mocks/`를 함께 고친다.
+
+| API | 가정 타입 위치 | 비고 |
+| --- | --- | --- |
+| 020·021·022·023·024·028·029·032 | `features/room/model.ts` (`RoomSummaryDto`, `RoomDetailDto`, `CreateRoomRequestDto`, `UpdateRoomRequestDto`, `RoomInvitationDto`, `RoomPlaceDto`, `AddRoomPlacesRequestDto`) | 목록 응답은 `{ rooms }`, 장소 목록은 `{ places }`로 감쌌다고 가정 |
+| 026 | `features/place/model.ts` (`PlaceDto`, `SearchPlacesResponseDto`) | 쿼리 `keyword`·`cursor`·`size`, 응답 `{ items, nextCursor }` |
+| 033(=080)·081·034 | `features/recommendation/model.ts` | 조건 `{ categoryCodes, regionCode }`, 결과 `{ requestId, criteria, items }`. `routeHint`는 서버 문구 |
+| 036 | `features/schedule/model.ts` (`RoomScheduleDto`) | 일정이 없으면 `data: null` |
+| 078·079 | `features/common/model.ts` | 지역은 시/도 → 시/군/구 2단(`children`) |
+| **목록에 없음** | `DELETE /rooms/{roomId}/members/me` → `{ roomDeleted }` | 여행방 나가기(W06-L·L2). **백엔드에 엔드포인트 요청 필요** |
+
+- 도메인 오류 code(`RO`·`P`·`AI`·`SC`)는 미확정이라 화면은 공통 code와 도메인 기본 문구만 쓴다. MSW는 없는 여행방에 목 전용 `RO404`를 돌려준다.
+- 버전 충돌(C008)용 버전 필드와 멱등성 헤더는 이 엔드포인트들에서 아직 보내지 않는다.
+
 ## 4. 열거형과 기준 데이터
 
 클라이언트 타입은 아래 값의 유니온으로 두고, 모르는 값은 `UNKNOWN`으로 흡수한다(규칙 90).
@@ -173,7 +189,7 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 | --- | --- | --- |
 | 소셜 로그인 provider | `google` `kakao` | API-001·002 경로 |
 | 작업 상태 | **상세 미확인** | API-011 |
-| 이동 수단 | **상세 미확인** (자차·대중교통) | API-023, 기능 TRP-10 |
+| 이동 수단 | **상세 미확인** (자차·대중교통). 화면 선개발용 가정 값 `CAR` `PUBLIC_TRANSIT`(§3-1) | API-023, 기능 TRP-10 |
 | 팁 반응 | **상세 미확인** (좋아요·싫어요·취소) | API-052 |
 | 기록 상태 | **상세 미확인** | API-059, 기능 REC-09 |
 | 지역·카테고리 | 서버 기준 데이터(API-078·079, API-010) — 클라이언트에 하드코딩하지 않는다 | |
