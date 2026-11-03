@@ -24,7 +24,7 @@ flowchart LR
 
 | 파일 | 하는 일 | 쓰는 곳 |
 | --- | --- | --- |
-| `infra/docker-compose.local.yml` | 로컬 개발용 DB | 팀원 노트북 |
+| `infra/docker-compose.local.yml` | 로컬 개발용 DB·Redis | 팀원 노트북 |
 | `infra/docker-compose.yml` | 서버의 DB·백엔드(·AI) 구성 | 서버 |
 | `infra/.env.example` | 서버 비밀값 목록 (값은 비워 둠) | 서버에서 `.env`로 복사 |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
@@ -44,7 +44,7 @@ flowchart LR
 | 단계 | 내용 | 시간 | 언제 | 끝났다는 기준 |
 | --- | --- | --- | --- | --- |
 | 0 | 준비물 확인 | 10분 | 10/29(목) | 서버 접속 정보와 도메인 확보 |
-| 1 | 로컬 DB | 30분 | 10/29(목) | 백엔드가 `.env` 없이 로컬에서 실행됨 |
+| 1 | 로컬 DB·Redis | 30분 | 10/29(목) | 백엔드가 `.env` 없이 로컬에서 실행됨 |
 | 2 | 서버 기본 세팅 | 1시간 | 10/29(목) | 서버에서 `docker run hello-world` 성공 |
 | 3 | 코드와 비밀값 | 20분 | 10/30(금) | `~/yeogirok` 폴더 구조와 `.env` |
 | 4 | 백엔드 첫 실행 | 1시간 | 10/30(금) | 서버 안에서 응답 200 |
@@ -76,7 +76,7 @@ flowchart LR
 
 ---
 
-## 1단계. 로컬 DB (내 노트북, 30분)
+## 1단계. 로컬 DB·Redis (내 노트북, 30분)
 
 **왜**: 팀원마다 DB 종류나 버전이 다르면 "내 컴퓨터에선 되는데"가 생깁니다. 모두 같은 이미지, 같은 계정으로 맞춥니다.
 
@@ -84,8 +84,18 @@ flowchart LR
 
 ```bash
 docker compose -f infra/docker-compose.local.yml up -d
-docker compose -f infra/docker-compose.local.yml ps   # STATUS 가 (healthy) 면 성공
+docker compose -f infra/docker-compose.local.yml ps   # db, redis 모두 STATUS 가 (healthy) 면 성공
 ```
+
+Redis가 응답하는지 확인합니다. `PONG`이 나오면 성공입니다.
+
+```bash
+docker compose -f infra/docker-compose.local.yml exec redis redis-cli ping
+```
+
+- DB는 `localhost:5432`, Redis는 `localhost:6379`(비밀번호 없음)로 붙습니다.
+- Redis는 로컬 전용이라 비밀번호·메모리 정책·영속성을 설정하지 않았습니다. `down`으로 컨테이너를 지우면 Redis 데이터도 사라집니다. 서버 Redis 설정은 서버 담당이 따로 맡습니다.
+- 내 PC에 이미 Redis가 6379 포트로 떠 있으면 충돌합니다. 그 Redis를 끄고 다시 실행합니다.
 
 백엔드를 실행해 봅니다. 접속 정보가 `application-local.yaml`의 기본값과 같아서 `.env` 없이 바로 뜹니다.
 
