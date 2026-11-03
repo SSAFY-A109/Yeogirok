@@ -376,6 +376,13 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
   | 사진 | `yeogirok-a109-photos-dev` | `yeogirok-a109-photos-prod` |
   | 영수증 | `yeogirok-a109-receipts-dev` | `yeogirok-a109-receipts-prod` |
 
+- 수명 주기 규칙으로 파일이 자동 삭제됩니다. S3 규칙은 하루 한 번 돌아서 실제로는 업로드 1~2일 뒤에 지워집니다.
+
+  | 버킷 | 자동 삭제 대상 | 백엔드가 지킬 것 |
+  | --- | --- | --- |
+  | 사진 | `tmp/` 아래 파일만, 1일 뒤 | 임시 업로드는 반드시 `tmp/` 아래에 올리고, 확정할 때 `tip-photo/`·`record-photo/`로 옮깁니다. 옮기지 않으면 하루 뒤에 사라집니다. |
+  | 영수증 | 버킷의 모든 파일, 1일 뒤 | 하루 안에 OCR 등 처리를 끝내고 필요한 데이터는 DB에 저장합니다. 원본은 다시 꺼내 쓸 수 없습니다. API-012의 24시간 보관 기한은 S3 삭제보다 먼저 끝나므로, 기한이 지나면 백엔드가 직접 접근을 막습니다. |
+
 - 서버는 서버 전용 IAM 사용자의 접근 키로 S3에 접근합니다. 값은 서버 `.env`에 넣고, 키 이름은 `.env.example`의 `AWS_*`, `S3_PHOTO_BUCKET`, `S3_RECEIPT_BUCKET`을 참고합니다. 백엔드는 파일 종류에 따라 버킷을 골라 Presigned URL을 발급합니다.
 - 접근 키는 Git·노션·메신저에 올리지 않습니다.
 - 앱은 서버가 발급한 Presigned URL로 S3에 직접 올리고 받으므로 파일이 Nginx·백엔드를 거치지 않습니다. Nginx `client_max_body_size`와 Spring multipart 한도는 파일 업로드와 관계없고, 허용 크기는 백엔드 설정값으로 정합니다.
