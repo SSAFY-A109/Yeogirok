@@ -5,6 +5,12 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+  data:
+    redis:
+      # DB 와 같이 기본값을 두지 않는다. 값이 없으면 실행이 바로 실패한다.
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
   jpa:
     hibernate:
       # Flyway(V1) 도입 전까지만 update 로 둔다. V1 이 들어오는 날 validate 로 바꾸고 서버 DB를 한 번 비운다.
@@ -18,6 +24,10 @@ yeogirok:
     base-cell-size-degrees: ${VISIT_STATS_BASE_CELL_SIZE_DEGREES}
     zoom-multipliers: ${VISIT_STATS_ZOOM_MULTIPLIERS}
     min-count: ${VISIT_STATS_MIN_COUNT}
+  idempotency:
+    # 정하지 않은 수치는 기본값 없이 받는다. 값이 없으면 실행이 바로 실패한다.
+    retention: ${IDEMPOTENCY_RETENTION}
+    processing-timeout: ${IDEMPOTENCY_PROCESSING_TIMEOUT}
 
 server:
   # Nginx(HTTPS) 뒤에서 X-Forwarded-* 헤더로 원래 주소(https, 도메인)를 복원한다.

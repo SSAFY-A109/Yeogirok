@@ -51,7 +51,7 @@ global/
 | C002 | 400 | 타입·형식 오류 | `MethodArgumentTypeMismatchException`, `HttpMessageNotReadableException` |
 | C003 | 400 | 허용하지 않는 요청값 | 그 외 `@Valid` 제약 위반, 파라미터 제약 위반(`HandlerMethodValidationException`) |
 | C004 | 409 | 버전 불일치 | 서비스가 요청 version 을 비교해 던짐, `OptimisticLockingFailureException`(동시 수정) |
-| C005 | | 멱등키 | 해당 기능을 만들 때 추가 |
+| C005 | 409 | 같은 멱등키로 다른 내용의 요청 | `IdempotencyService` ([02-idempotency.md](02-idempotency.md)) |
 | C006 | 400 | 페이지 커서 무효 | 서비스가 커서를 해석하지 못하면 던짐 |
 | C007 | 400 | 페이지 크기 범위 오류 | 서비스가 limit 범위를 검사해 던짐 |
 | C008~C011 | | 위치 증거, 위도·경도 범위 | 해당 기능을 만들 때 추가 |
@@ -61,6 +61,7 @@ global/
 | C015 | 404 | 없는 경로 | `NoResourceFoundException` |
 | C016 | 405 | 허용되지 않은 HTTP 메서드 | `HttpRequestMethodNotSupportedException` |
 | C017 | 415 | 지원하지 않는 Content-Type | `HttpMediaTypeNotSupportedException` |
+| C018 | 409 | 같은 요청을 처리하고 있음 (팀 합의 필요) | `IdempotencyService` ([02-idempotency.md](02-idempotency.md)) |
 
 - `@Valid` 위반은 `FieldError.getCode()`로 누락(C001)과 값 오류(C003)를 가른다.
 - C014는 원인을 스택과 함께 로그에만 남기고, 응답에는 고정 문구만 보낸다(SQL 조각·테이블 이름 노출 방지).

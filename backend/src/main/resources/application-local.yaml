@@ -3,6 +3,12 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/yeogirok}
     username: ${DB_USERNAME:yeogirok}
     password: ${DB_PASSWORD:yeogirok}
+  data:
+    redis:
+      # infra/docker-compose.local.yml 의 redis 와 같다(비밀번호 없음).
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: update
@@ -15,3 +21,7 @@ yeogirok:
     base-cell-size-degrees: 0.005
     zoom-multipliers: "15:1,13:2,11:8,9:32,0:128"
     min-count: 1
+  idempotency:
+    # 멱등키 보관 기간(11/3 결정, 요청 종류와 상관없이 같다)과 처리 중 표시 수명(제안값).
+    retention: ${IDEMPOTENCY_RETENTION:24h}
+    processing-timeout: ${IDEMPOTENCY_PROCESSING_TIMEOUT:30s}

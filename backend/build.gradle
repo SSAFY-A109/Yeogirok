@@ -30,6 +30,8 @@ dependencies {
 	/* 데이터 */
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	runtimeOnly 'org.postgresql:postgresql'
+	// Redis: 멱등키·업로드 세션 등 짧게 보관하는 값 (global.idempotency)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
@@ -46,6 +48,8 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	// 테스트는 PostgreSQL 없이 돌도록 H2(PostgreSQL 모드)를 쓴다.
 	testRuntimeOnly 'com.h2database:h2'
+	// Redis 를 쓰는 테스트는 Testcontainers 로 실제 Redis 를 띄운다(로컬·GitHub Actions 모두 Docker 필요).
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
