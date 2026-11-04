@@ -14,14 +14,19 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
 
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
+import com.ssafy.yeogirok.domain.footprint.dto.StatisticsStatus;
 import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.lock.UserLock;
+import com.ssafy.yeogirok.support.H2PostgresFunctions;
 
 @DataJpaTest
-@Import({FootprintService.class, FootprintFinder.class})
+@Import({FootprintService.class, FootprintFinder.class, UserLock.class, H2PostgresFunctions.class})
 class FootprintServiceTest {
 
 	static final Long OWNER = 1L;
@@ -180,6 +185,75 @@ class FootprintServiceTest {
 
 		expect(() -> footprintService.updateBody(OTHER, id, 1, "본문"), ExceptionType.FOOTPRINT_NOT_OWNER);
 		expect(() -> footprintService.updateBody(OWNER, id + 1000, 1, "본문"), ExceptionType.FOOTPRINT_NOT_FOUND);
+	}
+
+	/* ── API-045 삭제 ─────────────────────────────────────────── */
+
+	@Test
+	void API_045_소프트_삭제하고_version을_1_올린다() {
+		Long id = persistAndClear(footprintOf(OWNER).build());
+
+		FootprintDeleteResponse response = footprintService.delete(OWNER, id, 1);
+
+		assertThat(response.deleted()).isTrue();
+		assertThat(response.statisticsStatus()).isEqualTo(StatisticsStatus.PENDING);
+		em.clear();
+		Footprint saved = em.find(Footprint.class, id);  // 행은 남아 있다
+		assertThat(saved.getDeletedAt()).isNotNull();
+		assertThat(saved.getVersion()).isEqualTo(2);
+	}
+
+	@Test
+	void 삭제하면_상세와_목록에서_빠진다() {
+		Long deleted = persistAndClear(footprintOf(OWNER).build());
+		Long kept = persistAndClear(footprintOf(OWNER).build());
+
+		footprintService.delete(OWNER, deleted, 1);
+		em.clear();
+
+		expect(() -> footprintService.getFootprint(OWNER, deleted), ExceptionType.FOOTPRINT_NOT_FOUND);
+		assertThat(footprintService.getMyFootprints(OWNER, null, null, null, null, null, null).items())
+			.extracting(FootprintListResponse.Item::id)
+			.containsExactly(kept);
+	}
+
+	@Test
+	void 이미_삭제한_발자취를_또_지우면_F001() {
+		Long id = persistAndClear(footprintOf(OWNER).build());
+		footprintService.delete(OWNER, id, 1);
+		em.clear();
+
+		expect(() -> footprintService.delete(OWNER, id, 2), ExceptionType.FOOTPRINT_NOT_FOUND);
+	}
+
+	@Test
+	void 삭제도_version이_다르면_C004이고_지우지_않는다() {
+		Long id = persistAndClear(footprintOf(OWNER).build());
+
+		expect(() -> footprintService.delete(OWNER, id, 2), ExceptionType.VERSION_MISMATCH);
+
+		em.clear();
+		assertThat(em.find(Footprint.class, id).getDeletedAt()).isNull();
+	}
+
+	@Test
+	void 삭제도_다른_사람_발자취는_F002_없으면_F001() {
+		Long id = persistAndClear(footprintOf(OWNER).build());
+
+		expect(() -> footprintService.delete(OTHER, id, 1), ExceptionType.FOOTPRINT_NOT_OWNER);
+		expect(() -> footprintService.delete(OWNER, id + 1000, 1), ExceptionType.FOOTPRINT_NOT_FOUND);
+		em.clear();
+		assertThat(em.find(Footprint.class, id).getDeletedAt()).isNull();
+	}
+
+	@Test
+	void 본문을_수정한_뒤에는_올라간_version으로_지운다() {
+		Long id = persistAndClear(footprintOf(OWNER).build());
+		footprintService.updateBody(OWNER, id, 1, "고친 본문");
+		em.clear();
+
+		expect(() -> footprintService.delete(OWNER, id, 1), ExceptionType.VERSION_MISMATCH);
+		assertThat(footprintService.delete(OWNER, id, 2).deleted()).isTrue();
 	}
 
 	private Long persistAndClear(Footprint footprint) {

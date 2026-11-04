@@ -1,5 +1,6 @@
 package com.ssafy.yeogirok.domain.footprint.service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.category.TravelCategory;
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
@@ -20,6 +22,7 @@ import com.ssafy.yeogirok.domain.footprint.repository.FootprintSpecifications;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.BoundingBox;
+import com.ssafy.yeogirok.global.lock.UserLock;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,6 +38,7 @@ public class FootprintService {
 
 	private final FootprintFinder footprintFinder;
 	private final FootprintRepository footprintRepository;
+	private final UserLock userLock;
 
 	/** API-043. 본인 것만, 삭제한 것은 F001. */
 	@Transactional(readOnly = true)
@@ -59,6 +63,24 @@ public class FootprintService {
 		// 응답에 올라간 version·updatedAt 을 담으려고 지금 반영한다.
 		footprintRepository.flush();
 		return FootprintUpdateResponse.from(footprint);
+	}
+
+	/**
+	 * API-045. 본인 발자취를 소프트 삭제한다.
+	 *
+	 * <p>사용자 잠금 → 발자취 행 잠금 순서로 잡아 API-041 생성(하루 1회 검사)과 한 줄로 세운다.
+	 * 삭제하면 같은 구간·같은 법정동에 다시 쓸 수 있다.
+	 */
+	@Transactional
+	public FootprintDeleteResponse delete(Long userId, Long footprintId, int version) {
+		userLock.lock(userId);
+		Footprint footprint = footprintFinder.getOwnFootprintForUpdate(footprintId, userId);
+		if (footprint.getVersion() != version) {
+			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
+		}
+		footprint.softDelete(Instant.now());
+		footprintRepository.flush();
+		return FootprintDeleteResponse.pending();
 	}
 
 	/**

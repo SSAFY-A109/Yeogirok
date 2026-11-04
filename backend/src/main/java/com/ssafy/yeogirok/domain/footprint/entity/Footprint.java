@@ -127,4 +127,9 @@ public class Footprint {
 		// 같은 본문이어도 수정 성공이면 version +1(명세 AC-01). 값이 바뀌지 않으면 Hibernate 가 UPDATE 를 건너뛰므로 직접 표시한다.
 		this.updatedAt = Instant.now();
 	}
+
+	/** API-045. 소프트 삭제. 행은 남기고 목록·상세·통계·하루 1회 검사에서 뺀다. version 은 UPDATE 때 1 오른다. */
+	public void softDelete(Instant now) {
+		this.deletedAt = now;
+	}
 }

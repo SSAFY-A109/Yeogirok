@@ -20,10 +20,12 @@ import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.lock.UserLock;
+import com.ssafy.yeogirok.support.H2PostgresFunctions;
 
 /** API-042 내 발자취 목록. */
 @DataJpaTest
-@Import({FootprintService.class, FootprintFinder.class})
+@Import({FootprintService.class, FootprintFinder.class, UserLock.class, H2PostgresFunctions.class})
 class FootprintListServiceTest {
 
 	static final Long ME = 1L;

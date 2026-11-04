@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.footprint.controller;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
@@ -317,6 +319,53 @@ class FootprintControllerTest {
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.code").value("F001"));
 		mockMvc.perform(patch("/api/v1/footprints/10").contentType(MediaType.APPLICATION_JSON).content(json))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("A001"));
+	}
+
+	/* ── API-045 삭제 ─────────────────────────────────────────── */
+
+	@Test
+	void API_045_삭제하면_deleted와_statisticsStatus로_응답한다() throws Exception {
+		given(footprintService.delete(USER_ID, 10L, 3)).willReturn(FootprintDeleteResponse.pending());
+
+		mockMvc.perform(delete("/api/v1/footprints/10").param("version", "3").with(asUser(USER_ID)))
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{ "success": true, "data": { "deleted": true, "statisticsStatus": "PENDING" } }
+				""", JsonCompareMode.STRICT));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+		version 생략   | /api/v1/footprints/10            | C001
+		version 문자   | /api/v1/footprints/10?version=a  | C002
+		version 소수   | /api/v1/footprints/10?version=1.5 | C002
+		id 문자        | /api/v1/footprints/abc?version=1 | C002
+		""")
+	void 삭제_요청값이_틀리면_400(String name, String path, String code) throws Exception {
+		mockMvc.perform(delete(path).with(asUser(USER_ID)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(code));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+		FOOTPRINT_NOT_OWNER | 403 | F002
+		FOOTPRINT_NOT_FOUND | 404 | F001
+		VERSION_MISMATCH    | 409 | C004
+		""")
+	void 삭제_실패는_명세의_코드로_응답한다(ExceptionType type, int status, String code) throws Exception {
+		given(footprintService.delete(USER_ID, 10L, 1)).willThrow(new BusinessException(type));
+
+		mockMvc.perform(delete("/api/v1/footprints/10").param("version", "1").with(asUser(USER_ID)))
+			.andExpect(status().is(status))
+			.andExpect(jsonPath("$.code").value(code));
+	}
+
+	@Test
+	void 삭제도_인증_정보가_없으면_401_A001() throws Exception {
+		mockMvc.perform(delete("/api/v1/footprints/10").param("version", "1"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("A001"));
 	}

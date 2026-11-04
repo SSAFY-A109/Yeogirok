@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.footprint.controller;
 import java.time.LocalDate;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateRequest;
@@ -59,5 +61,13 @@ public class FootprintController {
 		@CurrentUserId Long userId, @PathVariable Long footprintId, @RequestBody FootprintUpdateRequest request) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			footprintService.updateBody(userId, footprintId, request.version(), request.body())));
+	}
+
+	@Operation(summary = "API-045 내 발자취 삭제")
+	@DeleteMapping("/footprints/{footprintId}")
+	public ResponseEntity<ApiResponseBody<FootprintDeleteResponse>> delete(
+		@CurrentUserId Long userId, @PathVariable Long footprintId, @RequestParam int version) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			footprintService.delete(userId, footprintId, version)));
 	}
 }
