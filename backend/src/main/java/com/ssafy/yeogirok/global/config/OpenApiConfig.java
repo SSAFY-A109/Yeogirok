@@ -1,10 +1,7 @@
 package com.ssafy.yeogirok.global.config;
 
 import org.springframework.context.annotation.Bean;
-import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.context.annotation.Configuration;
-
-import com.ssafy.yeogirok.global.security.CurrentUserId;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -14,11 +11,6 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 /** Swagger UI: /swagger-ui.html. 우상단 Authorize 에 서비스 액세스 토큰을 넣으면 보호 API 를 호출할 수 있다. */
 @Configuration
 public class OpenApiConfig {
-
-	static {
-		// 토큰에서 꺼내는 값이라 요청 파라미터로 문서에 보이지 않게 한다.
-		SpringDocUtils.getConfig().addAnnotationsToIgnore(CurrentUserId.class);
-	}
 
 	@Bean
 	public OpenAPI openApi() {
