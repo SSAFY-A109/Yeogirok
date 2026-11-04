@@ -1,9 +1,9 @@
 package com.ssafy.yeogirok.domain.footprint.dto;
 
-import static com.ssafy.yeogirok.domain.footprint.dto.JsonFields.invalidFormat;
-import static com.ssafy.yeogirok.domain.footprint.dto.JsonFields.isAbsent;
-import static com.ssafy.yeogirok.domain.footprint.dto.JsonFields.missing;
-import static com.ssafy.yeogirok.domain.footprint.dto.JsonFields.optionalString;
+import static com.ssafy.yeogirok.global.request.JsonFields.invalidFormat;
+import static com.ssafy.yeogirok.global.request.JsonFields.isAbsent;
+import static com.ssafy.yeogirok.global.request.JsonFields.missing;
+import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;

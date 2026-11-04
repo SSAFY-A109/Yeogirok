@@ -1,7 +1,7 @@
 package com.ssafy.yeogirok.domain.footprint.dto;
 
-import static com.ssafy.yeogirok.domain.footprint.dto.JsonFields.requiredInt;
-import static com.ssafy.yeogirok.domain.footprint.dto.JsonFields.requiredString;
+import static com.ssafy.yeogirok.global.request.JsonFields.requiredInt;
+import static com.ssafy.yeogirok.global.request.JsonFields.requiredString;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
