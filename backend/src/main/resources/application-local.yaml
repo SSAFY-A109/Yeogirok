@@ -6,3 +6,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+yeogirok:
+  # API-046 방문 분포. 로컬 실행용 제안값이다(11/4). 실제 값은 팀이 정해 prod 환경 변수로 넣는다.
+  # 기본 셀 크기를 바꾸면 aggregation-version 도 바꾼다(VisitStatisticsProperties 참고).
+  visit-statistics:
+    aggregation-version: grid-0.005-v1
+    base-cell-size-degrees: 0.005
+    zoom-multipliers: "15:1,13:2,11:8,9:32,0:128"
+    min-count: 1
