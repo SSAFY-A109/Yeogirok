@@ -16,6 +16,9 @@ yeogirok:
   footprint:
     # API-041 작성 제한(11/4 팀 결정): 같은 날(Asia/Seoul 04:00 기준) 이미 남긴 내 발자취와 이 거리 이내면 거부(F003).
     same-day-radius-meters: 500
+  visit-statistics:
+    # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
+    max-cells: 2500
   kakao:
     local:
       # 주소 표시용(API-041 역지오코딩). 키가 없으면 주소·위치명·법정동 코드를 null 로 저장하고 앱은 그대로 뜬다.

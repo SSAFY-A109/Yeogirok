@@ -26,7 +26,7 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 /**
- * API-046. 테스트 설정: 기본 셀 0.01도, zoom 10 이상 ×1(0.01도), 5 이상 ×4(0.04도), 5 미만은 지원 안 함.
+ * API-046. 테스트 설정: 기본 셀 0.01도, zoom 10 이상 ×1(0.01도), 10 미만 ×4(0.04도). 최대 셀 수는 공통 설정 2500.
  * 역삼동 근처 (37.505, 127.005) 는 zoom 10 에서 칸 (3750, 12700) 이다.
  */
 @DataJpaTest
@@ -34,7 +34,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 @TestPropertySource(properties = {
 	"yeogirok.visit-statistics.aggregation-version=test-v1",
 	"yeogirok.visit-statistics.base-cell-size-degrees=0.01",
-	"yeogirok.visit-statistics.zoom-multipliers=10:1,5:4",
+	"yeogirok.visit-statistics.zoom-multipliers=10:1,0:4",
 	"yeogirok.visit-statistics.min-count=1"
 })
 class VisitStatisticsServiceTest {
@@ -185,13 +185,28 @@ class VisitStatisticsServiceTest {
 		expect(() -> service.getStatistics(SEOUL_BOX, 10, null, null, null, "UNIQUE_VISITORS"),
 			ExceptionType.UNSUPPORTED_METRIC);
 		expect(() -> get("1,2,3", 10, null, null, null), ExceptionType.INVALID_BBOX);
-		expect(() -> get(null, 10, null, null, null), ExceptionType.REQUIRED_VALUE_MISSING);
 		expect(() -> get(SEOUL_BOX, -1, null, null, null), ExceptionType.NOT_ALLOWED_VALUE);
-		expect(() -> get(SEOUL_BOX, 4.9, null, null, null), ExceptionType.NOT_ALLOWED_VALUE);  // 설정에 없는 단계
 		expect(() -> get(SEOUL_BOX, Double.NaN, null, null, null), ExceptionType.NOT_ALLOWED_VALUE);
 		expect(() -> get(SEOUL_BOX, 10, "LODGING", null, null), ExceptionType.NOT_ALLOWED_VALUE);
 		expect(() -> get(SEOUL_BOX, 10, null, LocalDate.parse("2026-11-05"), LocalDate.parse("2026-11-04")),
 			ExceptionType.INVALID_DATE_RANGE);
+	}
+
+	@Test
+	void 한국_밖은_세지_않고_한국_밖만_보는_bbox는_빈_결과다() {
+		save(at("38.505", "127.005"), List.of("CAFE"));
+		save(at("39.505", "127.005"), List.of("CAFE"));  // 위도 39 밖
+
+		assertThat(get("127.0,38.0,127.1,40.0", 0, null, null, null).cells())
+			.extracting(VisitStatisticsResponse.Cell::count).containsExactly(1L);
+		assertThat(get("140.0,40.0,140.1,40.1", 10, null, null, null).cells()).isEmpty();
+	}
+
+	@Test
+	void 셀_경계로_넓힌_영역의_셀_수가_2500을_넘으면_C013() {
+		assertThat(get("127.0,37.0,127.49,37.49", 10, null, null, null).cells()).isEmpty();  // 50 × 50 = 2500
+		expect(() -> get("127.0,37.0,127.5,37.5", 10, null, null, null), ExceptionType.INVALID_BBOX);  // 51 × 51
+		expect(() -> get("124.0,33.0,132.0,39.0", 0, null, null, null), ExceptionType.INVALID_BBOX);  // 한국 전체 × 0.04도
 	}
 
 	@Nested

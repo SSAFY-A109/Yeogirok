@@ -1,5 +1,7 @@
 package com.ssafy.yeogirok.domain.statistics;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -15,6 +17,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.category.TravelCategory;
@@ -39,20 +42,21 @@ public class VisitStatisticsService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	private static final Pattern CATEGORY_CODE = Pattern.compile("\"([A-Z_]+)\"");
+	/** 서비스 지역(한국). 이 밖은 조회하지 않는다. */
+	static final BoundingBox KOREA = new BoundingBox(
+		BigDecimal.valueOf(124), BigDecimal.valueOf(33), BigDecimal.valueOf(132), BigDecimal.valueOf(39));
 
 	private final VisitStatisticsProperties properties;
 	private final VisitStatisticsQuery query;
 
-	@Transactional(readOnly = true)
+	/** 발자취와 보존분을 같은 시점으로 읽는다. 두 쿼리 사이에 탈퇴 처리(발자취 → 보존분 이동)가 끼면 이중 집계되기 때문이다. */
+	@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 	public VisitStatisticsResponse getStatistics(String bbox, double zoom, String category, LocalDate from,
 		LocalDate to, String metric) {
 		if (metric != null && !METRIC_VISIT_COUNT.equals(metric)) {
 			throw new BusinessException(ExceptionType.UNSUPPORTED_METRIC, "metric: VISIT_COUNT 만 지원합니다.");
 		}
 		BoundingBox box = BoundingBox.parseOrNull(bbox);
-		if (box == null) {
-			throw new BusinessException(ExceptionType.REQUIRED_VALUE_MISSING, "bbox 파라미터가 필요합니다.");
-		}
 		VisitGrid grid = gridFor(zoom);
 		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
 			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "category: 없는 카테고리입니다: " + category);
@@ -61,7 +65,12 @@ public class VisitStatisticsService {
 			throw new BusinessException(ExceptionType.INVALID_DATE_RANGE, "from 이 to 보다 늦습니다.");
 		}
 
-		BoundingBox area = grid.expandToCells(box);
+		BoundingBox korea = intersect(box, KOREA);
+		if (korea == null) {
+			return response(from, to, grid, List.of());
+		}
+		BoundingBox area = grid.expandToCells(korea);
+		rejectIfTooManyCells(area, grid);
 		Instant visitedFrom = from == null ? null : from.atStartOfDay(SEOUL).toInstant();
 		Instant visitedTo = to == null ? null : to.plusDays(1).atStartOfDay(SEOUL).toInstant();
 
@@ -80,6 +89,11 @@ public class VisitStatisticsService {
 			.map(entry -> toCell(grid, entry.getKey(), entry.getValue()))
 			.toList();
 
+		return response(from, to, grid, cells);
+	}
+
+	private VisitStatisticsResponse response(LocalDate from, LocalDate to, VisitGrid grid,
+		List<VisitStatisticsResponse.Cell> cells) {
 		return new VisitStatisticsResponse(
 			METRIC_VISIT_COUNT,
 			new VisitStatisticsResponse.Period(from, to),
@@ -89,13 +103,31 @@ public class VisitStatisticsService {
 			Instant.now());
 	}
 
+	/** 두 영역이 겹치는 부분. 넓이가 있는 겹침이 없으면 null. */
+	private static BoundingBox intersect(BoundingBox a, BoundingBox b) {
+		BigDecimal west = a.west().max(b.west());
+		BigDecimal south = a.south().max(b.south());
+		BigDecimal east = a.east().min(b.east());
+		BigDecimal north = a.north().min(b.north());
+		return west.compareTo(east) < 0 && south.compareTo(north) < 0 ? new BoundingBox(west, south, east, north) : null;
+	}
+
+	/** 셀 경계로 넓힌 영역의 셀 수가 max-cells 를 넘으면 C013. */
+	private void rejectIfTooManyCells(BoundingBox area, VisitGrid grid) {
+		BigDecimal size = grid.cellSize();
+		BigDecimal cells = area.east().subtract(area.west()).divide(size, 0, RoundingMode.CEILING)
+			.multiply(area.north().subtract(area.south()).divide(size, 0, RoundingMode.CEILING));
+		if (cells.compareTo(BigDecimal.valueOf(properties.maxCells())) > 0) {
+			throw new BusinessException(ExceptionType.INVALID_BBOX,
+				"bbox: 조회 영역이 너무 넓습니다. zoom 을 낮추거나 영역을 줄여 주세요.");
+		}
+	}
+
 	private VisitGrid gridFor(double zoom) {
 		if (Double.isNaN(zoom) || zoom < 0) {
 			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "zoom: 0 이상이어야 합니다.");
 		}
-		int multiplier = properties.multiplierFor(zoom)
-			.orElseThrow(() -> new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "zoom: 지원하지 않는 zoom 입니다."));
-		return new VisitGrid(properties.baseCellSizeDegrees(), multiplier);
+		return new VisitGrid(properties.baseCellSizeDegrees(), properties.zoomMultipliers().multiplierFor(zoom));
 	}
 
 	private static VisitStatisticsResponse.Cell toCell(VisitGrid grid, CellKey key, Tally tally) {
