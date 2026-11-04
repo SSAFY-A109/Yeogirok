@@ -8,11 +8,7 @@ import java.util.Base64;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
-/**
- * API-042 목록 커서. 마지막 항목의 (visitedAt, id) 를 담는다. 앱은 내용을 해석하지 않고 그대로 돌려보낸다.
- *
- * <p>형식: base64url("{visitedAt ISO-8601}|{id}"). 해석할 수 없으면 C006.
- */
+/** API-042 목록 커서. base64url("{visitedAt ISO-8601}|{id}"), 해석할 수 없으면 C006. */
 record FootprintCursor(Instant visitedAt, Long id) {
 
 	private static final String SEPARATOR = "|";

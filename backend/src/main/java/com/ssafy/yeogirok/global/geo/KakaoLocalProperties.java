@@ -9,15 +9,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 카카오 로컬 API 설정.
+ * 카카오 로컬 API 설정. 키는 환경 변수 {@code KAKAO_REST_API_KEY} 로만 받고, 비어 있으면 호출하지 않는다(주소 등 null).
  *
- * <p>REST API 키는 환경 변수 {@code KAKAO_REST_API_KEY} 로만 받는다. 주소 표시용이라 비어 있어도 앱은 뜨고,
- * 이때 주소·위치명·법정동 코드는 null 로 저장된다. 키를 yaml·코드·로그에 남기지 않는다.
- *
- * @param restApiKey     REST API 키. 비어 있으면 호출하지 않는다
- * @param baseUrl        API 주소
- * @param connectTimeout 연결 제한 시간
- * @param readTimeout    응답 제한 시간. 멱등키 처리 중 표시 수명보다 충분히 짧아야 한다
+ * @param readTimeout 응답 제한 시간. 멱등키 처리 중 표시 수명보다 충분히 짧아야 한다
  */
 @Validated
 @ConfigurationProperties("yeogirok.kakao.local")

@@ -5,12 +5,7 @@ import java.math.RoundingMode;
 
 import com.ssafy.yeogirok.global.geo.BoundingBox;
 
-/**
- * 한 zoom 의 위경도 격자. 셀 한 변 = 기본 셀 × 배수.
- *
- * <p>칸 번호는 {@code floor(좌표 / 셀 한 변)} 이다. 기본 셀 칸 번호를 배수로 floor 나눗셈하면 큰 셀 칸 번호가 되므로
- * footprint_statistics 의 기본 셀(cell_id "{위도 칸}:{경도 칸}")을 그대로 묶을 수 있다.
- */
+/** 한 zoom 의 위경도 격자(셀 한 변 = 기본 셀 × 배수). 칸 번호가 floor(좌표 / 한 변)라 기본 셀을 그대로 묶을 수 있다. */
 record VisitGrid(BigDecimal baseCellSize, int multiplier) {
 
 	private static final int COORDINATE_SCALE = 7;

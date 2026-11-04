@@ -30,7 +30,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class FootprintService {
 
-	/** API-042 limit 기본값·최댓값(11/4 결정, 노션에 값 없음). */
+	/** API-042 limit 기본값·최댓값. */
 	static final int DEFAULT_LIST_LIMIT = 20;
 	static final int MAX_LIST_LIMIT = 50;
 
@@ -46,12 +46,7 @@ public class FootprintService {
 		return FootprintDetailResponse.from(footprintFinder.getOwnFootprint(footprintId, userId));
 	}
 
-	/**
-	 * API-044. 본문만 바꾸고 version 을 1 올린다.
-	 *
-	 * <p>요청 version 이 현재와 다르면 C004. 같은 version 으로 동시에 들어온 요청은 @Version 이 막고,
-	 * 그 예외도 GlobalExceptionHandler 가 C004 로 바꾼다.
-	 */
+	/** API-044. 본문만 바꾸고 version 을 올린다. version 이 다르거나 동시 요청이 @Version 에 걸리면 C004. */
 	@Transactional
 	public FootprintUpdateResponse updateBody(Long userId, Long footprintId, int version, String body) {
 		FootprintBody.normalize(body);  // 본문 길이 오류(C003)는 요청값 문제라 조회보다 먼저 알린다
@@ -65,12 +60,7 @@ public class FootprintService {
 		return FootprintUpdateResponse.from(footprint);
 	}
 
-	/**
-	 * API-045. 본인 발자취를 소프트 삭제한다.
-	 *
-	 * <p>사용자 잠금 → 발자취 행 잠금 순서로 잡아 API-041 생성(작성 제한 검사)과 한 줄로 세운다.
-	 * 삭제하면 같은 날 같은 자리(반경 500m 안)에 다시 쓸 수 있다.
-	 */
+	/** API-045. 사용자 잠금 → 행 잠금 순서로 API-041 작성 제한 검사와 한 줄로 세운다. */
 	@Transactional
 	public FootprintDeleteResponse delete(Long userId, Long footprintId, int version) {
 		userLock.lock(userId);
@@ -83,11 +73,7 @@ public class FootprintService {
 		return FootprintDeleteResponse.applied();
 	}
 
-	/**
-	 * API-042. 본인의 삭제하지 않은 발자취를 visitedAt 최신순(같으면 id 큰 순)으로 돌려준다.
-	 *
-	 * <p>from·to 는 visitedAt 의 Asia/Seoul 달력 날짜 기준이며 둘 다 포함한다(footprint_statistics.stat_date 와 같은 기준).
-	 */
+	/** API-042. visitedAt 최신순(같으면 id 큰 순). from·to 는 Asia/Seoul 날짜 기준, 양끝 포함. */
 	@Transactional(readOnly = true)
 	public FootprintListResponse getMyFootprints(Long userId, String bbox, LocalDate from, LocalDate to,
 		String category, String cursor, Integer limit) {

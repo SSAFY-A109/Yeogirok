@@ -26,10 +26,8 @@ import com.ssafy.yeogirok.global.geo.BoundingBox;
 import lombok.RequiredArgsConstructor;
 
 /**
- * API-046 카테고리별 방문 분포. 조회할 때마다 미삭제 발자취를 셀·카테고리 집합별로 센 값에
- * footprint_statistics(탈퇴자 보존분)를 더한다(노션 API-046). 삭제한 발자취는 바로 빠진다.
- *
- * <p>category 를 주면 그 코드를 고른 발자취만 세고, categoryCounts 에는 그 발자취들이 함께 고른 코드도 센다(11/4 결정).
+ * API-046. 조회할 때 미삭제 발자취를 세고 footprint_statistics(탈퇴자 보존분)를 더한다.
+ * category 를 주면 그 코드를 고른 발자취만 세고, categoryCounts 에는 함께 고른 코드도 센다.
  */
 @Service
 @RequiredArgsConstructor

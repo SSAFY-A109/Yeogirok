@@ -55,12 +55,6 @@ class CurrentUserIdArgumentResolverTest {
 	}
 
 	@Test
-	void 인증_정보가_없으면_401_A001() throws Exception {
-		call().andExpect(status().isUnauthorized())
-			.andExpect(jsonPath("$.code").value("A001"));
-	}
-
-	@Test
 	void 익명_사용자는_401_A001() throws Exception {
 		authenticate(new AnonymousAuthenticationToken("key", "anonymousUser",
 			AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
@@ -78,7 +72,7 @@ class CurrentUserIdArgumentResolverTest {
 	}
 
 	@Test
-	void 요청_헤더로는_사용자를_바꿀_수_없다() throws Exception {
+	void 인증_정보가_없으면_요청_헤더나_파라미터가_있어도_401_A001() throws Exception {
 		mockMvc.perform(get("/test/me").header("X-User-Id", "1").param("userId", "1"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("A001"));

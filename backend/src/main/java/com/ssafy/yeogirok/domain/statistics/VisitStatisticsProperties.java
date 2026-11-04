@@ -15,20 +15,12 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 /**
- * API-046 방문 분포 집계 기준. 노션 "셀 체계·정밀도 수치는 별도 확정하며 임의 수치를 넣지 않는다"에 따라
- * <b>기본값이 없다.</b> 값이 없거나 틀리면 앱이 시작하지 않는다.
+ * API-046 방문 분포 집계 기준. 일부러 기본값이 없어 값이 없거나 틀리면 앱이 시작하지 않는다.
+ * <b>기본 셀 크기를 바꾸면 aggregation-version 도 바꾼다</b>(저장된 탈퇴자 보존분은 예전 셀이라 버전으로 구분).
  *
- * <p>위경도 격자(11/4 결정): 기본 셀은 {@code base-cell-size-degrees} 도 크기의 칸이고, zoom 이 낮을수록 기본 셀을
- * 정수 배로 묶은 큰 셀을 쓴다. 큰 셀은 기본 셀을 정확히 묶으므로 footprint_statistics(기본 셀로 저장)도 합칠 수 있다.
- *
- * <p><b>기본 셀 크기를 바꾸면 aggregation-version 도 바꿔야 한다.</b> 이미 저장된 탈퇴자 보존분은 예전 버전의 셀로
- * 남아 있고, 버전이 다르면 조회에서 합치지 않는다(노션: 최초 집계 버전과 셀 정의를 보존하고 덮어쓰지 않는다).
- *
- * @param aggregationVersion   집계 체계 이름. 응답 aggregation.version, footprint_statistics.aggregation_version
  * @param baseCellSizeDegrees  기본 셀 한 변(도)
- * @param zoomMultipliers      "최소zoom:배수" 쉼표 목록. 예: {@code 15:1,13:2,11:8,9:32,0:128}. zoom 이 이 값 이상인 것 중
- *                             가장 큰 최소zoom 을 쓴다. 0 이 없으면 그보다 낮은 zoom 은 C003
- * @param minCount             이 수보다 적은 셀은 응답에서 뺀다(1 이면 모두 보인다)
+ * @param zoomMultipliers      "최소zoom:배수" 쉼표 목록(예: {@code 15:1,13:2,0:128}). 맞는 단계가 없는 zoom 은 C003
+ * @param minCount             이 수보다 적은 셀은 응답에서 뺀다
  */
 @Validated
 @ConfigurationProperties("yeogirok.visit-statistics")

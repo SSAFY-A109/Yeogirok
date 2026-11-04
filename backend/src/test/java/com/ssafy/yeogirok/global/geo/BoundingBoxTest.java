@@ -25,12 +25,8 @@ class BoundingBoxTest {
 	}
 
 	@Test
-	void 범위_끝값도_받는다() {
+	void 범위_끝값도_받고_값이_없으면_null() {
 		assertThat(BoundingBox.parseOrNull("-180,-90,180,90")).isNotNull();
-	}
-
-	@Test
-	void 값이_없으면_null() {
 		assertThat(BoundingBox.parseOrNull(null)).isNull();
 	}
 

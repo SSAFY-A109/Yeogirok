@@ -15,10 +15,8 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 
 /**
- * API-046 집계 조회. 셀·카테고리 집합별 횟수를 DB 에서 센다. 카테고리별로 펼치는 일은 서비스가 한다.
- *
- * <p>JSON 배열은 문자열로 CAST 해서 묶고 비교한다(PostgreSQL·H2 공통). 셀 계산식을 GROUP BY 에 다시 쓰면
- * PostgreSQL 이 매개변수를 다른 식으로 보므로 안쪽 쿼리에서 계산하고 바깥에서 묶는다.
+ * API-046 집계 조회. 셀·카테고리 집합별 횟수를 센다. 셀 계산식은 안쪽 쿼리에서 계산한다
+ * (GROUP BY 에 다시 쓰면 PostgreSQL 이 매개변수를 다른 식으로 본다).
  */
 @Component
 class VisitStatisticsQuery {

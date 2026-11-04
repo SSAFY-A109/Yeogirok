@@ -58,33 +58,26 @@ class FootprintListServiceTest {
 
 		FootprintListResponse.Item item = list(null, null, null, null, null, null).items().getFirst();
 
-		assertThat(item.id()).isEqualTo(id);
-		assertThat(item.latitude()).isEqualByComparingTo(new BigDecimal("37.5012345"));
-		assertThat(item.longitude()).isEqualByComparingTo(new BigDecimal("127.0398765"));
-		assertThat(item.locationName()).isNull();
-		assertThat(item.address()).isNull();
-		assertThat(item.body()).isNull();
-		assertThat(item.categoryCodes()).containsExactly("CAFE", "FOOD");
-		assertThat(item.visitedAt()).isEqualTo(at("2026-11-04T03:00:00Z"));
+		assertThat(item).extracting("id", "locationName", "address", "body", "categoryCodes", "visitedAt")
+			.containsExactly(id, null, null, null, List.of("CAFE", "FOOD"), at("2026-11-04T03:00:00Z"));
+		assertThat(item.latitude()).isEqualByComparingTo("37.5012345");
+		assertThat(item.longitude()).isEqualByComparingTo("127.0398765");
 	}
 
 	@Test
-	void 커서로_이어_받으면_빠짐없이_겹치지_않게_받는다() {
+	void 커서로_이어_받으면_빠짐없이_겹치지_않게_받고_마지막_쪽이_딱_맞으면_nextCursor는_null() {
 		List<Long> expected = new ArrayList<>();
-		for (int day = 5; day >= 1; day--) {
+		for (int day = 4; day >= 1; day--) {
 			expected.add(save(footprintOf(ME).visitedAt(at("2026-11-0%dT03:00:00Z".formatted(day)))));
 		}
 
 		FootprintListResponse first = list(null, null, null, null, null, 2);
 		FootprintListResponse second = list(null, null, null, null, first.nextCursor(), 2);
-		FootprintListResponse third = list(null, null, null, null, second.nextCursor(), 2);
 
 		assertThat(ids(first)).containsExactlyElementsOf(expected.subList(0, 2));
 		assertThat(ids(second)).containsExactlyElementsOf(expected.subList(2, 4));
-		assertThat(ids(third)).containsExactlyElementsOf(expected.subList(4, 5));
 		assertThat(first.nextCursor()).isNotNull();
-		assertThat(second.nextCursor()).isNotNull();
-		assertThat(third.nextCursor()).isNull();
+		assertThat(second.nextCursor()).isNull();
 	}
 
 	@Test
@@ -99,14 +92,7 @@ class FootprintListServiceTest {
 
 		assertThat(ids(first)).containsExactly(c, b);
 		assertThat(ids(second)).containsExactly(a);
-	}
-
-	@Test
-	void 마지막_쪽이_딱_맞게_끝나면_nextCursor는_null() {
-		save(footprintOf(ME).visitedAt(at("2026-11-01T03:00:00Z")));
-		save(footprintOf(ME).visitedAt(at("2026-11-02T03:00:00Z")));
-
-		assertThat(list(null, null, null, null, null, 2).nextCursor()).isNull();
+		assertThat(second.nextCursor()).isNull();  // 마지막 쪽이 덜 차도 끝
 	}
 
 	@Test
@@ -164,20 +150,6 @@ class FootprintListServiceTest {
 	}
 
 	@Test
-	void from이_to보다_늦으면_C012() {
-		expect(() -> list(null, date("2026-11-05"), date("2026-11-04"), null, null, null),
-			ExceptionType.INVALID_DATE_RANGE);
-	}
-
-	@Test
-	void from과_to가_같은_날이면_그날만_준다() {
-		Long that = save(footprintOf(ME).visitedAt(at("2026-11-04T03:00:00Z")));
-		save(footprintOf(ME).visitedAt(at("2026-11-05T03:00:00Z")));
-
-		assertThat(ids(list(null, date("2026-11-04"), date("2026-11-04"), null, null, null))).containsExactly(that);
-	}
-
-	@Test
 	void category는_그_코드를_고른_발자취만_준다() {
 		Long cafeAndFood = save(footprintOf(ME).categoryCodes(List.of("CAFE", "FOOD")));
 		Long cafeOnly = save(footprintOf(ME).categoryCodes(List.of("CAFE")));
@@ -190,22 +162,22 @@ class FootprintListServiceTest {
 	}
 
 	@Test
-	void 없는_category는_C003() {
+	void 조건_값이_틀리면_명세의_오류() {
+		expect(() -> list(null, date("2026-11-05"), date("2026-11-04"), null, null, null),
+			ExceptionType.INVALID_DATE_RANGE);
 		expect(() -> list(null, null, null, "LODGING", null, null), ExceptionType.NOT_ALLOWED_VALUE);
 		expect(() -> list(null, null, null, "cafe", null, null), ExceptionType.NOT_ALLOWED_VALUE);
-	}
-
-	@Test
-	void 커서를_해석할_수_없으면_C006_bbox가_틀리면_C013() {
 		expect(() -> list(null, null, null, null, "not-a-cursor", null), ExceptionType.INVALID_CURSOR);
 		expect(() -> list("1,2,3", null, null, null, null, null), ExceptionType.INVALID_BBOX);
 	}
 
+	/** from 과 to 를 같은 날로 주면 그날만 받는 것도 여기서 본다. */
 	@Test
 	void 조건을_함께_쓰면_모두_만족하는_것만_준다() {
 		Long match = save(footprintOf(ME).categoryCodes(List.of("CAFE")).visitedAt(at("2026-11-04T03:00:00Z")));
 		save(footprintOf(ME).categoryCodes(List.of("FOOD")).visitedAt(at("2026-11-04T03:00:00Z")));
 		save(footprintOf(ME).categoryCodes(List.of("CAFE")).visitedAt(at("2026-10-01T03:00:00Z")));
+		save(footprintOf(ME).categoryCodes(List.of("CAFE")).visitedAt(at("2026-11-05T03:00:00Z")));
 		save(footprintOf(ME).categoryCodes(List.of("CAFE")).visitedAt(at("2026-11-04T03:00:00Z"))
 			.latitude(new BigDecimal("35.1")).longitude(new BigDecimal("129.0")));
 

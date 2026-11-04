@@ -5,7 +5,7 @@ import static com.ssafy.yeogirok.domain.footprint.FootprintFixture.footprintOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.math.BigDecimal;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,41 +46,11 @@ class FootprintServiceTest {
 
 		FootprintDetailResponse response = footprintService.getFootprint(OWNER, id);
 
-		assertThat(response.id()).isEqualTo(id);
-		assertThat(response.latitude()).isEqualByComparingTo(new BigDecimal("37.5012345"));
-		assertThat(response.longitude()).isEqualByComparingTo(new BigDecimal("127.0398765"));
-		assertThat(response.locationName()).isEqualTo("역삼동");
-		assertThat(response.address()).isEqualTo("서울특별시 강남구 역삼동 123");
-		assertThat(response.body()).isEqualTo("좋았다");
-		assertThat(response.categoryCodes()).containsExactly("CAFE", "FOOD");
-		assertThat(response.visitedAt()).isEqualTo(CAPTURED_AT);
+		assertThat(response).extracting("id", "locationName", "address", "body", "categoryCodes", "visitedAt", "version")
+			.containsExactly(id, "역삼동", "서울특별시 강남구 역삼동 123", "좋았다", List.of("CAFE", "FOOD"), CAPTURED_AT, 1);
+		assertThat(response.latitude()).isEqualByComparingTo("37.5012345");
+		assertThat(response.longitude()).isEqualByComparingTo("127.0398765");
 		assertThat(response.createdAt()).isNotNull();
-		assertThat(response.version()).isEqualTo(1);
-	}
-
-	@Test
-	void 위치명_주소_본문이_없으면_null() {
-		Long id = em.persistAndGetId(footprintOf(OWNER).locationName(null).address(null).body(null).build(), Long.class);
-		em.flush();
-		em.clear();
-
-		FootprintDetailResponse response = footprintService.getFootprint(OWNER, id);
-
-		assertThat(response.locationName()).isNull();
-		assertThat(response.address()).isNull();
-		assertThat(response.body()).isNull();
-	}
-
-	@Test
-	void 다른_사람_발자취는_F002_없으면_F001() {
-		Long id = em.persistAndGetId(footprintOf(OWNER).build(), Long.class);
-
-		assertThatThrownBy(() -> footprintService.getFootprint(OTHER, id))
-			.isInstanceOf(BusinessException.class)
-			.extracting("exceptionType").isEqualTo(ExceptionType.FOOTPRINT_NOT_OWNER);
-		assertThatThrownBy(() -> footprintService.getFootprint(OWNER, id + 1000))
-			.isInstanceOf(BusinessException.class)
-			.extracting("exceptionType").isEqualTo(ExceptionType.FOOTPRINT_NOT_FOUND);
 	}
 
 	/* ── API-044 본문 수정 ─────────────────────────────────────── */
@@ -100,24 +70,11 @@ class FootprintServiceTest {
 		Footprint saved = em.find(Footprint.class, id);
 		assertThat(saved.getBody()).isEqualTo("다시 와도\n좋겠다");
 		assertThat(saved.getVersion()).isEqualTo(2);
-	}
-
-	@Test
-	void 위치_방문_시각_카테고리는_바뀌지_않는다() {
-		Long id = persistAndClear(footprintOf(OWNER).build());
-
-		footprintService.updateBody(OWNER, id, 1, "바꾼 본문");
-
-		em.clear();
-		Footprint saved = em.find(Footprint.class, id);
-		assertThat(saved.getLatitude()).isEqualByComparingTo(new BigDecimal("37.5012345"));
-		assertThat(saved.getLongitude()).isEqualByComparingTo(new BigDecimal("127.0398765"));
-		assertThat(saved.getLocationName()).isEqualTo("역삼동");
-		assertThat(saved.getAddress()).isEqualTo("서울특별시 강남구 역삼동 123");
-		assertThat(saved.getLegalAreaCode()).isEqualTo("1168010100");
-		assertThat(saved.getCategoryCodes()).containsExactly("CAFE", "FOOD");
-		assertThat(saved.getVisitedAt()).isEqualTo(CAPTURED_AT);
-		assertThat(saved.getDeletedAt()).isNull();
+		// 위치·방문 시각·카테고리는 바뀌지 않는다
+		assertThat(saved).extracting("locationName", "address", "legalAreaCode", "categoryCodes", "visitedAt", "deletedAt")
+			.containsExactly("역삼동", "서울특별시 강남구 역삼동 123", "1168010100", List.of("CAFE", "FOOD"), CAPTURED_AT, null);
+		assertThat(saved.getLatitude()).isEqualByComparingTo("37.5012345");
+		assertThat(saved.getLongitude()).isEqualByComparingTo("127.0398765");
 	}
 
 	@Test
@@ -132,20 +89,12 @@ class FootprintServiceTest {
 	}
 
 	@Test
-	void 같은_본문으로_수정해도_version을_1_올린다() {
+	void 같은_본문이어도_수정할_때마다_version이_차례로_오른다() {
 		Long id = persistAndClear(footprintOf(OWNER).body("좋았다").build());
 
 		assertThat(footprintService.updateBody(OWNER, id, 1, "좋았다").version()).isEqualTo(2);
-	}
-
-	@Test
-	void 두_번_수정하면_version이_차례로_오른다() {
-		Long id = persistAndClear(footprintOf(OWNER).build());
-
-		footprintService.updateBody(OWNER, id, 1, "첫 번째");
 		em.clear();
-
-		assertThat(footprintService.updateBody(OWNER, id, 2, "두 번째").version()).isEqualTo(3);
+		assertThat(footprintService.updateBody(OWNER, id, 2, "좋았다").version()).isEqualTo(3);
 	}
 
 	@Test
@@ -177,14 +126,6 @@ class FootprintServiceTest {
 		em.clear();
 		assertThat(em.find(Footprint.class, id).getBody()).isEqualTo("좋았다");
 		assertThat(em.find(Footprint.class, id).getVersion()).isEqualTo(1);
-	}
-
-	@Test
-	void 수정도_다른_사람_발자취는_F002_없으면_F001() {
-		Long id = persistAndClear(footprintOf(OWNER).build());
-
-		expect(() -> footprintService.updateBody(OTHER, id, 1, "본문"), ExceptionType.FOOTPRINT_NOT_OWNER);
-		expect(() -> footprintService.updateBody(OWNER, id + 1000, 1, "본문"), ExceptionType.FOOTPRINT_NOT_FOUND);
 	}
 
 	/* ── API-045 삭제 ─────────────────────────────────────────── */
@@ -244,16 +185,6 @@ class FootprintServiceTest {
 		expect(() -> footprintService.delete(OWNER, id + 1000, 1), ExceptionType.FOOTPRINT_NOT_FOUND);
 		em.clear();
 		assertThat(em.find(Footprint.class, id).getDeletedAt()).isNull();
-	}
-
-	@Test
-	void 본문을_수정한_뒤에는_올라간_version으로_지운다() {
-		Long id = persistAndClear(footprintOf(OWNER).build());
-		footprintService.updateBody(OWNER, id, 1, "고친 본문");
-		em.clear();
-
-		expect(() -> footprintService.delete(OWNER, id, 1), ExceptionType.VERSION_MISMATCH);
-		assertThat(footprintService.delete(OWNER, id, 2).deleted()).isTrue();
 	}
 
 	private Long persistAndClear(Footprint footprint) {

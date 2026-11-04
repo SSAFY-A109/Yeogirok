@@ -4,15 +4,8 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 /**
- * 방명록 본문 정리. 저장·반환하는 값은 이 결과다.
- *
- * <ol>
- *   <li>CRLF·CR 을 LF 로 바꾼다.</li>
- *   <li>빈 문자열·공백만이면 길이와 상관없이 null(11/4 결정).</li>
- *   <li>공백 포함 {@value #MAX_LENGTH}자를 넘으면 C003. 자동으로 자르지 않는다.</li>
- * </ol>
- *
- * <p>길이는 DB 의 {@code char_length} 와 같게 유니코드 문자(code point) 수로 센다. 이모지 하나는 1자다.
+ * 방명록 본문 정리. CRLF·CR→LF, 공백만이면 null, {@value #MAX_LENGTH}자 초과면 C003(자르지 않음).
+ * 길이는 DB {@code char_length} 와 같게 code point 수로 센다.
  */
 public final class FootprintBody {
 

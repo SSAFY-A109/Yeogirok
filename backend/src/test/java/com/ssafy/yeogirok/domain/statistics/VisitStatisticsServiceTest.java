@@ -48,10 +48,11 @@ class VisitStatisticsServiceTest {
 	TestEntityManager em;
 
 	@Test
-	void 셀마다_발자취_횟수를_세고_셀_중심을_준다() {
+	void 셀마다_삭제하지_않은_발자취_횟수를_세고_셀_중심을_준다() {
 		save(at("37.501", "127.001"), List.of("CAFE"));
 		save(at("37.509", "127.009"), List.of("CAFE"));
 		save(at("37.515", "127.005"), List.of("CAFE"));  // 북쪽 옆 칸 (3751, 12700)
+		softDelete(save(at("37.502", "127.002"), List.of("CAFE")));  // 삭제한 발자취는 세지 않는다
 
 		VisitStatisticsResponse response = get(SEOUL_BOX, 10, null, null, null);
 
@@ -77,17 +78,6 @@ class VisitStatisticsServiceTest {
 		assertThat(cell.count()).isEqualTo(3);
 		assertThat(cell.categoryCounts()).containsExactly(  // 공통 카테고리 순서
 			Map.entry("NATURE", 1L), Map.entry("FOOD", 2L), Map.entry("CAFE", 2L), Map.entry("EVENT", 1L));
-	}
-
-	@Test
-	void 삭제한_발자취는_세지_않는다() {
-		save(at("37.501", "127.001"), List.of("CAFE"));
-		Long deleted = save(at("37.502", "127.002"), List.of("CAFE"));
-		em.getEntityManager().createNativeQuery("UPDATE footprints SET deleted_at = CURRENT_TIMESTAMP WHERE id = :id")
-			.setParameter("id", deleted)
-			.executeUpdate();
-
-		assertThat(get(SEOUL_BOX, 10, null, null, null).cells().getFirst().count()).isEqualTo(1);
 	}
 
 	@Test
@@ -181,27 +171,19 @@ class VisitStatisticsServiceTest {
 	void 응답에_집계_기준과_기간을_담는다() {
 		VisitStatisticsResponse response = get(SEOUL_BOX, 12.5, null, null, null);
 
-		assertThat(response.metric()).isEqualTo("VISIT_COUNT");
-		assertThat(response.period().from()).isNull();
-		assertThat(response.period().to()).isNull();
-		assertThat(response.aggregation().unit()).isEqualTo("LAT_LNG_GRID");
-		assertThat(response.aggregation().version()).isEqualTo("test-v1");
-		assertThat(response.aggregation().precision()).isEqualTo("0.01deg");
-		assertThat(response.aggregation().minCount()).isEqualTo(1);
+		assertThat(response).extracting("metric", "period.from", "period.to", "aggregation.unit", "aggregation.version",
+				"aggregation.precision", "aggregation.minCount")
+			.containsExactly("VISIT_COUNT", null, null, "LAT_LNG_GRID", "test-v1", "0.01deg", 1);
 		assertThat(response.cells()).isEmpty();
 		assertThat(response.updatedAt()).isNotNull();
 	}
 
 	@Test
-	void metric은_생략하거나_VISIT_COUNT만_받고_나머지는_ST001() {
+	void 요청값_오류() {
 		assertThat(service.getStatistics(SEOUL_BOX, 10, null, null, null, "VISIT_COUNT").metric())
-			.isEqualTo("VISIT_COUNT");
+			.isEqualTo("VISIT_COUNT");  // metric 은 생략(null)하거나 VISIT_COUNT 만 받는다
 		expect(() -> service.getStatistics(SEOUL_BOX, 10, null, null, null, "UNIQUE_VISITORS"),
 			ExceptionType.UNSUPPORTED_METRIC);
-	}
-
-	@Test
-	void 요청값_오류() {
 		expect(() -> get("1,2,3", 10, null, null, null), ExceptionType.INVALID_BBOX);
 		expect(() -> get(null, 10, null, null, null), ExceptionType.REQUIRED_VALUE_MISSING);
 		expect(() -> get(SEOUL_BOX, -1, null, null, null), ExceptionType.NOT_ALLOWED_VALUE);
@@ -245,6 +227,12 @@ class VisitStatisticsServiceTest {
 		Long id = em.persistAndGetId(footprint, Long.class);
 		em.flush();
 		return id;
+	}
+
+	private void softDelete(Long id) {
+		em.getEntityManager().createNativeQuery("UPDATE footprints SET deleted_at = CURRENT_TIMESTAMP WHERE id = :id")
+			.setParameter("id", id)
+			.executeUpdate();
 	}
 
 	private void preserve(String version, String cellId, String statDate, String codes, String lat, String lng,

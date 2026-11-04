@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
-/** API-041 응답. statisticsStatus 는 API-046 이 조회할 때 집계하므로 항상 APPLIED 다(11/4 결정). */
+/** API-041 응답. statisticsStatus 는 항상 APPLIED({@link StatisticsStatus}). */
 public record FootprintCreateResponse(
 	Long id,
 	BigDecimal latitude,

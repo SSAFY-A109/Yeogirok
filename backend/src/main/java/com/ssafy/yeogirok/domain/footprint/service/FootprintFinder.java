@@ -13,11 +13,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import lombok.RequiredArgsConstructor;
 
-/**
- * 개인 기록 본인 확인. 발자취는 작성자 본인만 조회·수정·삭제한다.
- *
- * <p>없거나 삭제됐으면 404 F001, 있지만 본인 것이 아니면 403 F002.
- */
+/** 발자취 본인 확인. 없거나 삭제됐으면 404 F001, 남의 것이면 403 F002. */
 @Component
 @RequiredArgsConstructor
 public class FootprintFinder {

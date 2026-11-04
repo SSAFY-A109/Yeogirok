@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,6 +21,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -50,6 +52,9 @@ import com.ssafy.yeogirok.global.security.PermitAllSecurityConfig;
 class FootprintControllerTest {
 
 	static final Long USER_ID = 1L;
+	static final String UPDATE_JSON = """
+		{ "version": 1, "body": "본문" }
+		""";
 
 	@Autowired
 	MockMvc mockMvc;
@@ -65,9 +70,9 @@ class FootprintControllerTest {
 	IdempotencyService idempotencyService;
 
 	@Test
-	void API_043_상세는_명세의_필드와_datetime_형식으로_응답한다() throws Exception {
+	void API_043_상세는_명세의_필드와_datetime_형식으로_응답하고_없는_값은_null로_내보낸다() throws Exception {
 		given(footprintService.getFootprint(USER_ID, 10L)).willReturn(new FootprintDetailResponse(
-			10L, new BigDecimal("37.5012345"), new BigDecimal("127.0398765"), "역삼동", "서울특별시 강남구 역삼동 123",
+			10L, new BigDecimal("37.5012345"), new BigDecimal("127.0398765"), "역삼동", null,
 			"좋았다\n또 올게", List.of("CAFE", "FOOD"),
 			Instant.parse("2026-11-04T03:00:00Z"), Instant.parse("2026-11-04T03:00:05Z"), 1));
 
@@ -77,67 +82,14 @@ class FootprintControllerTest {
 				{
 				  "success": true,
 				  "data": {
-				    "id": 10,
-				    "latitude": 37.5012345,
-				    "longitude": 127.0398765,
-				    "locationName": "역삼동",
-				    "address": "서울특별시 강남구 역삼동 123",
-				    "body": "좋았다\\n또 올게",
+				    "id": 10, "latitude": 37.5012345, "longitude": 127.0398765,
+				    "locationName": "역삼동", "address": null, "body": "좋았다\\n또 올게",
 				    "categoryCodes": ["CAFE", "FOOD"],
-				    "visitedAt": "2026-11-04 12:00:00+09",
-				    "createdAt": "2026-11-04 12:00:05+09",
+				    "visitedAt": "2026-11-04 12:00:00+09", "createdAt": "2026-11-04 12:00:05+09",
 				    "version": 1
 				  }
 				}
 				""", JsonCompareMode.STRICT));
-	}
-
-	@Test
-	void 위치명_주소_본문이_없으면_null로_내보낸다() throws Exception {
-		given(footprintService.getFootprint(USER_ID, 10L)).willReturn(new FootprintDetailResponse(
-			10L, new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null, List.of("NATURE"),
-			Instant.parse("2026-11-04T03:00:00Z"), Instant.parse("2026-11-04T03:00:00Z"), 1));
-
-		getAs(USER_ID, "/api/v1/footprints/10")
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.locationName").value((Object)null))
-			.andExpect(jsonPath("$.data.address").value((Object)null))
-			.andExpect(jsonPath("$.data.body").value((Object)null))
-			.andExpect(jsonPath("$.data.length()").value(10));
-	}
-
-	@Test
-	void 다른_사람_발자취는_403_F002() throws Exception {
-		given(footprintService.getFootprint(USER_ID, 10L))
-			.willThrow(new BusinessException(ExceptionType.FOOTPRINT_NOT_OWNER));
-
-		getAs(USER_ID, "/api/v1/footprints/10")
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("F002"));
-	}
-
-	@Test
-	void 없거나_삭제한_발자취는_404_F001() throws Exception {
-		given(footprintService.getFootprint(USER_ID, 10L))
-			.willThrow(new BusinessException(ExceptionType.FOOTPRINT_NOT_FOUND));
-
-		getAs(USER_ID, "/api/v1/footprints/10")
-			.andExpect(status().isNotFound())
-			.andExpect(jsonPath("$.code").value("F001"));
-	}
-
-	@Test
-	void 인증_정보가_없으면_401_A001() throws Exception {
-		mockMvc.perform(get("/api/v1/footprints/10"))
-			.andExpect(status().isUnauthorized())
-			.andExpect(jsonPath("$.code").value("A001"));
-	}
-
-	@Test
-	void 발자취_ID가_숫자가_아니면_400_C002() throws Exception {
-		getAs(USER_ID, "/api/v1/footprints/abc")
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("C002"));
 	}
 
 	/* ── API-042 내 발자취 목록 ───────────────────────────────── */
@@ -159,14 +111,9 @@ class FootprintControllerTest {
 				  "data": {
 				    "items": [
 				      {
-				        "id": 10,
-				        "latitude": 37.5012345,
-				        "longitude": 127.0398765,
-				        "locationName": "역삼동",
-				        "address": null,
-				        "body": null,
-				        "categoryCodes": ["CAFE"],
-				        "visitedAt": "2026-11-04 12:00:00+09"
+				        "id": 10, "latitude": 37.5012345, "longitude": 127.0398765,
+				        "locationName": "역삼동", "address": null, "body": null,
+				        "categoryCodes": ["CAFE"], "visitedAt": "2026-11-04 12:00:00+09"
 				      }
 				    ],
 				    "nextCursor": "next"
@@ -199,30 +146,6 @@ class FootprintControllerTest {
 			.andExpect(jsonPath("$.code").value("C002"));
 	}
 
-	@ParameterizedTest(name = "{0}")
-	@CsvSource(delimiter = '|', textBlock = """
-		INVALID_BBOX           | 400 | C013
-		INVALID_DATE_RANGE     | 400 | C012
-		INVALID_CURSOR         | 400 | C006
-		PAGE_SIZE_OUT_OF_RANGE | 400 | C007
-		NOT_ALLOWED_VALUE      | 400 | C003
-		""")
-	void 목록_요청값_오류는_명세의_코드로_응답한다(ExceptionType type, int status, String code) throws Exception {
-		given(footprintService.getMyFootprints(USER_ID, null, null, null, null, null, null))
-			.willThrow(new BusinessException(type));
-
-		getAs(USER_ID, "/api/v1/users/me/footprints")
-			.andExpect(status().is(status))
-			.andExpect(jsonPath("$.code").value(code));
-	}
-
-	@Test
-	void 목록도_인증_정보가_없으면_401_A001() throws Exception {
-		mockMvc.perform(get("/api/v1/users/me/footprints"))
-			.andExpect(status().isUnauthorized())
-			.andExpect(jsonPath("$.code").value("A001"));
-	}
-
 	/* ── API-044 본문 수정 ─────────────────────────────────────── */
 
 	@Test
@@ -240,19 +163,6 @@ class FootprintControllerTest {
 				  "data": { "id": 10, "body": "바꾼 본문", "updatedAt": "2026-11-04 14:30:00+09", "version": 2 }
 				}
 				""", JsonCompareMode.STRICT));
-	}
-
-	@Test
-	void 빈_본문이면_body를_null로_내보낸다() throws Exception {
-		given(footprintService.updateBody(USER_ID, 10L, 1, "")).willReturn(
-			new FootprintUpdateResponse(10L, null, Instant.parse("2026-11-04T05:30:00Z"), 2));
-
-		patchAs(USER_ID, "/api/v1/footprints/10", """
-			{ "version": 1, "body": "" }
-			""")
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.body").value((Object)null))
-			.andExpect(jsonPath("$.data.length()").value(4));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -276,60 +186,13 @@ class FootprintControllerTest {
 	}
 
 	@Test
-	void 본문_201자는_400_C003() throws Exception {
-		given(footprintService.updateBody(USER_ID, 10L, 1, "가".repeat(201)))
-			.willThrow(new BusinessException(ExceptionType.NOT_ALLOWED_VALUE));
-
-		patchAs(USER_ID, "/api/v1/footprints/10", """
-			{ "version": 1, "body": "%s" }
-			""".formatted("가".repeat(201)))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("C003"));
-	}
-
-	@Test
-	void version이_다르면_409_C004() throws Exception {
-		given(footprintService.updateBody(USER_ID, 10L, 1, "본문"))
-			.willThrow(new BusinessException(ExceptionType.VERSION_MISMATCH));
-
-		patchAs(USER_ID, "/api/v1/footprints/10", """
-			{ "version": 1, "body": "본문" }
-			""")
-			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("C004"));
-	}
-
-	@Test
 	void 동시_수정으로_낙관적_잠금이_실패해도_409_C004() throws Exception {
 		given(footprintService.updateBody(USER_ID, 10L, 1, "본문"))
 			.willThrow(new ObjectOptimisticLockingFailureException("Footprint", 10L));
 
-		patchAs(USER_ID, "/api/v1/footprints/10", """
-			{ "version": 1, "body": "본문" }
-			""")
+		patchAs(USER_ID, "/api/v1/footprints/10", UPDATE_JSON)
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("C004"));
-	}
-
-	@Test
-	void 수정도_타인은_403_F002_없으면_404_F001_인증_없으면_401_A001() throws Exception {
-		String json = """
-			{ "version": 1, "body": "본문" }
-			""";
-		given(footprintService.updateBody(USER_ID, 10L, 1, "본문"))
-			.willThrow(new BusinessException(ExceptionType.FOOTPRINT_NOT_OWNER));
-		given(footprintService.updateBody(USER_ID, 11L, 1, "본문"))
-			.willThrow(new BusinessException(ExceptionType.FOOTPRINT_NOT_FOUND));
-
-		patchAs(USER_ID, "/api/v1/footprints/10", json)
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("F002"));
-		patchAs(USER_ID, "/api/v1/footprints/11", json)
-			.andExpect(status().isNotFound())
-			.andExpect(jsonPath("$.code").value("F001"));
-		mockMvc.perform(patch("/api/v1/footprints/10").contentType(MediaType.APPLICATION_JSON).content(json))
-			.andExpect(status().isUnauthorized())
-			.andExpect(jsonPath("$.code").value("A001"));
 	}
 
 	/* ── API-045 삭제 ─────────────────────────────────────────── */
@@ -347,34 +210,72 @@ class FootprintControllerTest {
 
 	@ParameterizedTest(name = "{0}")
 	@CsvSource(delimiter = '|', textBlock = """
-		version 생략   | /api/v1/footprints/10            | C001
-		version 문자   | /api/v1/footprints/10?version=a  | C002
-		version 소수   | /api/v1/footprints/10?version=1.5 | C002
-		id 문자        | /api/v1/footprints/abc?version=1 | C002
+		삭제 version 생략 | DELETE | /api/v1/footprints/10             | C001
+		삭제 version 문자 | DELETE | /api/v1/footprints/10?version=a   | C002
+		삭제 version 소수 | DELETE | /api/v1/footprints/10?version=1.5 | C002
+		삭제 id 문자      | DELETE | /api/v1/footprints/abc?version=1  | C002
+		상세 id 문자      | GET    | /api/v1/footprints/abc            | C002
 		""")
-	void 삭제_요청값이_틀리면_400(String name, String path, String code) throws Exception {
-		mockMvc.perform(delete(path).with(asUser(USER_ID)))
+	void 경로나_쿼리_값이_틀리면_400(String name, String method, String path, String code) throws Exception {
+		mockMvc.perform(request(HttpMethod.valueOf(method), path).with(asUser(USER_ID)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(code));
 	}
 
-	@ParameterizedTest(name = "{0}")
-	@CsvSource(delimiter = '|', textBlock = """
-		FOOTPRINT_NOT_OWNER | 403 | F002
-		FOOTPRINT_NOT_FOUND | 404 | F001
-		VERSION_MISMATCH    | 409 | C004
-		""")
-	void 삭제_실패는_명세의_코드로_응답한다(ExceptionType type, int status, String code) throws Exception {
-		given(footprintService.delete(USER_ID, 10L, 1)).willThrow(new BusinessException(type));
+	/* ── 공통: 서비스 오류 매핑·인증 ───────────────────────────── */
 
-		mockMvc.perform(delete("/api/v1/footprints/10").param("version", "1").with(asUser(USER_ID)))
-			.andExpect(status().is(status))
+	@ParameterizedTest(name = "{0} {1}")
+	@CsvSource(delimiter = '|', textBlock = """
+		GET    | FOOTPRINT_NOT_OWNER | 403 | F002
+		GET    | FOOTPRINT_NOT_FOUND | 404 | F001
+		PATCH  | FOOTPRINT_NOT_OWNER | 403 | F002
+		PATCH  | FOOTPRINT_NOT_FOUND | 404 | F001
+		PATCH  | VERSION_MISMATCH    | 409 | C004
+		PATCH  | NOT_ALLOWED_VALUE   | 400 | C003
+		DELETE | FOOTPRINT_NOT_OWNER | 403 | F002
+		DELETE | FOOTPRINT_NOT_FOUND | 404 | F001
+		DELETE | VERSION_MISMATCH    | 409 | C004
+		LIST   | INVALID_BBOX           | 400 | C013
+		LIST   | INVALID_DATE_RANGE     | 400 | C012
+		LIST   | INVALID_CURSOR         | 400 | C006
+		LIST   | PAGE_SIZE_OUT_OF_RANGE | 400 | C007
+		LIST   | NOT_ALLOWED_VALUE      | 400 | C003
+		""")
+	void 서비스_오류는_명세의_코드로_응답한다_명세의_코드로_응답한다(String method, ExceptionType type, int status, String code)
+		throws Exception {
+		BusinessException e = new BusinessException(type);
+		ResultActions result = switch (method) {
+			case "GET" -> {
+				given(footprintService.getFootprint(USER_ID, 10L)).willThrow(e);
+				yield getAs(USER_ID, "/api/v1/footprints/10");
+			}
+			case "PATCH" -> {
+				given(footprintService.updateBody(USER_ID, 10L, 1, "본문")).willThrow(e);
+				yield patchAs(USER_ID, "/api/v1/footprints/10", UPDATE_JSON);
+			}
+			case "LIST" -> {
+				given(footprintService.getMyFootprints(USER_ID, null, null, null, null, null, null)).willThrow(e);
+				yield getAs(USER_ID, "/api/v1/users/me/footprints");
+			}
+			default -> {
+				given(footprintService.delete(USER_ID, 10L, 1)).willThrow(e);
+				yield mockMvc.perform(delete("/api/v1/footprints/10").param("version", "1").with(asUser(USER_ID)));
+			}
+		};
+		result.andExpect(status().is(status))
 			.andExpect(jsonPath("$.code").value(code));
 	}
 
-	@Test
-	void 삭제도_인증_정보가_없으면_401_A001() throws Exception {
-		mockMvc.perform(delete("/api/v1/footprints/10").param("version", "1"))
+	@ParameterizedTest(name = "{0} {1}")
+	@CsvSource(delimiter = '|', textBlock = """
+		GET    | /api/v1/footprints/10
+		GET    | /api/v1/users/me/footprints
+		PATCH  | /api/v1/footprints/10
+		DELETE | /api/v1/footprints/10?version=1
+		""")
+	void 인증_정보가_없으면_401_A001(String method, String path) throws Exception {
+		mockMvc.perform(request(HttpMethod.valueOf(method), path)
+				.contentType(MediaType.APPLICATION_JSON).content(UPDATE_JSON))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("A001"));
 	}

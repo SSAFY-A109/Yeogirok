@@ -25,12 +25,8 @@ class VisitStatisticsPropertiesTest {
 	}
 
 	@Test
-	void 순서와_공백은_상관없다() {
+	void 순서와_공백은_상관없고_가장_낮은_단계보다_작은_zoom은_맞는_단계가_없다() {
 		assertThat(of(" 0:128 , 15:1 ").multiplierFor(16)).contains(1);
-	}
-
-	@Test
-	void 가장_낮은_단계보다_작은_zoom은_맞는_단계가_없다() {
 		assertThat(of("15:1,9:32").multiplierFor(8)).isEmpty();
 	}
 

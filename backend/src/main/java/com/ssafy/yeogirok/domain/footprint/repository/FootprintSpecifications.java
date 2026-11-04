@@ -32,10 +32,7 @@ public final class FootprintSpecifications {
 			toExclusive == null ? cb.conjunction() : cb.lessThan(root.get("visitedAt"), toExclusive));
 	}
 
-	/**
-	 * 카테고리 코드를 포함. JSON 배열을 문자열로 바꿔 {@code "CODE"} 를 찾는다.
-	 * 코드가 고정된 영문 대문자라 따옴표까지 맞추면 다른 코드와 섞이지 않고, PostgreSQL·H2 에서 똑같이 동작한다.
-	 */
+	/** 카테고리 코드 포함. JSON 배열을 문자열로 바꿔 따옴표까지 {@code "CODE"} 를 찾는다(PostgreSQL·H2 공통). */
 	public static Specification<Footprint> hasCategory(String categoryCode) {
 		// as() 는 SQL CAST 를 만들지 않아 PostgreSQL 에서 jsonb LIKE 가 된다. cast() 를 써야 한다.
 		return (root, query, cb) -> cb.like(root.get("categoryCodes").cast(String.class), "%\"" + categoryCode + "\"%");

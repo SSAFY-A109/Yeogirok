@@ -47,10 +47,7 @@ public class FootprintController {
 	private final FootprintCreateService footprintCreateService;
 	private final IdempotencyService idempotencyService;
 
-	/**
-	 * 요청 형식(C001·C002·C008)은 멱등키 처리 전에 본다. 값 검사·저장은 처리 안에서 하므로,
-	 * 같은 키로 다시 보내면 위치 증거 유효 시각이 지났어도 처음 결과를 돌려준다.
-	 */
+	/** 형식 검사는 멱등키 처리 전, 값 검사는 처리 안에서 한다. 그래서 재요청은 유효 시각이 지나도 처음 결과를 준다. */
 	@Operation(summary = "API-041 발자취·방명록 저장")
 	@PostMapping("/footprints")
 	public ResponseEntity<ApiResponseBody<FootprintCreateResponse>> create(

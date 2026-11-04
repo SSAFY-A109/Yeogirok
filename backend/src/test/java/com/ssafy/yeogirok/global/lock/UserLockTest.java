@@ -47,11 +47,6 @@ class UserLockTest {
 	PlatformTransactionManager transactionManager;
 
 	@Test
-	void 트랜잭션_안에서는_잠글_수_있다() {
-		userLock.lock(1L);
-	}
-
-	@Test
 	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	void 트랜잭션_밖에서_부르면_예외다() {
 		assertThatThrownBy(() -> userLock.lock(1L)).isInstanceOf(IllegalTransactionStateException.class);

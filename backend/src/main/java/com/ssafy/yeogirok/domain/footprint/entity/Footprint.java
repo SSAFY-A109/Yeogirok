@@ -23,14 +23,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 발자취(방명록). 노션 ERD 실행용 DDL(10/30) {@code footprints} 와 컬럼 이름·타입·NOT NULL·길이를 맞춘다.
- *
- * <p>DDL 과 다른 점(Flyway V1 이 DDL 로 만들 때 채워진다):
- * <ul>
- *   <li>{@code user_id} 는 연관관계 없는 Long 이라 users FK 가 없다(User 엔티티 없음).</li>
- *   <li>부분 인덱스 2개({@code WHERE deleted_at IS NULL})와 {@code category_codes} 배열 CHECK·컬럼 기본값은
- *       H2 테스트 DB 와 호환되지 않아 엔티티에 두지 않는다. 값은 항상 애플리케이션이 채운다.</li>
- * </ul>
+ * 발자취(방명록). 노션 DDL {@code footprints} 와 맞춘다. DDL 과 다른 점: users FK 없음, 부분 인덱스·
+ * {@code category_codes} 배열 CHECK·컬럼 기본값은 H2 비호환이라 Flyway V1 에 맡긴다.
  */
 @Getter
 @Entity
@@ -62,7 +56,7 @@ public class Footprint {
 	@Column(columnDefinition = "text")
 	private String address;
 
-	/** 역지오코딩으로 판정한 법정동·법정리 코드. 판정하지 못하면 null. 작성 제한(반경 500m)에는 쓰지 않는다. */
+	/** 역지오코딩한 법정동·법정리 코드. 판정하지 못하면 null. */
 	@Column(name = "legal_area_code", length = 10)
 	private String legalAreaCode;
 
@@ -86,7 +80,6 @@ public class Footprint {
 	@Column(name = "deleted_at")
 	private Instant deletedAt;
 
-	/** DDL 기본값과 같게 1부터 시작한다. */
 	@Version
 	@Column(nullable = false)
 	private Integer version = 1;
@@ -99,7 +92,6 @@ public class Footprint {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
-	/** 본문은 {@link FootprintBody}, 카테고리는 {@link FootprintCategories} 규칙으로 정리·검사한다. */
 	@Builder
 	private Footprint(Long userId, BigDecimal latitude, BigDecimal longitude, String locationName, String address,
 		String legalAreaCode, String body, List<String> categoryCodes, Instant visitedAt, Instant locationCapturedAt,
@@ -121,14 +113,14 @@ public class Footprint {
 		return this.userId.equals(userId);
 	}
 
-	/** API-044. 본문만 바꾼다. 위치·방문 시각·카테고리는 그대로다. 빈 본문은 null 이 된다. */
+	/** API-044. 본문만 바꾼다. 빈 본문은 null. */
 	public void updateBody(String body) {
 		this.body = FootprintBody.normalize(body);
-		// 같은 본문이어도 수정 성공이면 version +1(명세 AC-01). 값이 바뀌지 않으면 Hibernate 가 UPDATE 를 건너뛰므로 직접 표시한다.
+		// 같은 본문이어도 version 을 올리려고 updatedAt 을 바꾼다(값이 같으면 Hibernate 가 UPDATE 를 건너뜀).
 		this.updatedAt = Instant.now();
 	}
 
-	/** API-045. 소프트 삭제. 행은 남기고 목록·상세·통계·작성 제한 검사에서 뺀다. version 은 UPDATE 때 1 오른다. */
+	/** API-045. 소프트 삭제. 목록·상세·통계·작성 제한 검사에서 빠진다. */
 	public void softDelete(Instant now) {
 		this.deletedAt = now;
 	}

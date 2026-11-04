@@ -30,19 +30,14 @@ import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.lock.UserLock;
 
 /**
- * API-041 발자취·방명록 저장. 멱등키 처리({@code IdempotencyService})는 컨트롤러가 이 서비스 밖에서 한다.
- *
- * <ol>
- *   <li>값 검사(좌표 범위 C011, 카테고리·본문 C003, 위치 증거 유효 시각 C009). 외부 호출 전에 끝낸다.</li>
- *   <li>역지오코딩(주소·위치명·법정동 코드). 외부 호출이라 DB 트랜잭션과 사용자 잠금 밖에서 한다. 실패해도 저장은 계속한다.</li>
- *   <li>트랜잭션 안에서 사용자 잠금 → 작성 제한 검사(F003) → 저장.</li>
- * </ol>
+ * API-041 발자취·방명록 저장. 멱등키는 컨트롤러가 이 밖에서 처리한다. 값 검사 → 역지오코딩(외부 호출이라
+ * 트랜잭션·잠금 밖, 실패해도 저장) → 트랜잭션 안에서 사용자 잠금 → 작성 제한(F003) → 저장.
  */
 @Service
 public class FootprintCreateService {
 
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
-	/** 작성 제한 구간의 하루 시작 시각(노션: Asia/Seoul 04:00 이상 다음 날 04:00 미만). */
+	/** 작성 제한 구간의 하루 시작(Asia/Seoul 04:00). */
 	private static final LocalTime DAY_START = LocalTime.of(4, 0);
 
 	private final FootprintRepository footprintRepository;

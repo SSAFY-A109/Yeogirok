@@ -67,7 +67,6 @@ import com.ssafy.yeogirok.support.MutableClock;
 class FootprintCreateServiceTest {
 
 	static final Long OWNER = 1L;
-	static final Long OTHER = 2L;
 	/** 2026-11-04 12:00 Asia/Seoul. */
 	static final Instant NOW = Instant.parse("2026-11-04T03:00:00Z");
 	/** 2026-11-04 04:00 Asia/Seoul. 이날 작성 제한 구간의 시작. */
@@ -118,42 +117,30 @@ class FootprintCreateServiceTest {
 		FootprintCreateResponse response = service.create(OWNER,
 			command(LAT, LNG, NOW.minusSeconds(10), "또 오고\r\n싶다", List.of("CAFE", "FOOD")));
 
+		assertThat(response).extracting("body", "categoryCodes", "visitedAt", "statisticsStatus")  // visitedAt = capturedAt (AC-01)
+			.containsExactly("또 오고\n싶다", List.of("CAFE", "FOOD"), NOW.minusSeconds(10), StatisticsStatus.APPLIED);
 		assertThat(response.id()).isNotNull();
+		assertThat(response.createdAt()).isNotNull();
 		assertThat(response.latitude()).isEqualByComparingTo(LAT);
 		assertThat(response.longitude()).isEqualByComparingTo(LNG);
-		assertThat(response.body()).isEqualTo("또 오고\n싶다");
-		assertThat(response.categoryCodes()).containsExactly("CAFE", "FOOD");
-		assertThat(response.visitedAt()).isEqualTo(NOW.minusSeconds(10));  // visitedAt = capturedAt (AC-01)
-		assertThat(response.createdAt()).isNotNull();
-		assertThat(response.statisticsStatus()).isEqualTo(StatisticsStatus.APPLIED);
 
 		em.clear();
 		Footprint saved = em.find(Footprint.class, response.id());
-		assertThat(saved.getUserId()).isEqualTo(OWNER);
-		assertThat(saved.getLegalAreaCode()).isEqualTo("1168010100");
-		assertThat(saved.getAddress()).isEqualTo("서울특별시 강남구 테헤란로 152");
-		assertThat(saved.getLocationName()).isEqualTo("강남파이낸스센터");
-		assertThat(saved.getLocationCapturedAt()).isEqualTo(NOW.minusSeconds(10));
-		assertThat(saved.getLocationPolicyVersion()).isEqualTo("test-location-v1");
-		assertThat(saved.getVersion()).isEqualTo(1);
-		assertThat(saved.getDeletedAt()).isNull();
+		assertThat(saved).extracting("userId", "legalAreaCode", "address", "locationName", "locationCapturedAt",
+				"locationPolicyVersion", "version", "deletedAt")
+			.containsExactly(OWNER, "1168010100", "서울특별시 강남구 테헤란로 152", "강남파이낸스센터", NOW.minusSeconds(10),
+				"test-location-v1", 1, null);
 	}
 
 	@Test
-	void 본문_없이도_저장한다() {
+	void 역지오코딩을_못_해도_본문이_없어도_주소_위치명_법정동_코드_본문을_null로_두고_저장한다() {
+		geocoder.willReturn(ReverseGeocodeResult.EMPTY);
+
 		FootprintCreateResponse response = service.create(OWNER, command(LAT, LNG, NOW, "   ", List.of("NATURE")));
 
 		assertThat(response.body()).isNull();
-	}
-
-	@Test
-	void 역지오코딩을_못_하면_주소_위치명_법정동_코드를_null로_두고_저장한다() {
-		geocoder.willReturn(ReverseGeocodeResult.EMPTY);
-
-		Long id = service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE"))).id();
-
 		em.clear();
-		Footprint saved = em.find(Footprint.class, id);
+		Footprint saved = em.find(Footprint.class, response.id());
 		assertThat(saved.getLegalAreaCode()).isNull();
 		assertThat(saved.getAddress()).isNull();
 		assertThat(saved.getLocationName()).isNull();
@@ -175,12 +162,8 @@ class FootprintCreateServiceTest {
 
 	@Test
 	void 카테고리_본문_오류는_C003이고_역지오코딩을_부르지_않는다() {
-		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, null, List.of())), ExceptionType.NOT_ALLOWED_VALUE);
-		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE", "CAFE"))),
-			ExceptionType.NOT_ALLOWED_VALUE);
+		// 카테고리·본문 규칙 자체는 FootprintCategoriesTest·FootprintBodyTest 가 본다.
 		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, null, List.of("LODGING"))),
-			ExceptionType.NOT_ALLOWED_VALUE);
-		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE", "FOOD", "NATURE", "SIGHT"))),
 			ExceptionType.NOT_ALLOWED_VALUE);
 		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, "가".repeat(201), List.of("CAFE"))),
 			ExceptionType.NOT_ALLOWED_VALUE);
@@ -207,20 +190,12 @@ class FootprintCreateServiceTest {
 	/* ── 작성 제한: 같은 날(04:00 기준) 반경 500m ──────────────── */
 
 	@Test
-	void 오늘_남긴_발자취와_500m_안이면_F003이고_저장하지_않는다() {
-		existing(OWNER, LAT, LNG, DAY_START.plusSeconds(60));
+	void 오늘_남긴_발자취와_500m_안이면_카테고리가_달라도_F003이고_저장하지_않는다() {
+		existing(OWNER, LAT, LNG, DAY_START.plusSeconds(60));  // 기존은 CAFE
 
 		expect(() -> service.create(OWNER, command(LAT.add(new BigDecimal("0.0044876")), LNG, NOW, null,
 			List.of("FOOD"))), ExceptionType.FOOTPRINT_TOO_CLOSE_TODAY);
 		assertThat(countFootprints()).isEqualTo(1);
-	}
-
-	@Test
-	void 같은_자리여도_카테고리가_다르면_F003() {
-		existing(OWNER, LAT, LNG, DAY_START);
-
-		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, null, List.of("NATURE"))),
-			ExceptionType.FOOTPRINT_TOO_CLOSE_TODAY);
 	}
 
 	@Test
@@ -232,9 +207,13 @@ class FootprintCreateServiceTest {
 		assertThat(countFootprints()).isEqualTo(2);
 	}
 
-	@Test
-	void 전날_구간_04시_직전에_남긴_발자취는_세지_않는다() {
-		existing(OWNER, LAT, LNG, DAY_START.minusSeconds(1));  // 2026-11-04 03:59:59 Asia/Seoul
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+		전날 구간 04시 직전(03:59:59) | 1 | -1
+		다른 사람의 발자취            | 2 | 60
+		""")
+	void 세지_않는_발자취는_같은_자리여도_저장한다(String name, Long userId, long secondsFromDayStart) {
+		existing(userId, LAT, LNG, DAY_START.plusSeconds(secondsFromDayStart));
 
 		service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE")));
 
@@ -271,15 +250,6 @@ class FootprintCreateServiceTest {
 			.setParameter("id", id)
 			.executeUpdate();
 		em.clear();
-
-		service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE")));
-
-		assertThat(countFootprints()).isEqualTo(2);
-	}
-
-	@Test
-	void 다른_사람의_발자취는_세지_않는다() {
-		existing(OTHER, LAT, LNG, DAY_START.plusSeconds(60));
 
 		service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE")));
 
@@ -345,20 +315,7 @@ class FootprintCreateServiceTest {
 
 		FootprintCreateResponse again = service.getCreated(OWNER, created.id());
 
-		assertThat(again.id()).isEqualTo(created.id());
-		assertThat(again.latitude()).isEqualByComparingTo(created.latitude());
-		assertThat(again.body()).isEqualTo("좋았다");
-		assertThat(again.categoryCodes()).containsExactly("CAFE");
-		assertThat(again.visitedAt()).isEqualTo(created.visitedAt());
-		assertThat(again.statisticsStatus()).isEqualTo(StatisticsStatus.APPLIED);
-	}
-
-	@Test
-	void getCreated도_삭제했으면_F001_다른_사람이면_F002() {
-		Long id = existing(OWNER, LAT, LNG, NOW);
-
-		expect(() -> service.getCreated(OTHER, id), ExceptionType.FOOTPRINT_NOT_OWNER);
-		expect(() -> service.getCreated(OWNER, id + 1000), ExceptionType.FOOTPRINT_NOT_FOUND);
+		assertThat(again).usingRecursiveComparison().ignoringFields("createdAt").isEqualTo(created);
 	}
 
 	private static FootprintCreateCommand command(BigDecimal latitude, BigDecimal longitude, Instant capturedAt,

@@ -3,11 +3,7 @@ package com.ssafy.yeogirok.domain.category;
 import java.util.Arrays;
 import java.util.Optional;
 
-/**
- * 공통 카테고리 8개. 발자취·장소·공개 코스가 함께 쓴다. 숙박은 없다.
- *
- * <p>DB와 API에는 상수 이름({@link #name()})을 코드로 쓴다. <b>이름을 바꾸면 저장된 데이터와 앱 동작이 바뀐다.</b>
- */
+/** 공통 카테고리 8개(숙박 없음). 상수 이름이 DB·API 코드라 바꾸면 저장된 데이터와 앱 동작이 바뀐다. */
 public enum TravelCategory {
 	NATURE,
 	CULTURE,

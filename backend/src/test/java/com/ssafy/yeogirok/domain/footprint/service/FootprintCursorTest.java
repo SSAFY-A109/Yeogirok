@@ -17,14 +17,10 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 class FootprintCursorTest {
 
 	@Test
-	void 만든_커서를_그대로_다시_읽는다() {
+	void 만든_커서를_그대로_다시_읽고_값이_없으면_null() {
 		FootprintCursor cursor = new FootprintCursor(Instant.parse("2026-11-04T03:00:00.123456Z"), 15L);
 
 		assertThat(FootprintCursor.decodeOrNull(cursor.encode())).isEqualTo(cursor);
-	}
-
-	@Test
-	void 값이_없으면_null() {
 		assertThat(FootprintCursor.decodeOrNull(null)).isNull();
 	}
 
@@ -34,12 +30,10 @@ class FootprintCursorTest {
 		expectInvalid(cursor);
 	}
 
-	@Test
-	void 시각이나_id가_틀리면_C006() {
-		expectInvalid(encode("어제|15"));
-		expectInvalid(encode("2026-11-04T03:00:00Z|abc"));
-		expectInvalid(encode("2026-11-04T03:00:00Z|0"));
-		expectInvalid(encode("2026-11-04T03:00:00Z|-1"));
+	@ParameterizedTest
+	@ValueSource(strings = {"어제|15", "2026-11-04T03:00:00Z|abc", "2026-11-04T03:00:00Z|0", "2026-11-04T03:00:00Z|-1"})
+	void 시각이나_id가_틀리면_C006(String raw) {
+		expectInvalid(encode(raw));
 	}
 
 	private static String encode(String raw) {

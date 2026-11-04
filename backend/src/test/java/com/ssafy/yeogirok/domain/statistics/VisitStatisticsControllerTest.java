@@ -71,12 +71,8 @@ class VisitStatisticsControllerTest {
 				    "period": { "from": "2026-11-01", "to": "2026-11-04" },
 				    "aggregation": { "unit": "LAT_LNG_GRID", "version": "grid-0.005-v1", "precision": "0.005deg", "minCount": 1 },
 				    "cells": [
-				      {
-				        "cellId": "1:7501:25401",
-				        "center": { "latitude": 37.5025000, "longitude": 127.0025000 },
-				        "count": 2,
-				        "categoryCounts": { "FOOD": 1, "CAFE": 2 }
-				      }
+				      { "cellId": "1:7501:25401", "center": { "latitude": 37.5025000, "longitude": 127.0025000 },
+				        "count": 2, "categoryCounts": { "FOOD": 1, "CAFE": 2 } }
 				    ],
 				    "updatedAt": "2026-11-04 14:00:00+09"
 				  }

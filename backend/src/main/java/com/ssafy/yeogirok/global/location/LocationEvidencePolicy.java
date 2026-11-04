@@ -10,11 +10,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import lombok.RequiredArgsConstructor;
 
-/**
- * 현재 위치 증거(좌표 + 측정 시각) 검사. 현장 위치를 받는 API(041·047·048·049·052)가 같이 쓴다.
- *
- * <p>값이 비었는지(C008)·형식(C002)은 요청을 읽을 때 본다. 여기서는 좌표 범위(C011)와 측정 시각의 유효 범위(C009)를 본다.
- */
+/** 현재 위치 증거 검사(API-041·047·048·049·052 공통). 좌표 범위 C011, 측정 시각 유효 범위 C009. */
 @Component
 @RequiredArgsConstructor
 public class LocationEvidencePolicy {

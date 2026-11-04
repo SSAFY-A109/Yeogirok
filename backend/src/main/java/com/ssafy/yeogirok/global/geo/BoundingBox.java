@@ -5,12 +5,7 @@ import java.math.BigDecimal;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
-/**
- * 지도 조회 영역. 요청 문자열은 {@code west,south,east,north} 순서의 쉼표 구분 값이다(노션 API-042·046).
- *
- * <p>경도 -180~180, 위도 -90~90, west &lt; east, south &lt; north. 날짜 변경선을 넘는 영역은 받지 않는다.
- * 어긋나면 C013.
- */
+/** 지도 조회 영역 {@code west,south,east,north}. west &lt; east, south &lt; north(날짜 변경선 불가), 어긋나면 C013. */
 public record BoundingBox(BigDecimal west, BigDecimal south, BigDecimal east, BigDecimal north) {
 
 	private static final BigDecimal MAX_LONGITUDE = BigDecimal.valueOf(180);

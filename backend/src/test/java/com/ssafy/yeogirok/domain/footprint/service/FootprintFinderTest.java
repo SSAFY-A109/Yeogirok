@@ -34,15 +34,11 @@ class FootprintFinderTest {
 	}
 
 	@Test
-	void 다른_사람_발자취는_F002() {
+	void 다른_사람_발자취는_F002_없는_발자취는_F001() {
 		Long id = em.persistAndGetId(footprintOf(OWNER).build(), Long.class);
 
 		expect(() -> footprintFinder.getOwnFootprint(id, OTHER), ExceptionType.FOOTPRINT_NOT_OWNER);
-	}
-
-	@Test
-	void 없는_발자취는_F001() {
-		expect(() -> footprintFinder.getOwnFootprint(999L, OWNER), ExceptionType.FOOTPRINT_NOT_FOUND);
+		expect(() -> footprintFinder.getOwnFootprint(id + 1000, OWNER), ExceptionType.FOOTPRINT_NOT_FOUND);
 	}
 
 	@Test

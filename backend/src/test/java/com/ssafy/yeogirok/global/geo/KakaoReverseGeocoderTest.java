@@ -19,6 +19,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.ResponseActions;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -51,6 +52,8 @@ class KakaoReverseGeocoderTest {
 		]}
 		""";
 
+	static final String EMPTY_JSON = "{\"meta\":{\"total_count\":0},\"documents\":[]}";
+
 	MockRestServiceServer server;
 	KakaoReverseGeocoder geocoder;
 
@@ -61,8 +64,8 @@ class KakaoReverseGeocoderTest {
 
 	@Test
 	void 법정동_코드는_B_유형_주소는_도로명_위치명은_건물_이름을_쓴다() {
-		expectRegion().andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
-		expectAddress().andRespond(withSuccess(ADDRESS_JSON, MediaType.APPLICATION_JSON));
+		expect(REGION_PATH).andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
+		expect(ADDRESS_PATH).andRespond(withSuccess(ADDRESS_JSON, MediaType.APPLICATION_JSON));
 
 		ReverseGeocodeResult result = geocoder.reverseGeocode(LAT, LNG);
 
@@ -73,8 +76,8 @@ class KakaoReverseGeocoderTest {
 
 	@Test
 	void 도로명_주소가_없으면_지번_주소와_법정동_이름을_쓴다() {
-		expectRegion().andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
-		expectAddress().andRespond(withSuccess("""
+		expect(REGION_PATH).andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
+		expect(ADDRESS_PATH).andRespond(withSuccess("""
 			{"meta":{"total_count":1},"documents":[
 			  {"road_address":null,"address":{"address_name":"서울 강남구 역삼동 737"}}
 			]}
@@ -86,13 +89,12 @@ class KakaoReverseGeocoderTest {
 
 	@Test
 	void 읍면_지역은_법정리_이름을_위치명으로_쓴다() {
-		expectRegion().andRespond(withSuccess("""
+		expect(REGION_PATH).andRespond(withSuccess("""
 			{"meta":{"total_count":1},"documents":[
 			  {"region_type":"B","code":"4182025021","region_3depth_name":"청평면","region_4depth_name":"대성리"}
 			]}
 			""", MediaType.APPLICATION_JSON));
-		expectAddress().andRespond(withSuccess("{\"meta\":{\"total_count\":0},\"documents\":[]}",
-			MediaType.APPLICATION_JSON));
+		expect(ADDRESS_PATH).andRespond(withSuccess(EMPTY_JSON, MediaType.APPLICATION_JSON));
 
 		assertThat(geocoder.reverseGeocode(LAT, LNG))
 			.isEqualTo(new ReverseGeocodeResult("4182025021", null, "대성리"));
@@ -100,25 +102,23 @@ class KakaoReverseGeocoderTest {
 
 	@Test
 	void 결과가_없으면_모두_null() {
-		expectRegion().andRespond(withSuccess("{\"meta\":{\"total_count\":0},\"documents\":[]}",
-			MediaType.APPLICATION_JSON));
-		expectAddress().andRespond(withSuccess("{\"meta\":{\"total_count\":0},\"documents\":[]}",
-			MediaType.APPLICATION_JSON));
+		expect(REGION_PATH).andRespond(withSuccess(EMPTY_JSON, MediaType.APPLICATION_JSON));
+		expect(ADDRESS_PATH).andRespond(withSuccess(EMPTY_JSON, MediaType.APPLICATION_JSON));
 
 		assertThat(geocoder.reverseGeocode(LAT, LNG)).isEqualTo(ReverseGeocodeResult.EMPTY);
 	}
 
 	@Test
 	void 쿼터_초과_429와_서버_오류는_예외_없이_실패한_쪽만_null() {
-		expectRegion().andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
-		expectAddress().andRespond(withSuccess(ADDRESS_JSON, MediaType.APPLICATION_JSON));
+		expect(REGION_PATH).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+		expect(ADDRESS_PATH).andRespond(withSuccess(ADDRESS_JSON, MediaType.APPLICATION_JSON));
 
 		assertThat(geocoder.reverseGeocode(LAT, LNG))
 			.isEqualTo(new ReverseGeocodeResult(null, "서울특별시 강남구 테헤란로 152", "강남파이낸스센터"));
 
 		geocoder = geocoderWithKey("test-key");
-		expectRegion().andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
-		expectAddress().andRespond(withServerError());
+		expect(REGION_PATH).andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
+		expect(ADDRESS_PATH).andRespond(withServerError());
 
 		assertThat(geocoder.reverseGeocode(LAT, LNG))
 			.isEqualTo(new ReverseGeocodeResult("1168010100", null, "역삼동"));
@@ -137,19 +137,11 @@ class KakaoReverseGeocoderTest {
 		assertThat(properties("secret-key-value").toString()).doesNotContain("secret-key-value");
 	}
 
-	private org.springframework.test.web.client.ResponseActions expectRegion() {
-		return server.expect(requestTo(Matchers.startsWith(REGION_PATH)))
+	private ResponseActions expect(String path) {
+		return server.expect(requestTo(Matchers.startsWith(path)))
 			.andExpect(method(HttpMethod.GET))
 			.andExpect(queryParam("x", "127.0300000"))   // x 는 경도
 			.andExpect(queryParam("y", "37.5000000"))    // y 는 위도
-			.andExpect(header("Authorization", "KakaoAK test-key"));
-	}
-
-	private org.springframework.test.web.client.ResponseActions expectAddress() {
-		return server.expect(requestTo(Matchers.startsWith(ADDRESS_PATH)))
-			.andExpect(method(HttpMethod.GET))
-			.andExpect(queryParam("x", "127.0300000"))
-			.andExpect(queryParam("y", "37.5000000"))
 			.andExpect(header("Authorization", "KakaoAK test-key"));
 	}
 

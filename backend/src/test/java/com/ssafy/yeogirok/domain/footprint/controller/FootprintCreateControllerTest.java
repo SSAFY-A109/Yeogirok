@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -24,6 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -32,6 +33,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintCreateCommand;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintCreateResponse;
@@ -92,13 +94,9 @@ class FootprintCreateControllerTest {
 				{
 				  "success": true,
 				  "data": {
-				    "id": 10,
-				    "latitude": 37.5012346,
-				    "longitude": 127.0398765,
-				    "body": "좋았다",
+				    "id": 10, "latitude": 37.5012346, "longitude": 127.0398765, "body": "좋았다",
 				    "categoryCodes": ["CAFE", "FOOD"],
-				    "visitedAt": "2026-11-04 12:00:00+09",
-				    "createdAt": "2026-11-04 12:00:05+09",
+				    "visitedAt": "2026-11-04 12:00:00+09", "createdAt": "2026-11-04 12:00:05+09",
 				    "statisticsStatus": "APPLIED"
 				  }
 				}
@@ -147,21 +145,19 @@ class FootprintCreateControllerTest {
 		assertThat(command.getValue().body()).isNull();
 	}
 
-	@Test
-	void Idempotency_Key_헤더가_없으면_400_C001() throws Exception {
-		mockMvc.perform(post("/api/v1/footprints").with(asUser(USER_ID))
-				.contentType(MediaType.APPLICATION_JSON).content(VALID))
+	@ParameterizedTest(name = "[{0}]")
+	@NullSource
+	@ValueSource(strings = " ")
+	void Idempotency_Key가_없거나_비어_있으면_400_C001(String idempotencyKey) throws Exception {
+		MockHttpServletRequestBuilder request = post("/api/v1/footprints").with(asUser(USER_ID))
+			.contentType(MediaType.APPLICATION_JSON).content(VALID);
+		if (idempotencyKey != null) {
+			request.header("Idempotency-Key", idempotencyKey);
+		}
+		mockMvc.perform(request)
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("C001"));
 		verifyNoInteractions(idempotencyService, footprintCreateService);
-	}
-
-	@Test
-	void Idempotency_Key가_비어_있으면_400_C001() throws Exception {
-		postAs(USER_ID, " ", VALID)
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("C001"));
-		verify(footprintCreateService, never()).create(any(), any());
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -181,30 +177,21 @@ class FootprintCreateControllerTest {
 
 	@ParameterizedTest(name = "{0}")
 	@CsvSource(delimiter = '|', textBlock = """
-		categoryCodes 생략     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}}
-		categoryCodes null     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": null}
+		location 이 문자열      | {"location": "37.5,127.0", "categoryCodes": ["CAFE"]} | C002
+		latitude 가 문자열      | {"location": {"latitude": "37.5", "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": ["CAFE"]} | C002
+		capturedAt ISO 형식     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04T12:00:00+09:00"}, "categoryCodes": ["CAFE"]} | C002
+		capturedAt 이 숫자      | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": 1762225200}, "categoryCodes": ["CAFE"]} | C002
+		categoryCodes 가 문자열 | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": "CAFE"} | C002
+		categoryCodes 에 숫자   | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": [1]} | C002
+		body 가 숫자            | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "body": 1, "categoryCodes": ["CAFE"]} | C002
+		JSON 이 아님            | not-json | C002
+		categoryCodes 생략     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}} | C001
+		categoryCodes null     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": null} | C001
 		""")
-	void 카테고리를_보내지_않으면_400_C001(String name, String json) throws Exception {
+	void 카테고리_생략은_C001_타입이나_형식_오류는_C002(String name, String json, String code) throws Exception {
 		postAs(USER_ID, "key-1", json)
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("C001"));
-	}
-
-	@ParameterizedTest(name = "{0}")
-	@CsvSource(delimiter = '|', textBlock = """
-		location 이 문자열      | {"location": "37.5,127.0", "categoryCodes": ["CAFE"]}
-		latitude 가 문자열      | {"location": {"latitude": "37.5", "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": ["CAFE"]}
-		capturedAt ISO 형식     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04T12:00:00+09:00"}, "categoryCodes": ["CAFE"]}
-		capturedAt 이 숫자      | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": 1762225200}, "categoryCodes": ["CAFE"]}
-		categoryCodes 가 문자열 | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": "CAFE"}
-		categoryCodes 에 숫자   | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": [1]}
-		body 가 숫자            | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "body": 1, "categoryCodes": ["CAFE"]}
-		JSON 이 아님            | not-json
-		""")
-	void 타입이나_형식이_틀리면_400_C002(String name, String json) throws Exception {
-		postAs(USER_ID, "key-1", json)
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("C002"));
+			.andExpect(jsonPath("$.code").value(code));
 		verifyNoInteractions(idempotencyService);
 	}
 
