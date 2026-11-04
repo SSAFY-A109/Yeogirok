@@ -1001,7 +1001,12 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         Matrix.multiplyMM(vp, 0, projection, 0, view, 0)
         val result = FloatArray(4)
         Matrix.multiplyMV(result, 0, vp, 0, floatArrayOf(pose.tx(), pose.ty(), pose.tz(), 1f), 0)
-        return projectPin(result, width, height, projection[0], projection[5])
+        val pin = projectPin(result, width, height, projection[0], projection[5])
+        if (!pin.visible) return pin
+        // ARCore world +Y is gravity-up: rotate the pin to follow it instead of the phone's roll.
+        val top = FloatArray(4)
+        Matrix.multiplyMV(top, 0, vp, 0, floatArrayOf(pose.tx(), pose.ty() + PIN_UP_PROBE_METERS, pose.tz(), 1f), 0)
+        return pin.copy(tiltDegrees = pinTiltDegrees(result, top, width, height))
     }
 
     private inner class PinOverlay : View(this@GeoArActivity) {
@@ -1071,7 +1076,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             pins.sortedBy { it.first.heightPx }.forEach { drawPin(canvas, it.first, it.second) }
         }
         private fun drawPin(canvas: Canvas, p: PinProjection, selected: Boolean) {
-            canvas.save(); canvas.translate(p.x!!, p.y!!)
+            canvas.save(); canvas.translate(p.x!!, p.y!!); canvas.rotate(p.tiltDegrees)
             val selectedScale = if (selected) 1.4f else 1f
             if (selected) {
                 val groundWidth = p.widthPx * selectedScale * 28f / 48f

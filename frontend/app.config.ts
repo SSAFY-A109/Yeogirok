@@ -17,6 +17,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       android: { authCodeHandlerActivity: true },
       ios: { handleKakaoOpenUrl: true },
     }]);
+    // Kakao SDK artifacts are published only to Kakao's Maven repository, not Maven Central.
+    plugins.push(["expo-build-properties", {
+      android: { extraMavenRepos: ["https://devrepo.kakao.com/nexus/content/groups/public/"] },
+    }]);
   }
 
   return {

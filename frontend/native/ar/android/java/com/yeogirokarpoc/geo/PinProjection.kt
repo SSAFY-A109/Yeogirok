@@ -1,5 +1,8 @@
 package com.yeogirokarpoc.geo
 
+import kotlin.math.atan2
+import kotlin.math.hypot
+
 /** Projection result for a pin tip. Off-screen guidance never changes its world pose. */
 data class PinProjection(
     val x: Float? = null,
@@ -8,6 +11,8 @@ data class PinProjection(
     val widthPx: Float = 0f,
     val heightPx: Float = 0f,
     val cameraDepthMeters: Float = 0f,
+    /** Clockwise screen rotation that keeps the pin aligned with world up (gravity), not the phone. */
+    val tiltDegrees: Float = 0f,
 ) {
     val visible: Boolean get() = x != null && y != null
 }
@@ -39,4 +44,21 @@ internal fun projectPin(clip: FloatArray, width: Int, height: Int, focalX: Float
     if (x < -1f) directions.add("왼쪽") else if (x > 1f) directions.add("오른쪽")
     if (y < -1f) directions.add("아래쪽") else if (y > 1f) directions.add("위쪽")
     return PinProjection(guidance = "핀은 화면 ${directions.joinToString("·")} 밖에 있습니다. 그 방향을 비춰 주세요.")
+}
+
+/** World-up offset used to find the on-screen direction of gravity-aligned "up" at the pin base. */
+internal const val PIN_UP_PROBE_METERS = 0.1f
+
+/**
+ * Screen angle of world up at the pin base, so the pin stands on the ground when the phone rolls.
+ * [baseClip] and [topClip] are clip coordinates of the base and a point [PIN_UP_PROBE_METERS] above it.
+ * Returns 0 (screen-upright) when the direction cannot be determined.
+ */
+internal fun pinTiltDegrees(baseClip: FloatArray, topClip: FloatArray, width: Int, height: Int): Float {
+    if (baseClip.size != 4 || topClip.size != 4 || baseClip[3] <= 0f || topClip[3] <= 0f) return 0f
+    val dx = (topClip[0] / topClip[3] - baseClip[0] / baseClip[3]) * width / 2f
+    val dy = -(topClip[1] / topClip[3] - baseClip[1] / baseClip[3]) * height / 2f
+    if (!dx.isFinite() || !dy.isFinite() || hypot(dx, dy) < 0.5f) return 0f
+    // Screen up is (0, -1); a positive angle rotates the pin clockwise on the canvas.
+    return Math.toDegrees(atan2(dx.toDouble(), (-dy).toDouble())).toFloat()
 }
