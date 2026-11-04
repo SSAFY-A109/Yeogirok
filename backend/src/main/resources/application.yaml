@@ -12,6 +12,22 @@ spring:
       # 스키마 관리 도구는 ERD 확정 뒤에 정한다. 그 전까지 로컬에서만 엔티티 기준으로 테이블을 만든다(application-local.yaml).
       ddl-auto: none
 
+yeogirok:
+  footprint:
+    # API-041 작성 제한(11/4 팀 결정): 같은 날(Asia/Seoul 04:00 기준) 이미 남긴 내 발자취와 이 거리 이내면 거부(F003).
+    same-day-radius-meters: 500
+  visit-statistics:
+    # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
+    max-cells: 2500
+  kakao:
+    local:
+      # 주소 표시용(API-041 역지오코딩). 키가 없으면 주소·위치명·법정동 코드를 null 로 저장하고 앱은 그대로 뜬다.
+      # 키는 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
+      rest-api-key: ${KAKAO_REST_API_KEY:}
+      base-url: https://dapi.kakao.com
+      # 멱등키 처리 중 표시 수명(30s)보다 충분히 짧게 둔다.
+      connect-timeout: 2s
+      read-timeout: 3s
 auth:
   jwt:
     issuer: yeogirok

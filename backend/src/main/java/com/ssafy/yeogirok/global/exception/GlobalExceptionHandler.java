@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.global.exception;
 
 import java.util.Set;
 
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
@@ -46,6 +47,12 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(BusinessException.class)
 	public ResponseEntity<ApiResponseBody<Void>> businessException(BusinessException e) {
 		return respond(e.getExceptionType(), e.getMessage());
+	}
+
+	/** 같은 version 으로 동시에 들어온 수정·삭제 중 늦은 쪽. 요청 version 을 직접 비교한 뒤에도 생길 수 있다. */
+	@ExceptionHandler(OptimisticLockingFailureException.class)
+	public ResponseEntity<ApiResponseBody<Void>> optimisticLockingFailure(OptimisticLockingFailureException e) {
+		return respond(ExceptionType.VERSION_MISMATCH);
 	}
 
 	/** {@code @Valid} 요청 본문 위반. 첫 오류 하나로 코드를 정한다. */

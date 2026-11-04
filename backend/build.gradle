@@ -42,7 +42,10 @@ dependencies {
 	/* 테스트 */
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.security:spring-security-test'
+	// Boot 4 에서 @WebMvcTest MockMvc 에 시큐리티 필터를 붙이는 자동 설정이 이 모듈로 분리됐다.
+	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	// 테스트는 PostgreSQL 없이 돌도록 H2(PostgreSQL 모드)를 쓴다.
 	testRuntimeOnly 'com.h2database:h2'
 	// Redis 를 쓰는 테스트는 Testcontainers 로 실제 Redis 를 띄운다(로컬·GitHub Actions 모두 Docker 필요).

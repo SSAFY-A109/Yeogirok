@@ -6,6 +6,15 @@ spring:
 
 yeogirok:
   # 멱등키 설정은 local·prod 프로필에만 있어 테스트 프로필에도 둔다. 값은 application-local.yaml 과 같다.
+  visit-statistics:
+    aggregation-version: grid-0.005-v1
+    base-cell-size-degrees: 0.005
+    zoom-multipliers: "15:1,13:2,11:8,9:32,0:128"
+    min-count: 1
+  location-evidence:
+    max-age: 2m
+    max-future-skew: 30s
+    policy-version: location-v1
   idempotency:
     retention: 24h
     processing-timeout: 30s
