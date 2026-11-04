@@ -25,3 +25,9 @@ export const failedRefreshTokensFixture = {
   expired: "mock-expired-refresh-token",
   revoked: "mock-revoked-refresh-token",
 } as const;
+
+export const meFixture = {
+  nickname: "여행자",
+  profileImageUrl: null,
+  activityCounts: { footprints: 0, tips: 0 },
+};

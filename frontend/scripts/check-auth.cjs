@@ -101,8 +101,11 @@ const { exchangeSocialToken, refreshServiceTokens } = require("../.expo/auth-che
 const { toLoginResult, toServiceTokens } = require("../.expo/auth-check/features/auth/model");
 const { getTokens, setTokens } = require("../.expo/auth-check/features/auth/token-store");
 const { server } = require("../.expo/auth-check/api/mocks/server");
-const { failedRefreshTokensFixture, serviceTokensFixture, socialCredentialsFixture } = require("../.expo/auth-check/api/mocks/fixtures/auth");
+const { failedRefreshTokensFixture, googleServerAuthCodeFixture, serviceTokensFixture, socialCredentialsFixture } = require("../.expo/auth-check/api/mocks/fixtures/auth");
 const { createNonce } = require("../.expo/auth-check/features/auth/nonce");
+const { signOutThisDevice } = require("../.expo/auth-check/features/auth/sign-out");
+const { deleteMe, getMe } = require("../.expo/auth-check/features/user/api/user.api");
+const { withdrawWithReauthentication } = require("../.expo/auth-check/features/user/withdraw");
 const { performSocialLogin } = require("../.expo/auth-check/features/auth/sign-in");
 const { signInWithGoogle } = loadNativeAdapter("google");
 const { signInWithKakao } = loadNativeAdapter("kakao");
@@ -271,7 +274,47 @@ async function check() {
       return header === null;
     }), "로그인·갱신 요청에 서비스 토큰을 보내면 안 됩니다.");
 
-    console.info("Auth: 개발 MSW 로그인·nonce·토큰 저장·SDK 어댑터·키 누락/취소·Expo 설정·오류 8종·회전·자동 갱신 확인");
+    server.resetHandlers();
+
+    // 로그아웃(API-007): 이 기기 리프레시 토큰 폐기, 요청이 실패해도 기기 토큰 삭제
+    await performSocialLogin("kakao");
+    const beforeLogout = await getTokens();
+    await signOutThisDevice();
+    assert.equal(await getTokens(), null);
+    await assert.rejects(refreshServiceTokens(beforeLogout.refreshToken), hasCode("A007", 401));
+    await setTokens(serviceTokensFixture);
+
+    server.use(http.post("*/api/v1/auth/logout", () => {
+      return HttpResponse.json({ success: false, code: "C009", message: "fail" }, { status: 500 });
+    }));
+
+    await assert.rejects(signOutThisDevice(), hasCode("C009", 500));
+    assert.equal(await getTokens(), null, "로그아웃 요청이 실패해도 기기 토큰은 지워야 합니다.");
+    server.resetHandlers();
+
+    // 내 정보(API-008)
+    await performSocialLogin("kakao");
+    const me = await getMe();
+    assert.ok(me.nickname.length > 0);
+    assert.deepEqual(me.loginProviders, ["kakao"]);
+
+    // 탈퇴(API-009): 재발급 토큰이면 A011, 구글 코드 누락·불일치는 C001·A029
+    await setTokens(await refreshServiceTokens((await getTokens()).refreshToken));
+    await assert.rejects(deleteMe(null), hasCode("A011", 403));
+    await performSocialLogin("google");
+    await assert.rejects(deleteMe(null), hasCode("C001", 400));
+    await performSocialLogin("google");
+    await assert.rejects(deleteMe("wrong-code"), hasCode("A029", 400));
+    await performSocialLogin("google");
+    assert.deepEqual(await deleteMe(googleServerAuthCodeFixture), { withdrawn: true, dataCleanupStatus: "QUEUED" });
+
+    for (const provider of ["google", "kakao"]) {
+      await setTokens(serviceTokensFixture);
+      await withdrawWithReauthentication(provider);
+      assert.equal(await getTokens(), null, "탈퇴 후 기기 토큰을 지워야 합니다.");
+    }
+
+    console.info("Auth: 개발 MSW 로그인·nonce·토큰 저장·SDK 어댑터·키 누락/취소·Expo 설정·오류 8종·회전·자동 갱신·로그아웃·내 정보·재인증 탈퇴 확인");
   } finally {
     server.close();
   }

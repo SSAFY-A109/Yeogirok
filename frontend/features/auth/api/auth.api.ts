@@ -18,3 +18,8 @@ export async function refreshServiceTokens(refreshToken: string) {
 
   return toServiceTokens(data);
 }
+
+/** API-007 로그아웃. 이 기기의 리프레시 토큰만 폐기하고, 여러 번 호출해도 성공한다. */
+export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+  await api.post<void>("/auth/logout", { refreshToken }, { timeout: TIMEOUT_MUTATION_MS });
+}
