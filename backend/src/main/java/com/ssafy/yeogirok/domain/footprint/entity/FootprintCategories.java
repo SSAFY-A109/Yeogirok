@@ -38,6 +38,11 @@ public final class FootprintCategories {
 		return List.copyOf(codes);
 	}
 
+	/** category_codes(JSON 배열 문자열)에 이 코드가 들어 있는지 보는 LIKE 패턴. 목록·통계 조회가 같이 쓴다. */
+	public static String containsPattern(String code) {
+		return "%\"" + code + "\"%";
+	}
+
 	private static BusinessException notAllowed(String reason) {
 		return new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "categoryCodes: " + reason);
 	}

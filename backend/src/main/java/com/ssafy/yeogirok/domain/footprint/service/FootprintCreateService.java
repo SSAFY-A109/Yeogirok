@@ -5,7 +5,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
 
@@ -28,6 +27,7 @@ import com.ssafy.yeogirok.global.geo.ReverseGeocodeResult;
 import com.ssafy.yeogirok.global.geo.ReverseGeocoder;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.lock.UserLock;
+import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /**
  * API-041 발자취·방명록 저장. 멱등키는 컨트롤러가 이 밖에서 처리한다. 값 검사 → 역지오코딩(외부 호출이라
@@ -36,7 +36,6 @@ import com.ssafy.yeogirok.global.lock.UserLock;
 @Service
 public class FootprintCreateService {
 
-	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	/** 작성 제한 구간의 하루 시작(Asia/Seoul 04:00). */
 	private static final LocalTime DAY_START = LocalTime.of(4, 0);
 
@@ -83,7 +82,9 @@ public class FootprintCreateService {
 		String body, ReverseGeocodeResult place) {
 		// 같은 사용자의 생성·삭제를 한 줄로 세운다. 잠금을 잡은 뒤에 읽어야 먼저 커밋된 발자취가 보인다.
 		userLock.lock(userId);
-		Instant dayStart = dayStartOf(clock.instant());
+		// 구간 계산과 created_at 에 같은 서버 시각을 쓴다(노션 API-041 "고정한 서버 생성시각").
+		Instant now = clock.instant();
+		Instant dayStart = dayStartOf(now);
 		rejectIfTooCloseToday(userId, command, dayStart);
 
 		Footprint footprint = footprintRepository.saveAndFlush(Footprint.builder()
@@ -98,6 +99,7 @@ public class FootprintCreateService {
 			.visitedAt(command.capturedAt())
 			.locationCapturedAt(command.capturedAt())
 			.locationPolicyVersion(locationEvidencePolicy.policyVersion())
+			.createdAt(now)
 			.build());
 		return FootprintCreateResponse.from(footprint);
 	}
@@ -116,8 +118,8 @@ public class FootprintCreateService {
 
 	/** {@code now} 가 속한 작성 제한 구간의 시작(Asia/Seoul 04:00). 서버 시각 기준이며 기기 시각·capturedAt 은 쓰지 않는다. */
 	static Instant dayStartOf(Instant now) {
-		ZonedDateTime seoul = now.atZone(SEOUL);
+		ZonedDateTime seoul = now.atZone(ApiDateTime.ZONE);
 		LocalDate day = seoul.toLocalTime().isBefore(DAY_START) ? seoul.toLocalDate().minusDays(1) : seoul.toLocalDate();
-		return day.atTime(DAY_START).atZone(SEOUL).toInstant();
+		return day.atTime(DAY_START).atZone(ApiDateTime.ZONE).toInstant();
 	}
 }

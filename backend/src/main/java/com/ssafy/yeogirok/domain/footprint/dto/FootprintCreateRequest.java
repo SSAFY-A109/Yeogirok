@@ -56,6 +56,10 @@ public class FootprintCreateRequest {
 		if (!value.isNumber()) {
 			throw invalidFormat("location." + field, "숫자여야 합니다.");
 		}
+		// 1e400 처럼 double 범위를 넘는 값은 Infinity 로 읽혀 decimalValue() 가 실패한다. 범위 밖 좌표와 같은 C011.
+		if (value.isFloatingPointNumber() && !Double.isFinite(value.doubleValue())) {
+			throw new BusinessException(ExceptionType.COORDINATE_OUT_OF_RANGE);
+		}
 		return value.decimalValue().setScale(COORDINATE_SCALE, RoundingMode.HALF_UP);
 	}
 

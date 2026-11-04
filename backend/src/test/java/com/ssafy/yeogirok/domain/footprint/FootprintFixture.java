@@ -25,6 +25,7 @@ public final class FootprintFixture {
 			.categoryCodes(List.of("CAFE", "FOOD"))
 			.visitedAt(CAPTURED_AT)
 			.locationCapturedAt(CAPTURED_AT)
-			.locationPolicyVersion("test-v1");
+			.locationPolicyVersion("test-v1")
+			.createdAt(CAPTURED_AT);
 	}
 }

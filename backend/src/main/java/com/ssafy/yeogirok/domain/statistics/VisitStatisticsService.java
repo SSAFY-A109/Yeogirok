@@ -2,9 +2,8 @@ package com.ssafy.yeogirok.domain.statistics;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -25,6 +24,7 @@ import com.ssafy.yeogirok.domain.statistics.dto.VisitStatisticsResponse;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.BoundingBox;
+import com.ssafy.yeogirok.global.request.DateRange;
 
 import lombok.RequiredArgsConstructor;
 
@@ -40,7 +40,6 @@ public class VisitStatisticsService {
 	public static final String METRIC_VISIT_COUNT = "VISIT_COUNT";
 	static final String UNIT = "LAT_LNG_GRID";
 
-	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	private static final Pattern CATEGORY_CODE = Pattern.compile("\"([A-Z_]+)\"");
 	/** 서비스 지역(한국). 이 밖은 조회하지 않는다. */
 	static final BoundingBox KOREA = new BoundingBox(
@@ -48,6 +47,7 @@ public class VisitStatisticsService {
 
 	private final VisitStatisticsProperties properties;
 	private final VisitStatisticsQuery query;
+	private final Clock clock;
 
 	/** 발자취와 보존분을 같은 시점으로 읽는다. 두 쿼리 사이에 탈퇴 처리(발자취 → 보존분 이동)가 끼면 이중 집계되기 때문이다. */
 	@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -58,26 +58,20 @@ public class VisitStatisticsService {
 		}
 		BoundingBox box = BoundingBox.parseOrNull(bbox);
 		VisitGrid grid = gridFor(zoom);
-		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
-			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "category: 없는 카테고리입니다: " + category);
-		}
-		if (from != null && to != null && from.isAfter(to)) {
-			throw new BusinessException(ExceptionType.INVALID_DATE_RANGE, "from 이 to 보다 늦습니다.");
-		}
+		TravelCategory.validateFilter(category);
+		DateRange dates = new DateRange(from, to);
 
 		BoundingBox korea = intersect(box, KOREA);
 		if (korea == null) {
-			return response(from, to, grid, List.of());
+			return response(dates, grid, List.of());
 		}
 		BoundingBox area = grid.expandToCells(korea);
 		rejectIfTooManyCells(area, grid);
-		Instant visitedFrom = from == null ? null : from.atStartOfDay(SEOUL).toInstant();
-		Instant visitedTo = to == null ? null : to.plusDays(1).atStartOfDay(SEOUL).toInstant();
 
 		Map<CellKey, Tally> tallies = new HashMap<>();
 		List<VisitStatisticsQuery.Row> rows = new ArrayList<>(
-			query.countFootprints(grid, area, visitedFrom, visitedTo, category));
-		rows.addAll(query.countPreserved(grid, properties.aggregationVersion(), area, from, to, category));
+			query.countFootprints(grid, area, dates, category));
+		rows.addAll(query.countPreserved(grid, properties.aggregationVersion(), area, dates, category));
 		for (VisitStatisticsQuery.Row row : rows) {
 			tallies.computeIfAbsent(new CellKey(row.latitudeIndex(), row.longitudeIndex()), key -> new Tally())
 				.add(row.codes(), row.count());
@@ -89,18 +83,17 @@ public class VisitStatisticsService {
 			.map(entry -> toCell(grid, entry.getKey(), entry.getValue()))
 			.toList();
 
-		return response(from, to, grid, cells);
+		return response(dates, grid, cells);
 	}
 
-	private VisitStatisticsResponse response(LocalDate from, LocalDate to, VisitGrid grid,
-		List<VisitStatisticsResponse.Cell> cells) {
+	private VisitStatisticsResponse response(DateRange dates, VisitGrid grid, List<VisitStatisticsResponse.Cell> cells) {
 		return new VisitStatisticsResponse(
 			METRIC_VISIT_COUNT,
-			new VisitStatisticsResponse.Period(from, to),
+			new VisitStatisticsResponse.Period(dates.from(), dates.to()),
 			new VisitStatisticsResponse.Aggregation(UNIT, properties.aggregationVersion(), grid.precision(),
 				properties.minCount()),
 			cells,
-			Instant.now());
+			clock.instant());
 	}
 
 	/** 두 영역이 겹치는 부분. 넓이가 있는 겹침이 없으면 null. */

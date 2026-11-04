@@ -16,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+
+import com.ssafy.yeogirok.global.config.ClockConfig;
 import org.springframework.test.context.TestPropertySource;
 
 import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
@@ -30,7 +32,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
  * 역삼동 근처 (37.505, 127.005) 는 zoom 10 에서 칸 (3750, 12700) 이다.
  */
 @DataJpaTest
-@Import({VisitStatisticsService.class, VisitStatisticsQuery.class})
+@Import({VisitStatisticsService.class, VisitStatisticsQuery.class, ClockConfig.class})
 @TestPropertySource(properties = {
 	"yeogirok.visit-statistics.aggregation-version=test-v1",
 	"yeogirok.visit-statistics.base-cell-size-degrees=0.01",

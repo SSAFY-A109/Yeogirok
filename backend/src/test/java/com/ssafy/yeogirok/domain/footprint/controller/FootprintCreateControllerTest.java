@@ -187,8 +187,10 @@ class FootprintCreateControllerTest {
 		JSON 이 아님            | not-json | C002
 		categoryCodes 생략     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}} | C001
 		categoryCodes null     | {"location": {"latitude": 37.5, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": null} | C001
+		위도 1e400(무한대)       | {"location": {"latitude": 1e400, "longitude": 127.0, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": ["CAFE"]} | C011
+		경도 -1e400(무한대)      | {"location": {"latitude": 37.5, "longitude": -1e400, "capturedAt": "2026-11-04 12:00:00+09"}, "categoryCodes": ["CAFE"]} | C011
 		""")
-	void 카테고리_생략은_C001_타입이나_형식_오류는_C002(String name, String json, String code) throws Exception {
+	void 카테고리_생략은_C001_타입이나_형식_오류는_C002_무한대_좌표는_C011(String name, String json, String code) throws Exception {
 		postAs(USER_ID, "key-1", json)
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(code));

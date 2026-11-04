@@ -5,6 +5,7 @@ import java.time.Instant;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
+import com.ssafy.yeogirok.domain.footprint.entity.FootprintCategories;
 import com.ssafy.yeogirok.global.geo.BoundingBox;
 
 /** API-042 목록 조건. 값이 없는 조건은 쓰지 않는다. */
@@ -35,7 +36,8 @@ public final class FootprintSpecifications {
 	/** 카테고리 코드 포함. JSON 배열을 문자열로 바꿔 따옴표까지 {@code "CODE"} 를 찾는다(PostgreSQL·H2 공통). */
 	public static Specification<Footprint> hasCategory(String categoryCode) {
 		// as() 는 SQL CAST 를 만들지 않아 PostgreSQL 에서 jsonb LIKE 가 된다. cast() 를 써야 한다.
-		return (root, query, cb) -> cb.like(root.get("categoryCodes").cast(String.class), "%\"" + categoryCode + "\"%");
+		return (root, query, cb) -> cb.like(root.get("categoryCodes").cast(String.class),
+			FootprintCategories.containsPattern(categoryCode));
 	}
 
 	/** visitedAt 최신순·id 큰 순에서 커서 다음 항목. */

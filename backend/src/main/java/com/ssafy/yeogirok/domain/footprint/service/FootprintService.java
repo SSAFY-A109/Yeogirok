@@ -1,8 +1,7 @@
 package com.ssafy.yeogirok.domain.footprint.service;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 import org.springframework.data.domain.Sort;
@@ -23,6 +22,7 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.BoundingBox;
 import com.ssafy.yeogirok.global.lock.UserLock;
+import com.ssafy.yeogirok.global.request.DateRange;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,11 +34,10 @@ public class FootprintService {
 	static final int DEFAULT_LIST_LIMIT = 20;
 	static final int MAX_LIST_LIMIT = 50;
 
-	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
-
 	private final FootprintFinder footprintFinder;
 	private final FootprintRepository footprintRepository;
 	private final UserLock userLock;
+	private final Clock clock;
 
 	/** API-043. 본인 것만, 삭제한 것은 F001. */
 	@Transactional(readOnly = true)
@@ -49,12 +48,12 @@ public class FootprintService {
 	/** API-044. 본문만 바꾸고 version 을 올린다. version 이 다르거나 동시 요청이 @Version 에 걸리면 C004. */
 	@Transactional
 	public FootprintUpdateResponse updateBody(Long userId, Long footprintId, int version, String body) {
-		FootprintBody.normalize(body);  // 본문 길이 오류(C003)는 요청값 문제라 조회보다 먼저 알린다
+		String normalized = FootprintBody.normalize(body);  // 본문 오류(C003)는 요청값 문제라 조회보다 먼저 알린다
 		Footprint footprint = footprintFinder.getOwnFootprint(footprintId, userId);
 		if (footprint.getVersion() != version) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
 		}
-		footprint.updateBody(body);
+		footprint.updateBody(normalized, clock.instant());
 		// 응답에 올라간 version·updatedAt 을 담으려고 지금 반영한다.
 		footprintRepository.flush();
 		return FootprintUpdateResponse.from(footprint);
@@ -68,7 +67,7 @@ public class FootprintService {
 		if (footprint.getVersion() != version) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
 		}
-		footprint.softDelete(Instant.now());
+		footprint.softDelete(clock.instant());
 		footprintRepository.flush();
 		return FootprintDeleteResponse.applied();
 	}
@@ -78,12 +77,8 @@ public class FootprintService {
 	public FootprintListResponse getMyFootprints(Long userId, String bbox, LocalDate from, LocalDate to,
 		String category, String cursor, Integer limit) {
 		BoundingBox box = BoundingBox.parseOrNull(bbox);
-		if (from != null && to != null && from.isAfter(to)) {
-			throw new BusinessException(ExceptionType.INVALID_DATE_RANGE, "from 이 to 보다 늦습니다.");
-		}
-		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
-			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "category: 없는 카테고리입니다: " + category);
-		}
+		DateRange dates = new DateRange(from, to);
+		TravelCategory.validateFilter(category);
 		FootprintCursor after = FootprintCursor.decodeOrNull(cursor);
 		int size = limit == null ? DEFAULT_LIST_LIMIT : limit;
 		if (size < 1 || size > MAX_LIST_LIMIT) {
@@ -96,9 +91,7 @@ public class FootprintService {
 			spec = spec.and(FootprintSpecifications.within(box));
 		}
 		if (from != null || to != null) {
-			spec = spec.and(FootprintSpecifications.visitedBetween(
-				from == null ? null : from.atStartOfDay(SEOUL).toInstant(),
-				to == null ? null : to.plusDays(1).atStartOfDay(SEOUL).toInstant()));
+			spec = spec.and(FootprintSpecifications.visitedBetween(dates.startInclusive(), dates.endExclusive()));
 		}
 		if (category != null) {
 			spec = spec.and(FootprintSpecifications.hasCategory(category));

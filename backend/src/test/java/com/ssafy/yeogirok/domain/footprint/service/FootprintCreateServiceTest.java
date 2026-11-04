@@ -31,6 +31,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,8 +47,8 @@ import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.location.LocationEvidenceProperties;
 import com.ssafy.yeogirok.global.lock.UserLock;
 import com.ssafy.yeogirok.support.FixedReverseGeocoder;
-import com.ssafy.yeogirok.support.H2PostgresFunctions;
 import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestUsers;
 
 /**
  * API-041 규칙. 서버 현재 시각은 2026-11-04 12:00(Asia/Seoul)으로 고정하고, 이날 작성 제한 구간은 04:00 부터다.
@@ -57,7 +58,7 @@ import com.ssafy.yeogirok.support.MutableClock;
  */
 @DataJpaTest
 @Import({FootprintCreateService.class, FootprintFinder.class, UserLock.class, LocationEvidencePolicy.class,
-	H2PostgresFunctions.class, FootprintCreateServiceTest.Config.class})
+	FootprintCreateServiceTest.Config.class})
 @TestPropertySource(properties = {
 	"yeogirok.location-evidence.max-age=2m",
 	"yeogirok.location-evidence.max-future-skew=30s",
@@ -66,7 +67,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 })
 class FootprintCreateServiceTest {
 
-	static final Long OWNER = 1L;
+	static final Long OWNER = 1001L;
 	/** 2026-11-04 12:00 Asia/Seoul. */
 	static final Instant NOW = Instant.parse("2026-11-04T03:00:00Z");
 	/** 2026-11-04 04:00 Asia/Seoul. 이날 작성 제한 구간의 시작. */
@@ -110,6 +111,19 @@ class FootprintCreateServiceTest {
 	void resetFakes() {
 		clock.set(NOW);
 		geocoder.willReturn(YEOKSAM);
+		if (TestTransaction.isActive()) {  // 동시성 테스트는 트랜잭션 없이 돌며 회원을 직접 넣고 지운다
+			TestUsers.insertActive(em.getEntityManager(), OWNER);
+		}
+	}
+
+	@Test
+	void 탈퇴한_회원은_저장할_수_없고_A003() {
+		em.getEntityManager().createNativeQuery("UPDATE users SET status = 'WITHDRAWN' WHERE id = :id")
+			.setParameter("id", OWNER).executeUpdate();
+
+		expect(() -> service.create(OWNER, command(LAT, LNG, NOW, null, List.of("CAFE"))),
+			ExceptionType.ACCESS_TOKEN_INVALID);
+		assertThat(countFootprints()).isZero();
 	}
 
 	@Test
@@ -275,6 +289,7 @@ class FootprintCreateServiceTest {
 	void PostgreSQL에서_동시에_같은_자리로_보내도_하나만_저장된다() throws Exception {
 		assumeTrue(isPostgres(), "PostgreSQL 에서만 확인한다");
 		Long userId = 919191L;
+		TestUsers.insertActive(new JdbcTemplate(dataSource), userId);
 		Instant now = Instant.now();
 		clock.set(now);
 		int requests = 5;
@@ -302,7 +317,7 @@ class FootprintCreateServiceTest {
 			assertThat(outcomes).filteredOn(ExceptionType.FOOTPRINT_TOO_CLOSE_TODAY::equals).hasSize(requests - 1);
 		} finally {
 			executor.shutdownNow();
-			new JdbcTemplate(dataSource).update("DELETE FROM footprints WHERE user_id = ?", userId);
+			TestUsers.delete(new JdbcTemplate(dataSource), userId);
 		}
 	}
 
@@ -338,12 +353,9 @@ class FootprintCreateServiceTest {
 			.visitedAt(createdAt)
 			.locationCapturedAt(createdAt)
 			.locationPolicyVersion("test-location-v1")
+			.createdAt(createdAt)
 			.build(), Long.class);
 		em.flush();
-		em.getEntityManager().createNativeQuery("UPDATE footprints SET created_at = :createdAt WHERE id = :id")
-			.setParameter("createdAt", createdAt)
-			.setParameter("id", id)
-			.executeUpdate();
 		em.clear();
 		return id;
 	}

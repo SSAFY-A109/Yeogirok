@@ -4,9 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.CheckConstraint;
@@ -84,44 +82,48 @@ public class Footprint {
 	@Column(nullable = false)
 	private Integer version = 1;
 
-	@CreationTimestamp
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
-	@UpdateTimestamp
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	/** 본문·카테고리는 서비스가 {@link FootprintBody}·{@link FootprintCategories} 로 정리·검사한 값을 받는다. 시각은 서비스 시계. */
 	@Builder
 	private Footprint(Long userId, BigDecimal latitude, BigDecimal longitude, String locationName, String address,
 		String legalAreaCode, String body, List<String> categoryCodes, Instant visitedAt, Instant locationCapturedAt,
-		String locationPolicyVersion) {
+		String locationPolicyVersion, Instant createdAt) {
 		this.userId = userId;
 		this.latitude = latitude;
 		this.longitude = longitude;
 		this.locationName = locationName;
 		this.address = address;
 		this.legalAreaCode = legalAreaCode;
-		this.body = FootprintBody.normalize(body);
-		this.categoryCodes = FootprintCategories.validate(categoryCodes);
+		this.body = body;
+		this.categoryCodes = categoryCodes;
 		this.visitedAt = visitedAt;
 		this.locationCapturedAt = locationCapturedAt;
 		this.locationPolicyVersion = locationPolicyVersion;
+		this.createdAt = createdAt;
+		this.updatedAt = createdAt;
 	}
 
 	public boolean isOwnedBy(Long userId) {
 		return this.userId.equals(userId);
 	}
 
-	/** API-044. 본문만 바꾼다. 빈 본문은 null. */
-	public void updateBody(String body) {
-		this.body = FootprintBody.normalize(body);
-		// 같은 본문이어도 version 을 올리려고 updatedAt 을 바꾼다(값이 같으면 Hibernate 가 UPDATE 를 건너뜀).
-		this.updatedAt = Instant.now();
+	/**
+	 * API-044. 본문만 바꾼다. 같은 본문이어도 updatedAt 이 바뀌므로 UPDATE 가 나가 version 이 오른다.
+	 * @param normalizedBody {@link FootprintBody#normalize} 로 정리한 본문
+	 */
+	public void updateBody(String normalizedBody, Instant now) {
+		this.body = normalizedBody;
+		this.updatedAt = now;
 	}
 
 	/** API-045. 소프트 삭제. 목록·상세·통계·작성 제한 검사에서 빠진다. */
 	public void softDelete(Instant now) {
 		this.deletedAt = now;
+		this.updatedAt = now;
 	}
 }

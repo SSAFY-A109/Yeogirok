@@ -18,20 +18,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.ssafy.yeogirok.support.H2PostgresFunctions;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.TestUsers;
 
-/**
- * 사용자 잠금. 실제 잠금 동작은 PostgreSQL 에서만 확인할 수 있어 해당 테스트는 H2 에서 건너뛴다
- * ({@code SPRING_TEST_DATABASE_REPLACE=NONE} 으로 로컬 PostgreSQL 에서 돌린다).
- */
+/** 사용자 잠금(users 행 FOR UPDATE). 동시 대기 확인은 로컬 PostgreSQL 에서만 돌린다({@code SPRING_TEST_DATABASE_REPLACE=NONE}). */
 @DataJpaTest
-@Import({UserLock.class, H2PostgresFunctions.class})
+@Import(UserLock.class)
 class UserLockTest {
 
 	@Autowired
@@ -47,48 +47,51 @@ class UserLockTest {
 	PlatformTransactionManager transactionManager;
 
 	@Test
+	void 활동_중인_회원은_잠그고_없거나_탈퇴했으면_A003() {
+		TestUsers.insertActive(em.getEntityManager(), 1001L);
+		TestUsers.insert(em.getEntityManager(), 1002L, "WITHDRAWN");
+
+		userLock.lock(1001L);
+		for (long userId : new long[] {1002L, 1003L}) {
+			assertThatThrownBy(() -> userLock.lock(userId))
+				.isInstanceOf(BusinessException.class)
+				.extracting("exceptionType").isEqualTo(ExceptionType.ACCESS_TOKEN_INVALID);
+		}
+	}
+
+	@Test
 	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	void 트랜잭션_밖에서_부르면_예외다() {
 		assertThatThrownBy(() -> userLock.lock(1L)).isInstanceOf(IllegalTransactionStateException.class);
 	}
 
 	@Test
-	void PostgreSQL에서는_트랜잭션_advisory_lock을_잡는다() throws Exception {
-		assumeTrue(isPostgres(), "PostgreSQL 에서만 확인한다");
-
-		userLock.lock(424242L);
-
-		Number held = (Number)em.getEntityManager().createNativeQuery("""
-				SELECT COUNT(*) FROM pg_locks
-				WHERE locktype = 'advisory' AND granted AND pid = pg_backend_pid() AND objid = 424242
-				""")
-			.getSingleResult();
-		assertThat(held.intValue()).isEqualTo(1);
-	}
-
-	@Test
 	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	void PostgreSQL에서_같은_사용자의_두_번째_트랜잭션은_첫_번째가_끝날_때까지_기다린다() throws Exception {
 		assumeTrue(isPostgres(), "PostgreSQL 에서만 확인한다");
+		long userId = 434343L;
+		JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+		TestUsers.insertActive(jdbc, userId);
 		TransactionTemplate tx = new TransactionTemplate(transactionManager);
 		CountDownLatch firstLocked = new CountDownLatch(1);
 		ExecutorService executor = Executors.newFixedThreadPool(2);
 		try {
 			Future<Long> firstReleasedAt = executor.submit(() -> tx.execute(status -> {
-				userLock.lock(434343L);
+				userLock.lock(userId);
 				firstLocked.countDown();
 				sleep(500);
 				return System.nanoTime();  // 이 직후 커밋하며 잠금이 풀린다
 			}));
 			assertThat(firstLocked.await(5, TimeUnit.SECONDS)).isTrue();
 			Future<Long> secondAcquiredAt = executor.submit(() -> tx.execute(status -> {
-				userLock.lock(434343L);
+				userLock.lock(userId);
 				return System.nanoTime();
 			}));
 
 			assertThat(secondAcquiredAt.get(5, TimeUnit.SECONDS)).isGreaterThan(firstReleasedAt.get(5, TimeUnit.SECONDS));
 		} finally {
 			executor.shutdownNow();
+			TestUsers.delete(jdbc, userId);
 		}
 	}
 

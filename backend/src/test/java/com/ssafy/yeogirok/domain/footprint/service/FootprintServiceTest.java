@@ -5,12 +5,16 @@ import static com.ssafy.yeogirok.domain.footprint.FootprintFixture.footprintOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
 
@@ -23,20 +27,55 @@ import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.lock.UserLock;
-import com.ssafy.yeogirok.support.H2PostgresFunctions;
+import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestUsers;
 
 @DataJpaTest
-@Import({FootprintService.class, FootprintFinder.class, UserLock.class, H2PostgresFunctions.class})
+@Import({FootprintService.class, FootprintFinder.class, UserLock.class, FootprintServiceTest.Config.class})
 class FootprintServiceTest {
 
-	static final Long OWNER = 1L;
-	static final Long OTHER = 2L;
+	static final Long OWNER = 1001L;
+	static final Long OTHER = 1002L;
 
 	@Autowired
 	FootprintService footprintService;
 
 	@Autowired
 	TestEntityManager em;
+
+	@Autowired
+	MutableClock clock;
+
+	/** 2026-11-05 09:00 Asia/Seoul. 픽스처 생성 시각(CAPTURED_AT)보다 뒤. */
+	static final Instant NOW = Instant.parse("2026-11-05T00:00:00Z");
+
+	@TestConfiguration
+	static class Config {
+
+		@Bean
+		MutableClock clock() {
+			return new MutableClock(NOW);
+		}
+	}
+
+	@BeforeEach
+	void setUp() {
+		clock.set(NOW);
+		TestUsers.insertActive(em.getEntityManager(), OWNER, OTHER);
+	}
+
+	@Test
+	void 탈퇴한_회원은_삭제할_수_없고_A003() {
+		Long id = em.persistAndGetId(footprintOf(OWNER).build(), Long.class);
+		em.getEntityManager().createNativeQuery("UPDATE users SET status = 'WITHDRAWN' WHERE id = :id")
+			.setParameter("id", OWNER).executeUpdate();
+		em.flush();
+		em.clear();
+
+		assertThatThrownBy(() -> footprintService.delete(OWNER, id, 1))
+			.isInstanceOf(BusinessException.class)
+			.extracting("exceptionType").isEqualTo(ExceptionType.ACCESS_TOKEN_INVALID);
+	}
 
 	@Test
 	void API_043_본인_발자취_상세를_돌려준다() {
@@ -94,7 +133,10 @@ class FootprintServiceTest {
 
 		assertThat(footprintService.updateBody(OWNER, id, 1, "좋았다").version()).isEqualTo(2);
 		em.clear();
+		clock.set(NOW.plusSeconds(1));
 		assertThat(footprintService.updateBody(OWNER, id, 2, "좋았다").version()).isEqualTo(3);
+		em.clear();
+		assertThat(em.find(Footprint.class, id).getUpdatedAt()).isEqualTo(NOW.plusSeconds(1));  // 수정 시각은 서비스 시계
 	}
 
 	@Test
@@ -140,7 +182,7 @@ class FootprintServiceTest {
 		assertThat(response.statisticsStatus()).isEqualTo(StatisticsStatus.APPLIED);
 		em.clear();
 		Footprint saved = em.find(Footprint.class, id);  // 행은 남아 있다
-		assertThat(saved.getDeletedAt()).isNotNull();
+		assertThat(saved.getDeletedAt()).isEqualTo(NOW);  // 삭제 시각은 서비스 시계
 		assertThat(saved.getVersion()).isEqualTo(2);
 	}
 
