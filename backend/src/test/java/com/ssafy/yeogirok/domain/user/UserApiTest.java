@@ -8,7 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -170,6 +176,34 @@ class UserApiTest {
 				.andExpect(jsonPath("$.data.dataCleanupStatus").value("QUEUED"));
 
 			assertThat(kakaoUnlinkClient.unlinked()).containsExactly(sub);
+		}
+
+		@Test
+		void 같은_회원의_탈퇴가_동시에_와도_한_번만_탈퇴하고_연결도_한_번만_끊는다() throws Exception {
+			String sub = uniqueSub();
+			String accessToken = login("kakao", idTokens.kakao(sub, clock.instant())).get("accessToken").asString();
+			int requests = 3;
+			ExecutorService executor = Executors.newFixedThreadPool(requests);
+			CountDownLatch start = new CountDownLatch(1);
+			try {
+				List<Future<Integer>> results = new ArrayList<>();
+				for (int i = 0; i < requests; i++) {
+					results.add(executor.submit(() -> {
+						start.await();
+						return withdraw(accessToken).andReturn().getResponse().getStatus();
+					}));
+				}
+				start.countDown();
+
+				List<Integer> statuses = new ArrayList<>();
+				for (Future<Integer> result : results) {
+					statuses.add(result.get());
+				}
+				assertThat(statuses).containsOnlyOnce(200);
+				assertThat(kakaoUnlinkClient.unlinked()).containsExactly(sub);
+			} finally {
+				executor.shutdownNow();
+			}
 		}
 
 		@Test

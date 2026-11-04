@@ -2,8 +2,8 @@ package com.ssafy.yeogirok.support;
 
 import java.net.URI;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.ssafy.yeogirok.global.oauth.client.KakaoUnlinkClient;
 import com.ssafy.yeogirok.global.oauth.client.UnlinkProperties;
@@ -11,7 +11,8 @@ import com.ssafy.yeogirok.global.oauth.client.UnlinkProperties;
 /** 카카오 API 대신 호출을 기록한다. {@link #failing} 을 켜면 실패한다. */
 public class FakeKakaoUnlinkClient extends KakaoUnlinkClient {
 
-	private final List<String> unlinked = new ArrayList<>();
+	// 동시 탈퇴 테스트에서 여러 요청 스레드가 함께 기록한다.
+	private final List<String> unlinked = new CopyOnWriteArrayList<>();
 	private boolean failing;
 
 	public FakeKakaoUnlinkClient() {

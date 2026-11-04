@@ -74,10 +74,13 @@ public class UserService {
 		UserWithdrawnEvent event = new UserWithdrawnEvent(user.getId(), user.getProvider(), user.getProviderSubject(),
 			googleRevokeToken);
 		transactionTemplate.executeWithoutResult(status -> {
-			User target = findActiveUser(principal.userId());
+			// 회원 행을 잠근다. 동시에 온 두 번째 탈퇴는 기다렸다가 탈퇴 상태를 보고 A003 으로 끝난다(이벤트가 두 번 나가지 않는다).
+			User target = userRepository.findByIdForUpdate(principal.userId())
+				.filter(User::isActive)
+				.orElseThrow(() -> new BusinessException(ExceptionType.ACCESS_TOKEN_INVALID));
 			target.withdraw(clock.instant());
 			// TODO: 탈퇴 데이터 정리(노션 ERD › ERD 설계 관련 사항). 발자취 PR(S15P31A109-35)이 합쳐진 뒤 구현한다.
-			//  - 사용자 행 잠금(발자취 UserLock 과 같은 잠금) 후 미삭제 발자취를 footprint_statistics 에 합산하고,
+			//  - 위에서 잠근 회원 행 아래에서(발자취 UserLock 도 같은 잠금으로 맞춘다) 미삭제 발자취를 footprint_statistics 에 합산하고,
 			//    그 회원의 발자취 원본(삭제 상태 포함)을 지운다. 계정 비활성화와 같은 이 트랜잭션에서 한다.
 			//    cell_id 는 기본 셀 "{floor(lat/기본셀)}:{floor(lng/기본셀)}", stat_date 는 방문 시각의 Asia/Seoul 날짜.
 			//  - 이야기·사진·채팅·AR 팁의 작성자 표시 익명화, 참여자 명단에서 빼기(남은 참여자가 0명이면 방 삭제).
