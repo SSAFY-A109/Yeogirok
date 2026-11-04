@@ -10,7 +10,7 @@ import lombok.Getter;
 /**
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
- * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가.
+ * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -36,6 +36,11 @@ public enum ExceptionType {
 	ACCESS_TOKEN_EXPIRED(UNAUTHORIZED, "A002", "서비스 액세스 토큰이 만료되었습니다."),
 	ACCESS_TOKEN_INVALID(UNAUTHORIZED, "A003", "서비스 액세스 토큰이 유효하지 않습니다."),
 	ROLE_INSUFFICIENT(FORBIDDEN, "A004", "요청에 필요한 권한이 없습니다."),
+
+	/* ── 발자취 F ───────────────────────────────────────────── */
+
+	FOOTPRINT_NOT_FOUND(NOT_FOUND, "F001", "발자취를 찾을 수 없습니다."),
+	FOOTPRINT_NOT_OWNER(FORBIDDEN, "F002", "발자취·방명록 작성자 본인이 아닙니다."),
 
 	;
 

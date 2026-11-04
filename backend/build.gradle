@@ -40,6 +40,7 @@ dependencies {
 	/* 테스트 */
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	// 테스트는 PostgreSQL 없이 돌도록 H2(PostgreSQL 모드)를 쓴다.
 	testRuntimeOnly 'com.h2database:h2'
