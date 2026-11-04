@@ -31,6 +31,8 @@ import com.ssafy.yeogirok.domain.user.domain.UserRole;
 public class JwtConfig {
 
 	static final String ROLE_CLAIM = "role";
+	/** 소셜 로그인(API-005) 시각. 재발급(API-006) 토큰에는 넣지 않는다 — 탈퇴 전 최근 재인증(A011) 판단에 쓴다. */
+	public static final String AUTH_TIME_CLAIM = "auth_time";
 
 	private static final Set<String> ALLOWED_ROLES = Arrays.stream(UserRole.values())
 		.map(Enum::name)

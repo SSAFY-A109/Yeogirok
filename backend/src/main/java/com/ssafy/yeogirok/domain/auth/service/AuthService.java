@@ -54,20 +54,21 @@ public class AuthService {
 		log.info("Social login. userId={}, provider={}, isNewUser={}", user.getId(), provider, isNewUser);
 
 		return new TokenIssueResponse(
-			accessTokenIssuer.issue(user), accessTokenIssuer.ttlSeconds(),
+			accessTokenIssuer.issueForLogin(user), accessTokenIssuer.ttlSeconds(),
 			refreshTokenService.issueForNewLogin(user.getId()), refreshTokenService.ttlSeconds(),
 			isNewUser);
 	}
 
-	/** API-006. */
+	/** API-006. 탈퇴 직후 세션 폐기가 늦어도 탈퇴 회원에게는 새 토큰을 주지 않는다. */
 	@Transactional(readOnly = true)
 	public TokenRefreshResponse refresh(String rawRefreshToken) {
 		RefreshTokenService.Rotated rotated = refreshTokenService.rotate(rawRefreshToken);
 		User user = userRepository.findById(rotated.userId())
+			.filter(User::isActive)
 			.orElseThrow(() -> new BusinessException(ExceptionType.REFRESH_TOKEN_REVOKED));
 
 		return new TokenRefreshResponse(
-			accessTokenIssuer.issue(user), accessTokenIssuer.ttlSeconds(),
+			accessTokenIssuer.issueForRefresh(user), accessTokenIssuer.ttlSeconds(),
 			rotated.rawToken(), refreshTokenService.ttlSeconds());
 	}
 

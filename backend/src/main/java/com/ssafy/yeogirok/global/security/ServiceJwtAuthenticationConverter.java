@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.domain.auth.token.JwtConfig;
+
 /** 서비스 액세스 토큰 → {@code AuthenticatedUser} + {@code ROLE_<role>}. */
 @Component
 public class ServiceJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
@@ -19,16 +21,16 @@ public class ServiceJwtAuthenticationConverter implements Converter<Jwt, Abstrac
 	@Override
 	public AbstractAuthenticationToken convert(Jwt jwt) {
 		SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + jwt.getClaimAsString("role"));
-		return UsernamePasswordAuthenticationToken.authenticated(principal(jwt.getSubject()), jwt, List.of(authority));
+		return UsernamePasswordAuthenticationToken.authenticated(principal(jwt), jwt, List.of(authority));
 	}
 
-	private AuthenticatedUser principal(String subject) {
+	private AuthenticatedUser principal(Jwt jwt) {
 		try {
-			long userId = Long.parseLong(subject);
+			long userId = Long.parseLong(jwt.getSubject());
 			if (userId <= 0) {
 				throw new NumberFormatException();
 			}
-			return new AuthenticatedUser(userId);
+			return new AuthenticatedUser(userId, jwt.getClaimAsInstant(JwtConfig.AUTH_TIME_CLAIM));
 		} catch (NumberFormatException e) {
 			throw new OAuth2AuthenticationException(new OAuth2Error(OAuth2ErrorCodes.INVALID_TOKEN));
 		}

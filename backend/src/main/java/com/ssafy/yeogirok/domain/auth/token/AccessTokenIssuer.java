@@ -24,20 +24,33 @@ public class AccessTokenIssuer {
 	private final JwtProperties properties;
 	private final Clock clock;
 
-	public String issue(User user) {
+	/** API-005. 소셜 로그인 시각을 {@code auth_time} 으로 담는다. */
+	public String issueForLogin(User user) {
+		return issue(user, true);
+	}
+
+	/** API-006. 재발급 토큰은 {@code auth_time} 이 없어 최근 재인증으로 보지 않는다. */
+	public String issueForRefresh(User user) {
+		return issue(user, false);
+	}
+
+	private String issue(User user, boolean afterLogin) {
 		Instant issuedAt = clock.instant().truncatedTo(ChronoUnit.SECONDS);
 
-		JwtClaimsSet claims = JwtClaimsSet.builder()
+		JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
 			.issuer(properties.issuer())
 			.subject(user.getId().toString())
 			.issuedAt(issuedAt)
 			.expiresAt(issuedAt.plus(properties.accessTokenTtl()))
 			.id(UUID.randomUUID().toString())
-			.claim(JwtConfig.ROLE_CLAIM, user.getRole().name())
-			.build();
+			.claim(JwtConfig.ROLE_CLAIM, user.getRole().name());
+		if (afterLogin) {
+			// 표준 클레임(iat·exp)과 같이 epoch 초로 넣는다. Instant 를 그대로 넣으면 JSON 으로 직렬화되지 않는다.
+			claims.claim(JwtConfig.AUTH_TIME_CLAIM, issuedAt.getEpochSecond());
+		}
 
 		JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
-		return serviceJwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+		return serviceJwtEncoder.encode(JwtEncoderParameters.from(header, claims.build())).getTokenValue();
 	}
 
 	public long ttlSeconds() {

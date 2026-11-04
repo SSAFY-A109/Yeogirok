@@ -111,6 +111,23 @@ public class RefreshTokenService {
 		return 1
 		""", Long.class);
 
+	/**
+	 * 탈퇴. 회원의 모든 세션을 폐기하고 세션 목록을 지운다. 폐기한 세션 수를 돌려준다.
+	 * KEYS: 세션 목록
+	 */
+	private static final RedisScript<Long> REVOKE_ALL = RedisScript.of("""
+		local count = 0
+		for _, id in ipairs(redis.call('smembers', KEYS[1])) do
+		  local sessionKey = 'auth:session:' .. id
+		  if redis.call('hget', sessionKey, 'revoked') == '0' then
+		    redis.call('hset', sessionKey, 'revoked', '1')
+		    count = count + 1
+		  end
+		end
+		redis.call('del', KEYS[1])
+		return count
+		""", Long.class);
+
 	private final StringRedisTemplate redis;
 	private final JwtProperties properties;
 	private final Clock clock;
@@ -163,6 +180,11 @@ public class RefreshTokenService {
 		}
 
 		redis.execute(REVOKE, List.of(TOKEN_KEY + hash(rawToken)), String.valueOf(userId));
+	}
+
+	/** 탈퇴 시 모든 기기 세션을 폐기한다. */
+	public long revokeAllSessions(Long userId) {
+		return redis.execute(REVOKE_ALL, List.of(USER_SESSIONS_KEY + userId));
 	}
 
 	public long ttlSeconds() {

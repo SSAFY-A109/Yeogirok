@@ -47,6 +47,8 @@ public enum ExceptionType {
 	REFRESH_TOKEN_EXPIRED(UNAUTHORIZED, "A008", "서비스 리프레시 토큰이 만료되었습니다."),
 	REFRESH_TOKEN_REVOKED(UNAUTHORIZED, "A009", "서비스 리프레시 토큰이 폐기되었습니다."),
 	REFRESH_TOKEN_REUSED(UNAUTHORIZED, "A010", "이미 재발급에 사용된 리프레시 토큰입니다."),
+	REAUTHENTICATION_REQUIRED(UNAUTHORIZED, "A011", "최근 재인증이 필요합니다."),
+	GOOGLE_AUTH_CODE_INVALID(UNAUTHORIZED, "A029", "구글 인증 코드가 유효하지 않거나 다른 계정의 코드입니다."),
 
 	;
 

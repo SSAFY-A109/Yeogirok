@@ -34,6 +34,9 @@ public class User {
 
 	/** ID 토큰에 이름 클레임이 없을 때 쓰는 닉네임. nickname 이 NOT NULL 이라 둔다. */
 	private static final String DEFAULT_NICKNAME = "여행자";
+	private static final String WITHDRAWN_NICKNAME = "탈퇴한 회원";
+	/** 탈퇴 후 provider_subject 에 넣는 값의 접두어. 원래 sub 를 비워 같은 계정이 새 회원으로 가입할 수 있게 한다. */
+	private static final String WITHDRAWN_SUBJECT_PREFIX = "withdrawn:";
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -84,6 +87,26 @@ public class User {
 	public static User signUp(OAuthProvider provider, String providerSubject, String email, String nickname,
 		String profileImageUrl, Instant now) {
 		return new User(provider, providerSubject, email, nickname, profileImageUrl, now);
+	}
+
+	public boolean isActive() {
+		return status == UserStatus.ACTIVE;
+	}
+
+	/**
+	 * API-009. 계정을 비활성화하고 개인정보를 지운다. 제공자 연결 해제에 쓸 원래 sub 는 호출 전에 따로 읽어 둔다.
+	 *
+	 * <p>(provider, provider_subject) 가 유니크라서 원래 sub 를 그대로 두면 같은 계정으로 다시 가입할 수 없다.
+	 * 탈퇴 회원이 다시 로그인하면 새 회원으로 가입시키는 정책이라 sub 를 회원 id 기반 값으로 바꾼다.
+	 */
+	public void withdraw(Instant now) {
+		this.status = UserStatus.WITHDRAWN;
+		this.withdrawnAt = now;
+		this.updatedAt = now;
+		this.providerSubject = WITHDRAWN_SUBJECT_PREFIX + id;
+		this.email = null;
+		this.nickname = WITHDRAWN_NICKNAME;
+		this.profileImageUrl = null;
 	}
 
 	/** ERD 에 role 컬럼이 없어 저장하지 않는다. 지금은 모든 회원이 USER 다(UserRole 참고). */
