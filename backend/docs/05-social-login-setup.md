@@ -15,7 +15,7 @@
 
 MVP는 **Android만** 한다. iOS 설정(구글 iOS 클라이언트, 카카오 iOS 플랫폼)은 iOS를 지원할 때 추가한다.
 
-서버는 **client secret이 필요 없다.** ID 토큰은 제공자 공개키(JWKS)로 검증하므로, 서버가 알아야 하는 건 "이 토큰이 우리 앱에 발급된 것인지" 확인할 `aud` 값뿐이다.
+로그인에는 **client secret이 필요 없다.** ID 토큰은 제공자 공개키(JWKS)로 검증하므로, 서버가 알아야 하는 건 "이 토큰이 우리 앱에 발급된 것인지" 확인할 `aud` 값뿐이다. 예외로 **회원 탈퇴(API-009)** 때만 구글 웹 클라이언트 secret(`GOOGLE_WEB_CLIENT_SECRET`)과 카카오 어드민 키(`KAKAO_ADMIN_KEY`)를 쓴다(연결 해제용).
 
 ## 1. 공통 — 서버 실행
 
@@ -60,7 +60,7 @@ cp .env.example .env        # 값 채우기 (.env 는 커밋하지 않는다)
 
 - 서버 `.env`의 `GOOGLE_WEB_CLIENT_ID=`에 넣는다.
 - 프론트에 전달한다(`GoogleSignin.configure({ webClientId })`에 같은 값).
-- 팝업의 **클라이언트 보안 비밀번호(secret)는 쓰지 않는다.** 복사·공유하지 않는다.
+- 팝업의 **클라이언트 보안 비밀번호(secret)는 서버 `.env`의 `GOOGLE_WEB_CLIENT_SECRET=`에만 넣는다.** 회원 탈퇴 때 구글 연결 해제(인증 코드 교환)에만 쓴다. 앱·채팅·문서에 공유하지 않는다. 비워 두면 구글 회원은 탈퇴할 수 없다.
 
 #### ② Android
 
@@ -164,7 +164,7 @@ cp .env.example .env        # 값 채우기 (.env 는 커밋하지 않는다)
   ```
 
   나온 `aud`를 `KAKAO_APP_KEY`에 넣는다. 다르면 서버 로그에 `ID token rejected. provider=KAKAO, reason=... audience 불일치` 가 찍힌다.
-- **어드민 키(앱 설정 → 앱 → 어드민 키)는 서버 밖으로 내보내지 않는다.** 지금 코드는 쓰지 않는다(탈퇴 시 연결 끊기를 구현할 때 사용, `04-auth-api.md` §6). 쓸 때는 **호출 허용 IP 주소**에 서버 IP를 등록한다.
+- **어드민 키(앱 설정 → 앱 → 어드민 키)는 서버 밖으로 내보내지 않는다.** 탈퇴(API-009) 때 카카오 연결 끊기에 쓴다. 서버 `.env`의 `KAKAO_ADMIN_KEY=`에 넣고, **호출 허용 IP 주소**에 서버 IP를 등록한다. 비워 두면 연결을 끊지 않고 재시도 대상(Redis `auth:unlink-tasks`)으로만 남긴다.
 
 ## 4. 서버 검증 기준 (코드에 들어간 값)
 

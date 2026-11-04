@@ -117,8 +117,8 @@ ERD 초안의 `users` 테이블을 따른다(확정 전).
 
 ### 3-5. 탈퇴(API-009)와 제공자 연결 끊기
 
-- 카카오: 앱 Admin 키로 `POST https://kapi.kakao.com/v1/user/unlink`(`target_id_type=user_id`, `target_id=sub`)를 부르면 사용자 토큰 없이 끊을 수 있다(확인 필요).
-- 구글: 토큰 폐기(`https://oauth2.googleapis.com/revoke`)에는 구글 토큰이 필요하다. 서버 주도(A)면 로그인 때 받은 refresh token을 암호화 저장해야 하고, 저장하지 않으면 서비스 쪽 데이터 삭제만 한다 — **팀 결정 필요**.
+- 카카오: 앱 Admin 키로 `POST https://kapi.kakao.com/v1/user/unlink`(`target_id_type=user_id`, `target_id=sub`)를 부르면 사용자 토큰 없이 끊을 수 있다. **서버에서 해제한다**(2026-11-04 결정, `04-auth-api.md` §3 API-009). 실제 카카오 호출은 아직 확인하지 않았다.
+- 구글: 토큰 폐기(`https://oauth2.googleapis.com/revoke`)에는 구글 토큰이 필요한데 서버는 구글 토큰을 저장하지 않는다. 그래서 **탈퇴할 때만** 앱이 재로그인으로 받은 `serverAuthCode`를 보내고, 서버가 토큰으로 바꿔 바로 해제한다(2026-11-04 결정). 이때만 웹 클라이언트 시크릿을 쓴다.
 
 ## 4. 의존성
 

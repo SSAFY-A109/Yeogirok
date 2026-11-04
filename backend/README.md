@@ -21,10 +21,14 @@ src/main/java/com/ssafy/yeogirok/
 │   │   ├── controller/   API-005·006·007
 │   │   ├── token/        서비스 액세스 토큰(HS256 JWT), 리프레시 토큰(불투명 문자열, Redis에 해시로 저장·회전)
 │   │   └── service/
-│   └── user/             회원 (provider, sub) 식별
+│   └── user/
+│       ├── controller/   API-008·009
+│       ├── domain/       회원 (provider, sub) 식별
+│       └── unlink/       탈퇴 후 제공자 연결 해제 처리와 카카오 해제 실패 재시도
 └── global/
     ├── oauth/        구글·카카오 공통. OAuthProvider(제공자 구분)
-    │   └── oidc/     구글·카카오 ID 토큰 검증 (JWKS · iss · aud · exp · nonce)
+    │   ├── oidc/     구글·카카오 ID 토큰 검증 (JWKS · iss · aud · exp · nonce)
+    │   └── client/   구글·카카오 API 호출 (구글 코드 교환·토큰 해제, 카카오 연결 해제)
     ├── response/     공통 봉투 { success, data } / { success, code, message }
     ├── exception/    ExceptionType(오류 코드), GlobalExceptionHandler
     ├── idempotency/  공통 멱등키(Redis)
