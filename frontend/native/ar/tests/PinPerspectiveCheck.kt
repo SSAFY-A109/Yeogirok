@@ -45,5 +45,21 @@ fun main() {
     tap.down(tipX, tipY, nearTarget, 1f, 1100L)
     tap.move(tipX + 9f, tipY)
     check(!tap.up(tipX + 9f, tipY, nearTarget, 1f, 1101L))
+
+    // World up projected straight up on screen: no tilt. Phone rolled: the pin follows world up.
+    val base = floatArrayOf(0f, 0f, 0f, 1f)
+    close(pinTiltDegrees(base, floatArrayOf(0f, 0.1f, 0f, 1f), 1080, 1920), 0f)
+    close(pinTiltDegrees(base, floatArrayOf(0.1f, 0f, 0f, 1f), 1080, 1080), 90f)
+    close(pinTiltDegrees(base, floatArrayOf(-0.1f, 0.1f, 0f, 1f), 1080, 1080), -45f)
+    close(pinTiltDegrees(base, floatArrayOf(0f, 0.1f, 0f, -1f), 1080, 1920), 0f) // Probe behind camera.
+    close(pinTiltDegrees(base, base, 1080, 1920), 0f) // Degenerate direction stays upright.
+    // A tilted pin keeps its hit box along its own axis, not the screen's vertical.
+    val tilted = PinTapTarget(near.copy(tiltDegrees = 90f), 1000L)
+    check(tilted.contains(tipX + near.heightPx * 0.8f, tipY, 1f, 1100L))
+    check(!tilted.contains(tipX, upperPinY, 1f, 1100L))
+    val edgeOn = PinTapTarget(near.copy(bounds = PinBounds(503f, 600f, 509f, 820f)), 1000L)
+    check(edgeOn.contains(526f, 700f, 1f, 1100L)) // A thin side retains a 48 dp target.
+    check(!edgeOn.contains(550f, 700f, 1f, 1100L))
+    check(!edgeOn.contains(506f, 700f, 1f, 1501L))
     println("AR pin perspective and touch checks passed")
 }

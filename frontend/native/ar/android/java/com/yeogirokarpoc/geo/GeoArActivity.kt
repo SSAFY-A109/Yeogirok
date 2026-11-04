@@ -47,6 +47,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private val centerHit = AtomicReference<CenterHit?>(null)
     private val placementRequested = AtomicReference<CenterHit?>(null)
     private val background = BackgroundRenderer()
+    private lateinit var pinRenderer: TipPinRenderer
+    private val projectionMatrix = FloatArray(16)
+    private val viewMatrix = FloatArray(16)
+    private val viewProjection = FloatArray(16)
     @Volatile private var session: Session? = null
     @Volatile private var sessionResumed = false
     private var resumed = false
@@ -473,8 +477,15 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        try { background.createOnGlThread(this); glReady = true }
-        catch (_: Exception) { glReady = false; runOnUiThread { status.text = "카메라 렌더러 초기화 실패" } }
+        try {
+            background.createOnGlThread(this)
+            pinRenderer = TipPinRenderer(this)
+            glReady = true
+        } catch (error: Exception) {
+            glReady = false
+            Log.e("GeoArActivity", "AR renderer initialization failed", error)
+            runOnUiThread { status.text = "AR 렌더러 초기화 실패" }
+        }
     }
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
         width = w; height = h; GLES20.glViewport(0, 0, w, h)
@@ -528,6 +539,9 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             current.setCameraTextureName(background.textureId)
             val frame = current.update()
             background.draw(frame)
+            frame.camera.getProjectionMatrix(projectionMatrix, 0, 0.1f, 1000f)
+            frame.camera.getViewMatrix(viewMatrix, 0)
+            Matrix.multiplyMM(viewProjection, 0, projectionMatrix, 0, viewMatrix, 0)
             if (cloudMode) {
                 DepthOcclusion.acquire(frame, depthSupported).use { depth -> drawCloudFrame(current, frame, depth) }
                 return
@@ -600,7 +614,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             val tracking = geoTrackingDecision(frame.camera.trackingState, earthTracking,
                 point?.trackingState, reference?.trackingState, validPlacement, restore != null)
             val ready = tracking.canConfirm
-            overlay.referencePoint = if (tracking.showReference) project(frame, reference!!.pose) else null
+            overlay.referencePoint = if (tracking.showReference) project(reference!!.pose) else null
             // Read both anchors after the same Session.update(); never compare old-session XYZ.
             val estimate = if (ready && restore != null && referenceTracking) {
                 val restoredPose = point!!.pose
@@ -615,7 +629,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     .put("groundTruth", false)
             } else null
             // Show the local pin even while Earth is still localizing.
-            val projectedPin = if (tracking.showAnchor) projectWithGuidance(frame, point!!.pose) else null
+            val projectedPin = if (tracking.showAnchor) renderPin(point!!.pose, selected = false) else null
             overlay.screenPoint = projectedPin?.takeIf { it.visible }
             val pinStatus = when {
                 !cameraTracking -> "핀 숨김: 카메라 추적 회복 대기 (${frame.camera.trackingFailureReason})"
@@ -821,15 +835,15 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val visible = cameraTracking && validPlacement && !cloud.failed && point?.trackingState == TrackingState.TRACKING
         val reference = measurementAnchor
         val referenceVisible = cameraTracking && reference?.trackingState == TrackingState.TRACKING
-        val projection = if (visible) projectWithGuidance(frame, point!!.pose).let { depth?.apply(it) ?: it } else null
+        val projection = if (visible) renderPin(point!!.pose, overlay.markerSelected, depth) else null
         overlay.screenPoint = projection?.takeIf { it.visible }
         tapTarget.set(if (localTip != null && projection?.visible == true)
             PinTapTarget(projection, SystemClock.elapsedRealtime()) else null)
         val sheetLocal = if (visible) frame.camera.displayOrientedPose.inverse().transformPoint(point!!.pose.translation) else null
         val sheetDistance = sheetLocal?.let { kotlin.math.sqrt(it.sumOf { value -> value.toDouble() * value }) }
         val otherPins = if (exploring && restore != null && (!navigationMode || navigation?.canStartResolve == true))
-            nearbyAnchors?.update(current, frame) { pose ->
-                projectWithGuidance(frame, pose).let { depth?.apply(it) ?: it }
+            nearbyAnchors?.update(current, frame) { pose, id ->
+                renderPin(pose, overlay.selectedTipId == id, depth)
             } ?: emptyList() else emptyList()
         overlay.otherPins = otherPins
         val now = SystemClock.elapsedRealtime()
@@ -848,7 +862,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 }
             }
         }
-        overlay.referencePoint = if (referenceVisible) project(frame, reference!!.pose) else null
+        overlay.referencePoint = if (referenceVisible) project(reference!!.pose) else null
         val direction = if (visible) relativeDirection(frame.camera.displayOrientedPose.inverse().transformPoint(point!!.pose.translation)) else null
         if (navigationMode) {
             val local = if (visible) frame.camera.displayOrientedPose.inverse().transformPoint(point!!.pose.translation) else null
@@ -989,19 +1003,26 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
     }
 
-    private fun project(frame: Frame, pose: Pose): PointF? {
-        val p = projectWithGuidance(frame, pose)
+    private fun project(pose: Pose): PointF? {
+        val p = projectWithGuidance(pose)
         return if (p.visible) PointF(p.x!!, p.y!!) else null
     }
 
-    private fun projectWithGuidance(frame: Frame, pose: Pose): PinProjection {
-        val projection = FloatArray(16); val view = FloatArray(16); val vp = FloatArray(16)
-        frame.camera.getProjectionMatrix(projection, 0, 0.1f, 1000f)
-        frame.camera.getViewMatrix(view, 0)
-        Matrix.multiplyMM(vp, 0, projection, 0, view, 0)
+    private fun renderPin(pose: Pose, selected: Boolean, depth: DepthOcclusion? = null): PinProjection {
+        val pin = projectWithGuidance(pose).let { depth?.apply(it) ?: it }
+        if (!pin.visible) return pin
+        return pin.copy(bounds = pinRenderer.draw(viewProjection, pose, selected, width, height))
+    }
+
+    private fun projectWithGuidance(pose: Pose): PinProjection {
         val result = FloatArray(4)
-        Matrix.multiplyMV(result, 0, vp, 0, floatArrayOf(pose.tx(), pose.ty(), pose.tz(), 1f), 0)
-        return projectPin(result, width, height, projection[0], projection[5])
+        Matrix.multiplyMV(result, 0, viewProjection, 0, floatArrayOf(pose.tx(), pose.ty(), pose.tz(), 1f), 0)
+        val pin = projectPin(result, width, height, projectionMatrix[0], projectionMatrix[5])
+        if (!pin.visible) return pin
+        // ARCore world +Y is gravity-up: rotate the pin to follow it instead of the phone's roll.
+        val top = FloatArray(4)
+        Matrix.multiplyMV(top, 0, viewProjection, 0, floatArrayOf(pose.tx(), pose.ty() + PIN_UP_PROBE_METERS, pose.tz(), 1f), 0)
+        return pin.copy(tiltDegrees = pinTiltDegrees(result, top, width, height))
     }
 
     private inner class PinOverlay : View(this@GeoArActivity) {
@@ -1018,7 +1039,6 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         @Volatile var otherPins: List<NearbyArPin> = emptyList()
         var onPoint: ((Float, Float) -> Unit)? = null
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val marker = assets.open("figma/51db5.png").use { BitmapFactory.decodeStream(it) }
         private val placementReticle = ArSvg(this@GeoArActivity, "005f7.svg")
         private val placementCenter = ArSvg(this@GeoArActivity, "1e810.svg")
         private val selectedGround = ArSvg(this@GeoArActivity, "d2771.svg")
@@ -1066,20 +1086,16 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 paint.color = Color.WHITE
                 canvas.drawCircle(r.x, r.y, 3 * density, paint)
             }
-            val pins = otherPins.map { it.projection to (selectedTipId == it.tip.getString("id")) } +
-                listOfNotNull(screenPoint?.let { it to markerSelected })
-            pins.sortedBy { it.first.heightPx }.forEach { drawPin(canvas, it.first, it.second) }
+            val selected = if (markerSelected) screenPoint
+                else otherPins.firstOrNull { it.tip.getString("id") == selectedTipId }?.projection
+            if (selected != null) drawSelectedGround(canvas, selected)
         }
-        private fun drawPin(canvas: Canvas, p: PinProjection, selected: Boolean) {
-            canvas.save(); canvas.translate(p.x!!, p.y!!)
-            val selectedScale = if (selected) 1.4f else 1f
-            if (selected) {
-                val groundWidth = p.widthPx * selectedScale * 28f / 48f
-                val groundHeight = groundWidth * 10f / 28f
-                selectedGround.setBounds((-groundWidth / 2).toInt(), (-groundHeight / 2).toInt(), (groundWidth / 2).toInt(), (groundHeight / 2).toInt())
-                selectedGround.draw(canvas)
-            }
-            canvas.drawBitmap(marker, null, RectF(-p.widthPx * selectedScale / 2f, -p.heightPx * selectedScale, p.widthPx * selectedScale / 2f, 0f), paint)
+        private fun drawSelectedGround(canvas: Canvas, p: PinProjection) {
+            canvas.save(); canvas.translate(p.x!!, p.y!!); canvas.rotate(p.tiltDegrees)
+            val groundWidth = p.widthPx * 1.4f * 28f / 48f
+            val groundHeight = groundWidth * 10f / 28f
+            selectedGround.setBounds((-groundWidth / 2).toInt(), (-groundHeight / 2).toInt(), (groundWidth / 2).toInt(), (groundHeight / 2).toInt())
+            selectedGround.draw(canvas)
             canvas.restore()
         }
         override fun onTouchEvent(event: MotionEvent): Boolean {
