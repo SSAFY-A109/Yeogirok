@@ -18,7 +18,7 @@ import com.ssafy.yeogirok.global.oauth.oidc.IdTokenVerifier;
 import com.ssafy.yeogirok.global.oauth.oidc.OidcProperties;
 
 /**
- * 실제 JWKS 대신 테스트 공개키로 검증하는 IdTokenVerifier, 앞으로 돌릴 수 있는 시계,
+ * 실제 JWKS 대신 테스트 공개키로 검증하는 IdTokenVerifier, 앞으로 돌릴 수 있는 시계, 가짜 카카오·구글 연결 해제,
  * 리프레시 토큰을 둘 실제 Redis(Testcontainers, infra 로컬 compose 와 같은 이미지).
  */
 @TestConfiguration
@@ -47,6 +47,18 @@ public class TestAuthConfig {
 	@Primary
 	public MutableClock mutableClock() {
 		return new MutableClock(START);
+	}
+
+	@Bean
+	@Primary
+	public FakeKakaoUnlinkClient fakeKakaoUnlinkClient() {
+		return new FakeKakaoUnlinkClient();
+	}
+
+	@Bean
+	@Primary
+	public FakeGoogleOAuthClient fakeGoogleOAuthClient() {
+		return new FakeGoogleOAuthClient();
 	}
 
 	@Bean

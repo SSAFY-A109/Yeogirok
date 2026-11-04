@@ -21,3 +21,9 @@ auth:
     kakao:
       allowed-audiences:
         - test-kakao-app-key
+  unlink:
+    kakao-admin-key: test-kakao-admin-key
+    google-client-id: test-google-web-client-id
+    google-client-secret: test-google-client-secret
+    # 테스트 중에 재시도 스케줄이 돌지 않게 길게 둔다. 재시도는 테스트에서 직접 호출한다.
+    retry-interval: P1D
