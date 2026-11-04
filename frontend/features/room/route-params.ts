@@ -1,3 +1,5 @@
+import type { PlaceTab } from "@/features/room/components/place-tabs";
+
 type RouteParam = string | string[] | undefined;
 
 function firstValue(value: RouteParam): string | undefined {
@@ -41,6 +43,11 @@ export function parsePlaceIds(value: RouteParam): number[] {
   }
 
   return ids;
+}
+
+/** 여행방 상세 탭. 모르는 값이면 장소 탭이다. */
+export function parseRoomDetailTab(value: RouteParam): PlaceTab {
+  return firstValue(value) === "schedule" ? "schedule" : "places";
 }
 
 /** 화면에 글자로만 보여 줄 라우트 파라미터. 비어 있으면 `null`. */
