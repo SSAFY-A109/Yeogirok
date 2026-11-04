@@ -6,6 +6,10 @@ Spring Boot 4.0.8 · Java 21 · Gradle · PostgreSQL · Redis · Spring Security
 
 로컬에 PostgreSQL과 Redis가 떠 있어야 한다. 레포 루트에서 `docker compose -f infra/docker-compose.local.yml up -d`로 켠다. 접속 정보 기본값은 `application-local.yaml`에 있고 `.env`의 `DB_*`·`REDIS_*`로 바꿀 수 있다.
 
+> **로컬 실행 전에 꼭 채울 값:** `.env`에 `JWT_SECRET`, `GOOGLE_WEB_CLIENT_ID`, `KAKAO_APP_KEY`가 없으면 앱이 뜨지 않는다.
+> 비밀·앱별 값이라 기본값을 일부러 두지 않았다. 받는 방법은 [docs/05-social-login-setup.md](docs/05-social-login-setup.md).
+> `GOOGLE_WEB_CLIENT_SECRET`·`KAKAO_ADMIN_KEY`는 비워도 뜨지만, 탈퇴할 때 구글 회원은 탈퇴할 수 없고 카카오 연결은 끊지 못한다.
+
 ```bash
 cp .env.example .env        # 값 채우기 — docs/05-social-login-setup.md
 ./gradlew bootRun           # http://localhost:8080/swagger-ui.html

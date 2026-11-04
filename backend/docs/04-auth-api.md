@@ -151,7 +151,7 @@ Notion 상세(2026-11-04 확인)를 따른다.
 5. 커밋 뒤 제공자 연결을 해제한다. 실패해도 탈퇴는 성공한다.
    - 카카오: 서버가 어드민 키로 `POST /v1/user/unlink`(`target_id_type=user_id`, `target_id=sub`). 실패하면 Redis(`auth:unlink-task:{회원 id}`, 목록 `auth:unlink-tasks`)에 원래 sub와 함께 남기고 `auth.unlink.retry-interval`마다 `max-attempts`까지 다시 시도한다(1시간 / 24회, 약 하루).
    - 구글: 2에서 받은 리프레시 토큰(없으면 액세스 토큰)으로 `POST https://oauth2.googleapis.com/revoke`. 토큰을 저장하지 않으므로 실패하면 로그만 남기고 다시 시도하지 않는다.
-6. 이미 발급된 액세스 토큰은 만료까지 서명이 유효하다. 회원을 조회하는 API는 탈퇴 회원을 A003으로 막는다.
+6. 이미 발급된 액세스 토큰은 만료까지 서명이 유효하다. 커밋 뒤 Redis에 `auth:withdrawn:{회원 id}`를 액세스 토큰 수명만큼 남기고, 서비스 JWT 검증 단계에서 이 키가 있으면 A003으로 막는다. 그래서 모든 API가 따로 탈퇴 여부를 확인하지 않아도 된다.
 
 실패:
 
