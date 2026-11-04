@@ -80,7 +80,7 @@ public class FootprintService {
 		}
 		footprint.softDelete(Instant.now());
 		footprintRepository.flush();
-		return FootprintDeleteResponse.pending();
+		return FootprintDeleteResponse.applied();
 	}
 
 	/**

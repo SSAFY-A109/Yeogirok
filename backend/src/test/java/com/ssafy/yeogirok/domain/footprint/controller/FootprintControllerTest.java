@@ -327,12 +327,12 @@ class FootprintControllerTest {
 
 	@Test
 	void API_045_삭제하면_deleted와_statisticsStatus로_응답한다() throws Exception {
-		given(footprintService.delete(USER_ID, 10L, 3)).willReturn(FootprintDeleteResponse.pending());
+		given(footprintService.delete(USER_ID, 10L, 3)).willReturn(FootprintDeleteResponse.applied());
 
 		mockMvc.perform(delete("/api/v1/footprints/10").param("version", "3").with(asUser(USER_ID)))
 			.andExpect(status().isOk())
 			.andExpect(content().json("""
-				{ "success": true, "data": { "deleted": true, "statisticsStatus": "PENDING" } }
+				{ "success": true, "data": { "deleted": true, "statisticsStatus": "APPLIED" } }
 				""", JsonCompareMode.STRICT));
 	}
 

@@ -196,7 +196,7 @@ class FootprintServiceTest {
 		FootprintDeleteResponse response = footprintService.delete(OWNER, id, 1);
 
 		assertThat(response.deleted()).isTrue();
-		assertThat(response.statisticsStatus()).isEqualTo(StatisticsStatus.PENDING);
+		assertThat(response.statisticsStatus()).isEqualTo(StatisticsStatus.APPLIED);
 		em.clear();
 		Footprint saved = em.find(Footprint.class, id);  // 행은 남아 있다
 		assertThat(saved.getDeletedAt()).isNotNull();
