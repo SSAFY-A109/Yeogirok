@@ -1,11 +1,12 @@
 package com.ssafy.yeogirok.support;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 
-/** 테스트에서 서버 현재 시각을 정하고 옮기는 시계. */
+/** 만료 시나리오를 위해 시각을 앞으로 돌릴 수 있는 시계. */
 public class MutableClock extends Clock {
 
 	private Instant now;
@@ -14,13 +15,12 @@ public class MutableClock extends Clock {
 		this.now = now;
 	}
 
-	public void setInstant(Instant now) {
-		this.now = now;
+	public void advance(Duration duration) {
+		now = now.plus(duration);
 	}
 
-	@Override
-	public Instant instant() {
-		return now;
+	public void set(Instant instant) {
+		now = instant;
 	}
 
 	@Override
@@ -30,6 +30,11 @@ public class MutableClock extends Clock {
 
 	@Override
 	public Clock withZone(ZoneId zone) {
-		throw new UnsupportedOperationException();
+		return this;
+	}
+
+	@Override
+	public Instant instant() {
+		return now;
 	}
 }

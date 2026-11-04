@@ -7,7 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static com.ssafy.yeogirok.support.WebMvcSecurity.asUser;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,14 +44,14 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
-import com.ssafy.yeogirok.global.security.PermitAllSecurityConfig;
+import com.ssafy.yeogirok.support.WebMvcSecurity;
 
 /**
  * API-041 HTTP 계약(요청 형식 오류 코드, 응답 모양, 멱등키 연결). 값 규칙은 FootprintCreateServiceTest,
  * 멱등키 동작 자체(C005·C018·재조회)는 IdempotencyServiceTest 가 본다.
  */
 @WebMvcTest(FootprintController.class)
-@Import(PermitAllSecurityConfig.class)
+@Import(WebMvcSecurity.class)
 class FootprintCreateControllerTest {
 
 	static final Long USER_ID = 1L;
@@ -234,7 +234,4 @@ class FootprintCreateControllerTest {
 			.contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
-	private static org.springframework.test.web.servlet.request.RequestPostProcessor asUser(Long userId) {
-		return jwt().jwt(token -> token.subject(String.valueOf(userId)));
-	}
 }

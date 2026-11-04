@@ -108,7 +108,7 @@ class FootprintCreateServiceTest {
 
 	@BeforeEach
 	void resetFakes() {
-		clock.setInstant(NOW);
+		clock.set(NOW);
 		geocoder.willReturn(YEOKSAM);
 	}
 
@@ -223,19 +223,19 @@ class FootprintCreateServiceTest {
 	@Test
 	void 자정이_지나도_04시_전이면_같은_구간이다() {
 		existing(OWNER, LAT, LNG, NOW);  // 2026-11-04 12:00
-		clock.setInstant(Instant.parse("2026-11-04T18:30:00Z"));  // 2026-11-05 03:30
+		clock.set(Instant.parse("2026-11-04T18:30:00Z"));  // 2026-11-05 03:30
 
 		expect(() -> service.create(OWNER, command(LAT, LNG, clock.instant(), null, List.of("CAFE"))),
 			ExceptionType.FOOTPRINT_TOO_CLOSE_TODAY);
 
-		clock.setInstant(Instant.parse("2026-11-04T19:00:00Z"));  // 2026-11-05 04:00, 다음 구간
+		clock.set(Instant.parse("2026-11-04T19:00:00Z"));  // 2026-11-05 04:00, 다음 구간
 		service.create(OWNER, command(LAT, LNG, clock.instant(), null, List.of("CAFE")));
 	}
 
 	@Test
 	void 구간은_서버_시각으로_정하고_capturedAt으로_바꾸지_않는다() {
 		existing(OWNER, LAT, LNG, DAY_START.minusSeconds(60));  // 전날 구간
-		clock.setInstant(DAY_START.plusSeconds(20));            // 04:00:20, 새 구간
+		clock.set(DAY_START.plusSeconds(20));            // 04:00:20, 새 구간
 		// 기기가 03:59:50 에 측정했어도 서버 시각이 새 구간이므로 전날 발자취와 겹치지 않는다.
 		service.create(OWNER, command(LAT, LNG, DAY_START.minusSeconds(10), null, List.of("CAFE")));
 
@@ -276,7 +276,7 @@ class FootprintCreateServiceTest {
 		assumeTrue(isPostgres(), "PostgreSQL 에서만 확인한다");
 		Long userId = 919191L;
 		Instant now = Instant.now();
-		clock.setInstant(now);
+		clock.set(now);
 		int requests = 5;
 		CountDownLatch start = new CountDownLatch(1);
 		ExecutorService executor = Executors.newFixedThreadPool(requests);

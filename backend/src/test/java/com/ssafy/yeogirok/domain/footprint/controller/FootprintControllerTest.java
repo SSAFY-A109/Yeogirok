@@ -1,7 +1,7 @@
 package com.ssafy.yeogirok.domain.footprint.controller;
 
 import static org.mockito.BDDMockito.given;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static com.ssafy.yeogirok.support.WebMvcSecurity.asUser;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -28,7 +28,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
@@ -39,7 +38,7 @@ import com.ssafy.yeogirok.domain.footprint.service.FootprintService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
-import com.ssafy.yeogirok.global.security.PermitAllSecurityConfig;
+import com.ssafy.yeogirok.support.WebMvcSecurity;
 
 /**
  * HTTP 계약(경로·응답 모양·오류 코드). 규칙 자체는 FootprintServiceTest·FootprintFinderTest 가 본다.
@@ -48,7 +47,7 @@ import com.ssafy.yeogirok.global.security.PermitAllSecurityConfig;
  * 회원 기능의 SecurityConfig 로 바뀌면 이 Import 도 바꾼다.
  */
 @WebMvcTest(FootprintController.class)
-@Import(PermitAllSecurityConfig.class)
+@Import(WebMvcSecurity.class)
 class FootprintControllerTest {
 
 	static final Long USER_ID = 1L;
@@ -288,7 +287,4 @@ class FootprintControllerTest {
 		return mockMvc.perform(patch(path).with(asUser(userId)).contentType(MediaType.APPLICATION_JSON).content(json));
 	}
 
-	private static RequestPostProcessor asUser(Long userId) {
-		return jwt().jwt(token -> token.subject(String.valueOf(userId)));
-	}
 }

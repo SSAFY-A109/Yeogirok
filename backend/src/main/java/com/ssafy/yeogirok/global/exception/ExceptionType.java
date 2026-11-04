@@ -26,6 +26,8 @@ public enum ExceptionType {
 	INVALID_VALUE_FORMAT(BAD_REQUEST, "C002", "요청 필드의 타입 또는 형식이 올바르지 않습니다."),
 	NOT_ALLOWED_VALUE(BAD_REQUEST, "C003", "허용하지 않는 요청값입니다."),
 	VERSION_MISMATCH(CONFLICT, "C004", "리소스 버전이 일치하지 않습니다. 최신 정보를 다시 조회해 주세요."),
+	// API-005 provider 값 오류. 명세대로 코드는 C003 이고 메시지만 구체적이다.
+	UNSUPPORTED_PROVIDER(BAD_REQUEST, "C003", "provider 는 google 또는 kakao 여야 합니다."),
 	IDEMPOTENCY_KEY_REUSED(CONFLICT, "C005", "같은 멱등키로 다른 내용의 요청을 보냈습니다."),
 	INVALID_CURSOR(BAD_REQUEST, "C006", "페이지 커서가 유효하지 않습니다."),
 	PAGE_SIZE_OUT_OF_RANGE(BAD_REQUEST, "C007", "페이지 크기가 허용 범위를 벗어났습니다."),
@@ -47,6 +49,14 @@ public enum ExceptionType {
 	ACCESS_TOKEN_EXPIRED(UNAUTHORIZED, "A002", "서비스 액세스 토큰이 만료되었습니다."),
 	ACCESS_TOKEN_INVALID(UNAUTHORIZED, "A003", "서비스 액세스 토큰이 유효하지 않습니다."),
 	ROLE_INSUFFICIENT(FORBIDDEN, "A004", "요청에 필요한 권한이 없습니다."),
+	ID_TOKEN_INVALID(UNAUTHORIZED, "A005", "소셜 ID 토큰 검증에 실패했습니다."),
+	ID_TOKEN_NONCE_MISMATCH(UNAUTHORIZED, "A006", "ID 토큰의 nonce 가 요청값과 다릅니다."),
+	REFRESH_TOKEN_INVALID(UNAUTHORIZED, "A007", "서비스 리프레시 토큰이 유효하지 않습니다."),
+	REFRESH_TOKEN_EXPIRED(UNAUTHORIZED, "A008", "서비스 리프레시 토큰이 만료되었습니다."),
+	REFRESH_TOKEN_REVOKED(UNAUTHORIZED, "A009", "서비스 리프레시 토큰이 폐기되었습니다."),
+	REFRESH_TOKEN_REUSED(UNAUTHORIZED, "A010", "이미 재발급에 사용된 리프레시 토큰입니다."),
+	REAUTHENTICATION_REQUIRED(UNAUTHORIZED, "A011", "최근 재인증이 필요합니다."),
+	GOOGLE_AUTH_CODE_INVALID(UNAUTHORIZED, "A029", "구글 인증 코드가 유효하지 않거나 다른 계정의 코드입니다."),
 
 	/* ── 발자취 F ───────────────────────────────────────────── */
 

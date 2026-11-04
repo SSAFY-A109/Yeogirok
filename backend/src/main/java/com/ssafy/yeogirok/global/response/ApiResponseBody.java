@@ -6,7 +6,7 @@ import lombok.Getter;
  * 공통 응답 봉투. 성공·실패 두 모양 외로 늘어나지 않도록 닫아 둔다.
  *
  * <pre>
- * { "success": true,  "data": { … } }      빈 성공은 data 를 생략한다
+ * { "success": true,  "data": { … } }      빈 성공은 data 가 null 이다
  * { "success": false, "code": "C001", "message": "…" }
  * </pre>
  *

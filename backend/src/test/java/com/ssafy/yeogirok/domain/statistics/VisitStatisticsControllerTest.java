@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static com.ssafy.yeogirok.support.WebMvcSecurity.asUser;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -32,11 +32,11 @@ import org.springframework.test.web.servlet.ResultActions;
 import com.ssafy.yeogirok.domain.statistics.dto.VisitStatisticsResponse;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
-import com.ssafy.yeogirok.global.security.PermitAllSecurityConfig;
+import com.ssafy.yeogirok.support.WebMvcSecurity;
 
 /** API-046 HTTP 계약. 집계 규칙은 VisitStatisticsServiceTest 가 본다. */
 @WebMvcTest(VisitStatisticsController.class)
-@Import(PermitAllSecurityConfig.class)
+@Import(WebMvcSecurity.class)
 class VisitStatisticsControllerTest {
 
 	@Autowired
@@ -131,6 +131,6 @@ class VisitStatisticsControllerTest {
 	}
 
 	private ResultActions getAs(String path) throws Exception {
-		return mockMvc.perform(get(path).with(jwt().jwt(token -> token.subject("1"))));
+		return mockMvc.perform(get(path).with(asUser(1L)));
 	}
 }
