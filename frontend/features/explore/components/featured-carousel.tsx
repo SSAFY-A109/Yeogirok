@@ -4,10 +4,11 @@ import { router } from "expo-router";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 
 import { Icon } from "@/components/ui/icon";
+import { MediaPhoto } from "@/components/ui/media-photo";
 import { Text } from "@/components/ui/text";
+import { formatCourseFacts, type FeaturedCourse } from "@/features/course/model";
 import { cn } from "@/lib/utils";
-import type { FeaturedCourse } from "../model";
-import { PhotoPlaceholder, toneAt } from "./photo-placeholder";
+import { AuthorAvatars } from "./author-avatars";
 
 const COVER_HEIGHT = 218;
 const HIGHLIGHT_OVERLAP = 53;
@@ -48,7 +49,7 @@ export function FeaturedCarousel({ courses }: { courses: FeaturedCourse[] }) {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             keyExtractor={(course) => {
-              return course.id;
+              return String(course.id);
             }}
             getItemLayout={(_, itemIndex) => {
               return { length: width, offset: width * itemIndex, index: itemIndex };
@@ -91,7 +92,7 @@ function HeroCourseCard({ course }: { course: FeaturedCourse }) {
           accessibilityLabel={`${course.title} 자세히 보기`}
           hitSlop={{ top: 7, bottom: 7 }}
           onPress={() => {
-            return router.push({ pathname: "/courses/[courseId]", params: { courseId: course.id } });
+            return router.push({ pathname: "/courses/[courseId]", params: { courseId: String(course.id) } });
           }}
           className="h-8 flex-row items-center justify-center gap-2 self-start rounded-full bg-card px-4 active:bg-accent"
           testID="home.featured.open"
@@ -101,15 +102,17 @@ function HeroCourseCard({ course }: { course: FeaturedCourse }) {
         </Pressable>
       </View>
       <View className="flex-row justify-center gap-3" style={{ marginTop: -HIGHLIGHT_OVERLAP }}>
-        {course.highlights.map((item, position) => {
+        {course.previewPlaces.map((item) => {
           return (
-            <View key={`${item.day}-${item.name}`} className="gap-2" style={{ width: THUMBNAIL_SIZE }}>
-              <PhotoPlaceholder size={THUMBNAIL_SIZE} tone={toneAt(position)} />
+            <View key={item.visitId} className="gap-2" style={{ width: THUMBNAIL_SIZE }}>
+              <View style={{ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE }}>
+                <MediaPhoto uri={item.imageUrl} accessibilityLabel={`${item.name} 사진`} className="size-full" />
+              </View>
               <View>
                 <Text numberOfLines={1} className="text-label text-foreground">{item.name}</Text>
                 <View className="flex-row items-center gap-1">
                   <Text className="text-caption font-medium text-primary">{`${item.day}일차`}</Text>
-                  <Text numberOfLines={1} className="shrink text-caption text-muted-foreground">{item.tag}</Text>
+                  {item.categoryName !== null && <Text numberOfLines={1} className="shrink text-caption text-muted-foreground">{item.categoryName}</Text>}
                 </View>
               </View>
             </View>
@@ -117,10 +120,8 @@ function HeroCourseCard({ course }: { course: FeaturedCourse }) {
         })}
       </View>
       <View className="flex-row items-center gap-2 px-2 pb-2 pt-2">
-        <View className="size-5 items-center justify-center rounded-full bg-brand-muted">
-          <Text className="text-micro text-primary">{course.author}</Text>
-        </View>
-        <Text className="text-caption text-foreground">{`장소 ${course.placeCount}곳 / ${course.duration} / ${course.transport}`}</Text>
+        <AuthorAvatars authors={course.authors} size={20} overlap={4} />
+        <Text className="text-caption text-foreground">{formatCourseFacts(course)}</Text>
       </View>
     </View>
   );

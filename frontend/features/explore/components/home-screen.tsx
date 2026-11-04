@@ -6,24 +6,25 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DesignAsset } from "@/components/ui/design-asset";
 import { Icon } from "@/components/ui/icon";
+import { MediaPhoto } from "@/components/ui/media-photo";
 import { SearchField } from "@/components/ui/search-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { useCategories } from "@/features/common/api/queries";
+import type { Category } from "@/features/common/model";
+import { useCourseRecommendations, usePopularPlaces } from "@/features/course/api/queries";
+import { getCourseErrorMessage } from "@/features/course/errors";
+import type { PopularPlace } from "@/features/course/model";
 import { cn } from "@/lib/utils";
-import { useHome, useRanking } from "../api/queries";
-import type { CategoryId, RankedPlace } from "../model";
-import { categoryIcons } from "./category-icons";
+import { categoryIconOf } from "./category-icons";
 import { FeaturedCarousel } from "./featured-carousel";
-import { PhotoPlaceholder, toneAt } from "./photo-placeholder";
 import { PlaceLocationMap } from "./place-location-map";
 import { InlineMessage } from "./query-states";
 import { RoomSelectSheet } from "./room-select-sheet";
 
-export function HomeScreen() {
-  const home = useHome();
-  const [category, setCategory] = useState<CategoryId>("NATURE");
-  const [subcategory, setSubcategory] = useState("전체");
+const RANKING_THUMBNAIL_SIZE = 64;
 
+export function HomeScreen() {
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background" testID="home.screen">
       <View className="flex-row items-center gap-3 px-5 pb-4 pt-2">
@@ -44,75 +45,12 @@ export function HomeScreen() {
         </Pressable>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="pb-4" keyboardShouldPersistTaps="handled">
-        {home.isPending && <HomeSkeleton />}
-        {home.isError && (
-          <View className="px-5 pt-4">
-            <InlineMessage
-              title="코스를 불러오지 못했어요"
-              description="잠시 후 다시 시도해 주세요."
-              actionLabel="다시 시도"
-              onAction={() => {
-                return void home.refetch();
-              }}
-              testID="home.error"
-            />
-          </View>
-        )}
-        {home.data && (
-          <>
-            <FeaturedCarousel courses={home.data.featured} />
-            <View className="gap-4 pb-4">
-              <View className="h-2 bg-muted" />
-              <Text accessibilityRole="header" className="px-5 pt-4 text-h3 text-foreground">어떤 곳을 찾으세요?</Text>
-              <View className="flex-row flex-wrap gap-y-4 px-2">
-                {home.data.categories.map((item) => {
-                  const selected = item.id === category;
-
-                  return (
-                    <Pressable
-                      key={item.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={item.label}
-                      accessibilityState={{ selected }}
-                      onPress={() => {
-                        setCategory(item.id);
-                        setSubcategory("전체");
-                      }}
-                      className="w-1/4 items-center gap-2"
-                      testID={`home.category.${item.id}`}
-                    >
-                      <View className={cn("items-center justify-center rounded-lg", selected ? "bg-accent" : "bg-muted")} style={{ width: 60, height: 60 }}>
-                        <Icon as={categoryIcons[item.icon]} size={26} className={selected ? "text-primary" : "text-icon"} />
-                      </View>
-                      <Text className={cn("text-center text-caption", selected ? "font-medium text-primary" : "text-foreground-secondary")}>{item.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-5" className="grow-0">
-                {home.data.subcategories[category].map((name) => {
-                  const selected = name === subcategory;
-
-                  return (
-                    <Pressable
-                      key={name}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      hitSlop={{ top: 6, bottom: 6 }}
-                      onPress={() => {
-                        return setSubcategory(name);
-                      }}
-                      className={cn("h-8 items-center justify-center rounded-full px-3", selected ? "bg-foreground" : "bg-muted")}
-                    >
-                      <Text className={cn("text-label-sm", selected ? "text-primary-foreground" : "text-foreground")}>{name}</Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-              <RankingSection category={category} subcategory={subcategory} />
-            </View>
-          </>
-        )}
+        <FeaturedSection />
+        <View className="gap-4 pb-4">
+          <View className="h-2 bg-muted" />
+          <Text accessibilityRole="header" className="px-5 pt-4 text-h3 text-foreground">어떤 곳을 찾으세요?</Text>
+          <CategoryRankingSection />
+        </View>
         {__DEV__ && (
           <Pressable
             accessibilityRole="button"
@@ -131,10 +69,122 @@ export function HomeScreen() {
   );
 }
 
-function RankingSection({ category, subcategory }: { category: CategoryId; subcategory: string }) {
-  const ranking = useRanking(category, subcategory);
-  const [sheetPlace, setSheetPlace] = useState<RankedPlace>();
+// #region 추천 코스
+
+function FeaturedSection() {
+  const recommendations = useCourseRecommendations();
+
+  if (recommendations.isPending) {
+    return (
+      <View accessibilityLabel="추천 코스 불러오는 중" className="gap-4 px-5 pb-8 pt-3" testID="home.loading">
+        <Skeleton className="h-56 w-full rounded-lg" />
+        <Skeleton className="h-6 w-skeleton-heading" />
+      </View>
+    );
+  }
+
+  if (recommendations.isError) {
+    return (
+      <View className="px-5 pb-8 pt-4">
+        <InlineMessage
+          title="추천 코스를 불러오지 못했어요"
+          description={getCourseErrorMessage(recommendations.error)}
+          actionLabel="다시 시도"
+          onAction={() => {
+            return void recommendations.refetch();
+          }}
+          testID="home.error"
+        />
+      </View>
+    );
+  }
+
+  if (recommendations.data.length === 0) {
+    return (
+      <View className="px-5 pb-8 pt-4">
+        <InlineMessage title="아직 추천할 코스가 없어요" description="검색에서 다른 사람의 코스를 찾아보세요." testID="home.featured.empty" />
+      </View>
+    );
+  }
+
+  return <FeaturedCarousel courses={recommendations.data} />;
+}
+
+// #endregion
+
+// #region 카테고리·인기 장소
+
+function CategoryRankingSection() {
+  const categories = useCategories();
+  const [picked, setPicked] = useState<string>();
+
+  if (categories.isPending) {
+    return (
+      <View accessibilityLabel="카테고리 불러오는 중" className="px-5">
+        <Skeleton className="h-24 w-full" />
+      </View>
+    );
+  }
+
+  if (categories.isError) {
+    return (
+      <View className="px-5">
+        <InlineMessage title="카테고리를 불러오지 못했어요" actionLabel="다시 시도" onAction={() => {
+          return void categories.refetch();
+        }} testID="home.categories.error" />
+      </View>
+    );
+  }
+
+  const category = picked ?? categories.data[0]?.code ?? null;
+
+  return (
+    <>
+      <CategoryGrid categories={categories.data} selected={category} onSelect={setPicked} />
+      <RankingSection category={category} />
+    </>
+  );
+}
+
+function CategoryGrid({ categories, selected, onSelect }: { categories: Category[]; selected: string | null; onSelect: (code: string) => void }) {
+  return (
+    <View className="flex-row flex-wrap gap-y-4 px-2">
+      {categories.map((item) => {
+        const active = item.code === selected;
+
+        return (
+          <Pressable
+            key={item.code}
+            accessibilityRole="button"
+            accessibilityLabel={item.name}
+            accessibilityState={{ selected: active }}
+            onPress={() => {
+              onSelect(item.code);
+            }}
+            className="w-1/4 items-center gap-2"
+            testID={`home.category.${item.code}`}
+          >
+            <View className={cn("items-center justify-center rounded-lg", active ? "bg-accent" : "bg-muted")} style={{ width: 60, height: 60 }}>
+              <Icon as={categoryIconOf(item.code)} size={26} className={active ? "text-primary" : "text-icon"} />
+            </View>
+            <Text className={cn("text-center text-caption", active ? "font-medium text-primary" : "text-foreground-secondary")}>{item.name}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 새 여행방 화면은 숫자 장소 id만 받는다. TourAPI 장소의 숫자 식별값만 넘기고, 나머지는 준비 중으로 둔다(TBD). */
+function carryOverPlaceId(place: PopularPlace): string | null {
+  return place.provider === "TOUR_API" && place.providerPlaceId !== null && /^\d+$/.test(place.providerPlaceId) ? place.providerPlaceId : null;
+}
+
+function RankingSection({ category }: { category: string | null }) {
+  const ranking = usePopularPlaces(category);
+  const [sheetPlace, setSheetPlace] = useState<PopularPlace>();
   const [notice, setNotice] = useState("");
+  const carryOverId = sheetPlace ? carryOverPlaceId(sheetPlace) : null;
 
   return (
     <View className="gap-4" testID="home.ranking">
@@ -148,39 +198,24 @@ function RankingSection({ category, subcategory }: { category: CategoryId; subca
           </View>
         )}
         {ranking.isError && (
-          <InlineMessage title="인기 장소를 불러오지 못했어요" actionLabel="다시 시도" onAction={() => {
+          <InlineMessage title="인기 장소를 불러오지 못했어요" description={getCourseErrorMessage(ranking.error)} actionLabel="다시 시도" onAction={() => {
             return void ranking.refetch();
           }} />
         )}
         {ranking.data?.length === 0 && (
           <InlineMessage title="아직 가져간 장소가 없어요" description="다른 분류를 골라 보세요." testID="home.ranking.empty" />
         )}
-        {ranking.data?.map((place, rank) => {
+        {ranking.data?.map((place, index) => {
           return (
-            <Pressable
-              key={place.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${rank + 1}위 ${place.name}, ${place.area}, 코스 ${place.courseCount}개에 담김`}
-              accessibilityHint="위치를 보고 여행방에 담아요"
+            <RankingRow
+              key={place.key}
+              place={place}
+              last={index === ranking.data.length - 1}
               onPress={() => {
                 setNotice("");
                 setSheetPlace(place);
               }}
-              className={cn("flex-row items-center gap-3 border-border py-3 active:bg-muted", rank < ranking.data.length - 1 && "border-b")}
-              testID={`home.ranking.${place.id}`}
-            >
-              <Text className={cn("w-5 text-center text-h2 tabular-nums", rank < 3 ? "text-primary" : "text-muted-foreground")}>{rank + 1}</Text>
-              <PhotoPlaceholder size={64} tone={toneAt(rank)} />
-              <View className="flex-1 gap-1">
-                <Text className="text-label text-foreground">{place.name}</Text>
-                <Text className="text-caption text-foreground-secondary">{place.area}</Text>
-                <View className="flex-row items-center gap-1">
-                  <Icon as={Footprints} size={14} className="text-highlight" />
-                  <Text className="text-caption text-highlight">{`코스 ${place.courseCount}개에 담겼어요`}</Text>
-                </View>
-              </View>
-              <Icon as={ChevronRight} size={20} className="text-icon" />
-            </Pressable>
+            />
           );
         })}
       </View>
@@ -189,8 +224,8 @@ function RankingSection({ category, subcategory }: { category: CategoryId; subca
       )}
       <RoomSelectSheet
         visible={sheetPlace !== undefined}
-        placeIds={sheetPlace ? [sheetPlace.id] : []}
-        placeNames={sheetPlace ? [`${sheetPlace.name} · ${sheetPlace.area}`] : []}
+        placeIds={sheetPlace ? [sheetPlace.key] : []}
+        placeNames={sheetPlace ? [[sheetPlace.name, sheetPlace.areaName].filter(Boolean).join(" · ")] : []}
         onClose={() => {
           setSheetPlace(undefined);
         }}
@@ -198,14 +233,10 @@ function RankingSection({ category, subcategory }: { category: CategoryId; subca
           setSheetPlace(undefined);
           setNotice(`${result.roomName}에 ${result.addedCount}곳을 담았어요`);
         }}
-        onCreateRoom={() => {
-          if (!sheetPlace) {
-            return;
-          }
-
+        onCreateRoom={sheetPlace && carryOverId !== null ? () => {
           setSheetPlace(undefined);
-          router.push({ pathname: "/rooms/new", params: { placeIds: sheetPlace.id, placeNames: sheetPlace.name } });
-        }}
+          router.push({ pathname: "/rooms/new", params: { placeIds: carryOverId, placeNames: sheetPlace.name } });
+        } : undefined}
       >
         {sheetPlace && <PlaceLocationMap place={sheetPlace} />}
       </RoomSelectSheet>
@@ -213,12 +244,34 @@ function RankingSection({ category, subcategory }: { category: CategoryId; subca
   );
 }
 
-function HomeSkeleton() {
+function RankingRow({ place, last, onPress }: { place: PopularPlace; last: boolean; onPress: () => void }) {
+  const top = place.rank <= 3;
+  const area = place.areaName ?? "지역 정보 없음";
+
   return (
-    <View accessibilityLabel="불러오는 중" className="gap-4 px-5 pt-3" testID="home.loading">
-      <Skeleton className="h-56 w-full rounded-lg" />
-      <Skeleton className="h-6 w-skeleton-heading" />
-      <Skeleton className="h-24 w-full" />
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${place.rank}위 ${place.name}, ${area}, 최근 30일 여행방 ${place.importCount30d}곳이 가져감`}
+      accessibilityHint="위치를 보고 여행방에 담아요"
+      onPress={onPress}
+      className={cn("flex-row items-center gap-3 border-border py-3 active:bg-muted", !last && "border-b")}
+      testID={`home.ranking.${place.rank}`}
+    >
+      <Text className={cn("w-5 text-center text-h2 tabular-nums", top ? "text-primary" : "text-muted-foreground")}>{place.rank}</Text>
+      <View style={{ width: RANKING_THUMBNAIL_SIZE, height: RANKING_THUMBNAIL_SIZE }}>
+        <MediaPhoto uri={place.imageUrl} className="size-full" />
+      </View>
+      <View className="flex-1 gap-1">
+        <Text numberOfLines={1} className="text-label text-foreground">{place.name}</Text>
+        <Text numberOfLines={1} className="text-caption text-foreground-secondary">{area}</Text>
+        <View className="flex-row items-center gap-1">
+          <Icon as={Footprints} size={14} className="text-highlight" />
+          <Text className="text-caption text-highlight tabular-nums">{`여행방 ${place.importCount30d}곳이 가져갔어요`}</Text>
+        </View>
+      </View>
+      <Icon as={ChevronRight} size={20} className="text-icon" />
+    </Pressable>
   );
 }
+
+// #endregion

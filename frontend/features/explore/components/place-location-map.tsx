@@ -6,7 +6,7 @@ import { DesignAsset } from "@/components/ui/design-asset";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { KakaoMapView, placePinImage, type MapCamera, type MapMarker } from "@/lib/native/map";
-import type { RankedPlace } from "../model";
+import type { PopularPlace } from "@/features/course/model";
 
 const MAP_HEIGHT = 160;
 const PLACE_MAP_LEVEL = 4;
@@ -15,18 +15,18 @@ const javascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
 type MapPhase = "loading" | "ready" | "error";
 
 // 장소 한 곳의 위치를 카카오맵 마커로 보여 준다. 지도를 쓸 수 없으면 지역 이름으로 대신한다.
-export function PlaceLocationMap({ place }: { place: RankedPlace }) {
+export function PlaceLocationMap({ place }: { place: Pick<PopularPlace, "name" | "areaName" | "coordinate"> }) {
   const [phase, setPhase] = useState<MapPhase>("loading");
   const [attempt, setAttempt] = useState(0);
   const canLoad = Platform.OS !== "web" && Boolean(javascriptKey);
 
   const camera = useMemo<MapCamera>(() => {
-    return { lat: place.lat, lng: place.lng, level: PLACE_MAP_LEVEL };
-  }, [place.lat, place.lng]);
+    return { lat: place.coordinate.latitude, lng: place.coordinate.longitude, level: PLACE_MAP_LEVEL };
+  }, [place.coordinate.latitude, place.coordinate.longitude]);
 
   const markers = useMemo<MapMarker[]>(() => {
-    return [{ lat: place.lat, lng: place.lng }];
-  }, [place.lat, place.lng]);
+    return [{ lat: place.coordinate.latitude, lng: place.coordinate.longitude }];
+  }, [place.coordinate.latitude, place.coordinate.longitude]);
 
   if (canLoad && javascriptKey && phase !== "error") {
     return (
@@ -63,7 +63,7 @@ export function PlaceLocationMap({ place }: { place: RankedPlace }) {
         style={{ width: placePinImage.width, height: placePinImage.height }}
         accessible={false}
       />
-      <Text className="text-label text-foreground">{place.area}</Text>
+      <Text className="text-label text-foreground">{place.areaName ?? place.name}</Text>
       <Text className="text-caption text-foreground-secondary">지도를 불러오지 못했어요</Text>
       {canLoad && (
         <Button
