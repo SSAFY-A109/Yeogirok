@@ -28,7 +28,7 @@ internal class DepthOcclusion private constructor(private val frame: Frame, priv
             samples[index++] = depthMillimeters(buffer, image.width, image.height,
                 plane.rowStride, plane.pixelStride, x + dx, y + dy)
         }
-        // ponytail: hide the whole 2D pin at its occluded anchor; per-pixel clipping needs a GPU pin renderer.
+        // All tips use the same anchor-level occlusion policy.
         return if (isDepthOccluded(samples, pin.cameraDepthMeters))
             pin.copy(x = null, y = null, guidance = "핀은 앞의 표면에 가려져 있어요.") else pin
     }

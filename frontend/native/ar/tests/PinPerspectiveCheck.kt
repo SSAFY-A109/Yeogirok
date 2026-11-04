@@ -57,5 +57,9 @@ fun main() {
     val tilted = PinTapTarget(near.copy(tiltDegrees = 90f), 1000L)
     check(tilted.contains(tipX + near.heightPx * 0.8f, tipY, 1f, 1100L))
     check(!tilted.contains(tipX, upperPinY, 1f, 1100L))
+    val edgeOn = PinTapTarget(near.copy(bounds = PinBounds(503f, 600f, 509f, 820f)), 1000L)
+    check(edgeOn.contains(526f, 700f, 1f, 1100L)) // A thin side retains a 48 dp target.
+    check(!edgeOn.contains(550f, 700f, 1f, 1100L))
+    check(!edgeOn.contains(506f, 700f, 1f, 1501L))
     println("AR pin perspective and touch checks passed")
 }

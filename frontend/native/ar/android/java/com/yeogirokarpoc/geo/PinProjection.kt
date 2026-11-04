@@ -3,6 +3,8 @@ package com.yeogirokarpoc.geo
 import kotlin.math.atan2
 import kotlin.math.hypot
 
+data class PinBounds(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
 /** Projection result for a pin tip. Off-screen guidance never changes its world pose. */
 data class PinProjection(
     val x: Float? = null,
@@ -13,6 +15,7 @@ data class PinProjection(
     val cameraDepthMeters: Float = 0f,
     /** Clockwise screen rotation that keeps the pin aligned with world up (gravity), not the phone. */
     val tiltDegrees: Float = 0f,
+    val bounds: PinBounds? = null,
 ) {
     val visible: Boolean get() = x != null && y != null
 }
