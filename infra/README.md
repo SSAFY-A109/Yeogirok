@@ -12,11 +12,12 @@ flowchart LR
   subgraph EC2["EC2 서버"]
     NG["Nginx<br/>80 · 443"] --> BE["backend 컨테이너<br/>127.0.0.1:8080"]
     BE --> DB[("db 컨테이너<br/>PostgreSQL + PostGIS")]
+    BE --> RD[("redis 컨테이너<br/>멱등키 · 로그인 세션")]
     SH --> BE
   end
 ```
 
-- 바깥에서 들어오는 길은 **Nginx(80·443) 하나**입니다. DB(5432)와 백엔드(8080)는 서버 안에서만 열립니다.
+- 바깥에서 들어오는 길은 **Nginx(80·443) 하나**입니다. DB(5432)와 백엔드(8080)는 서버 안에서만 열립니다. Redis는 포트를 열지 않고 compose 내부망으로만 백엔드와 붙습니다.
 - 테이블은 **백엔드의 Flyway(마이그레이션)만** 만듭니다. AI 서버도 같은 DB를 쓰지만 테이블을 만들지 않습니다.
 - 역할 경계: 컨테이너 바깥(서버, 도메인, HTTPS, DB 인스턴스, 배포, 비밀값)은 인프라, 컨테이너 안(코드, 스키마, 설정 프로필)은 각 파트가 맡습니다.
 
@@ -25,7 +26,7 @@ flowchart LR
 | 파일 | 하는 일 | 쓰는 곳 |
 | --- | --- | --- |
 | `infra/docker-compose.local.yml` | 로컬 개발용 DB·Redis | 팀원 노트북 |
-| `infra/docker-compose.yml` | 서버의 DB·백엔드(·AI) 구성 | 서버 |
+| `infra/docker-compose.yml` | 서버의 DB·Redis·백엔드(·AI) 구성 | 서버 |
 | `infra/.env.example` | 서버 비밀값 목록 (값은 비워 둠) | 서버에서 `.env`로 복사 |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
 | `infra/scripts/deploy-backend.sh` | 최신 코드로 백엔드 다시 띄우고 확인 | 서버 (Actions가 실행) |
@@ -52,7 +53,7 @@ flowchart LR
 | 6 | 자동 배포 | 1시간 | 10/30(금) | `backend/dev` 머지 후 5분 안에 반영 |
 | 7 | Flyway 도입 | 30분 | V1이 나오는 날 | `flyway_schema_history`에 V1 기록 |
 | 8 | 백업 | 15분 | 11/2(월) | 매일 백업 파일 생성 |
-| 9 | AI 서버·파일 저장소·외부 키 | — | 11/2~3 | 영수증 1장 업로드 → OCR 결과 |
+| 9 | AI 서버·파일 저장소·Redis·외부 키 | — | 11/2~4 | 영수증 1장 업로드 → OCR 결과, Redis `(healthy)` |
 
 ## 먼저 알아둘 말 6개
 
@@ -210,6 +211,7 @@ git clone --single-branch --branch backend/dev https://github.com/SSAFY-A109/Yeo
 cd ~/yeogirok/infra-src/infra
 cp .env.example .env
 openssl rand -hex 24         # 나온 값을 DB_PASSWORD 에 넣는다
+openssl rand -hex 24         # 한 번 더 만들어 다른 값을 REDIS_PASSWORD 에 넣는다
 nano .env                    # 저장: Ctrl+O, Enter / 나가기: Ctrl+X
 chmod 600 .env               # 나만 읽을 수 있게
 ```
@@ -399,6 +401,39 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 - 앱은 서버가 발급한 Presigned URL로 S3에 직접 올리고 받으므로 파일이 Nginx·백엔드를 거치지 않습니다. Nginx `client_max_body_size`와 Spring multipart 한도는 파일 업로드와 관계없고, 허용 크기는 백엔드 설정값으로 정합니다.
 - 구성과 확인 방법: [여기록 S3 파일 저장소 구성 가이드](https://claude.ai/artifact/9aLhLYienyLD2TevfE43Xh)
 
+**Redis (멱등키·로그인 세션, 2026-11-04)**
+- 백엔드는 같은 요청이 두 번 처리되지 않게 하는 멱등키와 로그인 세션을 Redis에 둡니다(백엔드 S15P31A109-106). 서버 Redis는 `docker-compose.yml`의 `redis` 서비스입니다.
+
+  | 설정 | 값 | 이유 |
+  | --- | --- | --- |
+  | 버전 | `redis:7.4-alpine` | 로컬 compose와 같게 |
+  | 비밀번호 | `.env`의 `REDIS_PASSWORD` (`openssl rand -hex 24`) | 비어 있으면 compose가 멈춘다 |
+  | 포트 | 열지 않음 | 백엔드만 compose 내부망(`redis:6379`)으로 접속 |
+  | 메모리 | 256MB, `noeviction` | 꽉 차도 멱등키·세션을 몰래 지우지 않고 쓰기를 거부 |
+  | 영속성 | AOF(`appendonly yes`), `redis-data` 볼륨 | 재시작·배포 뒤에도 키가 남음 |
+  | 멱등키 | 보관 `24h`, 처리 중 표시 `30s` | 보관은 11/3 결정, 처리 중은 백엔드 제안값 |
+
+- **순서를 지킵니다.** 백엔드 `prod` 프로필은 Redis 값이 없으면 바로 멈추고, `backend/dev`에 머지되면 자동 배포가 바로 돕니다. 배포 스크립트는 서버의 infra 코드를 받아 오지 않습니다.
+  1. 이 변경을 `infra/dev`에 머지합니다.
+  2. 서버에서 infra 코드를 받고 **바로 이어서** `.env`에 비밀번호를 넣습니다. 받은 뒤 비밀번호가 없으면 `docker compose`가 `required variable REDIS_PASSWORD is missing a value`로 멈춰서 배포·백업도 같이 멈춥니다.
+  3. Redis를 켜고 확인한 뒤 백엔드에 머지해도 된다고 알립니다.
+
+```bash
+cd ~/yeogirok/infra-src && git pull
+cd infra
+grep -c '^REDIS_PASSWORD=' .env     # 0 이어야 한다
+printf '\nREDIS_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> .env
+grep -c '^REDIS_PASSWORD=' .env     # 1 이면 정상
+docker compose up -d redis
+docker compose ps redis             # (healthy) 가 보이면 정상
+docker compose exec redis redis-cli ping
+docker compose exec redis redis-cli config get maxmemory-policy
+```
+
+- `ping`은 `PONG`, 마지막 줄은 `noeviction`이 나와야 합니다. 비밀번호는 `REDISCLI_AUTH`로 넘겨 두어서 `redis-cli`에 따로 치지 않습니다.
+- 지금 백엔드는 그대로 둬도 됩니다. 백엔드 PR이 머지되면 자동 배포가 새 설정(환경 변수, Redis 대기)으로 백엔드를 다시 만듭니다.
+- 비밀번호는 DB와 달리 나중에 바꿔도 됩니다. `.env`를 고친 뒤 `docker compose up -d redis backend`로 둘 다 다시 만듭니다.
+
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
 2. `docker-compose.yml`의 해당 서비스 `environment`에 `KEY: ${KEY}` 한 줄 추가 (이 파일은 `infra/dev`로 커밋)
@@ -418,6 +453,8 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 | 백엔드 재시작 | `docker compose restart backend` |
 | 수동 배포 | `bash scripts/deploy-backend.sh` |
 | DB 접속(서버 안) | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` |
+| Redis 접속(서버 안) | `docker compose exec redis redis-cli` (비밀번호는 자동으로 들어감) |
+| Redis 메모리 사용량 | `docker compose exec redis redis-cli info memory \| grep used_memory_human` |
 | DB 접속(내 노트북, DBeaver 등) | `ssh -i <키>.pem -L 15432:127.0.0.1:5432 ubuntu@<도메인>` 후 `localhost:15432`로 접속 |
 | 디스크·Docker 용량 | `df -h /` · `docker system df` |
 | 안 쓰는 이미지 정리 | `docker image prune -f` |
@@ -433,6 +470,9 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 | Swagger Try it out이 "Failed to fetch" | HTTPS 뒤에서 http 주소로 요청 | `application-prod.yaml`의 `forward-headers-strategy: framework` 확인 |
 | 빌드 중 `Killed` 또는 exit 137 | 메모리 부족 | 2-4 스왑 추가 |
 | 백엔드가 DB 접속 거부(password authentication failed) | DB를 만든 뒤 `.env` 비밀번호만 바꿈 | 7단계처럼 DB 볼륨을 지우고 다시 만듦 |
+| `docker compose` 명령마다 `required variable REDIS_PASSWORD is missing a value` | infra 코드를 받은 뒤 `.env`에 `REDIS_PASSWORD`를 넣지 않음 | 9단계 Redis대로 비밀번호 추가 |
+| 배포 직후 백엔드가 꺼지고 로그에 `Could not resolve placeholder 'REDIS_HOST'`(또는 `IDEMPOTENCY_...`) | 서버 infra 코드가 예전 것 | `git -C ~/yeogirok/infra-src pull` 후 9단계 Redis |
+| 백엔드 오류에 `OOM command not allowed` | Redis 메모리 256MB가 다 참(`noeviction`이라 쓰기 거부) | `info memory`로 확인하고 `docker-compose.yml`의 `--maxmemory`를 늘림 |
 | Flyway `non-empty schema ... without schema history table` | `update`로 만든 테이블이 남음 | 7단계 DB 비우기 |
 | Flyway `checksum mismatch` | 이미 적용된 V 파일을 수정함 | 원래대로 되돌리고 새 번호 파일로 수정 |
 | Actions의 SSH 단계가 `i/o timeout` | 22번이 GitHub에서 막힘 | 6-5 플랜 B |
@@ -443,6 +483,7 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 
 - [ ] `https://<도메인>/swagger-ui.html` 열림
 - [ ] 서버 재부팅 후에도 자동으로 다시 뜸 (`sudo reboot` → 2분 뒤 확인)
+- [ ] `docker compose ps`에서 db·redis가 `(healthy)`
 - [ ] `~/yeogirok/backups`에 매일 백업이 생김
 - [ ] 인증서 만료일이 시연일 이후 (`sudo certbot certificates`)
 - [ ] 디스크 여유 20% 이상 (`df -h /`)

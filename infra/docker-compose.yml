@@ -8,6 +8,7 @@
 #
 # 포트는 모두 127.0.0.1 에만 연다. Docker는 방화벽(ufw) 규칙을 건너뛰고 포트를 열기 때문에,
 # "5432:5432"처럼 쓰면 DB가 인터넷에 그대로 노출된다. 바깥에서 들어오는 길은 Nginx(80·443) 하나뿐이다.
+# Redis는 백엔드만 쓰므로 포트를 아예 열지 않고 compose 내부망(redis:6379)으로만 붙는다.
 
 name: yeogirok
 
@@ -30,6 +31,36 @@ services:
       timeout: 3s
       retries: 20
 
+  redis:
+    image: redis:7.4-alpine   # 로컬 compose와 같은 버전
+    restart: unless-stopped
+    # 멱등키·로그인 세션 용도라 다음처럼 둔다 (가이드 9단계 Redis).
+    # - 비밀번호를 건다. .env 에 REDIS_PASSWORD 가 없으면 비밀번호 없이 뜨지 않도록 compose 가 바로 멈춘다(:?).
+    # - 디스크에 기록해(appendonly) 재시작·배포 뒤에도 키가 남는다.
+    # - 메모리는 256MB까지 쓰고, 꽉 차면 키를 지우지 않고 쓰기를 거부한다(noeviction).
+    command:
+      - redis-server
+      - --requirepass
+      - "${REDIS_PASSWORD:?.env 에 REDIS_PASSWORD 를 넣어야 한다 (가이드 9단계 Redis)}"
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+    environment:
+      # 컨테이너 안의 redis-cli 가 비밀번호를 따로 치지 않고 접속한다 (헬스체크·점검용).
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      # 종료 코드가 아니라 PONG 이 왔는지로 판단한다. 비밀번호 오류(NOAUTH)를 정상으로 보지 않기 위해서다.
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   backend:
     # 서버에 따로 받아 둔 backend/dev 코드로 이미지를 만든다 (가이드 3단계 폴더 구조).
     build: ../../backend-src/backend
@@ -38,12 +69,21 @@ services:
     depends_on:
       db:
         condition: service_healthy   # DB가 준비된 뒤에 백엔드를 띄운다
+      redis:
+        condition: service_healthy   # Redis도 준비된 뒤에 띄운다
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:postgresql://db:5432/${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       TZ: Asia/Seoul
+      # Redis (prod 프로필은 기본값이 없어 하나라도 빠지면 백엔드가 바로 멈춘다)
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 멱등키 보관 기간(11/3 결정)과 처리 중 표시 수명(백엔드 제안값). 비밀 값이 아니라 여기에 바로 적는다.
+      IDEMPOTENCY_RETENTION: 24h
+      IDEMPOTENCY_PROCESSING_TIMEOUT: 30s
       # S3 파일 저장소 (값은 .env)
       AWS_REGION: ${AWS_REGION}
       S3_PHOTO_BUCKET: ${S3_PHOTO_BUCKET}
@@ -73,4 +113,5 @@ services:
 
 volumes:
   db-data:
+  redis-data:
   # paddle-models:
