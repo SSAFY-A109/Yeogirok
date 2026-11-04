@@ -318,7 +318,7 @@ class AuthApiTest {
 	class 로그아웃과_액세스_토큰 {
 
 		@Test
-		void 로그아웃하면_data_없이_성공하고_그_리프레시_토큰은_A009() throws Exception {
+		void 로그아웃하면_data_null_로_성공하고_그_리프레시_토큰은_A009() throws Exception {
 			JsonNode tokens = loginGoogle(uniqueSub());
 			String accessToken = tokens.get("accessToken").asString();
 			String refreshToken = tokens.get("refreshToken").asString();
@@ -326,9 +326,11 @@ class AuthApiTest {
 			String body = logout(accessToken, refreshToken)
 				.andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
-			assertThat(jsonMapper.readTree(body).properties())
+			JsonNode json = jsonMapper.readTree(body);
+			assertThat(json.properties())
 				.extracting(java.util.Map.Entry::getKey)
-				.containsExactly("success");
+				.containsExactlyInAnyOrder("success", "data");
+			assertThat(json.get("data").isNull()).isTrue();
 
 			expectFailure(refresh(refreshToken), 401, "A009");
 		}
