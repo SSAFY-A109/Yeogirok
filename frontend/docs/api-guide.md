@@ -50,7 +50,7 @@ app/ 화면 ──▶ features/<domain>/api/queries.ts ──▶ features/<domai
 | `common` | C | API-010·078·079 | 공통 기준 데이터 |
 | `job` | J | API-011 | 작업 상태 조회 공용 훅 |
 | `media` | M | API-012·013 | 업로드 대기열 |
-| `course` | CO | API-014~019·074·075·083 | 공개 코스 탐색·관리 |
+| `course` | CO | API-014~019·074·075·083, `GET /main/popular-places` | 공개 코스 탐색·관리. 메인 인기 장소도 코스 가져가기 집계라 여기 둔다(오류는 공통 C003) |
 | `room` | RO | API-020~025·028~032·076·077 | 여행방·장소 담기·초대·채팅(P1) |
 | `place` | P | API-026·027 | 장소 검색·상세 |
 | `recommendation` | AI | API-033~035·080~082 | 추천 온보딩·추천 결과 |
