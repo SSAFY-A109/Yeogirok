@@ -150,15 +150,18 @@ if (System.getProperty('os.name').toLowerCase().contains('windows')) {
       source = source.replace("PackageList(this).packages.apply {", `PackageList(this).packages.apply {\n          add(${nativePackage}.GeoValidationPackage())`);
     }
 
-    const guard = 'if (android.app.Application.getProcessName() == "$packageName:geospatial") return';
+    const isArProcess = 'android.app.Application.getProcessName() == "$packageName:geospatial"';
+    const guard = `if (${isArProcess}) return`;
+    // AR 프로세스도 카카오맵 WebView를 쓰므로, 메인 프로세스와 WebView 데이터 디렉터리를 나눠야 동시에 열어도 죽지 않는다.
+    const createGuard = `if (${isArProcess}) {\n      android.webkit.WebView.setDataDirectorySuffix("geospatial")\n      return\n    }`;
 
-    for (const hook of ["super.onCreate()", "super.onConfigurationChanged(newConfig)"]) {
-      if (!source.includes(`${hook}\n    ${guard}`)) {
-        if (!source.includes(hook)) {
-          throw new Error(`Cannot locate ${hook} for AR process isolation`);
-        }
+    for (const [hook, line] of [["super.onCreate()", createGuard], ["super.onConfigurationChanged(newConfig)", guard]]) {
+      if (!source.includes(hook)) {
+        throw new Error(`Cannot locate ${hook} for AR process isolation`);
+      }
 
-        source = source.replace(hook, `${hook}\n    ${guard}`);
+      if (!source.includes(`${hook}\n    ${line}`)) {
+        source = source.replace(`${hook}\n    ${guard}`, hook).replace(hook, `${hook}\n    ${line}`);
       }
     }
 
