@@ -20,6 +20,18 @@
 | Auth / GoogleLoginButton | `social-login-button.tsx` · `GoogleLoginButton` | Button의 `onPress`, `disabled`, `loading` 등 |
 | Navigation / TabBar | `tab-bar.tsx` · `TabBar` | `items`, `value`, `onValueChange`; `tabBarIcons` 제공 |
 
+여행방 화면(2026-11-03, S15P31A109-83)에서 추가한 공용 컴포넌트:
+
+| Figma | 파일·컴포넌트 | 주요 props |
+| --- | --- | --- |
+| — | `screen.tsx` · `Screen` | View props. 흰 배경 + 위쪽 안전 영역 |
+| Navigation / AppBar | `screen-header.tsx` · `ScreenHeader`, `HeaderIconButton` | `title`, `titleAlign="center\|start"`, `leading`(기본 뒤로가기, `null`이면 빈자리), `trailing`, `onBack` / `icon`, `accessibilityLabel`, `onPress` |
+| Bottom CTA | `bottom-cta.tsx` · `BottomCta` | `children`(안내 줄 + `Button size="lg"`) |
+| BottomSheet | `bottom-sheet.tsx` · `BottomSheet` | `visible`, `onClose`, `closeLabel`, `expandable` (아래 BottomSheet 절) |
+| Dialog | `confirm-dialog.tsx` · `ConfirmDialog` | `open`, `onOpenChange`, `title`, `description`, `children`, `confirmLabel`, `onConfirm`, `confirmTone="primary\|destructive"`, `loading` |
+| Media / Photo | `media-photo.tsx` · `MediaPhoto` | `uri`, `className`(크기) |
+| — | `toast.tsx` · `ToastProvider`, `useToast` | `show({ message, action?, durationMs? })`. Provider는 루트 레이아웃에 있다 |
+
 `Text`, `Icon`, `Skeleton`, `Spinner`, RNR Select 조합도 제공한다. 버튼·배지의 글자는 `Text`로 감싸면 크기와 색을 자동으로 상속한다.
 
 ```tsx

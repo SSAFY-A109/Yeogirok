@@ -85,7 +85,8 @@
     },
     "BottomSheet": {
       "code": "components/ui/bottom-sheet.tsx",
-      "pencil": "없음"
+      "pencil": "없음",
+      "figma": "BottomSheet / 장소 담기 (1:7198) — rounded-t-xl, 손잡이 36×4"
     },
     "Textarea": {
       "code": "components/ui/textarea.tsx",
@@ -146,6 +147,36 @@
       "code": "components/ui/social-login-button.tsx",
       "pencil": "없음",
       "figma": "Auth / GoogleLoginButton (692:2867) — 원본 로고, 브랜드 규격"
+    },
+    "Screen": {
+      "code": "components/ui/screen.tsx",
+      "pencil": "없음",
+      "figma": "없음 — 화면 틀(흰 배경 + 위쪽 안전 영역)"
+    },
+    "ScreenHeader": {
+      "code": "components/ui/screen-header.tsx",
+      "pencil": "없음",
+      "figma": "Navigation / AppBar (복제본 1:3600) — 56px, 제목 Title/18. 여행방 상세 헤더(1:6765)는 titleAlign=start"
+    },
+    "BottomCta": {
+      "code": "components/ui/bottom-cta.tsx",
+      "pencil": "없음",
+      "figma": "Bottom CTA (W06 821:9783, W09 1:6839)"
+    },
+    "ConfirmDialog": {
+      "code": "components/ui/confirm-dialog.tsx",
+      "pencil": "없음",
+      "figma": "Dialog / 날짜 변경 확인 (1:7510) — 모서리 20, 취소 Secondary + 확인 Primary"
+    },
+    "MediaPhoto": {
+      "code": "components/ui/media-photo.tsx",
+      "pencil": "없음",
+      "figma": "Media / Photo (1:3616) — 사진 슬롯, bg/brand-soft 바탕"
+    },
+    "Toast": {
+      "code": "components/ui/toast.tsx",
+      "pencil": "없음",
+      "figma": "없음 — 시안 없음, 임시 토큰(bg-foreground) [확인]"
     }
   },
   "screens": {
@@ -183,6 +214,74 @@
       ],
       "note": "2026-11-02 사용자 지정 Figma 직접 대조. 로컬 PoC: 사진 선택/본문 필수 2,000자, + 즉시 위치 저장 유지, 서버 공개 연동 없음. Pencil 미대조."
     },
+    "rooms": {
+      "route": "/rooms",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W07 (821:9704)",
+      "features": [
+        "TRP-01"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
+    "rooms/new": {
+      "route": "/rooms/new",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W06 (821:9758), W06-C (821:10297). W05에서 들어오는 진입 W06은 복제본 진입 탐색 장소 가져오기 (1:5914), 함께 담을 장소 (1:5939)",
+      "features": [
+        "TRP-02"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
+    "rooms/[roomId]": {
+      "route": "/rooms/[roomId]",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W09 (821:9790), W09-A (821:10137), W09-S (821:10255)",
+      "features": [
+        "TRP-04",
+        "TRP-05",
+        "PLN-01"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1). 채팅(W09-2)·지도로 보기(TRP-07)는 이번 범위 밖."
+    },
+    "rooms/[roomId]/edit": {
+      "route": "/rooms/[roomId]/edit",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W06-E (821:10470), W06-E2 (821:10502), W06-L (854:16984), W06-L2 (854:17070)",
+      "features": [
+        "TRP-04",
+        "TRP-10"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1). 나가기 API는 가정 엔드포인트."
+    },
+    "rooms/[roomId]/invite": {
+      "route": "/rooms/[roomId]/invite",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W08 (821:9880), W08-F (854:17163)",
+      "features": [
+        "TRP-03"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1). 카카오톡 공유는 시스템 공유 시트로 대체(TBD)."
+    },
+    "rooms/[roomId]/search": {
+      "route": "/rooms/[roomId]/search",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W12 (821:10031)",
+      "features": [
+        "TRP-05"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
+    "rooms/[roomId]/recommend": {
+      "route": "/rooms/[roomId]/recommend",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W10 (821:14139), W10-1 (821:14181), W11 (821:9987)",
+      "features": [
+        "PLN-01",
+        "PLN-02",
+        "PLN-03"
+      ],
+      "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
     "home": {
       "route": "/",
       "pencil": "없음",
@@ -190,7 +289,7 @@
       "features": [
         "EXP-04"
       ],
-      "note": "2026-11-03 사용자 지정 Figma 대조. 사진·지도는 자리표시(API 미정), mock은 features/explore/mocks. 인기 장소를 누르면 room-select-sheet에 장소 위치 지도(place-location-map)를 얹어 바로 담는다(사용자 요청 2026-11-03, Figma W05-2 32:2956에 W05 기반으로 작성). Pencil 미대조."
+      "note": "2026-11-03 사용자 지정 Figma 대조. 사진·지도는 자리표시(API 미정), mock은 features/explore/mocks. 인기 장소를 누르면 room-select-sheet에 장소 위치 지도(place-location-map)를 얹어 바로 담는다(사용자 요청 2026-11-03, Figma W05-2 32:2956에 W05 기반으로 작성). 시트의 새 여행방 만들기는 /rooms/new로 장소를 넘긴다(사용자 요청 2026-11-03). 인기 장소 id는 MSW 장소 목록과 같은 숫자다. Pencil 미대조."
     },
     "courses": {
       "route": "/courses",
@@ -209,7 +308,7 @@
         "EXP-05",
         "EXP-07"
       ],
-      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 미구현이라 비활성. Pencil 미대조."
+      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 코스 장소 id가 MSW 장소 목록과 연결되지 않아 아직 비활성(메인 인기 장소만 연결). Pencil 미대조."
     }
   },
   "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."

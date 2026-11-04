@@ -198,6 +198,14 @@ function RankingSection({ category, subcategory }: { category: CategoryId; subca
           setSheetPlace(undefined);
           setNotice(`${result.roomName}에 ${result.addedCount}곳을 담았어요`);
         }}
+        onCreateRoom={() => {
+          if (!sheetPlace) {
+            return;
+          }
+
+          setSheetPlace(undefined);
+          router.push({ pathname: "/rooms/new", params: { placeIds: sheetPlace.id, placeNames: sheetPlace.name } });
+        }}
       >
         {sheetPlace && <PlaceLocationMap place={sheetPlace} />}
       </RoomSelectSheet>

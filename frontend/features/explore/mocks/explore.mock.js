@@ -110,37 +110,37 @@ export const featuredCourses = [
   },
 ];
 
-/** 대분류별 최근 30일 인기 장소 순위. 값이 없는 장소(null)는 순위에 넣지 않는다. */
+/** 대분류별 최근 30일 인기 장소 순위. 값이 없는 장소(null)는 순위에 넣지 않는다. id는 MSW 장소 목록(api/mocks/fixtures/place.ts)과 같은 숫자다. 새 여행방에 장소를 이어 담을 때 그대로 넘긴다. */
 export const rankings = {
   NATURE: [
-    { id: "place-gyeongpo-beach", name: "경포해변", area: "강릉 해변", courseCount: 198, subcategory: "자연경관(하천 해양)", lat: 37.8055, lng: 128.9087 },
-    { id: "place-gyeongpo-lake", name: "경포호", area: "강릉 호수", courseCount: 176, subcategory: "자연경관(하천 해양)", lat: 37.7957, lng: 128.8996 },
-    { id: "place-sacheon-beach", name: "사천해변", area: "강릉 해변", courseCount: 141, subcategory: "자연경관(하천 해양)", lat: 37.8396, lng: 128.8771 },
-    { id: "place-jumunjin-port", name: "주문진항", area: "강릉 항구", courseCount: 97, subcategory: "기타자연관광", lat: 37.8932, lng: 128.8271 },
-    { id: "place-gangmun-beach", name: "강문해변", area: "강릉 해변", courseCount: 83, subcategory: "자연경관(하천 해양)", lat: 37.7955, lng: 128.9185 },
+    { id: "111", name: "경포해변", area: "강릉 해변", courseCount: 198, subcategory: "자연경관(하천 해양)", lat: 37.8055, lng: 128.9087 },
+    { id: "112", name: "경포호", area: "강릉 호수", courseCount: 176, subcategory: "자연경관(하천 해양)", lat: 37.7957, lng: 128.8996 },
+    { id: "110", name: "사천해변", area: "강릉 해변", courseCount: 141, subcategory: "자연경관(하천 해양)", lat: 37.8396, lng: 128.8771 },
+    { id: "113", name: "주문진항", area: "강릉 항구", courseCount: 97, subcategory: "기타자연관광", lat: 37.8932, lng: 128.8271 },
+    { id: "114", name: "강문해변", area: "강릉 해변", courseCount: 83, subcategory: "자연경관(하천 해양)", lat: 37.7955, lng: 128.9185 },
   ],
   CULTURE: [
-    { id: "place-ojukheon", name: "오죽헌", area: "강릉 고택", courseCount: 120, subcategory: "역사유적지", lat: 37.779, lng: 128.8795 },
-    { id: "place-chamsori", name: "참소리박물관", area: "강릉 박물관", courseCount: 88, subcategory: "전시시설", lat: 37.7958, lng: 128.9174 },
-    { id: "place-seonggyojang", name: "선교장", area: "강릉 고택", courseCount: 64, subcategory: "역사유적지", lat: 37.786, lng: 128.884 },
+    { id: "108", name: "오죽헌", area: "강릉 고택", courseCount: 120, subcategory: "역사유적지", lat: 37.779, lng: 128.8795 },
+    { id: "115", name: "참소리박물관", area: "강릉 박물관", courseCount: 88, subcategory: "전시시설", lat: 37.7958, lng: 128.9174 },
+    { id: "116", name: "선교장", area: "강릉 고택", courseCount: 64, subcategory: "역사유적지", lat: 37.786, lng: 128.884 },
   ],
   SIGHT: [
-    { id: "place-anmok", name: "안목 커피거리", area: "강릉 거리", courseCount: 210, subcategory: "도시·지역문화관광", lat: 37.7728, lng: 128.9476 },
-    { id: "place-jeongdongjin", name: "정동진역", area: "강릉 역", courseCount: 101, subcategory: "랜드마크관광", lat: 37.6916, lng: 129.0343 },
+    { id: "117", name: "안목 커피거리", area: "강릉 거리", courseCount: 210, subcategory: "도시·지역문화관광", lat: 37.7728, lng: 128.9476 },
+    { id: "118", name: "정동진역", area: "강릉 역", courseCount: 101, subcategory: "랜드마크관광", lat: 37.6916, lng: 129.0343 },
   ],
   FOOD: [
-    { id: "place-chodang", name: "초당순두부마을", area: "강릉 맛집", courseCount: 189, subcategory: "한식", lat: 37.7918, lng: 128.9135 },
-    { id: "place-jungang-market-food", name: "중앙시장 먹거리", area: "강릉 시장", courseCount: 132, subcategory: "간이음식", lat: 37.7547, lng: 128.8972 },
+    { id: "103", name: "초당순두부마을", area: "강릉 맛집", courseCount: 189, subcategory: "한식", lat: 37.7918, lng: 128.9135 },
+    { id: "119", name: "중앙시장 먹거리", area: "강릉 시장", courseCount: 132, subcategory: "간이음식", lat: 37.7547, lng: 128.8972 },
   ],
   CAFE: [
-    { id: "place-terarosa", name: "테라로사 본점", area: "강릉 카페", courseCount: 155, subcategory: "카페/찻집", lat: 37.7437, lng: 128.9068 },
-    { id: "place-bongbong", name: "봉봉방앗간", area: "강릉 카페", courseCount: 70, subcategory: "제과", lat: 37.7536, lng: 128.8987 },
+    { id: "120", name: "테라로사 본점", area: "강릉 카페", courseCount: 155, subcategory: "카페/찻집", lat: 37.7437, lng: 128.9068 },
+    { id: "121", name: "봉봉방앗간", area: "강릉 카페", courseCount: 70, subcategory: "제과", lat: 37.7536, lng: 128.8987 },
   ],
   ACTIVITY: [
-    { id: "place-sea-train", name: "정동진 바다열차", area: "강릉 체험", courseCount: 92, subcategory: "기타체험", lat: 37.6916, lng: 129.0343 },
+    { id: "122", name: "정동진 바다열차", area: "강릉 체험", courseCount: 92, subcategory: "기타체험", lat: 37.6916, lng: 129.0343 },
   ],
   SHOPPING: [
-    { id: "place-jungang-market", name: "중앙시장", area: "강릉 시장", courseCount: 145, subcategory: "시장", lat: 37.7547, lng: 128.8972 },
+    { id: "123", name: "중앙시장", area: "강릉 시장", courseCount: 145, subcategory: "시장", lat: 37.7547, lng: 128.8972 },
   ],
   EVENT: [],
 };

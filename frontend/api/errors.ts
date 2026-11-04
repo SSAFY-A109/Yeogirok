@@ -50,6 +50,18 @@ export function toApiError(error: unknown): ApiError {
   return new ApiError(0, "UNKNOWN", "API 요청을 처리하지 못했습니다.");
 }
 
+/**
+ * 오류를 사용자 문구로 바꾼다. 공통 code → 도메인 code → 기본 문구 순서로 찾는다.
+ * 서버 `message`는 개발자용이라 쓰지 않는다.
+ */
+export function getErrorMessage(error: unknown, domainMessages: Readonly<Record<string, string>>, fallback: string): string {
+  if (!isApiError(error)) {
+    return fallback;
+  }
+
+  return COMMON_ERROR_MESSAGES[error.code] ?? domainMessages[error.code] ?? fallback;
+}
+
 export const COMMON_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   C001: "요청을 처리할 수 없습니다. 다시 시도해 주세요.",
   C002: "요청을 처리할 수 없습니다. 다시 시도해 주세요.",

@@ -212,7 +212,12 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | --- | --- | --- |
 | `POST /footprints` (API-041) | `footprintKeys.all`, `statisticsKeys.all` | — |
 | `PUT /tips/{id}/reaction` (API-052) | 완료 후 `tipKeys.detail(id)` | 낙관적 반영 → 실패 시 롤백 |
+| `POST /rooms` (API-021) | `roomKeys.list()` | 응답 상세 → `roomKeys.detail(id)` |
+| `PATCH /rooms/{id}` (API-023) | `roomKeys.list()`, `roomKeys.places(roomId)`, `scheduleKeys.room(roomId)` | 응답 상세 → `roomKeys.detail(roomId)` |
+| `DELETE /rooms/{id}/members/me` (가정, TBD) | `roomKeys.list()` | — (나간 방의 캐시는 닫히는 화면이 다시 요청하지 않도록 바로 지우지 않고 gcTime에 맡긴다) |
 | `POST /rooms/{id}/places` · `place-imports` (API-029·030) | `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — |
+| `DELETE /rooms/{id}/places/{roomPlaceId}` (API-032) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — (화면이 되돌리기 토스트 동안 행을 숨겼다가 확정 시 요청) |
+| `PUT /rooms/{id}/preferences` + `POST …/place-recommendations` (API-033·034) | `recommendationKeys.preference(roomId)` | — (추천 결과는 뮤테이션 `data`로만 쓴다) |
 | `PUT /rooms/{id}/schedule` (API-039) | `scheduleKeys.room(roomId)` | 응답 일정 |
 | `PATCH /rooms/{id}/schedule` (API-040) | 409 C008이면 `scheduleKeys.room(roomId)` 다시 조회 | 응답 일정 |
 | `POST /records/{id}/drafts` (API-064) | 작업 완료 시 `recordKeys.drafts(recordId)` | — |
