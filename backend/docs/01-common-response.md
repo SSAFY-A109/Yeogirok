@@ -50,11 +50,13 @@ global/
 | C001 | 400 | 필수 요청값 누락 | `MissingServletRequestParameterException`, `MissingRequestHeaderException`, `@NotNull`·`@NotBlank`·`@NotEmpty` 위반 |
 | C002 | 400 | 타입·형식 오류 | `MethodArgumentTypeMismatchException`, `HttpMessageNotReadableException` |
 | C003 | 400 | 허용하지 않는 요청값 | 그 외 `@Valid` 제약 위반, 파라미터 제약 위반(`HandlerMethodValidationException`) |
-| C004~C013 | | 버전 불일치, 멱등키, 커서·페이지 크기, 위치 증거, 좌표·날짜 범위, 지도 영역 | 해당 기능을 만들 때 추가 |
+| C004, C006~C013 | | 버전 불일치, 커서·페이지 크기, 위치 증거, 좌표·날짜 범위, 지도 영역 | 해당 기능을 만들 때 추가 |
+| C005 | 409 | 같은 멱등키로 다른 내용의 요청 | `IdempotencyService` ([02-idempotency.md](02-idempotency.md)) |
 | C014 | 500 | 예상하지 못한 서버 오류 | 그 외 모든 예외 |
 | C015 | 404 | 없는 경로 | `NoResourceFoundException` |
 | C016 | 405 | 허용되지 않은 HTTP 메서드 | `HttpRequestMethodNotSupportedException` |
 | C017 | 415 | 지원하지 않는 Content-Type | `HttpMediaTypeNotSupportedException` |
+| C018 | 409 | 같은 요청을 처리하고 있음 (팀 합의 필요) | `IdempotencyService` ([02-idempotency.md](02-idempotency.md)) |
 
 - `@Valid` 위반은 `FieldError.getCode()`로 누락(C001)과 값 오류(C003)를 가른다.
 - C014는 원인을 스택과 함께 로그에만 남기고, 응답에는 고정 문구만 보낸다(SQL 조각·테이블 이름 노출 방지).
