@@ -8,13 +8,13 @@
 
 후속 사용자 요청(2026-11-03)으로 개발 MSW 로그인과 배포 네이티브 SDK 연결까지 구현 범위를 확대했다. 브라우저·실기기 실행은 하지 않고 정적 검사와 Node 계약 검사로 검증한다. 화면은 스크롤 없이 안전 영역 안의 전체 높이를 차지하고, 남은 높이에 맞춰 로고와 지도 크기를 줄인다.
 
-개발(`__DEV__`)에서는 fixture 자격 증명으로 MSW API-005를 호출한다. 배포에서는 Google Sign-In 또는 Kakao User SDK가 발급한 ID 토큰을 같은 API 함수로 교환한다. 성공한 서비스 토큰 쌍을 SecureStore에 저장한 뒤 인증 상태를 갱신하고 메인 `/`로 이동한다. 로그인 화면은 내비게이션 이력에서도 제외된다. 요청 중에는 버튼을 잠그고 취소·실패 시 이동하지 않는다.
+개발(`__DEV__`)에서는 fixture 자격 증명으로 MSW API-005를 호출한다. 배포에서는 로그인마다 보안 난수 nonce(`features/auth/nonce.ts`, expo-crypto 32바이트 hex)를 만들어 SDK와 API-005에 같은 값으로 보낸다. Google은 `react-native-nitro-google-signin`(Credential Manager)의 `presentExplicitSignIn()`(기기의 모든 계정 표시, `offlineAccess: true`), Kakao는 User SDK `login({ nonce })`가 발급한 ID 토큰을 같은 API 함수로 교환한다. 대상은 Android다. 성공한 서비스 토큰 쌍을 SecureStore에 저장한 뒤 인증 상태를 갱신하고 메인 `/`로 이동한다. 로그인 화면은 내비게이션 이력에서도 제외된다. 요청 중에는 버튼을 잠그고 취소·실패 시 이동하지 않는다.
 
 TanStack Query가 로그인 mutation과 저장소 세션 조회를 담당한다. Query 캐시에는 인증 여부만 두며, mutation은 토큰을 반환하지 않는다. SDK 모듈은 배포 인증 시점에만 불러오므로 개발 목 로그인은 네이티브 SDK 초기화 없이 사용할 수 있다. `/`의 메인은 기존 개발 홈을 유지하며 새 메인 디자인·온보딩은 포함하지 않는다.
 
 ## 배포 설정
 
-승인 후 Expo 설치 절차로 Google Sign-In 17.0.0, Kakao Core/User 2.4.11, TanStack Query 5.105.3을 추가했다. SDK API·Expo plugin 옵션은 설치된 공식 배포 패키지의 소스·타입으로 확인했다.
+승인 후 Expo 설치 절차로 Google Sign-In 17.0.0, Kakao Core/User 2.4.11, TanStack Query 5.105.3을 추가했다. 2026-11-04 nonce를 넘길 수 없는 Google Sign-In을 제거하고 react-native-nitro-google-signin 2.3.1·react-native-nitro-modules 0.37.1·expo-crypto 58.0.7로 바꿨다(사용자 승인, 개발 빌드 재생성 필요). SDK API·Expo plugin 옵션은 설치된 공식 배포 패키지의 소스·타입으로 확인했다.
 
 아래 공개 설정값의 빈 항목을 `.env.example`과 로컬 `.env.local`에 준비했다. 클라이언트 비밀키는 넣지 않는다.
 
@@ -36,13 +36,13 @@ TanStack Query가 로그인 mutation과 저장소 세션 조회를 담당한다.
 원천: [API-005](https://app.notion.com/p/402debe071c381e58b0add45607da132), [API-006](https://app.notion.com/p/402debe071c381f7ac0defad7a91b6fd). 연결 도구는 404를 반환했으며, 사용자가 2026-11-03 제공한 해당 페이지 본문을 기준으로 구현했다. 원천은 설계 초안·서버 미구현 상태다.
 
 - 현재 계약은 **네이티브 SDK의 OIDC ID 토큰 교환**이다. 저장소의 이전 시스템 브라우저 인증/API-001·002 안내와 다르며, 이번 작업에서는 사용자가 제공한 현재 계약을 따른다. SDK 도입 시 기존 인증 지침도 함께 갱신해야 한다.
-- `features/auth/api/auth.api.ts`의 `exchangeSocialToken`은 API-005를, `refreshServiceTokens`는 API-006을 호출한다. 공통 클라이언트가 봉투를 해제하고 인증 헤더를 제외한다. `nonce`는 선택이며 서버가 반환하는 만료 시간과 `isNewUser`를 검증한다.
+- `features/auth/api/auth.api.ts`의 `exchangeSocialToken`은 API-005를, `refreshServiceTokens`는 API-006을 호출한다. 공통 클라이언트가 봉투를 해제하고 인증 헤더를 제외한다. `nonce`는 필수이며(없으면 C001, 다르면 A006) 서버가 반환하는 만료 시간과 `isNewUser`를 검증한다.
 - API 함수는 결과만 반환한다. `performSocialLogin`이 서비스 토큰을 저장하고 Query mutation 성공 후 세션을 다시 읽는다. 기존 공통 클라이언트의 자동 갱신은 회전한 토큰 쌍 저장, 실패 시 삭제·인증 해제와 Query 캐시 정리를 담당한다.
 - 토큰 수명·로그인 유지 기간·온보딩 분기는 TBD다. 검토 수치를 서비스 정책으로 사용하지 않는다.
 
 ## 개발 목과 검사
 
-`api/mocks/fixtures/auth.ts`의 제공자별 가짜 ID 토큰으로 발급 요청을 할 수 있다. `nonce` 생략은 허용하고, 전달하면 fixture 값과 대조한다. 잘못된 ID 토큰은 A005, nonce 불일치는 A006이다.
+`api/mocks/fixtures/auth.ts`의 제공자별 가짜 ID 토큰으로 발급 요청을 할 수 있다. `nonce`는 필수이고 fixture 값과 대조한다. 누락은 C001, 잘못된 ID 토큰은 A005, nonce 불일치는 A006이다.
 
 목은 로그인마다 독립된 세션을 만들고, 갱신 시 이전 리프레시 토큰을 즉시 무효화한다(A010). 만료·폐기 시나리오는 `failedRefreshTokensFixture`의 전용 값으로 A008·A009를 재현하고, 나머지 무효 토큰은 A007이다. **60초·120초는 응답 검사용 가상 수명**이며, 실제 시간 경과나 제공자 JWT 서명을 검증하는 목이 아니다. 오류 시나리오를 추가할 때는 MSW `server.use`로 응답을 덮어쓴다.
 

@@ -2,9 +2,9 @@ import { initializeKakaoSDK } from "@react-native-kakao/core";
 import { login } from "@react-native-kakao/user";
 
 import { SocialLoginError } from "../../errors";
-import type { SocialLoginRequestDto } from "../../model";
+import type { SocialCredentials } from "../../model";
 
-export async function signInWithKakao(): Promise<SocialLoginRequestDto> {
+export async function signInWithKakao(nonce: string): Promise<SocialCredentials> {
   const nativeAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY;
 
   if (!nativeAppKey) {
@@ -13,13 +13,13 @@ export async function signInWithKakao(): Promise<SocialLoginRequestDto> {
 
   try {
     await initializeKakaoSDK(nativeAppKey);
-    const token = await login();
+    const token = await login({ nonce });
 
     if (!token.idToken) {
       throw new SocialLoginError("AUTH_NOT_CONFIGURED");
     }
 
-    return { provider: "kakao", idToken: token.idToken };
+    return { provider: "kakao", idToken: token.idToken, nonce, serverAuthCode: null };
   } catch (error) {
     if (error instanceof SocialLoginError) {
       throw error;

@@ -1,16 +1,19 @@
-import type { SocialLoginRequestDto, SocialProvider } from "../../model";
+import type { SocialCredentials, SocialProvider } from "../../model";
+import { createNonce } from "../../nonce";
 
-export async function getSocialCredentials(provider: SocialProvider): Promise<SocialLoginRequestDto> {
+export async function getSocialCredentials(provider: SocialProvider): Promise<SocialCredentials> {
   if (__DEV__) {
-    const { socialCredentialsFixture } = await import("../../../../api/mocks/fixtures/auth");
-    return socialCredentialsFixture[provider];
+    const { mockSocialCredentials } = await import("../../../../api/mocks/fixtures/auth");
+    return mockSocialCredentials(provider);
   }
+
+  const nonce = createNonce();
 
   if (provider === "google") {
     const { signInWithGoogle } = await import("./google");
-    return signInWithGoogle();
+    return signInWithGoogle(nonce);
   }
 
   const { signInWithKakao } = await import("./kakao");
-  return signInWithKakao();
+  return signInWithKakao(nonce);
 }

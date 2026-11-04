@@ -2,18 +2,20 @@ import { http, HttpResponse } from "msw";
 
 import { failedRefreshTokensFixture, serviceTokensFixture, socialCredentialsFixture } from "../fixtures/auth";
 
-const activeRefreshTokens = new Set<string>();
+type Provider = "google" | "kakao";
+
+const activeRefreshTokens = new Map<string, Provider>();
 const usedRefreshTokens = new Set<string>();
 let tokenSequence = 0;
 
-function issueMockTokens() {
+function issueMockTokens(provider: Provider) {
   tokenSequence += 1;
   const tokens = {
     ...serviceTokensFixture,
     accessToken: `${serviceTokensFixture.accessToken}-${tokenSequence}`,
     refreshToken: `${serviceTokensFixture.refreshToken}-${tokenSequence}`,
   };
-  activeRefreshTokens.add(tokens.refreshToken);
+  activeRefreshTokens.set(tokens.refreshToken, provider);
   return tokens;
 }
 
@@ -21,16 +23,21 @@ function failure(code: string, status: number) {
   return HttpResponse.json({ success: false, code, message: "Mock authentication error" }, { status });
 }
 
+async function readJson(request: Request): Promise<unknown> {
+  return request.json().catch(() => {
+    return null;
+  });
+}
+
 export const authHandlers = [
   http.post("*/api/v1/auth/token", async ({ request }) => {
-    const body: unknown = await request.json().catch(() => {
-      return null;
-    });
+    const body = await readJson(request);
 
     if (
       typeof body !== "object" || body === null ||
-      !("provider" in body) || !("idToken" in body) ||
-      typeof body.idToken !== "string" || !body.idToken.trim()
+      !("provider" in body) || !("idToken" in body) || !("nonce" in body) ||
+      typeof body.idToken !== "string" || !body.idToken.trim() ||
+      typeof body.nonce !== "string" || !body.nonce.trim()
     ) {
       return failure("C001", 400);
     }
@@ -45,16 +52,14 @@ export const authHandlers = [
       return failure("A005", 401);
     }
 
-    if ("nonce" in body && body.nonce !== credentials.nonce) {
+    if (body.nonce !== credentials.nonce) {
       return failure("A006", 401);
     }
 
-    return HttpResponse.json({ success: true, data: { ...issueMockTokens(), isNewUser: true } });
+    return HttpResponse.json({ success: true, data: { ...issueMockTokens(body.provider), isNewUser: true } });
   }),
   http.post("*/api/v1/auth/token/refresh", async ({ request }) => {
-    const body: unknown = await request.json().catch(() => {
-      return null;
-    });
+    const body = await readJson(request);
 
     if (
       typeof body !== "object" || body === null ||
@@ -75,12 +80,14 @@ export const authHandlers = [
       return failure("A010", 401);
     }
 
-    if (!activeRefreshTokens.has(body.refreshToken)) {
+    const provider = activeRefreshTokens.get(body.refreshToken);
+
+    if (!provider) {
       return failure("A007", 401);
     }
 
     activeRefreshTokens.delete(body.refreshToken);
     usedRefreshTokens.add(body.refreshToken);
-    return HttpResponse.json({ success: true, data: issueMockTokens() });
+    return HttpResponse.json({ success: true, data: issueMockTokens(provider) });
   }),
 ];
