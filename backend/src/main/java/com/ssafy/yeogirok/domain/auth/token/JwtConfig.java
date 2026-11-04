@@ -59,7 +59,8 @@ public class JwtConfig {
 	}
 
 	@Bean
-	public JwtDecoder serviceJwtDecoder(SecretKey serviceJwtSecretKey, JwtProperties properties, Clock clock) {
+	public JwtDecoder serviceJwtDecoder(SecretKey serviceJwtSecretKey, JwtProperties properties, Clock clock,
+		WithdrawnUserTokens withdrawnUserTokens) {
 		NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(serviceJwtSecretKey)
 			.macAlgorithm(MacAlgorithm.HS256)
 			.build();
@@ -68,7 +69,8 @@ public class JwtConfig {
 			new AccessTokenExpiryValidator(clock),
 			new JwtIssuerValidator(properties.issuer()),
 			new JwtClaimValidator<String>(JwtClaimNames.SUB, StringUtils::hasText),
-			new JwtClaimValidator<String>(ROLE_CLAIM, ALLOWED_ROLES::contains)));
+			new JwtClaimValidator<String>(ROLE_CLAIM, ALLOWED_ROLES::contains),
+			withdrawnUserTokens));
 		return decoder;
 	}
 }

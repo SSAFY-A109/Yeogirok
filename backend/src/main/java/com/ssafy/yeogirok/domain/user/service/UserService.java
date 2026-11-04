@@ -11,6 +11,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import com.ssafy.yeogirok.domain.auth.token.RefreshTokenService;
+import com.ssafy.yeogirok.domain.auth.token.WithdrawnUserTokens;
 import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.domain.user.dto.MyAccountResponse;
 import com.ssafy.yeogirok.domain.user.dto.WithdrawResponse;
@@ -35,6 +36,7 @@ public class UserService {
 
 	private final UserRepository userRepository;
 	private final RefreshTokenService refreshTokenService;
+	private final WithdrawnUserTokens withdrawnUserTokens;
 	private final GoogleOAuthClient googleOAuthClient;
 	private final IdTokenVerifier idTokenVerifier;
 	private final ApplicationEventPublisher eventPublisher;
@@ -61,8 +63,8 @@ public class UserService {
 	 * 계정 비활성화 → 커밋 뒤 모든 기기 세션 폐기(Redis)와 제공자 연결 해제
 	 * ({@link com.ssafy.yeogirok.domain.user.unlink.ProviderUnlinkService}). 세션 폐기·연결 해제가 실패해도 탈퇴는 성공한다.
 	 *
-	 * <p>발급된 액세스 토큰은 만료(최대 TTL)까지 서명이 유효하다. 회원을 조회하는 API 는
-	 * {@link #findActiveUser} 로 탈퇴 회원을 막는다.
+	 * <p>발급된 액세스 토큰은 만료(최대 TTL)까지 서명이 유효하다. 커밋 뒤 {@link WithdrawnUserTokens} 에 남겨
+	 * JWT 검증 단계에서 모든 API 를 막는다(A003).
 	 */
 	public WithdrawResponse withdraw(AuthenticatedUser principal, String googleAuthCode) {
 		User user = findActiveUser(principal.userId());
@@ -88,9 +90,19 @@ public class UserService {
 			eventPublisher.publishEvent(event);
 		});
 
+		blockRemainingAccessTokens(user.getId());
 		log.info("User withdrawn. userId={}, provider={}, revokedSessions={}", user.getId(), user.getProvider(),
 			revokeAllSessions(user.getId()));
 		return WithdrawResponse.queued();
+	}
+
+	/** 실패하면 남은 액세스 토큰은 만료까지 쓸 수 있다. 회원을 조회하는 API 는 그래도 {@link #findActiveUser} 로 막힌다. */
+	private void blockRemainingAccessTokens(Long userId) {
+		try {
+			withdrawnUserTokens.markWithdrawn(userId);
+		} catch (RuntimeException e) {
+			log.error("Failed to block access tokens of withdrawn user. userId={}", userId, e);
+		}
 	}
 
 	/** Redis 는 DB 트랜잭션에 묶이지 않아 커밋 뒤에 폐기한다. 실패해도 재발급(API-006)이 탈퇴 회원을 막는다. */

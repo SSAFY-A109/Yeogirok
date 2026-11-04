@@ -179,6 +179,20 @@ class UserApiTest {
 		}
 
 		@Test
+		void 탈퇴_후_남은_액세스_토큰은_회원을_조회하지_않는_API_에서도_A003() throws Exception {
+			JsonNode tokens = login("kakao", idTokens.kakao(uniqueSub(), clock.instant()));
+			String accessToken = tokens.get("accessToken").asString();
+			withdraw(accessToken).andExpect(status().isOk());
+
+			// 로그아웃(API-007)은 회원을 조회하지 않는다. JWT 검증 단계에서 막혀야 한다.
+			mockMvc.perform(post("/api/v1/auth/logout").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("{\"refreshToken\": \"%s\"}".formatted(tokens.get("refreshToken").asString())))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value("A003"));
+		}
+
+		@Test
 		void 같은_회원의_탈퇴가_동시에_와도_한_번만_탈퇴하고_연결도_한_번만_끊는다() throws Exception {
 			String sub = uniqueSub();
 			String accessToken = login("kakao", idTokens.kakao(sub, clock.instant())).get("accessToken").asString();
