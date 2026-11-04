@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
 import com.ssafy.yeogirok.domain.footprint.service.FootprintService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -125,6 +127,89 @@ class FootprintControllerTest {
 		getAs(USER_ID, "/api/v1/footprints/abc")
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("C002"));
+	}
+
+	/* ── API-042 내 발자취 목록 ───────────────────────────────── */
+
+	@Test
+	void API_042_목록은_items와_nextCursor로_응답하고_쿼리를_그대로_넘긴다() throws Exception {
+		given(footprintService.getMyFootprints(USER_ID, "126.9,37.4,127.1,37.6", LocalDate.parse("2026-11-01"),
+			LocalDate.parse("2026-11-04"), "CAFE", "abc", 10)).willReturn(new FootprintListResponse(
+			List.of(new FootprintListResponse.Item(10L, new BigDecimal("37.5012345"), new BigDecimal("127.0398765"),
+				"역삼동", null, null, List.of("CAFE"), Instant.parse("2026-11-04T03:00:00Z"))),
+			"next"));
+
+		getAs(USER_ID, "/api/v1/users/me/footprints?bbox=126.9,37.4,127.1,37.6&from=2026-11-01&to=2026-11-04"
+			+ "&category=CAFE&cursor=abc&limit=10")
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{
+				  "success": true,
+				  "data": {
+				    "items": [
+				      {
+				        "id": 10,
+				        "latitude": 37.5012345,
+				        "longitude": 127.0398765,
+				        "locationName": "역삼동",
+				        "address": null,
+				        "body": null,
+				        "categoryCodes": ["CAFE"],
+				        "visitedAt": "2026-11-04 12:00:00+09"
+				      }
+				    ],
+				    "nextCursor": "next"
+				  }
+				}
+				""", JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 쿼리를_모두_생략해도_되고_다음_쪽이_없으면_nextCursor는_null() throws Exception {
+		given(footprintService.getMyFootprints(USER_ID, null, null, null, null, null, null))
+			.willReturn(new FootprintListResponse(List.of(), null));
+
+		getAs(USER_ID, "/api/v1/users/me/footprints")
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{ "success": true, "data": { "items": [], "nextCursor": null } }
+				""", JsonCompareMode.STRICT));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+		날짜 형식 틀림     | from=2026/11/01
+		없는 날짜          | to=2026-02-30
+		limit 숫자 아님    | limit=abc
+		""")
+	void 쿼리_타입이_틀리면_400_C002(String name, String query) throws Exception {
+		getAs(USER_ID, "/api/v1/users/me/footprints?" + query)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("C002"));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+		INVALID_BBOX           | 400 | C013
+		INVALID_DATE_RANGE     | 400 | C012
+		INVALID_CURSOR         | 400 | C006
+		PAGE_SIZE_OUT_OF_RANGE | 400 | C007
+		NOT_ALLOWED_VALUE      | 400 | C003
+		""")
+	void 목록_요청값_오류는_명세의_코드로_응답한다(ExceptionType type, int status, String code) throws Exception {
+		given(footprintService.getMyFootprints(USER_ID, null, null, null, null, null, null))
+			.willThrow(new BusinessException(type));
+
+		getAs(USER_ID, "/api/v1/users/me/footprints")
+			.andExpect(status().is(status))
+			.andExpect(jsonPath("$.code").value(code));
+	}
+
+	@Test
+	void 목록도_인증_정보가_없으면_401_A001() throws Exception {
+		mockMvc.perform(get("/api/v1/users/me/footprints"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("A001"));
 	}
 
 	/* ── API-044 본문 수정 ─────────────────────────────────────── */

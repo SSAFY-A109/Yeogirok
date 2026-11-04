@@ -51,7 +51,12 @@ global/
 | C002 | 400 | 타입·형식 오류 | `MethodArgumentTypeMismatchException`, `HttpMessageNotReadableException` |
 | C003 | 400 | 허용하지 않는 요청값 | 그 외 `@Valid` 제약 위반, 파라미터 제약 위반(`HandlerMethodValidationException`) |
 | C004 | 409 | 버전 불일치 | 서비스가 요청 version 을 비교해 던짐, `OptimisticLockingFailureException`(동시 수정) |
-| C005~C013 | | 멱등키, 커서·페이지 크기, 위치 증거, 좌표·날짜 범위, 지도 영역 | 해당 기능을 만들 때 추가 |
+| C005 | | 멱등키 | 해당 기능을 만들 때 추가 |
+| C006 | 400 | 페이지 커서 무효 | 서비스가 커서를 해석하지 못하면 던짐 |
+| C007 | 400 | 페이지 크기 범위 오류 | 서비스가 limit 범위를 검사해 던짐 |
+| C008~C011 | | 위치 증거, 위도·경도 범위 | 해당 기능을 만들 때 추가 |
+| C012 | 400 | 시작·종료 날짜·시각의 범위·순서 오류 | 서비스가 순서를 검사해 던짐. 날짜 형식 자체가 틀리면 C002 |
+| C013 | 400 | 지도 조회 영역(bbox) 형식·범위 오류 | `global.geo.BoundingBox` |
 | C014 | 500 | 예상하지 못한 서버 오류 | 그 외 모든 예외 |
 | C015 | 404 | 없는 경로 | `NoResourceFoundException` |
 | C016 | 405 | 허용되지 않은 HTTP 메서드 | `HttpRequestMethodNotSupportedException` |
