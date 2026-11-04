@@ -78,7 +78,7 @@ export function RoomDetailSchedule({ room, header }: RoomDetailScheduleProps) {
               <Text accessibilityRole="header" className="text-label text-foreground">
                 {formatMonthDay(item.date)}
               </Text>
-              {item.places.map((place, order) => {
+              {item.stops.map((place, order) => {
                 return (
                   <Text key={place.id} className="text-body-sm text-foreground-secondary">
                     {`${order + 1}. ${place.name}`}

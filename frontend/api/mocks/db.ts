@@ -1,13 +1,29 @@
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
+import type { ScheduleBodyDto } from "../../features/schedule/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
+
+/** 목 서버가 들고 있는 일정 초안 작업. `readyAt`이 지나야 완료로 보인다. */
+export type MockScheduleDraft = {
+  draftId: number;
+  roomId: number;
+  idempotencyKey: string;
+  /** 같은 멱등키로 다른 내용을 보냈는지 가리는 요청 본문. */
+  requestBody: string;
+  baseVersion: number | null;
+  readyAt: number;
+  schedule: ScheduleBodyDto | null;
+  failureCode: string | null;
+};
 
 type MockDb = {
   rooms: Map<number, MockRoom>;
   preferences: Map<number, RecommendationPreferenceDto>;
+  scheduleDrafts: Map<number, MockScheduleDraft>;
   nextRoomId: number;
   nextRoomPlaceId: number;
   nextRecommendationRequestId: number;
+  nextScheduleDraftId: number;
 };
 
 function createDb(): MockDb {
@@ -19,9 +35,11 @@ function createDb(): MockDb {
     })),
 
     preferences: new Map(),
+    scheduleDrafts: new Map(),
     nextRoomId: 100,
     nextRoomPlaceId: 9000,
     nextRecommendationRequestId: 1,
+    nextScheduleDraftId: 1,
   };
 }
 

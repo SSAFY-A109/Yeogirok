@@ -2,6 +2,7 @@ import type { RoomDetailDto, RoomMemberDto, RoomPlaceDto } from "../../../featur
 import type { RoomScheduleDto } from "../../../features/schedule/model";
 
 import { findCatalogPlace, toAreaName } from "./place";
+import { planSchedule } from "./schedule";
 
 /** 목에서 "나"로 쓰는 사용자. */
 export const MOCK_ME: RoomMemberDto = { userId: 1, nickname: "지윤", profileImageUrl: null, me: true };
@@ -42,6 +43,39 @@ export function createRoomPlaceFixture(
 
 export type MockRoom = { detail: RoomDetailDto; places: RoomPlaceDto[]; schedule: RoomScheduleDto | null };
 
+const FIXTURE_STAY_MINUTES = 60;
+
+/** 목 일정. 날마다 정한 순서로 목 계산기가 시각과 이동 시간을 채운다. */
+function makeSchedule(
+  places: RoomPlaceDto[],
+  transportMode: string,
+  createdAt: string,
+  days: { date: string; roomPlaceIds: number[] }[],
+): RoomScheduleDto {
+  const body = planSchedule({
+    roomPlaces: places,
+    transportMode,
+
+    request: {
+      pace: "NORMAL",
+
+      days: days.map((day, index) => {
+        return {
+          date: day.date,
+          startTime: index === 0 ? "10:00" : "09:00",
+          endTime: "18:00",
+
+          stops: day.roomPlaceIds.map((roomPlaceId) => {
+            return { roomPlaceId, stayMinutes: FIXTURE_STAY_MINUTES };
+          }),
+        };
+      }),
+    },
+  });
+
+  return { ...body, version: 1, createdAt };
+}
+
 function makeRoom(
   detail: Omit<RoomDetailDto, "memberCount" | "memberLimit" | "placeCount" | "schedule">,
   places: RoomPlaceDto[],
@@ -58,6 +92,15 @@ function makeRoom(
     places,
     schedule,
   };
+}
+
+function makeRoomWithSchedule(
+  detail: Omit<RoomDetailDto, "memberCount" | "memberLimit" | "placeCount" | "schedule">,
+  places: RoomPlaceDto[],
+  createdAt: string,
+  days: { date: string; roomPlaceIds: number[] }[],
+): MockRoom {
+  return makeRoom(detail, places, makeSchedule(places, detail.transportMode, createdAt, days));
 }
 
 /**
@@ -79,35 +122,31 @@ export function createRoomFixtures(): MockRoom[] {
       { roomId: 2, name: "제주 가을 여행", startDate: null, endDate: null, transportMode: "PUBLIC_TRANSIT", members: [MOCK_ME], recordId: null },
       [createRoomPlaceFixture(2001, 201, "SEARCH")],
     ),
-    makeRoom(
+    makeRoomWithSchedule(
       { roomId: 3, name: "부산 영도 1박 2일", startDate: "2026-10-03", endDate: "2026-10-04", transportMode: "CAR", members: [MOCK_ME, others[2]], recordId: 1 },
       [
         createRoomPlaceFixture(3001, 301, "SEARCH"),
         createRoomPlaceFixture(3002, 302, "SEARCH"),
         createRoomPlaceFixture(3003, 303, "AI_RECOMMENDATION"),
       ],
-      {
-        createdAt: "2026-09-28 21:00:00+09",
-        days: [
-          { date: "2026-10-03", places: [{ roomPlaceId: 3001, name: "흰여울문화마을" }, { roomPlaceId: 3003, name: "영도 해녀촌" }] },
-          { date: "2026-10-04", places: [{ roomPlaceId: 3002, name: "태종대" }] },
-        ],
-      },
+      "2026-09-28 21:00:00+09",
+      [
+        { date: "2026-10-03", roomPlaceIds: [3001, 3003] },
+        { date: "2026-10-04", roomPlaceIds: [3002] },
+      ],
     ),
-    makeRoom(
+    makeRoomWithSchedule(
       { roomId: 4, name: "속초 주말 여행", startDate: "2026-11-21", endDate: "2026-11-22", transportMode: "PUBLIC_TRANSIT", members: [MOCK_ME, ...others.slice(3, 12)], recordId: null },
       [
         createRoomPlaceFixture(4001, 401, "SEARCH"),
         createRoomPlaceFixture(4002, 402, "COURSE", "해솔"),
         createRoomPlaceFixture(4003, 403, "AI_RECOMMENDATION"),
       ],
-      {
-        createdAt: "2026-11-01 20:10:00+09",
-        days: [
-          { date: "2026-11-21", places: [{ roomPlaceId: 4001, name: "속초관광수산시장" }, { roomPlaceId: 4002, name: "영금정" }] },
-          { date: "2026-11-22", places: [{ roomPlaceId: 4003, name: "아바이마을" }] },
-        ],
-      },
+      "2026-11-01 20:10:00+09",
+      [
+        { date: "2026-11-21", roomPlaceIds: [4001, 4002] },
+        { date: "2026-11-22", roomPlaceIds: [4003] },
+      ],
     ),
   ];
 }

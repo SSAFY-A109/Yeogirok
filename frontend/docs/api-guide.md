@@ -218,7 +218,8 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | `POST /rooms/{id}/places` · `place-imports` (API-029·030) | `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — |
 | `DELETE /rooms/{id}/places/{roomPlaceId}` (API-032) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — (화면이 되돌리기 토스트 동안 행을 숨겼다가 확정 시 요청) |
 | `PUT /rooms/{id}/preferences` + `POST …/place-recommendations` (API-033·034) | `recommendationKeys.preference(roomId)` | — (추천 결과는 뮤테이션 `data`로만 쓴다) |
-| `PUT /rooms/{id}/schedule` (API-039) | `scheduleKeys.room(roomId)` | 응답 일정 |
+| `POST /rooms/{id}/schedule-drafts` (API-037, 작업) | — (진행은 `scheduleKeys.draft(roomId, draftId)`를 끝날 때까지 확인. 끝난 초안은 다시 받지 않는다) | — |
+| `PUT /rooms/{id}/schedule` (API-039) | `roomKeys.detail(roomId)`. 409 C008이면 `scheduleKeys.room(roomId)`·`roomKeys.detail(roomId)` 다시 조회 | 응답 일정 → `scheduleKeys.room(roomId)` |
 | `PATCH /rooms/{id}/schedule` (API-040) | 409 C008이면 `scheduleKeys.room(roomId)` 다시 조회 | 응답 일정 |
 | `POST /records/{id}/drafts` (API-064) | 작업 완료 시 `recordKeys.drafts(recordId)` | — |
 | `POST /records/{id}/publications` (API-073) | `recordKeys.detail(recordId)`, `courseKeys.mine()` | — |
