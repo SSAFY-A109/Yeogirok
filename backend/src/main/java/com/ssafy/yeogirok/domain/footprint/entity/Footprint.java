@@ -120,4 +120,11 @@ public class Footprint {
 	public boolean isOwnedBy(Long userId) {
 		return this.userId.equals(userId);
 	}
+
+	/** API-044. 본문만 바꾼다. 위치·방문 시각·카테고리는 그대로다. 빈 본문은 null 이 된다. */
+	public void updateBody(String body) {
+		this.body = FootprintBody.normalize(body);
+		// 같은 본문이어도 수정 성공이면 version +1(명세 AC-01). 값이 바뀌지 않으면 Hibernate 가 UPDATE 를 건너뛰므로 직접 표시한다.
+		this.updatedAt = Instant.now();
+	}
 }

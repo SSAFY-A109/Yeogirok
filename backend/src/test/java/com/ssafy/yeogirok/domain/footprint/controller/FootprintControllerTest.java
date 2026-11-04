@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.footprint.controller;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,15 +13,21 @@ import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
 import com.ssafy.yeogirok.domain.footprint.service.FootprintService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -120,7 +127,124 @@ class FootprintControllerTest {
 			.andExpect(jsonPath("$.code").value("C002"));
 	}
 
+	/* ── API-044 본문 수정 ─────────────────────────────────────── */
+
+	@Test
+	void API_044_수정하면_id_body_updatedAt_version으로_응답한다() throws Exception {
+		given(footprintService.updateBody(USER_ID, 10L, 1, "바꾼 본문")).willReturn(
+			new FootprintUpdateResponse(10L, "바꾼 본문", Instant.parse("2026-11-04T05:30:00Z"), 2));
+
+		patchAs(USER_ID, "/api/v1/footprints/10", """
+			{ "version": 1, "body": "바꾼 본문" }
+			""")
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{
+				  "success": true,
+				  "data": { "id": 10, "body": "바꾼 본문", "updatedAt": "2026-11-04 14:30:00+09", "version": 2 }
+				}
+				""", JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 빈_본문이면_body를_null로_내보낸다() throws Exception {
+		given(footprintService.updateBody(USER_ID, 10L, 1, "")).willReturn(
+			new FootprintUpdateResponse(10L, null, Instant.parse("2026-11-04T05:30:00Z"), 2));
+
+		patchAs(USER_ID, "/api/v1/footprints/10", """
+			{ "version": 1, "body": "" }
+			""")
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.body").value((Object)null))
+			.andExpect(jsonPath("$.data.length()").value(4));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+		body 생략                 | { "version": 1 }                        | C001
+		version 생략              | { "body": "본문" }                      | C001
+		빈 객체                   | { }                                     | C001
+		body null                 | { "version": 1, "body": null }          | C002
+		body 숫자                 | { "version": 1, "body": 123 }           | C002
+		body 배열                 | { "version": 1, "body": ["본문"] }      | C002
+		version null              | { "version": null, "body": "본문" }     | C002
+		version 문자열            | { "version": "1", "body": "본문" }      | C002
+		version 소수              | { "version": 1.5, "body": "본문" }      | C002
+		version int 범위 밖       | { "version": 3000000000, "body": "본문" } | C002
+		JSON 아님                 | version=1                               | C002
+		""")
+	void 요청값_생략은_C001_null과_타입_오류는_C002(String name, String json, String code) throws Exception {
+		patchAs(USER_ID, "/api/v1/footprints/10", json)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(code));
+	}
+
+	@Test
+	void 본문_201자는_400_C003() throws Exception {
+		given(footprintService.updateBody(USER_ID, 10L, 1, "가".repeat(201)))
+			.willThrow(new BusinessException(ExceptionType.NOT_ALLOWED_VALUE));
+
+		patchAs(USER_ID, "/api/v1/footprints/10", """
+			{ "version": 1, "body": "%s" }
+			""".formatted("가".repeat(201)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("C003"));
+	}
+
+	@Test
+	void version이_다르면_409_C004() throws Exception {
+		given(footprintService.updateBody(USER_ID, 10L, 1, "본문"))
+			.willThrow(new BusinessException(ExceptionType.VERSION_MISMATCH));
+
+		patchAs(USER_ID, "/api/v1/footprints/10", """
+			{ "version": 1, "body": "본문" }
+			""")
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("C004"));
+	}
+
+	@Test
+	void 동시_수정으로_낙관적_잠금이_실패해도_409_C004() throws Exception {
+		given(footprintService.updateBody(USER_ID, 10L, 1, "본문"))
+			.willThrow(new ObjectOptimisticLockingFailureException("Footprint", 10L));
+
+		patchAs(USER_ID, "/api/v1/footprints/10", """
+			{ "version": 1, "body": "본문" }
+			""")
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("C004"));
+	}
+
+	@Test
+	void 수정도_타인은_403_F002_없으면_404_F001_인증_없으면_401_A001() throws Exception {
+		String json = """
+			{ "version": 1, "body": "본문" }
+			""";
+		given(footprintService.updateBody(USER_ID, 10L, 1, "본문"))
+			.willThrow(new BusinessException(ExceptionType.FOOTPRINT_NOT_OWNER));
+		given(footprintService.updateBody(USER_ID, 11L, 1, "본문"))
+			.willThrow(new BusinessException(ExceptionType.FOOTPRINT_NOT_FOUND));
+
+		patchAs(USER_ID, "/api/v1/footprints/10", json)
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("F002"));
+		patchAs(USER_ID, "/api/v1/footprints/11", json)
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("F001"));
+		mockMvc.perform(patch("/api/v1/footprints/10").contentType(MediaType.APPLICATION_JSON).content(json))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("A001"));
+	}
+
 	private ResultActions getAs(Long userId, String path) throws Exception {
-		return mockMvc.perform(get(path).with(jwt().jwt(token -> token.subject(String.valueOf(userId)))));
+		return mockMvc.perform(get(path).with(asUser(userId)));
+	}
+
+	private ResultActions patchAs(Long userId, String path, String json) throws Exception {
+		return mockMvc.perform(patch(path).with(asUser(userId)).contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	private static RequestPostProcessor asUser(Long userId) {
+		return jwt().jwt(token -> token.subject(String.valueOf(userId)));
 	}
 }

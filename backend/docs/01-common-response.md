@@ -50,7 +50,8 @@ global/
 | C001 | 400 | 필수 요청값 누락 | `MissingServletRequestParameterException`, `MissingRequestHeaderException`, `@NotNull`·`@NotBlank`·`@NotEmpty` 위반 |
 | C002 | 400 | 타입·형식 오류 | `MethodArgumentTypeMismatchException`, `HttpMessageNotReadableException` |
 | C003 | 400 | 허용하지 않는 요청값 | 그 외 `@Valid` 제약 위반, 파라미터 제약 위반(`HandlerMethodValidationException`) |
-| C004~C013 | | 버전 불일치, 멱등키, 커서·페이지 크기, 위치 증거, 좌표·날짜 범위, 지도 영역 | 해당 기능을 만들 때 추가 |
+| C004 | 409 | 버전 불일치 | 서비스가 요청 version 을 비교해 던짐, `OptimisticLockingFailureException`(동시 수정) |
+| C005~C013 | | 멱등키, 커서·페이지 크기, 위치 증거, 좌표·날짜 범위, 지도 영역 | 해당 기능을 만들 때 추가 |
 | C014 | 500 | 예상하지 못한 서버 오류 | 그 외 모든 예외 |
 | C015 | 404 | 없는 경로 | `NoResourceFoundException` |
 | C016 | 405 | 허용되지 않은 HTTP 메서드 | `HttpRequestMethodNotSupportedException` |
