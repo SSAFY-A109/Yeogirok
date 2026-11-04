@@ -26,6 +26,20 @@ auth:
     kakao:
       allowed-audiences:
         - ${KAKAO_APP_KEY}
+  unlink:
+    # 탈퇴 시 카카오 연결 끊기에 쓴다. 비어 있으면 해제하지 않고 재시도 대상으로 남긴다(로컬 개발용).
+    kakao-admin-key: ${KAKAO_ADMIN_KEY:}
+    kakao-api-base-url: https://kapi.kakao.com
+    # 구글 회원 탈퇴 때 앱이 보낸 serverAuthCode 를 토큰으로 바꿔 연결을 해제한다. 시크릿이 비어 있으면 구글 회원은 탈퇴할 수 없다.
+    google-client-id: ${GOOGLE_WEB_CLIENT_ID}
+    google-client-secret: ${GOOGLE_WEB_CLIENT_SECRET:}
+    google-oauth-base-url: https://oauth2.googleapis.com
+    # 실패한 카카오 연결 해제를 1시간마다 24회(약 하루) 다시 시도한다. 연결 해제는 급하지 않아 천천히 오래 시도한다.
+    retry-interval: PT1H
+    max-attempts: 24
+  withdrawal:
+    # TBD: 탈퇴 전 재인증 허용 시간. 소셜 로그인 후 이 시간이 지나면 A011. 5분은 제안값.
+    reauth-max-age: PT5M
 
 springdoc:
   swagger-ui:
