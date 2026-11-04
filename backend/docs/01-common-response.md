@@ -6,13 +6,13 @@
 
 ```json
 { "success": true,  "data": { … } }
-{ "success": true }
+{ "success": true, "data": null }
 { "success": false, "code": "C002", "message": "…" }
 ```
 
 | 항목 | 규칙 |
 | --- | --- |
-| 빈 성공 | 돌려줄 데이터가 없으면 `data` 필드를 생략한다 |
+| 빈 성공 | 돌려줄 데이터가 없어도 `data` 필드를 `null`로 보낸다. 프론트 봉투 해제가 `data` 키를 요구한다 |
 | `code` | 실패 응답에만 있다. 프론트는 `code`로만 분기한다 |
 | `message` | 개발자용 디버깅 설명. 프론트는 표시·분기에 쓰지 않는다 |
 | 코드 형식 | 도메인 접두어 + 3자리 숫자. 공통은 `C`, 인증·인가는 `A` (`C001`, `A001`) |
@@ -24,7 +24,7 @@
 global/
 ├── response/
 │   ├── ApiResponseBody<T>       sealed abstract — success
-│   ├── SuccessResponseBody<T>   final — data (null 이면 생략)
+│   ├── SuccessResponseBody<T>   final — data (빈 성공은 null)
 │   ├── FailedResponseBody       final — code, message
 │   └── ApiResponseUtil          정적 팩토리 (createSuccessResponse / createFailureResponse)
 └── exception/
@@ -77,4 +77,3 @@ global/
 ## 5. 팀 확인 필요
 
 - 코드 체계를 `C` 공통 / `A` 인증·인가로 정리하면서 번호를 처음부터 다시 매겼다. Notion 명세(기존 C004~C007, C008~C017, AU 접두어)를 이 문서에 맞춰 고쳐야 한다.
-- 빈 성공에서 `data`를 생략하는 것은 명세 초안(`"data": null` 포함)과 다르다. 명세 수정이 필요하다.

@@ -81,11 +81,11 @@ class CommonResponseTest {
 		}
 
 		@Test
-		void 빈_성공은_data_를_생략한다() throws Exception {
+		void 빈_성공은_data_가_null() throws Exception {
 			mockMvc.perform(get("/test/empty"))
 				.andExpect(status().isOk())
 				.andExpect(content().json("""
-					{ "success": true }
+					{ "success": true, "data": null }
 					""", JsonCompareMode.STRICT));
 		}
 	}

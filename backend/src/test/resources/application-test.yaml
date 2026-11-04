@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:yeogirok;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+
+yeogirok:
+  # 멱등키 설정은 local·prod 프로필에만 있어 테스트 프로필에도 둔다. 값은 application-local.yaml 과 같다.
+  idempotency:
+    retention: 24h
+    processing-timeout: 30s
+
+auth:
+  jwt:
+    # 테스트 전용 값(Base64, 48바이트). 운영 값과 무관하다.
+    secret: dGVzdC1vbmx5LXNlY3JldC1mb3IteWVvZ2lyb2stYXV0aC10ZXN0cy0wMTIzNDU2Nzg5
+  oidc:
+    google:
+      allowed-audiences:
+        - test-google-web-client-id
+    kakao:
+      allowed-audiences:
+        - test-kakao-app-key
+  unlink:
+    kakao-admin-key: test-kakao-admin-key
+    google-client-id: test-google-web-client-id
+    google-client-secret: test-google-client-secret
+    # 테스트 중에 재시도 스케줄이 돌지 않게 길게 둔다. 재시도는 테스트에서 직접 호출한다.
+    retry-interval: P1D
