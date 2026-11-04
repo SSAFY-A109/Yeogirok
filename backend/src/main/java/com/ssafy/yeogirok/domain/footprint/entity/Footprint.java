@@ -62,7 +62,7 @@ public class Footprint {
 	@Column(columnDefinition = "text")
 	private String address;
 
-	/** 서비스가 판정한 법정동·법정리 코드. 하루 1회 검사에 쓴다(DB 유일 제약 없음). */
+	/** 역지오코딩으로 판정한 법정동·법정리 코드. 판정하지 못하면 null. 작성 제한(반경 500m)에는 쓰지 않는다. */
 	@Column(name = "legal_area_code", length = 10)
 	private String legalAreaCode;
 
@@ -128,7 +128,7 @@ public class Footprint {
 		this.updatedAt = Instant.now();
 	}
 
-	/** API-045. 소프트 삭제. 행은 남기고 목록·상세·통계·하루 1회 검사에서 뺀다. version 은 UPDATE 때 1 오른다. */
+	/** API-045. 소프트 삭제. 행은 남기고 목록·상세·통계·작성 제한 검사에서 뺀다. version 은 UPDATE 때 1 오른다. */
 	public void softDelete(Instant now) {
 		this.deletedAt = now;
 	}

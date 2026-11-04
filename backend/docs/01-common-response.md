@@ -54,7 +54,10 @@ global/
 | C005 | 409 | 같은 멱등키로 다른 내용의 요청 | `IdempotencyService` ([02-idempotency.md](02-idempotency.md)) |
 | C006 | 400 | 페이지 커서 무효 | 서비스가 커서를 해석하지 못하면 던짐 |
 | C007 | 400 | 페이지 크기 범위 오류 | 서비스가 limit 범위를 검사해 던짐 |
-| C008~C011 | | 위치 증거, 위도·경도 범위 | 해당 기능을 만들 때 추가 |
+| C008 | 422 | 현재 위치 증거 누락 | 요청을 읽을 때 location·latitude·longitude·capturedAt 이 없거나 null |
+| C009 | 422 | 현재 위치 증거의 유효 시각 만료 | `global.location.LocationEvidencePolicy` (capturedAt 허용 범위는 설정값) |
+| C010 | | 현재 위치 정확도 기준 미충족 | 해당 기능을 만들 때 추가 |
+| C011 | 400 | 위도·경도 범위 오류 | `global.location.LocationEvidencePolicy` |
 | C012 | 400 | 시작·종료 날짜·시각의 범위·순서 오류 | 서비스가 순서를 검사해 던짐. 날짜 형식 자체가 틀리면 C002 |
 | C013 | 400 | 지도 조회 영역(bbox) 형식·범위 오류 | `global.geo.BoundingBox` |
 | C014 | 500 | 예상하지 못한 서버 오류 | 그 외 모든 예외 |

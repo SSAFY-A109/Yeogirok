@@ -32,9 +32,11 @@ import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
+import com.ssafy.yeogirok.domain.footprint.service.FootprintCreateService;
 import com.ssafy.yeogirok.domain.footprint.service.FootprintService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.security.PermitAllSecurityConfig;
 
 /**
@@ -54,6 +56,13 @@ class FootprintControllerTest {
 
 	@MockitoBean
 	FootprintService footprintService;
+
+	/** API-041 은 FootprintCreateControllerTest 가 본다. 컨트롤러를 띄우려고만 둔다. */
+	@MockitoBean
+	FootprintCreateService footprintCreateService;
+
+	@MockitoBean
+	IdempotencyService idempotencyService;
 
 	@Test
 	void API_043_상세는_명세의_필드와_datetime_형식으로_응답한다() throws Exception {

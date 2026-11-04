@@ -2,22 +2,31 @@ package com.ssafy.yeogirok.domain.footprint.controller;
 
 import java.time.LocalDate;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintCreateCommand;
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintCreateRequest;
+import com.ssafy.yeogirok.domain.footprint.dto.FootprintCreateResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDeleteResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintDetailResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintListResponse;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateRequest;
 import com.ssafy.yeogirok.domain.footprint.dto.FootprintUpdateResponse;
+import com.ssafy.yeogirok.domain.footprint.service.FootprintCreateService;
 import com.ssafy.yeogirok.domain.footprint.service.FootprintService;
+import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
+import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
 import com.ssafy.yeogirok.global.response.ApiResponseUtil;
 import com.ssafy.yeogirok.global.security.CurrentUserId;
@@ -31,7 +40,32 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class FootprintController {
 
+	/** 멱등키 scope. 새로 만드는 요청이라 대상은 "-" 다. */
+	static final String CREATE_SCOPE = "footprint-create";
+
 	private final FootprintService footprintService;
+	private final FootprintCreateService footprintCreateService;
+	private final IdempotencyService idempotencyService;
+
+	/**
+	 * 요청 형식(C001·C002·C008)은 멱등키 처리 전에 본다. 값 검사·저장은 처리 안에서 하므로,
+	 * 같은 키로 다시 보내면 위치 증거 유효 시각이 지났어도 처음 결과를 돌려준다.
+	 */
+	@Operation(summary = "API-041 발자취·방명록 저장")
+	@PostMapping("/footprints")
+	public ResponseEntity<ApiResponseBody<FootprintCreateResponse>> create(
+		@CurrentUserId Long userId,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@RequestBody FootprintCreateRequest request) {
+		FootprintCreateCommand command = request.toCommand();
+		FootprintCreateResponse response = idempotencyService.execute(
+			new IdempotencyKey(userId, CREATE_SCOPE, "-", idempotencyKey),
+			command,
+			() -> footprintCreateService.create(userId, command),
+			FootprintCreateResponse::id,
+			id -> footprintCreateService.getCreated(userId, Long.parseLong(id)));
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
 
 	@Operation(summary = "API-042 내 발자취 목록")
 	@GetMapping("/users/me/footprints")

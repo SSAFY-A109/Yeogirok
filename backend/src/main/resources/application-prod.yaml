@@ -24,6 +24,11 @@ yeogirok:
     base-cell-size-degrees: ${VISIT_STATS_BASE_CELL_SIZE_DEGREES}
     zoom-multipliers: ${VISIT_STATS_ZOOM_MULTIPLIERS}
     min-count: ${VISIT_STATS_MIN_COUNT}
+  # 현재 위치 증거(DEC-01). 수치가 확정되지 않아 기본값을 두지 않는다. 값이 없으면 실행이 바로 실패한다.
+  location-evidence:
+    max-age: ${LOCATION_EVIDENCE_MAX_AGE}
+    max-future-skew: ${LOCATION_EVIDENCE_MAX_FUTURE_SKEW}
+    policy-version: ${LOCATION_POLICY_VERSION}
   idempotency:
     # 정하지 않은 수치는 기본값 없이 받는다. 값이 없으면 실행이 바로 실패한다.
     retention: ${IDEMPOTENCY_RETENTION}

@@ -29,7 +29,7 @@ public class FootprintStatisticId implements Serializable {
 	@Column(name = "cell_id", nullable = false, length = 255)
 	private String cellId;
 
-	/** visited_at 의 Asia/Seoul 달력 날짜. 하루 1회 작성 제한의 04:00 구간과 별개다. */
+	/** visited_at 의 Asia/Seoul 달력 날짜. 발자취 작성 제한의 04:00 구간과 별개다. */
 	@Column(name = "stat_date", nullable = false)
 	private LocalDate statDate;
 

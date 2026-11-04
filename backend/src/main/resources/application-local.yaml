@@ -21,6 +21,12 @@ yeogirok:
     base-cell-size-degrees: 0.005
     zoom-multipliers: "15:1,13:2,11:8,9:32,0:128"
     min-count: 1
+  # 현재 위치 증거(DEC-01). 로컬 실행용 제안값이다(11/4). 실제 값은 팀이 정해 prod 환경 변수로 넣는다.
+  # 기준을 바꾸면 policy-version 도 바꾼다(footprints.location_policy_version 에 저장된다).
+  location-evidence:
+    max-age: 2m
+    max-future-skew: 30s
+    policy-version: location-v1
   idempotency:
     # 멱등키 보관 기간(11/3 결정, 요청 종류와 상관없이 같다)과 처리 중 표시 수명(제안값).
     retention: ${IDEMPOTENCY_RETENTION:24h}

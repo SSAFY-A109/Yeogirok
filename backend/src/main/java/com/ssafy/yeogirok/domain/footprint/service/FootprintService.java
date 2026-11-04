@@ -68,8 +68,8 @@ public class FootprintService {
 	/**
 	 * API-045. 본인 발자취를 소프트 삭제한다.
 	 *
-	 * <p>사용자 잠금 → 발자취 행 잠금 순서로 잡아 API-041 생성(하루 1회 검사)과 한 줄로 세운다.
-	 * 삭제하면 같은 구간·같은 법정동에 다시 쓸 수 있다.
+	 * <p>사용자 잠금 → 발자취 행 잠금 순서로 잡아 API-041 생성(작성 제한 검사)과 한 줄로 세운다.
+	 * 삭제하면 같은 날 같은 자리(반경 500m 안)에 다시 쓸 수 있다.
 	 */
 	@Transactional
 	public FootprintDeleteResponse delete(Long userId, Long footprintId, int version) {
