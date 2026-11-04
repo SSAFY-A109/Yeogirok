@@ -19,11 +19,13 @@ type RoomSelectSheetProps = {
   placeIds: string[];
   onClose: () => void;
   onAdded: (result: AddPlacesResult) => void;
+  /** 새 여행방 만들기(W06)로 고른 장소를 넘긴다. 없으면 버튼을 준비 중으로 둔다. */
+  onCreateRoom?: () => void;
   /** 제목과 여행방 목록 사이에 보여 줄 내용(예: 장소 위치 지도). */
   children?: ReactNode;
 };
 
-export function RoomSelectSheet({ visible, placeNames, placeIds, onClose, onAdded, children }: RoomSelectSheetProps) {
+export function RoomSelectSheet({ visible, placeNames, placeIds, onClose, onAdded, onCreateRoom, children }: RoomSelectSheetProps) {
   const rooms = useRooms(visible);
   const add = useAddPlacesToRoom();
   const [picked, setPicked] = useState<string>();
@@ -87,11 +89,14 @@ export function RoomSelectSheet({ visible, placeNames, placeIds, onClose, onAdde
                   </Pressable>
                 );
               })}
-              <View
+              <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="새 여행방 만들기, 준비 중"
-                accessibilityState={{ disabled: true }}
-                className="flex-row items-center gap-3 rounded-md border border-dashed border-border p-4 opacity-50"
+                accessibilityLabel={onCreateRoom ? "새 여행방 만들기" : "새 여행방 만들기, 준비 중"}
+                accessibilityHint={onCreateRoom ? "고른 장소를 담은 채로 새 여행방을 만들어요" : undefined}
+                accessibilityState={{ disabled: !onCreateRoom }}
+                disabled={!onCreateRoom}
+                onPress={onCreateRoom}
+                className={cn("flex-row items-center gap-3 rounded-md border border-dashed border-border p-4", onCreateRoom ? "active:bg-muted" : "opacity-50")}
                 testID="room-sheet.new-room"
               >
                 <View className="items-center justify-center rounded-full bg-brand-muted" style={{ width: 22, height: 22 }}>
@@ -102,7 +107,7 @@ export function RoomSelectSheet({ visible, placeNames, placeIds, onClose, onAdde
                   <Text className="text-caption text-foreground-secondary">고른 장소를 담은 채로 만들어요</Text>
                 </View>
                 <Icon as={ChevronRight} size={20} className="text-icon" />
-              </View>
+              </Pressable>
             </RadioGroup>
           )}
         </View>
