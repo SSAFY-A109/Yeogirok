@@ -1,0 +1,158 @@
+package com.ssafy.yeogirok.domain.room.service;
+
+import java.time.Clock;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
+import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
+import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
+import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
+import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
+import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.geo.LegalDong;
+import com.ssafy.yeogirok.global.geo.LegalDongResolver;
+
+import jakarta.persistence.EntityManager;
+
+/**
+ * 여행방 후보 장소 조회·직접 추가·빼기·복원(API-028·031·032·094).
+ *
+ * <p>후보를 바꾸는 요청은 방 행을 잠가 한 줄로 세우고, 실제로 바뀐 경우에만 여행방 version 을 1 올린다. 이미 뺀 후보 빼기·
+ * 이미 있는 후보 복원은 바꾸는 것이 없어 version 을 보지도 올리지도 않고 성공한다(동시에 같은 요청이 와도 오류 없이).
+ *
+ * <p>TODO API-029(검색·AI 추천 담기): 투어API 장소 조회(API-026·027)와 추천 기록(recommendation_logs)이 생기면 만든다.
+ * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
+ */
+@Service
+public class RoomPlaceService {
+
+	private final RoomPlaceRepository roomPlaceRepository;
+	private final TravelRoomRepository travelRoomRepository;
+	private final RoomFinder roomFinder;
+	private final LegalDongResolver legalDongResolver;
+	private final EntityManager entityManager;
+	private final TransactionTemplate transactionTemplate;
+	private final Clock clock;
+
+	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, TravelRoomRepository travelRoomRepository,
+		RoomFinder roomFinder, LegalDongResolver legalDongResolver, EntityManager entityManager,
+		PlatformTransactionManager transactionManager, Clock clock) {
+		this.roomPlaceRepository = roomPlaceRepository;
+		this.travelRoomRepository = travelRoomRepository;
+		this.roomFinder = roomFinder;
+		this.legalDongResolver = legalDongResolver;
+		this.entityManager = entityManager;
+		this.transactionTemplate = new TransactionTemplate(transactionManager);
+		this.clock = clock;
+	}
+
+	/** API-028. 담은 순서(id 오름차순). */
+	@Transactional(readOnly = true)
+	public RoomPlaceListResponse getPlaces(Long userId, Long roomId, RoomPlaceState state) {
+		TravelRoom room = roomFinder.getForMember(roomId, userId).room();
+		List<RoomPlace> places = switch (state) {
+			case ACTIVE -> roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
+			case REMOVED -> roomPlaceRepository.findByRoomIdAndRemovedAtIsNotNullOrderByIdAsc(roomId);
+			case ALL -> roomPlaceRepository.findByRoomIdOrderByIdAsc(roomId);
+		};
+		return new RoomPlaceListResponse(places.stream().map(RoomPlaceListResponse.Item::from).toList(),
+			room.getVersion());
+	}
+
+	/**
+	 * API-031. 멱등키는 컨트롤러가 이 밖에서 처리한다. 참여 확인 → 법정동 이름 조회(외부 호출이라 트랜잭션·잠금 밖,
+	 * 실패해도 regionName 만 null) → 트랜잭션 안에서 방 잠금·참여 재확인 → 저장·version 증가.
+	 * 참여자가 아닌 요청이 카카오를 부르지 않도록 먼저 한 번 확인한다.
+	 */
+	public CustomPlaceCreateResponse addCustomPlace(Long userId, Long roomId, CustomPlaceCreateCommand command) {
+		roomFinder.getForMember(roomId, userId);
+		LegalDong legalDong = legalDongResolver.resolve(command.latitude(), command.longitude());
+
+		return transactionTemplate.execute(status -> {
+			TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
+			RoomPlace place = roomPlaceRepository.save(RoomPlace.manual(roomId, command.name(), command.latitude(),
+				command.longitude(), command.address(), legalDong.name(), userId, clock.instant()));
+			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(place), increaseVersion(room));
+		});
+	}
+
+	/** 같은 멱등키로 다시 보낸 API-031 요청에 담았던 후보와 지금 여행방 version 을 돌려준다. */
+	@Transactional(readOnly = true)
+	public CustomPlaceCreateResponse getAddedCustomPlace(Long userId, Long roomId, Long roomPlaceId) {
+		TravelRoom room = roomFinder.getForMember(roomId, userId).room();
+		return new CustomPlaceCreateResponse(RoomPlaceResponse.from(findInRoom(roomPlaceId, roomId)),
+			room.getVersion());
+	}
+
+	/**
+	 * API-032. removed_at 만 채운다. 일정 항목·재계산 필요 플래그는 그대로 둔다.
+	 * 이미 뺀 후보면 version 과 상관없이 바꾸지 않고 성공한다.
+	 */
+	@Transactional
+	public RoomPlaceRemoveResponse remove(Long userId, Long roomId, Long roomPlaceId, int version) {
+		TravelRoom room = lockForMember(roomId, userId);
+		RoomPlace place = findInRoom(roomPlaceId, roomId);
+		if (place.isRemoved()) {
+			return RoomPlaceRemoveResponse.of(room.getVersion(), room.isScheduleNeedsRecalculation());
+		}
+		checkVersion(room, version);
+		place.remove(clock.instant());
+		return RoomPlaceRemoveResponse.of(increaseVersion(room), room.isScheduleNeedsRecalculation());
+	}
+
+	/**
+	 * API-094. 뺀 후보의 원래 행을 되살린다(ID·출처·추가자 그대로). 시간 제한은 없다.
+	 * 이미 있는 후보면 version 과 상관없이 바꾸지 않고 성공한다.
+	 */
+	@Transactional
+	public RoomPlaceRestoreResponse restore(Long userId, Long roomId, Long roomPlaceId, int version) {
+		TravelRoom room = lockForMember(roomId, userId);
+		RoomPlace place = findInRoom(roomPlaceId, roomId);
+		if (!place.isRemoved()) {
+			return RoomPlaceRestoreResponse.of(place.getId(), room.getVersion(), room.isScheduleNeedsRecalculation());
+		}
+		checkVersion(room, version);
+		place.restore(clock.instant());
+		return RoomPlaceRestoreResponse.of(place.getId(), increaseVersion(room), room.isScheduleNeedsRecalculation());
+	}
+
+	private TravelRoom lockForMember(Long roomId, Long userId) {
+		MemberRoom found = roomFinder.getForMemberForUpdate(roomId, userId);
+		return found.room();
+	}
+
+	private RoomPlace findInRoom(Long roomPlaceId, Long roomId) {
+		return roomPlaceRepository.findByIdAndRoomId(roomPlaceId, roomId)
+			.orElseThrow(() -> new BusinessException(ExceptionType.ROOM_PLACE_NOT_FOUND));
+	}
+
+	private static void checkVersion(TravelRoom room, int version) {
+		if (room.getVersion() != version) {
+			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
+		}
+	}
+
+	/**
+	 * 이미 잡은 행 잠금 위에서 version 을 올리고 방을 다시 읽는다(바뀐 방 정보는 없어 버릴 것이 없다).
+	 * 그사이 API-023 이 읽은 version 은 낡게 되어 그쪽 저장은 C004 로 끝난다.
+	 * PESSIMISTIC_FORCE_INCREMENT 는 이미 PESSIMISTIC_WRITE 로 잠근 엔티티에서는 올리지 않아 쓰지 않는다.
+	 */
+	private int increaseVersion(TravelRoom room) {
+		travelRoomRepository.increaseVersion(room.getId(), clock.instant());
+		entityManager.refresh(room);
+		return room.getVersion();
+	}
+}

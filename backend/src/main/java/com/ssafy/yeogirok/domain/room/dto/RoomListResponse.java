@@ -9,7 +9,7 @@ import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
 
 /**
  * API-020 참여 여행방 목록. 다음 쪽이 없으면 nextCursor 는 null.
- * placeCount·recordIds 는 후보 장소·여행 기록 API 를 만들기 전이라 0·빈 배열이다.
+ * placeCount 는 빼지 않은 후보 수. recordIds 는 여행 기록 API 를 만들기 전이라 빈 배열이다.
  */
 public record RoomListResponse(List<Item> items, String nextCursor) {
 
@@ -26,15 +26,18 @@ public record RoomListResponse(List<Item> items, String nextCursor) {
 		ChatReadState chatReadState
 	) {
 
-		/** @param members 이 방의 현재 참여자(요청자 포함) */
-		public static Item of(TravelRoom room, List<RoomMemberView> members, Long requesterId) {
+		/**
+		 * @param members    이 방의 현재 참여자(요청자 포함)
+		 * @param placeCount 빼지 않은 후보 수
+		 */
+		public static Item of(TravelRoom room, List<RoomMemberView> members, int placeCount, Long requesterId) {
 			Long lastRead = members.stream()
 				.filter(member -> member.userId().equals(requesterId))
 				.findFirst()
 				.map(RoomMemberView::lastReadMessageId)
 				.orElse(null);
 			return new Item(room.getId(), room.getTitle(), room.getStartDate(), room.getEndDate(),
-				room.getTransportMode(), members.size(), members.stream().map(Member::from).toList(), 0, List.of(),
+				room.getTransportMode(), members.size(), members.stream().map(Member::from).toList(), placeCount, List.of(),
 				ChatReadState.of(lastRead));
 		}
 	}

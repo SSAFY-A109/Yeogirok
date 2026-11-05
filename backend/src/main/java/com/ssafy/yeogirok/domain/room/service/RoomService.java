@@ -23,6 +23,8 @@ import com.ssafy.yeogirok.domain.room.entity.RoomMemberId;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
+import com.ssafy.yeogirok.domain.room.repository.RoomPlaceCount;
+import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -42,6 +44,7 @@ public class RoomService {
 
 	private final TravelRoomRepository travelRoomRepository;
 	private final RoomMemberRepository roomMemberRepository;
+	private final RoomPlaceRepository roomPlaceRepository;
 	private final RoomFinder roomFinder;
 	private final Clock clock;
 
@@ -95,8 +98,13 @@ public class RoomService {
 			.findCurrentMembers(page.stream().map(TravelRoom::getId).toList())
 			.stream()
 			.collect(Collectors.groupingBy(RoomMemberView::roomId));
+		Map<Long, Long> placeCountByRoom = roomPlaceRepository
+			.countActiveByRoomIds(page.stream().map(TravelRoom::getId).toList())
+			.stream()
+			.collect(Collectors.toMap(RoomPlaceCount::roomId, RoomPlaceCount::count));
 		List<RoomListResponse.Item> items = page.stream()
-			.map(room -> RoomListResponse.Item.of(room, membersByRoom.getOrDefault(room.getId(), List.of()), userId))
+			.map(room -> RoomListResponse.Item.of(room, membersByRoom.getOrDefault(room.getId(), List.of()),
+				placeCountByRoom.getOrDefault(room.getId(), 0L).intValue(), userId))
 			.toList();
 		String nextCursor = hasNext ? new RoomCursor(page.getLast().getId()).encode() : null;
 		return new RoomListResponse(items, nextCursor);
@@ -107,7 +115,7 @@ public class RoomService {
 	public RoomDetailResponse getRoom(Long userId, Long roomId) {
 		MemberRoom found = roomFinder.getForMember(roomId, userId);
 		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)),
-			found.member());
+			roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId), found.member());
 	}
 
 	/**
