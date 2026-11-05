@@ -14,11 +14,12 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * 카카오 로컬 API 역지오코딩. 법정동 코드·이름은 coord2regioncode(region_type B), 주소·건물 이름은 coord2address.
+ * 발자취는 {@link ReverseGeocoder}(두 호출), 후보 장소 직접 추가는 {@link LegalDongResolver}(법정동만)로 쓴다.
  * 두 호출은 따로 실패할 수 있고 실패한 쪽 값만 null 이 된다. x 는 경도, y 는 위도다. 키·좌표는 로그에 남기지 않는다.
  */
 @Slf4j
 @Component
-public class KakaoReverseGeocoder implements ReverseGeocoder {
+public class KakaoReverseGeocoder implements ReverseGeocoder, LegalDongResolver {
 
 	private static final String REGION_PATH = "/v2/local/geo/coord2regioncode.json";
 	private static final String ADDRESS_PATH = "/v2/local/geo/coord2address.json";
@@ -63,6 +64,17 @@ public class KakaoReverseGeocoder implements ReverseGeocoder {
 			firstNonNull(text(road, "address_name"), text(lot, "address_name")),
 			firstNonNull(text(road, "building_name"), text(region, "region_4depth_name"),
 				text(region, "region_3depth_name")));
+	}
+
+	/** coord2regioncode 만 부른다(주소 조회 없음). */
+	@Override
+	public LegalDong resolve(BigDecimal latitude, BigDecimal longitude) {
+		if (!properties.hasRestApiKey()) {
+			return LegalDong.EMPTY;
+		}
+		JsonNode region = firstDocument(REGION_PATH, latitude, longitude,
+			document -> "B".equals(text(document, "region_type")));
+		return new LegalDong(text(region, "code"), text(region, "region_3depth_name"));
 	}
 
 	/** 조건에 맞는 첫 documents 항목. 결과가 없거나 호출이 실패하면 null. */
