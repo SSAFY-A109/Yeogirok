@@ -364,6 +364,51 @@ export function hasUnplacedStops(day: Pick<ScheduleDay, "unplaced">): boolean {
   return day.unplaced.length > 0;
 }
 
+/** 초안을 적용하면 지금 일정에서 달라지는 점. */
+export type ScheduleChanges = {
+  /** 넣은 장소나 순서가 바뀌는 날(초안 기준). */
+  changedDates: LocalDate[];
+  /** 지금 일정에 있는데 초안 일정에는 없는 장소(넣지 못한 장소 포함). */
+  droppedStops: ScheduleStopRef[];
+};
+
+function stopIdsOf(day: Pick<ScheduleDay, "stops">): number[] {
+  return day.stops.map((stop) => {
+    return stop.id;
+  });
+}
+
+function isSameOrder(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((id, index) => {
+    return id === b[index];
+  });
+}
+
+/** 지금 일정과 초안을 날짜별로 비교한다(ScheduleTimeline 체크리스트 "현재 일정과 달라지는 점"). */
+export function getScheduleChanges(current: Pick<ScheduleBody, "days">, draft: Pick<ScheduleBody, "days">): ScheduleChanges {
+  const currentOrders = new Map(current.days.map((day) => {
+    return [day.date, stopIdsOf(day)];
+  }));
+
+  const draftStopIds = new Set(draft.days.flatMap(stopIdsOf));
+
+  const changedDates = draft.days.filter((day) => {
+    return !isSameOrder(currentOrders.get(day.date) ?? [], stopIdsOf(day));
+  }).map((day) => {
+    return day.date;
+  });
+
+  const droppedStops = current.days.flatMap((day) => {
+    return day.stops;
+  }).filter((stop) => {
+    return !draftStopIds.has(stop.id);
+  }).map((stop) => {
+    return { id: stop.id, name: stop.name };
+  });
+
+  return { changedDates, droppedStops };
+}
+
 /** 주차 줄 문구. 정보가 없으면 "주차 정보 없음"으로 둔다(명세 §5). */
 export function getParkingLabel(parking: ParkingStatus | null): string {
   switch (parking) {
