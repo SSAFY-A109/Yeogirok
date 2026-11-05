@@ -23,7 +23,7 @@
 | 날짜·시각 | date `2026-07-27`, time `15:30:00`, datetime `2026-07-27 15:30:00+09`. datetime은 날짜와 시각 사이가 **공백**이고 오프셋을 포함한다 | 명세 "날짜/시간 형식" |
 | 시간대 | datetime에 오프셋(`+09`)이 포함된다. 오프셋이 없는 값은 받지 않는다고 가정하고, 오면 불일치로 보고한다 | 위 형식 |
 | 페이지네이션 | 커서 방식(C010 커서 무효, C011 페이지 크기 범위 오류). 파라미터 이름·크기 범위·마지막 페이지 표시는 **상세 미확인** | 공통 실패 코드 |
-| 멱등성 | 멱등키를 사용한다(C009 같은 멱등키에 다른 요청 내용). 헤더 이름과 적용 API는 **상세 미확인** | 공통 실패 코드 |
+| 멱등성 | 멱등키를 사용한다(C009 같은 멱등키에 다른 요청 내용). 헤더 이름과 적용 API는 **상세 미확인**. 백엔드 공통 멱등키 처리(`backend/dev`, 2026-11-04 확인)는 `Idempotency-Key` 헤더를 쓰고, 같은 요청이 처리 중이면 409 `C018`을 준다 | 공통 실패 코드 |
 | 버전 충돌 | 자원 버전 비교(C008 요청한 자원의 버전과 현재 버전 불일치). 버전 값 전달 방식은 **상세 미확인** | 공통 실패 코드 |
 | 위치 증거 | 현재 위치가 필요한 요청은 위치 증거를 보낸다. 누락 C012, 유효 시각 만료 C013, 정확도 미달 C014. 필드 구성은 **상세 미확인** | 공통 실패 코드 |
 | 지도 조회 영역 | 영역 파라미터가 있다(C017 형식·범위 오류). 형식은 **상세 미확인** | 공통 실패 코드 |
@@ -174,12 +174,12 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 | 020·021·022·023·024·028·029·032 | `features/room/model.ts` (`RoomSummaryDto`, `RoomDetailDto`, `CreateRoomRequestDto`, `UpdateRoomRequestDto`, `RoomInvitationDto`, `RoomPlaceDto`, `AddRoomPlacesRequestDto`) | 목록 응답은 `{ rooms }`, 장소 목록은 `{ places }`로 감쌌다고 가정 |
 | 026 | `features/place/model.ts` (`PlaceDto`, `SearchPlacesResponseDto`) | 쿼리 `keyword`·`cursor`·`size`, 응답 `{ items, nextCursor }` |
 | 033(=080)·081·034 | `features/recommendation/model.ts` | 조건 `{ categoryCodes, regionCode }`, 결과 `{ requestId, criteria, items }`. `routeHint`는 서버 문구 |
-| 036 | `features/schedule/model.ts` (`RoomScheduleDto`) | 일정이 없으면 `data: null` |
+| 036·037·038·039 | `features/schedule/model.ts` (`RoomScheduleDto`, `CreateScheduleDraftRequestDto`, `ScheduleDraftDto`, `ApplyScheduleDraftRequestDto`) | 2026-11-04 추가. Figma "여행방 일정 만들기"(W13·W14·W09-B)에서 역산. 일정이 없으면 `data: null`. 초안 생성(037)은 작업이라 202 `{ draftId, status }`를 주고, 진행과 결과는 038의 `status`(`PROCESSING`·`COMPLETED`·`FAILED`)로 확인한다(API-011 대신). "다시 계산"도 037로 보낸다(날마다 `stops`를 보내면 그 순서·머무는 시간으로 시각만 계산). 적용(039)은 초안의 `baseVersion`을 보내고, 그사이 일정이 바뀌었으면 409 C008. 이동 시간·주차·넣지 못한 이유 문구는 서버 값. 040(수동 편집)은 이번 화면에서 쓰지 않는다 |
 | 078·079 | `features/common/model.ts` | 지역은 시/도 → 시/군/구 2단(`children`) |
 | **목록에 없음** | `DELETE /rooms/{roomId}/members/me` → `{ roomDeleted }` | 여행방 나가기(W06-L·L2). **백엔드에 엔드포인트 요청 필요** |
 
 - 도메인 오류 code(`RO`·`P`·`AI`·`SC`)는 미확정이라 화면은 공통 code와 도메인 기본 문구만 쓴다. MSW는 없는 여행방에 목 전용 `RO404`를 돌려준다.
-- 버전 충돌(C008)용 버전 필드와 멱등성 헤더는 이 엔드포인트들에서 아직 보내지 않는다.
+- 일정 초안 생성(037)은 `Idempotency-Key` 헤더를, 일정 적용(039)은 버전(`baseVersion`)을 보낸다. 나머지 엔드포인트는 버전 필드와 멱등성 헤더를 아직 보내지 않는다.
 
 ## 4. 열거형과 기준 데이터
 

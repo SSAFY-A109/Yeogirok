@@ -15,7 +15,7 @@ import {
   type UpdateRoomInput,
 } from "@/features/room/api/room.api";
 import type { CreateRoomRequestDto } from "@/features/room/model";
-import { scheduleKeys } from "@/features/schedule/api/queries";
+import { scheduleKeys } from "@/features/schedule/api/keys";
 
 export const roomKeys = {
   all: ["room"] as const,

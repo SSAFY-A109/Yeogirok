@@ -4,6 +4,7 @@ import { useState } from "react";
 import { View } from "react-native";
 
 import { isApiError } from "@/api/errors";
+import { BottomCta } from "@/components/ui/bottom-cta";
 import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { HeaderIconButton, ScreenHeader } from "@/components/ui/screen-header";
@@ -48,22 +49,25 @@ function goToPlaceSource(roomId: number, source: AddPlaceSource) {
 type RoomDetailScreenProps = {
   /** 검증한 라우트 파라미터. 잘못된 id면 `null`. */
   roomId: number | null;
+  /** 장소·일정 탭. 일정을 저장한 뒤 일정 탭으로 돌아올 수 있게 라우트 파라미터로 둔다. */
+  tab: PlaceTab;
+  onTabChange: (tab: PlaceTab) => void;
 };
 
-/** 여행방 상세(Figma W09 + W09-A 시트 + W09-S 하단 상태, TRP-04). */
-export function RoomDetailScreen({ roomId }: RoomDetailScreenProps) {
+/** 여행방 상세(Figma W09 + W09-A 시트 + W09-S 하단 상태 + W09-B 일정 탭, TRP-04). */
+export function RoomDetailScreen({ roomId, tab, onTabChange }: RoomDetailScreenProps) {
   if (roomId === null) {
     return <RoomNotFound />;
   }
 
-  return <RoomDetailQuery roomId={roomId} />;
+  return <RoomDetailQuery roomId={roomId} tab={tab} onTabChange={onTabChange} />;
 }
 
-function RoomDetailQuery({ roomId }: { roomId: number }) {
+function RoomDetailQuery({ roomId, tab, onTabChange }: { roomId: number; tab: PlaceTab; onTabChange: (tab: PlaceTab) => void }) {
   const roomQuery = useRoom(roomId);
 
   if (roomQuery.data) {
-    return <RoomDetailContent room={roomQuery.data} />;
+    return <RoomDetailContent room={roomQuery.data} tab={tab} onTabChange={onTabChange} />;
   }
 
   if (roomQuery.isError) {
@@ -101,8 +105,7 @@ function RoomDetailQuery({ roomId }: { roomId: number }) {
 
 // #region 여행방 상세 본문
 
-function RoomDetailContent({ room }: { room: RoomDetail }) {
-  const [tab, setTab] = useState<PlaceTab>("places");
+function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: PlaceTab; onTabChange: (tab: PlaceTab) => void }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const placesQuery = useRoomPlaces(room.id);
   const { hiddenIds, remove } = useRoomPlaceRemoval(room.id);
@@ -133,10 +136,16 @@ function RoomDetailContent({ room }: { room: RoomDetail }) {
     toast.show({ message: "AI 일정 만들기는 아직 준비 중이에요" });
   };
 
+  const showAdjustPending = () => {
+    toast.show({ message: "일정 조정하기는 아직 준비 중이에요" });
+  };
+
+  const showAdjustButton = tab === "schedule" && room.scheduleCreatedAt !== null;
+
   const header = (
     <>
       <RoomInfo room={room} onInvite={goToInvite} />
-      <PlaceTabs value={tab} onValueChange={setTab} placeCount={visiblePlaceCount} />
+      <PlaceTabs value={tab} onValueChange={onTabChange} placeCount={visiblePlaceCount} />
     </>
   );
 
@@ -163,14 +172,22 @@ function RoomDetailContent({ room }: { room: RoomDetail }) {
           <RoomDetailSchedule room={room} header={header} />
         )}
       </View>
-      <ScheduleReadinessBar
-        readiness={readiness}
-        room={room}
-        placeCount={visiblePlaceCount}
-        onSetDates={goToEdit}
-        onAddPlace={openSheet}
-        onCreateSchedule={showSchedulePending}
-      />
+      {showAdjustButton ? (
+        <BottomCta className="border-t border-border">
+          <Button size="lg" className="h-button-lg w-full" onPress={showAdjustPending} testID="room-detail.adjust-schedule">
+            <Text className="text-button text-primary-foreground">일정 조정하기</Text>
+          </Button>
+        </BottomCta>
+      ) : (
+        <ScheduleReadinessBar
+          readiness={readiness}
+          room={room}
+          placeCount={visiblePlaceCount}
+          onSetDates={goToEdit}
+          onAddPlace={openSheet}
+          onCreateSchedule={showSchedulePending}
+        />
+      )}
       <AddPlaceSheet open={sheetOpen} onOpenChange={setSheetOpen} onSelect={selectSource} />
     </Screen>
   );

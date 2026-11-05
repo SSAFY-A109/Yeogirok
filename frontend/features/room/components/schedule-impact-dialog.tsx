@@ -5,13 +5,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import type { TripDateRange } from "@/features/room/components/trip-date-sheet";
-import { getPlacesOutsideRange, type RoomSchedule, type ScheduleDay } from "@/features/schedule/model";
+import { getDayStopRefs, getPlacesOutsideRange, type RoomSchedule, type ScheduleStopRef } from "@/features/schedule/model";
 import { compareLocalDate, diffDays, formatTripLength, type LocalDate } from "@/lib/date";
 
 /** 저장하면 일정에 생기는 변화(Figma W06-E2). */
 export type ScheduleImpact = {
   /** 새 기간 밖으로 빠져 후보로 돌아가는 장소. */
-  returningPlaces: ScheduleDay["places"];
+  returningPlaces: ScheduleStopRef[];
   /** 장소가 빠지는 날의 차례(1일차부터). */
   returningDayNumbers: number[];
   /** 새 기간 안에 장소가 남는 날이 있는지. */
@@ -53,7 +53,7 @@ export function getScheduleImpact({ schedule, previousRange, nextRange, datesCha
 
   const returningDayNumbers = days
     .filter((day) => {
-      return day.places.length > 0 && isOutsideRange(day.date, nextRange);
+      return getDayStopRefs(day).length > 0 && isOutsideRange(day.date, nextRange);
     })
     .map((day, index) => {
       return previousRange === null ? index + 1 : diffDays(previousRange.startDate, day.date) + 1;
@@ -64,7 +64,7 @@ export function getScheduleImpact({ schedule, previousRange, nextRange, datesCha
     returningDayNumbers,
 
     keepsSomeDays: days.some((day) => {
-      return day.places.length > 0 && !isOutsideRange(day.date, nextRange);
+      return getDayStopRefs(day).length > 0 && !isOutsideRange(day.date, nextRange);
     }),
 
     shortened: previousRange !== null && nextRange !== null && getTripNights(nextRange) < getTripNights(previousRange),
@@ -141,7 +141,7 @@ export function ScheduleImpactDialog({ impact, onCancel, onConfirm, loading }: S
   );
 }
 
-function ReturningPlaces({ places }: { places: ScheduleDay["places"] }) {
+function ReturningPlaces({ places }: { places: ScheduleStopRef[] }) {
   return (
     <View className="gap-2 rounded-md bg-muted px-4 py-3" testID="schedule-impact-dialog.places">
       <Text className="text-label-sm text-muted-foreground">{`후보로 돌아가는 장소 ${places.length}곳`}</Text>

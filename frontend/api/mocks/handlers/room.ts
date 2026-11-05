@@ -54,7 +54,11 @@ function trimSchedule(room: MockRoom): void {
     return startDate !== null && endDate !== null && day.date >= startDate && day.date <= endDate;
   });
 
-  room.schedule = days.length === 0 ? null : { ...room.schedule, days };
+  if (days.length === room.schedule.days.length) {
+    return;
+  }
+
+  room.schedule = days.length === 0 ? null : { ...room.schedule, days, version: room.schedule.version + 1 };
 }
 
 export const roomHandlers = [
@@ -216,18 +220,18 @@ export const roomHandlers = [
       return place.roomPlaceId !== roomPlaceId;
     });
 
+    // 목은 일정에서 그 장소만 빼고 시각은 다시 계산하지 않는다. 일정이 바뀌었으므로 버전은 올린다.
     if (room.schedule !== null) {
+      const isOther = (stop: { roomPlaceId: number }) => {
+        return stop.roomPlaceId !== roomPlaceId;
+      };
+
       room.schedule = {
         ...room.schedule,
+        version: room.schedule.version + 1,
 
         days: room.schedule.days.map((day) => {
-          return {
-            ...day,
-
-            places: day.places.filter((place) => {
-              return place.roomPlaceId !== roomPlaceId;
-            }),
-          };
+          return { ...day, stops: day.stops.filter(isOther), unplaced: day.unplaced.filter(isOther) };
         }),
       };
     }
