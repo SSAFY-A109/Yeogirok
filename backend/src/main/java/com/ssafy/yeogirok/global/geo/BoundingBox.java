@@ -8,8 +8,8 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 /** 지도 조회 영역 {@code west,south,east,north}. west &lt; east, south &lt; north(날짜 변경선 불가), 어긋나면 C013. */
 public record BoundingBox(BigDecimal west, BigDecimal south, BigDecimal east, BigDecimal north) {
 
-	private static final BigDecimal MAX_LONGITUDE = BigDecimal.valueOf(180);
-	private static final BigDecimal MAX_LATITUDE = BigDecimal.valueOf(90);
+	private static final BigDecimal MAX_LONGITUDE = Coordinates.MAX_LONGITUDE;
+	private static final BigDecimal MAX_LATITUDE = Coordinates.MAX_LATITUDE;
 
 	/** @return 값이 없으면 null */
 	public static BoundingBox parseOrNull(String raw) {

@@ -6,7 +6,6 @@ import static com.ssafy.yeogirok.global.request.JsonFields.missing;
 import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -17,6 +16,7 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.geo.Coordinates;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 import tools.jackson.databind.JsonNode;
@@ -27,8 +27,6 @@ import tools.jackson.databind.JsonNode;
  */
 public class FootprintCreateRequest {
 
-	/** footprints.latitude·longitude 의 소수 자릿수. */
-	private static final int COORDINATE_SCALE = 7;
 	private static final DateTimeFormatter CAPTURED_AT_FORMAT = DateTimeFormatter.ofPattern(ApiDateTime.PATTERN);
 
 	@JsonProperty("location")
@@ -56,11 +54,7 @@ public class FootprintCreateRequest {
 		if (!value.isNumber()) {
 			throw invalidFormat("location." + field, "숫자여야 합니다.");
 		}
-		// 1e400 처럼 double 범위를 넘는 값은 Infinity 로 읽혀 decimalValue() 가 실패한다. 범위 밖 좌표와 같은 C011.
-		if (value.isFloatingPointNumber() && !Double.isFinite(value.doubleValue())) {
-			throw new BusinessException(ExceptionType.COORDINATE_OUT_OF_RANGE);
-		}
-		return value.decimalValue().setScale(COORDINATE_SCALE, RoundingMode.HALF_UP);
+		return Coordinates.toDecimal(value);
 	}
 
 	private Instant capturedAt() {
