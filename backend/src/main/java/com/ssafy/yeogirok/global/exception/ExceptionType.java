@@ -76,6 +76,12 @@ public enum ExceptionType {
 	ROOM_NOT_MEMBER(FORBIDDEN, "RO002", "여행방 참여자가 아닙니다."),
 	ROOM_INVITE_TOKEN_INVALID(NOT_FOUND, "RO005", "여행방 초대 토큰이 유효하지 않습니다."),
 	ROOM_FULL(CONFLICT, "RO007", "여행방 참여 인원이 가득 찼습니다."),
+	/** 없는 후보이거나 다른 방의 후보다. 뺀 후보(removed_at)는 찾을 수 있다. */
+	ROOM_PLACE_NOT_FOUND(NOT_FOUND, "RO009", "요청한 후보 장소가 해당 여행방에 없습니다."),
+
+	/* ── 장소 P ─────────────────────────────────────────────── */
+
+	CUSTOM_PLACE_NAME_INVALID(BAD_REQUEST, "P004", "직접 추가할 장소명은 앞뒤 공백을 빼고 1~255자여야 합니다."),
 
 	;
 
