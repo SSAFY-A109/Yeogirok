@@ -132,8 +132,8 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
     goToPlaceSource(room.id, source);
   };
 
-  const showSchedulePending = () => {
-    toast.show({ message: "AI 일정 만들기는 아직 준비 중이에요" });
+  const goToScheduleConditions = () => {
+    router.push({ pathname: "/rooms/[roomId]/schedule/new", params });
   };
 
   const showAdjustPending = () => {
@@ -185,7 +185,7 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
           placeCount={visiblePlaceCount}
           onSetDates={goToEdit}
           onAddPlace={openSheet}
-          onCreateSchedule={showSchedulePending}
+          onCreateSchedule={goToScheduleConditions}
         />
       )}
       <AddPlaceSheet open={sheetOpen} onOpenChange={setSheetOpen} onSelect={selectSource} />

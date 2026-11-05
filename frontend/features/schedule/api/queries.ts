@@ -16,8 +16,10 @@ import { isScheduleDraftFinished } from "@/features/schedule/model";
 /** 초안 진행 확인 간격. */
 export const SCHEDULE_DRAFT_POLL_MS = 1_500;
 
-/** 이만큼 지나도 끝나지 않으면 화면이 "아직 만들고 있어요"를 보여 주고 진행 확인을 멈춘다. */
+/** 이만큼 지나도 끝나지 않으면 화면이 "아직 만들고 있어요"를 보여 주고 자동 진행 확인을 멈춘다. */
 export const SCHEDULE_DRAFT_MAX_WAIT_MS = 120_000;
+
+const MAX_AUTO_CHECKS = SCHEDULE_DRAFT_MAX_WAIT_MS / SCHEDULE_DRAFT_POLL_MS;
 
 export function roomScheduleOptions(roomId: number) {
   return queryOptions({
@@ -30,10 +32,11 @@ export function roomScheduleOptions(roomId: number) {
 }
 
 /**
- * 일정 초안. 끝난 초안은 바뀌지 않으므로 다시 받지 않는다.
- * `poll`이 false면 진행 확인을 멈춘다(최대 대기 초과). 진행 확인 요청이 실패해도 초안 실패로 보지 않고 다음 확인을 기다린다.
+ * 일정 초안. 끝난 초안은 바뀌지 않으므로 다시 받지 않고, 처리 중이면 화면에 들어올 때마다 다시 확인한다.
+ * 최대 대기만큼 확인해도 끝나지 않으면 자동 확인을 멈춘다("다시 확인"은 화면이 직접 부른다).
+ * 진행 확인 요청이 실패해도 초안 실패로 보지 않고 다음 확인을 기다린다.
  */
-export function scheduleDraftOptions(roomId: number, draftId: number, { poll = true }: { poll?: boolean } = {}) {
+export function scheduleDraftOptions(roomId: number, draftId: number) {
   return queryOptions({
     queryKey: scheduleKeys.draft(roomId, draftId),
 
@@ -41,10 +44,13 @@ export function scheduleDraftOptions(roomId: number, draftId: number, { poll = t
       return getScheduleDraft(roomId, draftId, signal);
     },
 
-    staleTime: Infinity,
+    staleTime: (query) => {
+      return isScheduleDraftFinished(query.state.data) ? Infinity : 0;
+    },
 
     refetchInterval: (query) => {
-      return poll && !isScheduleDraftFinished(query.state.data) ? SCHEDULE_DRAFT_POLL_MS : false;
+      const checks = query.state.dataUpdateCount + query.state.errorUpdateCount;
+      return isScheduleDraftFinished(query.state.data) || checks >= MAX_AUTO_CHECKS ? false : SCHEDULE_DRAFT_POLL_MS;
     },
   });
 }
@@ -54,8 +60,8 @@ export function useRoomSchedule(roomId: number, { enabled = true }: { enabled?: 
   return useQuery({ ...roomScheduleOptions(roomId), enabled });
 }
 
-export function useScheduleDraft(roomId: number, draftId: number, { poll = true }: { poll?: boolean } = {}) {
-  return useQuery(scheduleDraftOptions(roomId, draftId, { poll }));
+export function useScheduleDraft(roomId: number, draftId: number) {
+  return useQuery(scheduleDraftOptions(roomId, draftId));
 }
 
 /** 초안 만들기·다시 계산(작업 생성). 중복 생성을 막는 멱등키를 쓰므로 자동으로 다시 보내지 않는다. */
