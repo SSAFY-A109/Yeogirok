@@ -11,6 +11,7 @@ const SCHEDULE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
 export const SCHEDULE_ERROR_FALLBACK = {
   load: "일정을 불러오지 못했어요.",
   draft: "일정 초안을 만들지 못했어요.",
+  recalculate: "다시 계산하지 못했어요.",
   save: "일정을 저장하지 못했어요.",
 } as const;
 

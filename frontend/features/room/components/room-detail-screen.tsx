@@ -10,7 +10,6 @@ import { Screen } from "@/components/ui/screen";
 import { HeaderIconButton, ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
 import { useRoom, useRoomPlaces } from "@/features/room/api/queries";
 import type { AddPlaceSource } from "@/features/room/components/add-place-options";
 import { AddPlaceSheet } from "@/features/room/components/add-place-sheet";
@@ -109,7 +108,6 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
   const [sheetOpen, setSheetOpen] = useState(false);
   const placesQuery = useRoomPlaces(room.id);
   const { hiddenIds, remove } = useRoomPlaceRemoval(room.id);
-  const toast = useToast();
 
   const visiblePlaceCount = placesQuery.data ? getVisibleRoomPlaces(placesQuery.data, hiddenIds).length : room.placeCount;
   const readiness = getScheduleReadiness(room, visiblePlaceCount);
@@ -136,8 +134,9 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
     router.push({ pathname: "/rooms/[roomId]/schedule/new", params });
   };
 
-  const showAdjustPending = () => {
-    toast.show({ message: "일정 조정하기는 아직 준비 중이에요" });
+  /** 저장된 일정에서 시작해 고친다(W14, `draftId` 없음). */
+  const goToScheduleAdjust = () => {
+    router.push({ pathname: "/rooms/[roomId]/schedule/draft", params });
   };
 
   const showAdjustButton = tab === "schedule" && room.scheduleCreatedAt !== null;
@@ -174,7 +173,7 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
       </View>
       {showAdjustButton ? (
         <BottomCta className="border-t border-border">
-          <Button size="lg" className="h-button-lg w-full" onPress={showAdjustPending} testID="room-detail.adjust-schedule">
+          <Button size="lg" className="h-button-lg w-full" onPress={goToScheduleAdjust} testID="room-detail.adjust-schedule">
             <Text className="text-button text-primary-foreground">일정 조정하기</Text>
           </Button>
         </BottomCta>

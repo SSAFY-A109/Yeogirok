@@ -282,6 +282,25 @@
       ],
       "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1)."
     },
+    "rooms/[roomId]/schedule/new": {
+      "route": "/rooms/[roomId]/schedule/new",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › 여행방 일정 만들기. 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:8346) · W13 (1:8347)",
+      "features": [
+        "TRP-08"
+      ],
+      "note": "Pencil 미대조. 처리 중 화면은 섹션에 시안이 없어 W10-1 패턴을 따른다. API는 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
+    "rooms/[roomId]/schedule/draft": {
+      "route": "/rooms/[roomId]/schedule/draft",
+      "pencil": "없음",
+      "figma": "Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:8346) · W14 (1:8394), W14-L (1:8679), W14-L2 (1:8842), W14-M (1:9035), W14-T (1:9227)",
+      "features": [
+        "TRP-08",
+        "TRP-09"
+      ],
+      "note": "2026-11-05 W14·W14-M·W14-T 스크린샷 대조. Pencil 미대조. draftId가 있으면 AI 초안 검토, 없으면 저장된 일정 조정(\"일정 조정하기\"). 순서 바꾸기는 드래그 대신 위·아래 버튼. 웹에서는 BottomSheet 높이 애니메이션이 styleq 경고로 적용되지 않아 시트 배경이 비친다(기존 문제)."
+    },
     "home": {
       "route": "/",
       "pencil": "없음",
