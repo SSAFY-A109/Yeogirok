@@ -36,6 +36,8 @@ import jakarta.persistence.EntityManager;
  * 이미 있는 후보 복원은 바꾸는 것이 없어 version 을 보지도 올리지도 않고 성공한다(동시에 같은 요청이 와도 오류 없이).
  *
  * <p>TODO API-029(검색·AI 추천 담기): 투어API 장소 조회(API-026·027)와 추천 기록(recommendation_logs)이 생기면 만든다.
+ * 지역은 투어API 코드(시·군·구 단위까지)를 그대로 넣지 말고, 장소 좌표(mapx·mapy)로 {@link LegalDongResolver} 를 불러
+ * 직접 추가와 같은 10자리 법정동 코드·읍·면·동 이름을 저장한다(region_code 단위가 섞이지 않게).
  * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
  */
 @Service
