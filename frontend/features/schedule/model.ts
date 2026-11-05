@@ -372,7 +372,7 @@ export type ScheduleChanges = {
   droppedStops: ScheduleStopRef[];
 };
 
-function stopIdsOf(day: Pick<ScheduleDay, "stops">): number[] {
+function stopIdsOf(day: { stops: readonly { id: number }[] }): number[] {
   return day.stops.map((stop) => {
     return stop.id;
   });
@@ -556,6 +556,14 @@ export function removeStop(layout: readonly ScheduleLayoutDay[], stopId: number)
         return stop.id !== stopId;
       }),
     };
+  });
+}
+
+/** 날마다 장소와 순서가 같은지. "순서 바꾸기"에서 바뀐 것이 있는지 볼 때 쓴다. */
+export function isSameLayoutOrder(a: readonly ScheduleLayoutDay[], b: readonly ScheduleLayoutDay[]): boolean {
+  return a.length === b.length && a.every((day, index) => {
+    const other = b.at(index);
+    return other !== undefined && day.date === other.date && isSameOrder(stopIdsOf(day), stopIdsOf(other));
   });
 }
 

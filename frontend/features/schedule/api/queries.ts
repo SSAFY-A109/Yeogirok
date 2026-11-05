@@ -60,8 +60,9 @@ export function useRoomSchedule(roomId: number, { enabled = true }: { enabled?: 
   return useQuery({ ...roomScheduleOptions(roomId), enabled });
 }
 
-export function useScheduleDraft(roomId: number, draftId: number) {
-  return useQuery(scheduleDraftOptions(roomId, draftId));
+/** 일정 초안. `draftId`가 `null`이면 요청하지 않는다(저장된 일정을 보는 중 등). */
+export function useScheduleDraft(roomId: number, draftId: number | null) {
+  return useQuery({ ...scheduleDraftOptions(roomId, draftId ?? 0), enabled: draftId !== null });
 }
 
 /** 초안 만들기·다시 계산(작업 생성). 중복 생성을 막는 멱등키를 쓰므로 자동으로 다시 보내지 않는다. */
