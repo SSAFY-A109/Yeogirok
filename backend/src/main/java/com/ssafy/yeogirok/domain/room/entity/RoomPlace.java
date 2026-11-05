@@ -36,7 +36,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "room_places", indexes = @Index(name = "ix_room_places_room", columnList = "room_id"), check = {
 	@CheckConstraint(name = "room_places_latitude_check", constraint = "latitude BETWEEN -90 AND 90"),
 	@CheckConstraint(name = "room_places_longitude_check", constraint = "longitude BETWEEN -180 AND 180"),
-	@CheckConstraint(name = "room_places_provider_check",
+	// room_places_provider_check 는 PostgreSQL 이 provider 컬럼(enum) 자동 CHECK 에 붙이는 이름이라 겹치지 않게 한다.
+	@CheckConstraint(name = "room_places_provider_place_id_check",
 		constraint = "(provider = 'TOUR_API' AND provider_place_id IS NOT NULL)"
 			+ " OR (provider = 'MANUAL' AND provider_place_id IS NULL)")
 })
