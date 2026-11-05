@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
+import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteProperties;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteTokenCipher;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
@@ -18,7 +19,8 @@ import com.ssafy.yeogirok.support.MutableClock;
 
 /** 여행방 서비스 @DataJpaTest 용 빈. */
 @TestConfiguration
-@Import({RoomService.class, RoomInvitationService.class, RoomPlaceService.class, RoomFinder.class})
+@Import({RoomService.class, RoomInvitationService.class, RoomPlaceService.class, RoomFinder.class,
+	CategoryNames.class})
 public class RoomTestConfig {
 
 	/** 직접 추가 후보의 기본 법정동. */

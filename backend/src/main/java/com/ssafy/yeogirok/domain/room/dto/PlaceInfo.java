@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.room.dto;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 import com.ssafy.yeogirok.domain.room.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
@@ -8,8 +9,7 @@ import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 /**
  * 후보에 저장한 장소 정보(명세의 Place). 표시명은 확인한 값만 주고 지어내지 않는다.
  * <ul>
- *   <li>categoryName: travel_categories.name 을 쓰기로 했지만 아직 이름 기준 데이터가 없어 null 이다.
- *       TODO API-029·030 에서 카테고리가 있는 후보를 담을 때 이름 기준을 함께 만든다.</li>
+ *   <li>categoryName: category_code 에 대응하는 travel_categories.name. 코드가 없거나 그 행이 없으면 null.</li>
  *   <li>regionName: 담을 때 저장한 room_places.region_name 을 그대로 준다.</li>
  * </ul>
  */
@@ -28,9 +28,11 @@ public record PlaceInfo(
 	String imageAttribution
 ) {
 
-	public static PlaceInfo from(RoomPlace place) {
+	/** @param categoryNames 카테고리 코드 → 표시명({@link com.ssafy.yeogirok.domain.category.CategoryNames}) */
+	public static PlaceInfo from(RoomPlace place, Map<String, String> categoryNames) {
+		String categoryName = place.getCategoryCode() == null ? null : categoryNames.get(place.getCategoryCode());
 		return new PlaceInfo(place.getProvider(), place.getProviderPlaceId(), place.getPlaceName(),
-			place.getLatitude(), place.getLongitude(), place.getAddress(), place.getCategoryCode(), null,
+			place.getLatitude(), place.getLongitude(), place.getAddress(), place.getCategoryCode(), categoryName,
 			place.getRegionCode(), place.getRegionName(), place.getImageUrl(), place.getImageAttribution());
 	}
 }

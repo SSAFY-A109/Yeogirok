@@ -12,6 +12,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomDetailResponse;
@@ -20,6 +21,7 @@ import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomUpdateResponse;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.RoomMemberId;
+import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
@@ -45,6 +47,7 @@ public class RoomService {
 	private final TravelRoomRepository travelRoomRepository;
 	private final RoomMemberRepository roomMemberRepository;
 	private final RoomPlaceRepository roomPlaceRepository;
+	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
 	private final Clock clock;
 
@@ -114,8 +117,9 @@ public class RoomService {
 	@Transactional(readOnly = true)
 	public RoomDetailResponse getRoom(Long userId, Long roomId) {
 		MemberRoom found = roomFinder.getForMember(roomId, userId);
-		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)),
-			roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId), found.member());
+		List<RoomPlace> places = roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
+		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)), places,
+			categoryNames.of(places.stream().map(RoomPlace::getCategoryCode).toList()), found.member());
 	}
 
 	/**

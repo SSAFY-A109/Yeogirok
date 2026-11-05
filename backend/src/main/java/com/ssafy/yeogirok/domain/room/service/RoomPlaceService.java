@@ -2,12 +2,14 @@ package com.ssafy.yeogirok.domain.room.service;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse;
@@ -41,6 +43,7 @@ public class RoomPlaceService {
 
 	private final RoomPlaceRepository roomPlaceRepository;
 	private final TravelRoomRepository travelRoomRepository;
+	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
 	private final LegalDongResolver legalDongResolver;
 	private final EntityManager entityManager;
@@ -48,10 +51,11 @@ public class RoomPlaceService {
 	private final Clock clock;
 
 	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, TravelRoomRepository travelRoomRepository,
-		RoomFinder roomFinder, LegalDongResolver legalDongResolver, EntityManager entityManager,
-		PlatformTransactionManager transactionManager, Clock clock) {
+		CategoryNames categoryNames, RoomFinder roomFinder, LegalDongResolver legalDongResolver,
+		EntityManager entityManager, PlatformTransactionManager transactionManager, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.travelRoomRepository = travelRoomRepository;
+		this.categoryNames = categoryNames;
 		this.roomFinder = roomFinder;
 		this.legalDongResolver = legalDongResolver;
 		this.entityManager = entityManager;
@@ -68,8 +72,9 @@ public class RoomPlaceService {
 			case REMOVED -> roomPlaceRepository.findByRoomIdAndRemovedAtIsNotNullOrderByIdAsc(roomId);
 			case ALL -> roomPlaceRepository.findByRoomIdOrderByIdAsc(roomId);
 		};
-		return new RoomPlaceListResponse(places.stream().map(RoomPlaceListResponse.Item::from).toList(),
-			room.getVersion());
+		Map<String, String> names = categoryNamesOf(places);
+		return new RoomPlaceListResponse(places.stream().map(place -> RoomPlaceListResponse.Item.from(place, names))
+			.toList(), room.getVersion());
 	}
 
 	/**
@@ -85,7 +90,8 @@ public class RoomPlaceService {
 			TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
 			RoomPlace place = roomPlaceRepository.save(RoomPlace.manual(roomId, command.name(), command.latitude(),
 				command.longitude(), command.address(), legalDong.code(), legalDong.name(), userId, clock.instant()));
-			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(place), increaseVersion(room));
+			// 직접 추가 후보에는 카테고리가 없다.
+			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(place, Map.of()), increaseVersion(room));
 		});
 	}
 
@@ -93,7 +99,8 @@ public class RoomPlaceService {
 	@Transactional(readOnly = true)
 	public CustomPlaceCreateResponse getAddedCustomPlace(Long userId, Long roomId, Long roomPlaceId) {
 		TravelRoom room = roomFinder.getForMember(roomId, userId).room();
-		return new CustomPlaceCreateResponse(RoomPlaceResponse.from(findInRoom(roomPlaceId, roomId)),
+		RoomPlace place = findInRoom(roomPlaceId, roomId);
+		return new CustomPlaceCreateResponse(RoomPlaceResponse.from(place, categoryNamesOf(List.of(place))),
 			room.getVersion());
 	}
 
@@ -137,6 +144,10 @@ public class RoomPlaceService {
 	private RoomPlace findInRoom(Long roomPlaceId, Long roomId) {
 		return roomPlaceRepository.findByIdAndRoomId(roomPlaceId, roomId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.ROOM_PLACE_NOT_FOUND));
+	}
+
+	private Map<String, String> categoryNamesOf(List<RoomPlace> places) {
+		return categoryNames.of(places.stream().map(RoomPlace::getCategoryCode).toList());
 	}
 
 	private static void checkVersion(TravelRoom room, int version) {

@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.room.dto;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
@@ -30,10 +31,10 @@ public record RoomDetailResponse(
 ) {
 
 	public static RoomDetailResponse of(TravelRoom room, List<RoomMemberView> members, List<RoomPlace> places,
-		RoomMember requester) {
+		Map<String, String> categoryNames, RoomMember requester) {
 		return new RoomDetailResponse(room.getId(), room.getTitle(), room.getStartDate(), room.getEndDate(),
 			room.getTransportMode(), members.stream().map(Member::from).toList(),
-			places.stream().map(Place::from).toList(), null, List.of(), room.getVersion(),
+			places.stream().map(place -> Place.from(place, categoryNames)).toList(), null, List.of(), room.getVersion(),
 			ChatReadState.of(requester.getLastReadMessageId()));
 	}
 
@@ -41,9 +42,9 @@ public record RoomDetailResponse(
 	public record Place(Long id, PlaceInfo place, PlaceSourceType sourceType, Long sourceRecordId,
 		Object sourceRecord, Long addedBy) {
 
-		static Place from(RoomPlace place) {
-			return new Place(place.getId(), PlaceInfo.from(place), place.getSourceType(), place.getSourceRecordId(),
-				null, place.getAddedBy());
+		static Place from(RoomPlace place, Map<String, String> categoryNames) {
+			return new Place(place.getId(), PlaceInfo.from(place, categoryNames), place.getSourceType(),
+				place.getSourceRecordId(), null, place.getAddedBy());
 		}
 	}
 

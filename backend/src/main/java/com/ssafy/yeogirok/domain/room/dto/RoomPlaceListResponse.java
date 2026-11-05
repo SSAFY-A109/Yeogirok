@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.room.dto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
@@ -25,8 +26,9 @@ public record RoomPlaceListResponse(List<Item> items, Integer version) {
 		Instant removedAt
 	) {
 
-		public static Item from(RoomPlace place) {
-			return new Item(place.getId(), PlaceInfo.from(place), place.getSourceType(), place.getSourceRecordId(),
+		public static Item from(RoomPlace place, Map<String, String> categoryNames) {
+			return new Item(place.getId(), PlaceInfo.from(place, categoryNames), place.getSourceType(),
+				place.getSourceRecordId(),
 				null, place.getAddedBy(), place.getRemovedAt());
 		}
 	}

@@ -1,5 +1,7 @@
 package com.ssafy.yeogirok.domain.room.dto;
 
+import java.util.Map;
+
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 
@@ -7,8 +9,8 @@ import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 public record RoomPlaceResponse(Long id, PlaceInfo place, PlaceSourceType sourceType, Long sourceRecordId,
 	Long addedBy) {
 
-	public static RoomPlaceResponse from(RoomPlace place) {
-		return new RoomPlaceResponse(place.getId(), PlaceInfo.from(place), place.getSourceType(),
+	public static RoomPlaceResponse from(RoomPlace place, Map<String, String> categoryNames) {
+		return new RoomPlaceResponse(place.getId(), PlaceInfo.from(place, categoryNames), place.getSourceType(),
 			place.getSourceRecordId(), place.getAddedBy());
 	}
 }

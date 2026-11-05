@@ -15,6 +15,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
+import com.ssafy.yeogirok.domain.category.entity.TravelCategoryEntity;
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
@@ -178,6 +179,33 @@ class RoomPlaceServiceTest {
 		assertThat(all.items()).extracting(RoomPlaceListResponse.Item::id).containsExactly(kept, removed);
 		assertThat(all.version()).isEqualTo(version());
 		assertThat(all.items()).allSatisfy(item -> assertThat(item.sourceRecord()).isNull());
+	}
+
+	@Test
+	void categoryName은_travel_categories의_이름이고_행이_없으면_null() {
+		em.persist(new TravelCategoryEntity("NATURE", "테스트 자연"));
+		insertTourPlace("NATURE");
+		insertTourPlace("CAFE");
+
+		RoomPlaceListResponse list = roomPlaceService.getPlaces(OWNER, roomId, RoomPlaceState.ACTIVE);
+
+		assertThat(list.items()).extracting(item -> item.place().categoryCode()).containsExactly("NATURE", "CAFE");
+		assertThat(list.items()).extracting(item -> item.place().categoryName()).containsExactly("테스트 자연", null);
+		assertThat(roomService.getRoom(OWNER, roomId).places())
+			.extracting(place -> place.place().categoryName()).containsExactly("테스트 자연", null);
+	}
+
+	/** 투어API 담기(API-029)가 아직 없어 카테고리가 있는 후보를 직접 넣는다. */
+	private void insertTourPlace(String categoryCode) {
+		em.getEntityManager().createNativeQuery("INSERT INTO room_places (room_id, place_name, latitude, longitude,"
+				+ " category_code, provider, provider_place_id, parking_status, parking_info, added_by, source_type,"
+				+ " created_at, updated_at) VALUES (?1, '투어 장소', 37.75, 128.87, ?2, 'TOUR_API', ?3, 'UNKNOWN',"
+				+ " '{}' FORMAT JSON, ?4, 'SEARCH', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+			.setParameter(1, roomId)
+			.setParameter(2, categoryCode)
+			.setParameter(3, "tour-" + categoryCode)
+			.setParameter(4, OWNER)
+			.executeUpdate();
 	}
 
 	@Test
