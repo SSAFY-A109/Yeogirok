@@ -3,15 +3,19 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import {
   buildKakaoMapHtml,
+  buildSetFootprintsScript,
   buildSetMarkersScript,
   buildSetRouteScript,
   KAKAO_JS_SDK_DOMAIN,
   parseKakaoMapMessage,
   type KakaoMapFailure,
   type MapCamera,
+  type MapFootprint,
+  type MapFootprintStyle,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRegion,
   type MapRoute,
 } from "./kakao-map-bridge";
 
@@ -19,14 +23,18 @@ export {
   KAKAO_JS_SDK_DOMAIN,
   type KakaoMapFailure,
   type MapCamera,
+  type MapFootprint,
+  type MapFootprintStyle,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRegion,
   type MapRoute,
   type MapRouteColors,
   type MapRoutePoint,
 } from "./kakao-map-bridge";
 
+export { footprintPinImage } from "./footprint-pin";
 export { placePinImage } from "./place-pin";
 
 const NO_RESPONSE_TIMEOUT_MS = 20000;
@@ -37,7 +45,11 @@ type KakaoMapViewProps = {
   markers?: readonly MapMarker[];
   markerImage?: MapMarkerImage;
   route?: MapRoute;
+  footprints?: readonly MapFootprint[];
+  footprintStyle?: MapFootprintStyle;
   onPressPoint?: (id: string) => void;
+  onPressMap?: () => void;
+  onRegionChange?: (region: MapRegion) => void;
   onReady: () => void;
   onError: (reason: KakaoMapFailure) => void;
   onPerformance?: (report: MapPerformanceReport) => void;
@@ -50,7 +62,11 @@ export function KakaoMapView({
   markers,
   markerImage,
   route,
+  footprints,
+  footprintStyle,
   onPressPoint,
+  onPressMap,
+  onRegionChange,
   onReady,
   onError,
   onPerformance,
@@ -109,6 +125,16 @@ export function KakaoMapView({
     }
   }, [route]);
 
+  function sendFootprints(nextFootprints: readonly MapFootprint[], style: MapFootprintStyle) {
+    webViewRef.current?.injectJavaScript(buildSetFootprintsScript(nextFootprints, style));
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && footprints && footprintStyle) {
+      sendFootprints(footprints, footprintStyle);
+    }
+  }, [footprints, footprintStyle]);
+
   function handleMessage(event: WebViewMessageEvent) {
     const message = parseKakaoMapMessage(event.nativeEvent.data);
 
@@ -129,6 +155,10 @@ export function KakaoMapView({
         sendRoute(route);
       }
 
+      if (footprints && footprintStyle) {
+        sendFootprints(footprints, footprintStyle);
+      }
+
       onReady();
     }
 
@@ -138,6 +168,14 @@ export function KakaoMapView({
 
     if (message.type === "point-pressed") {
       onPressPoint?.(message.id);
+    }
+
+    if (message.type === "map-pressed") {
+      onPressMap?.();
+    }
+
+    if (message.type === "region-changed") {
+      onRegionChange?.(message.region);
     }
 
     if (message.type === "markers-rendered") {

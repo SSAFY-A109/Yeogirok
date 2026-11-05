@@ -76,6 +76,7 @@ function RootNavigator() {
             <Stack.Screen name="rooms/[roomId]/search" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/recommend" options={{ headerShown: false }} />
             <Stack.Screen name="ar-tip" options={{ headerShown: false }} />
+            <Stack.Screen name="map" options={{ headerShown: false }} />
             <Stack.Screen name="kakao-map-test" />
           </Stack.Protected>
           <Stack.Protected guard={!session.data} redirectTo="/">

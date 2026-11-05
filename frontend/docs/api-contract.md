@@ -181,6 +181,32 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 - 도메인 오류 code(`RO`·`P`·`AI`·`SC`)는 미확정이라 화면은 공통 code와 도메인 기본 문구만 쓴다. MSW는 없는 여행방에 목 전용 `RO404`를 돌려준다.
 - 버전 충돌(C008)용 버전 필드와 멱등성 헤더는 이 엔드포인트들에서 아직 보내지 않는다.
 
+### 3-2. 방문 분포도 가정 DTO (2026-11-05)
+
+지도 탭(Figma W15·W15-A)을 MSW로 먼저 만들기 위해 API-046의 요청·응답을 화면에서 역산해 **가정**했다. 타입은 `features/statistics/model.ts`에 있다. 명세가 나오면 타입과 `api/mocks/`를 함께 고친다.
+
+```ts
+// GET /visit-statistics?swLat&swLng&neLat&neLng&level&category — 가정
+// swLat·swLng·neLat·neLng: 지도에 보이는 영역(남서·북동). 클라이언트가 소수 셋째 자리로 넓혀 반올림한다
+// level: 카카오 지도 확대 단계. 서버가 이 단계에 맞는 집계 단위로 묶는다고 가정
+// category: API-079 카테고리 code. 없으면 전체
+type VisitStatisticsResponseDto = {
+  periodDays: number; // 집계 기간(DEC-02). 화면은 "최근 N일"로 표시만 한다
+  areas: {
+    areaId: string; // 집계 단위 id. 데이터베이스 키가 아닐 수 있어 문자열로 가정
+    name: string; // "경포호 일대"
+    latitude: number;
+    longitude: number;
+    visitorCount: number; // 다녀간 사람(중복 제거)
+    visitCount: number; // 방문 수
+    categoryShares: { categoryCode: string; categoryName: string; percent: number }[]; // 서버가 계산한 비율
+  }[];
+};
+// 400 C017(영역 형식·범위), 도메인 ST*** 미확정
+```
+
+- 최소 집계 수 미만 지역을 숨기는 일(DEC-07)과 기간 선택(DEC-02)은 서버가 정한다고 보고, 클라이언트는 받은 값을 그대로 그린다.
+
 ## 4. 열거형과 기준 데이터
 
 클라이언트 타입은 아래 값의 유니온으로 두고, 모르는 값은 `UNKNOWN`으로 흡수한다(규칙 90).

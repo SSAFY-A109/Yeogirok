@@ -40,6 +40,36 @@ export type MapRoute = {
   colors: MapRouteColors;
 };
 
+/** 지도에 보이는 영역(남서·북동 좌표)과 확대 단계. 카카오 지도는 level이 작을수록 가깝다. */
+export type MapRegion = {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  level: number;
+};
+
+/** 방문 분포 발바닥 마커(Figma `Map / FootprintMarker`). label은 배지 숫자, scale은 기본 크기 56×64 대비 배율이다. 선택하면 배지 대신 선택 링을 그린다. */
+export type MapFootprint = {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
+  accessibilityLabel: string;
+  scale: number;
+  selected: boolean;
+};
+
+/** 발바닥 마커 모양. image는 WebView에서 바로 읽히는 data URI이고, 색은 `lib/theme.ts` 값을 넘긴다. */
+export type MapFootprintStyle = {
+  image: string;
+  badgeBackground: string;
+  badgeBorder: string;
+  badgeText: string;
+  selectionBorder: string;
+  selectionFill: string;
+};
+
 export type KakaoMapFailure = "sdk-load" | "map-init" | "timeout" | "network" | "no-response";
 
 export type MapInteractionKind = "drag" | "zoom";
@@ -49,6 +79,8 @@ export type KakaoMapMessage =
   | { type: "error"; reason: KakaoMapFailure }
   | { type: "markers-rendered"; count: number; renderMs: number }
   | { type: "point-pressed"; id: string }
+  | { type: "map-pressed" }
+  | { type: "region-changed"; region: MapRegion }
   | {
       type: "interaction-perf";
       kind: MapInteractionKind;
@@ -74,6 +106,8 @@ export const KAKAO_JS_SDK_DOMAIN = "http://localhost";
 const TILES_TIMEOUT_MS = 15000;
 const CLUSTER_MIN_LEVEL = 5;
 const MIN_PERF_SAMPLE_FRAMES = 5;
+/** 마커를 누른 직후의 지도 탭은 마커 누름으로 보고 지도 빈 곳 탭으로 알리지 않는다. */
+const OVERLAY_PRESS_GUARD_MS = 500;
 const pageFailureReasons: readonly KakaoMapFailure[] = ["sdk-load", "map-init", "timeout"];
 
 function toScriptLiteral(value: unknown): string {
@@ -99,6 +133,8 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   var clusterer = null;
   var routeLine = null;
   var routeOverlays = [];
+  var footprintOverlays = [];
+  var overlayPressedAt = 0;
   var anchor = null;
 
   function post(message) {
@@ -237,6 +273,88 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
     }
   };
 
+  function currentRegion() {
+    var bounds = map.getBounds();
+    var southWest = bounds.getSouthWest();
+    var northEast = bounds.getNorthEast();
+    return {
+      south: southWest.getLat(),
+      west: southWest.getLng(),
+      north: northEast.getLat(),
+      east: northEast.getLng(),
+      level: map.getLevel()
+    };
+  }
+
+  function markOverlayPress() {
+    overlayPressedAt = Date.now();
+  }
+
+  function footprintElement(point, style) {
+    var pawTop = point.selected ? 10 : 1;
+    var pawCenter = pawTop + 22;
+    var wrapper = document.createElement("div");
+    wrapper.setAttribute("role", "button");
+    wrapper.setAttribute("aria-label", point.accessibilityLabel);
+    wrapper.style.cssText = "position:relative;width:56px;height:64px;cursor:pointer;-webkit-tap-highlight-color:transparent;" +
+      "transform:scale(" + point.scale + ");transform-origin:50% " + pawCenter + "px;";
+    if (point.selected) {
+      var ring = document.createElement("div");
+      ring.style.cssText = "position:absolute;left:2px;top:6px;width:52px;height:52px;box-sizing:border-box;border-radius:26px;" +
+        "border:2px solid " + style.selectionBorder + ";background:" + style.selectionFill + ";";
+      wrapper.appendChild(ring);
+    }
+    var paw = document.createElement("img");
+    paw.src = style.image;
+    paw.alt = "";
+    paw.draggable = false;
+    paw.style.cssText = "position:absolute;left:6px;top:" + pawTop + "px;width:44px;height:44px;";
+    wrapper.appendChild(paw);
+    if (!point.selected) {
+      var badge = document.createElement("div");
+      badge.textContent = point.label;
+      badge.style.cssText = "position:absolute;left:50%;top:40px;transform:translateX(-50%);min-width:44px;box-sizing:border-box;" +
+        "padding:1px 4px;border-radius:9999px;border:2px solid " + style.badgeBorder + ";background:" + style.badgeBackground +
+        ";color:" + style.badgeText + ";font:500 12px/16px sans-serif;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;";
+      wrapper.appendChild(badge);
+    }
+    wrapper.addEventListener("touchstart", markOverlayPress, { passive: true });
+    wrapper.addEventListener("mousedown", markOverlayPress);
+    wrapper.addEventListener("click", function () {
+      markOverlayPress();
+      post({ type: "point-pressed", id: point.id });
+    });
+    return { element: wrapper, yAnchor: pawCenter / 64 };
+  }
+
+  window.yeogirokMap.setFootprints = function (points, style) {
+    if (!map) return;
+    footprintOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    footprintOverlays = points.map(function (point) {
+      var marker = footprintElement(point, style);
+      var overlay = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(point.lat, point.lng),
+        content: marker.element,
+        clickable: true,
+        xAnchor: 0.5,
+        yAnchor: marker.yAnchor,
+        zIndex: point.selected ? 1000 : Math.round(point.scale * 100)
+      });
+      overlay.setMap(map);
+      return overlay;
+    });
+  };
+
+  function watchRegionAndTaps() {
+    kakao.maps.event.addListener(map, "idle", function () {
+      post({ type: "region-changed", region: currentRegion() });
+    });
+    kakao.maps.event.addListener(map, "click", function () {
+      if (Date.now() - overlayPressedAt < ${OVERLAY_PRESS_GUARD_MS}) return;
+      post({ type: "map-pressed" });
+    });
+  }
+
   function recenterOnAnchor() {
     map.relayout();
     map.setCenter(anchor);
@@ -278,10 +396,13 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
       map = new kakao.maps.Map(container, { center: anchor, level: camera.level });
       clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: ${CLUSTER_MIN_LEVEL} });
       kakao.maps.event.addListener(map, "tilesloaded", function () {
-        if (!settled) recenterOnAnchor();
+        if (settled) return;
+        recenterOnAnchor();
         settle({ type: "ready" });
+        post({ type: "region-changed", region: currentRegion() });
       });
       keepCenterOnResize(container);
+      watchRegionAndTaps();
       watchInteractionPerformance();
     } catch (error) {
       settle({ type: "error", reason: "map-init" });
@@ -323,6 +444,14 @@ export function buildSetMarkersScript(markers: readonly MapMarker[], image?: Map
   return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}, ${toScriptLiteral(image ?? null)}); true;`;
 }
 
+export function buildSetFootprintsScript(footprints: readonly MapFootprint[], style: MapFootprintStyle): string {
+  const points = footprints.map(({ id, lat, lng, label, accessibilityLabel, scale, selected }) => {
+    return { id, lat, lng, label, accessibilityLabel, scale, selected };
+  });
+
+  return `window.yeogirokMap && window.yeogirokMap.setFootprints && window.yeogirokMap.setFootprints(${toScriptLiteral(points)}, ${toScriptLiteral(style)}); true;`;
+}
+
 function isPageFailureReason(value: unknown): value is KakaoMapFailure {
   return pageFailureReasons.some((reason) => {
     return reason === value;
@@ -335,6 +464,28 @@ function isInteractionKind(value: unknown): value is MapInteractionKind {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function toMapRegion(value: unknown): MapRegion | null {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("south" in value) ||
+    !("west" in value) ||
+    !("north" in value) ||
+    !("east" in value) ||
+    !("level" in value)
+  ) {
+    return null;
+  }
+
+  const { south, west, north, east, level } = value;
+
+  if (!isFiniteNumber(south) || !isFiniteNumber(west) || !isFiniteNumber(north) || !isFiniteNumber(east) || !isFiniteNumber(level)) {
+    return null;
+  }
+
+  return { south, west, north, east, level };
 }
 
 export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
@@ -356,6 +507,15 @@ export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
 
   if (value.type === "point-pressed" && "id" in value && typeof value.id === "string") {
     return { type: "point-pressed", id: value.id };
+  }
+
+  if (value.type === "map-pressed") {
+    return { type: "map-pressed" };
+  }
+
+  if (value.type === "region-changed" && "region" in value) {
+    const region = toMapRegion(value.region);
+    return region ? { type: "region-changed", region } : null;
   }
 
   if (value.type === "error" && "reason" in value && isPageFailureReason(value.reason)) {
