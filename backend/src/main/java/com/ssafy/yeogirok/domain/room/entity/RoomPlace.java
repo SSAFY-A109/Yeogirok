@@ -121,15 +121,20 @@ public class RoomPlace {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
-	/** API-031 지도 핀 직접 추가. 이름·좌표 검사는 서비스가 끝낸 뒤 부른다. */
+	/**
+	 * API-031 지도 핀 직접 추가. 이름·좌표 검사는 서비스가 끝낸 뒤 부른다.
+	 * @param regionCode 좌표로 찾은 법정동 코드(10자리), 못 찾으면 null
+	 * @param regionName 좌표로 찾은 읍·면·동 이름, 못 찾으면 null
+	 */
 	public static RoomPlace manual(Long roomId, String name, BigDecimal latitude, BigDecimal longitude,
-		String address, String regionName, Long addedBy, Instant now) {
+		String address, String regionCode, String regionName, Long addedBy, Instant now) {
 		RoomPlace place = new RoomPlace();
 		place.roomId = roomId;
 		place.placeName = name;
 		place.latitude = latitude;
 		place.longitude = longitude;
 		place.address = address;
+		place.regionCode = regionCode;
 		place.regionName = regionName;
 		place.provider = PlaceProvider.MANUAL;
 		place.addedBy = addedBy;

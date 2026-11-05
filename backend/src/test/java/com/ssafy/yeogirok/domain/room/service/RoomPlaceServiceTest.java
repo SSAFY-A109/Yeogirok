@@ -98,7 +98,7 @@ class RoomPlaceServiceTest {
 		assertThat(response.roomPlace().addedBy()).isEqualTo(FRIEND);
 		assertThat(response.roomPlace().sourceRecordId()).isNull();
 		assertThat(response.roomPlace().place()).isEqualTo(new PlaceInfo(PlaceProvider.MANUAL, null,
-			"경포 해변 주차장", LAT, LNG, "강원 강릉시 창해로", null, null, null, "강릉동", null, null));
+			"경포 해변 주차장", LAT, LNG, "강원 강릉시 창해로", null, null, "4215010100", "강릉동", null, null));
 		assertThat(legalDongResolver.calls()).isEqualTo(1);
 
 		em.flush();
@@ -106,15 +106,17 @@ class RoomPlaceServiceTest {
 		RoomPlace saved = em.find(RoomPlace.class, response.roomPlace().id());
 		assertThat(saved.getRoomId()).isEqualTo(roomId);
 		assertThat(saved.getRegionName()).isEqualTo("강릉동");
-		assertThat(saved.getRegionCode()).isNull();
+		assertThat(saved.getRegionCode()).isEqualTo("4215010100");
 		assertThat(saved.getCreatedAt()).isEqualTo(NOW);
 	}
 
 	@Test
-	void 법정동_이름을_못_얻어도_후보는_만들고_regionName은_null() {
+	void 법정동을_못_얻어도_후보는_만들고_regionCode와_regionName은_null() {
 		legalDongResolver.willReturn(LegalDong.EMPTY);
 
-		assertThat(add(OWNER, "이름 없는 곳").roomPlace().place().regionName()).isNull();
+		PlaceInfo place = add(OWNER, "이름 없는 곳").roomPlace().place();
+		assertThat(place.regionCode()).isNull();
+		assertThat(place.regionName()).isNull();
 	}
 
 	@Test

@@ -73,8 +73,8 @@ public class RoomPlaceService {
 	}
 
 	/**
-	 * API-031. 멱등키는 컨트롤러가 이 밖에서 처리한다. 참여 확인 → 법정동 이름 조회(외부 호출이라 트랜잭션·잠금 밖,
-	 * 실패해도 regionName 만 null) → 트랜잭션 안에서 방 잠금·참여 재확인 → 저장·version 증가.
+	 * API-031. 멱등키는 컨트롤러가 이 밖에서 처리한다. 참여 확인 → 법정동 조회(외부 호출이라 트랜잭션·잠금 밖,
+	 * 실패해도 regionCode·regionName 만 null) → 트랜잭션 안에서 방 잠금·참여 재확인 → 저장·version 증가.
 	 * 참여자가 아닌 요청이 카카오를 부르지 않도록 먼저 한 번 확인한다.
 	 */
 	public CustomPlaceCreateResponse addCustomPlace(Long userId, Long roomId, CustomPlaceCreateCommand command) {
@@ -84,7 +84,7 @@ public class RoomPlaceService {
 		return transactionTemplate.execute(status -> {
 			TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
 			RoomPlace place = roomPlaceRepository.save(RoomPlace.manual(roomId, command.name(), command.latitude(),
-				command.longitude(), command.address(), legalDong.name(), userId, clock.instant()));
+				command.longitude(), command.address(), legalDong.code(), legalDong.name(), userId, clock.instant()));
 			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(place), increaseVersion(room));
 		});
 	}
