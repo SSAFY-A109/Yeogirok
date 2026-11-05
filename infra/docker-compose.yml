@@ -90,8 +90,23 @@ services:
       S3_RECEIPT_BUCKET: ${S3_RECEIPT_BUCKET}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # 로그인 (값은 .env, 백엔드 backend/docs/05-social-login-setup.md 참고). 하나라도 비면 백엔드가 바로 멈춘다.
+      # 구글 웹 클라이언트 ID와 카카오 네이티브 앱 키는 앱(프론트)과 같은 값이다.
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
+      KAKAO_APP_KEY: ${KAKAO_APP_KEY}
+      # 방문 분포(API-046)와 현재 위치 증거(DEC-01). 비밀 값이 아니라 여기에 바로 적는다. 하나라도 빠지면 백엔드가 바로 멈춘다.
+      # TBD: 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다. 팀이 정하면 바꾼다.
+      # 셀 크기를 바꾸면 VISIT_STATS_AGGREGATION_VERSION 도, 위치 기준을 바꾸면 LOCATION_POLICY_VERSION 도 함께 바꾼다.
+      VISIT_STATS_AGGREGATION_VERSION: grid-0.005-v1
+      VISIT_STATS_BASE_CELL_SIZE_DEGREES: "0.005"
+      VISIT_STATS_ZOOM_MULTIPLIERS: "15:1,13:2,11:8,9:32,0:128"
+      VISIT_STATS_MIN_COUNT: "1"
+      LOCATION_EVIDENCE_MAX_AGE: 2m
+      LOCATION_EVIDENCE_MAX_FUTURE_SKEW: 30s
+      LOCATION_POLICY_VERSION: location-v1
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
-      # JWT_SECRET: ${JWT_SECRET}
+      # TOUR_API_KEY: ${TOUR_API_KEY}
     ports:
       - "127.0.0.1:8080:8080"   # Nginx만 접근
 

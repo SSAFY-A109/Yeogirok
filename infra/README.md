@@ -212,12 +212,14 @@ cd ~/yeogirok/infra-src/infra
 cp .env.example .env
 openssl rand -hex 24         # 나온 값을 DB_PASSWORD 에 넣는다
 openssl rand -hex 24         # 한 번 더 만들어 다른 값을 REDIS_PASSWORD 에 넣는다
+openssl rand -base64 48      # JWT_SECRET 에 넣는다 (이것만 base64)
 nano .env                    # 저장: Ctrl+O, Enter / 나가기: Ctrl+X
 chmod 600 .env               # 나만 읽을 수 있게
 ```
 
 - `.env`는 커밋하지 않습니다(`infra/.gitignore`에 들어 있음). 노션에는 키 **이름**과 발급처만 적고 값은 적지 않습니다.
 - 비밀번호는 `-hex`로 만듭니다(숫자와 a~f만 나옴). `-base64`는 `/`, `+` 같은 기호가 섞이는데, 9단계 AI 서버는 비밀번호를 DB 주소(`postgresql://계정:비밀번호@db:5432/...`) 안에 넣기 때문에 이런 기호가 있으면 주소가 깨질 수 있습니다.
+- `JWT_SECRET`만 `-base64`로 만듭니다. 백엔드가 Base64로 읽고, DB 주소에 들어가지 않아 기호가 섞여도 괜찮습니다. 구글·카카오 키는 9단계 "로그인·방문 분포·위치 증거 값"을 봅니다.
 - **`DB_PASSWORD`는 DB를 처음 만들 때만 적용됩니다.** 나중에 `.env`만 바꾸면 접속이 거부됩니다. 바꾸려면 7단계처럼 DB 볼륨을 지우고 다시 만듭니다.
 
 ---
@@ -434,6 +436,32 @@ docker compose exec redis redis-cli config get maxmemory-policy
 - 지금 백엔드는 그대로 둬도 됩니다. 백엔드 PR이 머지되면 자동 배포가 새 설정(환경 변수, Redis 대기)으로 백엔드를 다시 만듭니다.
 - 비밀번호는 DB와 달리 나중에 바꿔도 됩니다. `.env`를 고친 뒤 `docker compose up -d redis backend`로 둘 다 다시 만듭니다.
 
+**로그인·방문 분포·위치 증거 값 (2026-11-05)**
+- 11/4 백엔드 PR 두 개(회원 API #47, 발자취 API #46)가 prod에서 기본값 없이 받는 값 10개를 추가했습니다. 서버 compose가 이 값을 넘기지 않아 그날 자동 배포가 계속 실패했고, 이제 `docker-compose.yml`이 넘깁니다.
+
+  | 값 | 넣는 곳 | 비고 |
+  | --- | --- | --- |
+  | `JWT_SECRET` | 서버 `.env` | `openssl rand -base64 48`. 서버에서만 만든다 |
+  | `GOOGLE_WEB_CLIENT_ID` | 서버 `.env` | 구글 **웹** 클라이언트 ID. 앱의 `webClientId`와 같은 값 |
+  | `KAKAO_APP_KEY` | 서버 `.env` | 카카오 **네이티브 앱 키**. 앱 카카오 SDK와 같은 값 |
+  | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다 |
+
+- 구글·카카오 키가 아직 없으면 임시 문자열을 넣습니다. 백엔드는 뜨고 그 제공자 로그인만 실패합니다.
+- **순서**: 이 변경을 `infra/dev`에 머지 → 서버에서 infra 코드를 받고 `.env`에 세 값을 넣기 → 백엔드 다시 배포. 위의 Redis를 아직 반영하지 않았다면 그것부터 합니다.
+
+```bash
+cd ~/yeogirok/infra-src && git pull
+cd infra
+grep -cE '^(JWT_SECRET|GOOGLE_WEB_CLIENT_ID|KAKAO_APP_KEY)=' .env    # 0 이어야 한다
+printf '\nJWT_SECRET=%s\n' "$(openssl rand -base64 48)" >> .env
+nano .env    # 맨 아래에 GOOGLE_WEB_CLIENT_ID=<값>, KAKAO_APP_KEY=<값> 두 줄을 추가한다
+grep -cE '^(JWT_SECRET|GOOGLE_WEB_CLIENT_ID|KAKAO_APP_KEY)=' .env    # 3 이면 정상
+bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이면 끝
+```
+
+- `JWT_SECRET`을 바꾸면 이미 발급된 액세스 토큰이 모두 무효가 됩니다. 한 번 만든 뒤에는 바꾸지 않습니다.
+- **앞으로**: 백엔드가 prod 프로필에 기본값 없는 값을 추가하면, 그 값을 compose와 서버 `.env`에 먼저 넣은 뒤 백엔드 PR을 머지합니다. 순서가 바뀌면 머지 즉시 자동 배포가 돌아 백엔드가 멈춥니다.
+
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
 2. `docker-compose.yml`의 해당 서비스 `environment`에 `KEY: ${KEY}` 한 줄 추가 (이 파일은 `infra/dev`로 커밋)
@@ -472,6 +500,8 @@ docker compose exec redis redis-cli config get maxmemory-policy
 | 백엔드가 DB 접속 거부(password authentication failed) | DB를 만든 뒤 `.env` 비밀번호만 바꿈 | 7단계처럼 DB 볼륨을 지우고 다시 만듦 |
 | `docker compose` 명령마다 `required variable REDIS_PASSWORD is missing a value` | infra 코드를 받은 뒤 `.env`에 `REDIS_PASSWORD`를 넣지 않음 | 9단계 Redis대로 비밀번호 추가 |
 | 배포 직후 backend가 `Restarting`을 반복하고 로그에 `For input string: "${REDIS_PORT}"`처럼 `${...}`가 그대로 찍힘 | 서버 infra 코드가 예전 것이라 compose가 백엔드에 Redis 값을 넘기지 않음 | `git -C ~/yeogirok/infra-src pull` 후 `git -C ~/yeogirok/infra-src log --oneline -1`로 받았는지 확인, 9단계 Redis대로 Redis를 켜고 `docker compose up -d backend` |
+| 백엔드 로그에 `JWT_SECRET 환경 변수가 필요합니다` 또는 `허용 audience 가 비어 있습니다` | 서버 `.env`에 로그인 값이 없음 | 9단계 "로그인·방문 분포·위치 증거 값"대로 넣고 `docker compose up -d backend` |
+| 백엔드 로그에 `JWT_SECRET 은 Base64 형식이어야 합니다` | 서버 infra 코드가 예전 것이라 값이 넘어가지 않았거나, 값을 잘못 붙여 넣음 | `git -C ~/yeogirok/infra-src log --oneline -1`로 최신인지 확인, `openssl rand -base64 48`로 다시 만듦 |
 | 백엔드 오류에 `OOM command not allowed` | Redis 메모리 256MB가 다 참(`noeviction`이라 쓰기 거부) | `info memory`로 확인하고 `docker-compose.yml`의 `--maxmemory`를 늘림 |
 | Flyway `non-empty schema ... without schema history table` | `update`로 만든 테이블이 남음 | 7단계 DB 비우기 |
 | Flyway `checksum mismatch` | 이미 적용된 V 파일을 수정함 | 원래대로 되돌리고 새 번호 파일로 수정 |
