@@ -22,7 +22,7 @@ yeogirok:
   room:
     invite:
       # 초대 토큰 암호화 키(AES-SIV). Base64, 디코드했을 때 64바이트. 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
-      # 생성: openssl rand -base64 64
+      # 생성(한 줄로): openssl rand -base64 -A 64
       token-key: ${ROOM_INVITE_TOKEN_KEY}
       # inviteUrl 앞부분. 앱 딥링크 주소가 정해지면 바꾼다.
       url-base: ${ROOM_INVITE_URL_BASE}
