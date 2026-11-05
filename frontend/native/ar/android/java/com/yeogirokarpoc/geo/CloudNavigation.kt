@@ -122,6 +122,7 @@ class CloudNavigation(private val activity: Activity, viewport: FrameLayout, tar
     }
     fun startPlacement() {
         placing = true
+        mapCard.visibility = android.view.View.GONE
         footer.visibility = android.view.View.GONE
         directionArrow.visibility = android.view.View.GONE
     }

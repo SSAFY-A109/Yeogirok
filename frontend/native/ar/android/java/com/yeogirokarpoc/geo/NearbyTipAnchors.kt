@@ -13,7 +13,7 @@ class NearbyTipAnchors(tips: List<JSONObject>, primaryId: String?) {
     private val entries = tips.filter { it.getString("id") != primaryId }.take(39).map { Entry(it) }
     val failedCount get() = entries.count { it.failed }
 
-    fun update(session: Session, frame: Frame, project: (Pose, String) -> PinProjection): List<NearbyArPin> {
+    fun update(session: Session, frame: Frame, project: (Pose, JSONObject) -> PinProjection): List<NearbyArPin> {
         val now = SystemClock.elapsedRealtime()
         val tracking = frame.camera.trackingState == TrackingState.TRACKING
         val pins = mutableListOf<NearbyArPin>()
@@ -35,7 +35,7 @@ class NearbyTipAnchors(tips: List<JSONObject>, primaryId: String?) {
             val anchor = entry.anchor ?: continue
             if (anchor.trackingState == TrackingState.STOPPED) { anchor.detach(); entry.anchor = null; entry.failed = true; continue }
             if (!tracking || anchor.trackingState != TrackingState.TRACKING) continue
-            val projection = project(anchor.pose, entry.tip.getString("id"))
+            val projection = project(anchor.pose, entry.tip)
             if (!projection.visible) continue
             val local = frame.camera.displayOrientedPose.inverse().transformPoint(anchor.pose.translation)
             val distance = kotlin.math.sqrt(local.sumOf { it.toDouble() * it })

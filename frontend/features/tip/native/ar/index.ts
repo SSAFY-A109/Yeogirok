@@ -1,6 +1,6 @@
 import { NativeModules, Platform } from "react-native";
 
-import { isObject, isPlacementExpired, parseLocalTip, parseLocalTips, parsePlacement, parsePhoto, type CloudPlacement, type TipPhoto } from "./contracts";
+import { isObject, isPlacementExpired, isTipType, parseLocalTip, parseLocalTips, parsePlacement, parsePhoto, parseTipDetail, parseTipReaction, type CloudPlacement, type TipPhoto, type TipType } from "./contracts";
 
 type GeoBridge = {
   getStatus: () => Promise<unknown>;
@@ -14,6 +14,9 @@ type TipBridge = {
   openTipAR: (id: string) => Promise<unknown>;
   pickPhoto: () => Promise<unknown>;
   capturePhoto: () => Promise<unknown>;
+  getTipDetail?: (id: string) => Promise<unknown>;
+  toggleTipReaction?: (id: string, reaction: string) => Promise<unknown>;
+  closeTipDetail?: () => Promise<unknown>;
 };
 
 function isGeoBridge(value: unknown): value is GeoBridge {
@@ -56,17 +59,53 @@ export async function loadArTips() {
   };
 }
 
-export async function placeTip(): Promise<CloudPlacement | null> {
+export async function loadTipDetail(id: string) {
+  const { tips } = bridges();
+
+  if (!tips.getTipDetail) {
+    throw new Error("NATIVE_MODULE_MISSING");
+  }
+
+  const detail = parseTipDetail(await tips.getTipDetail(id));
+
+  if (detail.tip.id !== id) {
+    throw new Error("INVALID_RESULT");
+  }
+
+  return detail;
+}
+
+export async function toggleTipReaction(id: string, reaction: "LIKE" | "DISLIKE") {
+  const { tips } = bridges();
+
+  if (!tips.toggleTipReaction) {
+    throw new Error("NATIVE_MODULE_MISSING");
+  }
+
+  return parseTipReaction(await tips.toggleTipReaction(id, reaction));
+}
+
+export async function closeTipDetail() {
+  const { tips } = bridges();
+
+  if (!tips.closeTipDetail) {
+    throw new Error("NATIVE_MODULE_MISSING");
+  }
+
+  await tips.closeTipDetail();
+}
+
+export async function placeTip(persistMarker = true): Promise<CloudPlacement | null> {
   const result = await bridges().geo.openTipPlacement();
-  return keepLocalPlacement(result);
+  return keepLocalPlacement(result, persistMarker);
 }
 
-export async function exploreTips(selectedId: string | null = null): Promise<CloudPlacement | null> {
+export async function exploreTips(selectedId: string | null = null, persistMarker = true): Promise<CloudPlacement | null> {
   const result = await bridges().geo.openTipExplorer(selectedId);
-  return keepLocalPlacement(result);
+  return keepLocalPlacement(result, persistMarker);
 }
 
-async function keepLocalPlacement(result: unknown): Promise<CloudPlacement | null> {
+async function keepLocalPlacement(result: unknown, persistMarker: boolean): Promise<CloudPlacement | null> {
   if (result === null) {
     return null;
   }
@@ -75,6 +114,10 @@ async function keepLocalPlacement(result: unknown): Promise<CloudPlacement | nul
 
   if (isPlacementExpired(placement)) {
     throw new Error("ANCHOR_EXPIRED");
+  }
+
+  if (!persistMarker) {
+    return placement;
   }
 
   const { tips } = bridges();
@@ -135,15 +178,41 @@ export async function saveLocalTip(body: string, placement: CloudPlacement, phot
   return parseLocalTip(await bridges().tips.saveTip(JSON.stringify({ body: body.trim(), cloudRecord, ...(photo !== undefined ? { photoName: photo?.photoName ?? null } : {}) })));
 }
 
+export async function saveTipDraft(body: string, placement: CloudPlacement, photo: TipPhoto | null, tipType: TipType | null) {
+  if (!isTipType(tipType)) {
+    throw new Error("TYPE_REQUIRED");
+  }
+
+  if (!photo) {
+    throw new Error("PHOTO_REQUIRED");
+  }
+
+  if (body.length > 120) {
+    throw new Error("DRAFT_BODY_TOO_LONG");
+  }
+
+  if (isPlacementExpired(placement)) {
+    throw new Error("ANCHOR_EXPIRED");
+  }
+
+  return parseLocalTip(await bridges().tips.saveTip(JSON.stringify({
+    draft: true, tipType, title: tipType, body: body.trim(), photoName: photo.photoName,
+    cloudRecord: JSON.parse(placement.raw),
+  })));
+}
+
 export function arErrorMessage(error: unknown): string {
   const code = isObject(error) && typeof error.code === "string" ? error.code : error instanceof Error ? error.message : "";
 
   switch (code) {
-    case "UNSUPPORTED_PLATFORM": return "이번 AR PoC는 Android 개발 빌드에서 사용할 수 있어요.";
+    case "UNSUPPORTED_PLATFORM": return "AR 팁은 현재 Android 앱에서 사용할 수 있어요. 다른 탭에서 여행을 계속해 주세요.";
     case "NATIVE_MODULE_MISSING": return "AR 모듈이 아직 연결되지 않았어요. Kotlin 모듈을 포함한 Android 개발 빌드가 필요해요.";
     case "BUSY": return "다른 AR 작업이 진행 중이에요. 화면을 닫은 뒤 다시 시도해 주세요.";
     case "KAKAO_KEY_MISSING": return "지도 설정이 필요해요. 카카오 JavaScript 키와 웹 플랫폼의 localhost 등록을 확인하고 개발 앱을 다시 빌드해 주세요.";
     case "BODY_REQUIRED": return "팁 내용을 입력해 주세요.";
+    case "TYPE_REQUIRED": return "팁 종류를 선택해 주세요.";
+    case "PHOTO_REQUIRED": return "팁 사진을 첨부해 주세요.";
+    case "DRAFT_BODY_TOO_LONG": return "팁 내용은 120자까지 입력할 수 있어요.";
     case "BODY_TOO_LONG": return "이번 PoC는 팁 내용을 2,000자까지 저장할 수 있어요.";
     case "PHOTO_FAILED": return "사진을 불러오지 못했어요. 20MB 이하의 다른 사진을 선택해 주세요.";
     case "CAPTURE_FAILED": return "카메라를 열지 못했어요. 사진 선택으로 다시 시도해 주세요.";
