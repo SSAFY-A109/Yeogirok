@@ -101,14 +101,16 @@ if (System.getProperty('os.name').toLowerCase().contains('windows')) {
       application["meta-data"].push({ $: { "android:name": name, "android:value": value } });
     }
 
-    for (const name of ["GeoArActivity", "GeoMapActivity"]) {
+    for (const name of ["GeoArActivity", "GeoMapActivity", "TipDetailSheet"]) {
       application.activity = application.activity.filter((item) => {
         return item.$["android:name"] !== `${nativePackage}.${name}`;
       });
 
       application.activity.push({ $: {
-        "android:name": `${nativePackage}.${name}`, "android:exported": "false", "android:screenOrientation": "portrait",
+        "android:name": `${nativePackage}.${name}`, "android:exported": "false",
+        ...(name !== "TipDetailSheet" ? { "android:screenOrientation": "portrait" } : {}),
         ...(name === "GeoArActivity" ? { "android:process": ":geospatial" } : {}),
+        ...(name === "TipDetailSheet" ? { "android:theme": "@style/ArTipDetailTheme", "android:configChanges": "keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" } : {}),
       } });
     }
 
@@ -191,6 +193,18 @@ if (System.getProperty('os.name').toLowerCase().contains('windows')) {
     const xml = path.join(mod.modRequest.platformProjectRoot, "app/src/main/res/xml");
     fs.mkdirSync(xml, { recursive: true });
     fs.writeFileSync(path.join(xml, "ar_tip_photo_paths.xml"), '<?xml version="1.0" encoding="utf-8"?><paths><cache-path name="ar-tip-capture" path="ar-tip-capture/" /></paths>');
+    const values = path.join(mod.modRequest.platformProjectRoot, "app/src/main/res/values");
+    fs.mkdirSync(values, { recursive: true });
+    fs.writeFileSync(path.join(values, "ar_tip_detail_styles.xml"), `<resources>
+  <style name="ArTipDetailTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:backgroundDimEnabled">false</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+  </style>
+</resources>`);
     const proguardPath = path.join(mod.modRequest.platformProjectRoot, "app/proguard-rules.pro");
     const proguard = fs.existsSync(proguardPath) ? fs.readFileSync(proguardPath, "utf8") : "";
     fs.writeFileSync(proguardPath, proguard.replace(/\n# BEGIN YEOGIROK KEYLESS[\s\S]*?# END YEOGIROK KEYLESS\n/g, "") + `

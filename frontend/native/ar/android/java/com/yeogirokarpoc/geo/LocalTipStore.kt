@@ -12,6 +12,7 @@ object LocalTipStore {
     private const val PREFS = "yeogirok_local_tips_v1"
     private const val KEY = "tips"
     const val MAX_BODY = 2000
+    private val tipTypes = setOf("포토", "맛집", "카페", "꿀팁", "TMI")
 
     fun photoFile(context: Context, name: String): File {
         require(Regex("[a-f0-9-]{36}\\.jpg").matches(name)) { "사진 파일 형식이 올바르지 않습니다." }
@@ -25,7 +26,11 @@ object LocalTipStore {
         UUID.fromString(tip.getString("id"))
         Instant.parse(tip.getString("createdAt"))
         require(tip.getString("title").length in 1..60)
-        require(tip.getString("body").trim().length in 1..MAX_BODY)
+        if (tip.optBoolean("draft")) {
+            require(tip.getString("tipType") in tipTypes)
+            require(tip.getString("body").length <= 120)
+            require(!tip.isNull("photoName"))
+        } else require(tip.getString("body").trim().length in 1..MAX_BODY)
         val cloud = CloudRecord.parse(tip.getJSONObject("cloudRecord").toString())
         tip.put("cloudRecord", cloud)
         if (!tip.isNull("photoName")) photoFile(context, tip.getString("photoName"))
@@ -49,7 +54,12 @@ object LocalTipStore {
         require(raw.length <= 100_000)
         val draft = JSONObject(raw)
         val body = draft.getString("body").trim()
-        require(body.length in 1..MAX_BODY) { "팁 내용을 1~2,000자로 입력해 주세요." }
+        val isDraft = draft.optBoolean("draft")
+        if (isDraft) {
+            require(draft.getString("tipType") in tipTypes) { "팁 종류를 선택해 주세요." }
+            require(body.length <= 120) { "팁 내용은 120자까지 입력할 수 있어요." }
+            require(!draft.isNull("photoName")) { "팁 사진을 첨부해 주세요." }
+        } else require(body.length in 1..MAX_BODY) { "팁 내용을 1~2,000자로 입력해 주세요." }
         val title = draft.optString("title").trim().ifEmpty { body.lineSequence().first().take(40) }
         require(title.length <= 60) { "제목은 60자까지 입력할 수 있어요." }
         val cloud = CloudRecord.parse(draft.getJSONObject("cloudRecord").toString(), forResolve = true)
@@ -60,6 +70,7 @@ object LocalTipStore {
         val tip = JSONObject().put("schemaVersion", 1).put("id", previous?.getString("id") ?: UUID.randomUUID().toString())
             .put("title", title).put("body", body).put("createdAt", previous?.getString("createdAt") ?: Instant.now().toString())
             .put("cloudRecord", cloud)
+        if (isDraft) tip.put("draft", true).put("tipType", draft.getString("tipType"))
         if (!draft.isNull("photoName")) {
             val name = draft.getString("photoName")
             require(photoFile(context, name).isFile) { "사진을 다시 선택해 주세요." }

@@ -7,6 +7,16 @@ export type CloudPlacement = {
 };
 
 export type TipPhoto = { photoName: string; photoUri: string };
+export type TipReaction = "LIKE" | "DISLIKE" | null;
+
+export const TIP_TYPES = ["포토", "맛집", "카페", "꿀팁", "TMI"] as const;
+export type TipType = typeof TIP_TYPES[number];
+
+export function isTipType(value: unknown): value is TipType {
+  return TIP_TYPES.some((type) => {
+    return type === value;
+  });
+}
 
 export type LocalTip = {
   id: string;
@@ -14,6 +24,8 @@ export type LocalTip = {
   createdAt: string;
   placement: CloudPlacement;
   photo: TipPhoto | null;
+  tipType: TipType | null;
+  draft: boolean;
 };
 
 export function isObject(value: unknown): value is Record<string, unknown> {
@@ -88,12 +100,19 @@ function parseTipValue(value: unknown): LocalTip {
     throw new Error("INVALID_RESULT");
   }
 
+  if (value.draft === true && (!isTipType(value.tipType) || value.body.length > 120 ||
+    typeof value.photoName !== "string" || !/^[a-f0-9-]{36}\.jpg$/.test(value.photoName))) {
+    throw new Error("INVALID_RESULT");
+  }
+
   return {
     id: value.id,
     body: value.body,
     createdAt: value.createdAt,
     placement: parsePlacement(JSON.stringify(value.cloudRecord)),
     photo: typeof value.photoName === "string" && typeof value.photoUri === "string" ? parsePhoto(JSON.stringify(value)) : null,
+    tipType: isTipType(value.tipType) ? value.tipType : null,
+    draft: value.draft === true,
   };
 }
 
@@ -110,6 +129,25 @@ export function parsePhoto(raw: unknown): TipPhoto {
 
 export function parseLocalTip(raw: unknown): LocalTip {
   return parseTipValue(parseJson(raw));
+}
+
+export function parseTipReaction(value: unknown): TipReaction {
+  if (value !== null && value !== "LIKE" && value !== "DISLIKE") {
+    throw new Error("INVALID_RESULT");
+  }
+
+  return value;
+}
+
+export function parseTipDetail(raw: unknown) {
+  const value = parseJson(raw);
+  const tip = parseTipValue(value);
+
+  if (!isObject(value)) {
+    throw new Error("INVALID_RESULT");
+  }
+
+  return { tip, reaction: parseTipReaction(value.reaction) };
 }
 
 export function parseLocalTips(raw: unknown): LocalTip[] {

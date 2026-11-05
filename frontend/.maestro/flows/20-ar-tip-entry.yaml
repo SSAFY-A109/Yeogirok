@@ -1,10 +1,11 @@
-# 실제 카메라/Cloud Anchor는 현장에서 수동 검증한다. 기존 저장 데이터를 지우지 않는다.
-# Metro에 연결된 Android 개발 빌드에서 실행한다.
 appId: ${MAESTRO_APP_ID}
-name: 20 AR 팁 진입 안내
+name: AR 팁 카메라 권한을 거부하면 안내 후 탐색 재진입 화면으로 돌아온다
 ---
 - launchApp:
     clearState: false
+    permissions:
+      camera: deny
+      location: deny
 - runFlow:
     when:
       visible:
@@ -14,9 +15,21 @@ name: 20 AR 팁 진입 안내
           id: "login.kakao"
       - assertVisible:
           id: "home.screen"
-- openLink: "yeogirokfe://ar-tip"
+- tapOn:
+    id: "tabs.ar-tip"
+- runFlow:
+    when:
+      visible: "AR 팁 이용 안내"
+    commands:
+      - assertVisible: ".*주변 팁을 찾고 팁을 놓을 자리를 인식하기 위해 카메라를 사용해요.*"
+      - tapOn: "동의하고 시작"
+- assertVisible: "앱 설정에서 카메라를 허용해 주세요."
+- tapOn: "닫기"
 - assertVisible:
-    id: "ar-tip.continue"
-- assertVisible: "카메라와 위치를 사용해요"
+    id: "ar-tip.explore"
 - assertVisible:
     id: "tabs.ar-tip"
+- tapOn:
+    id: "tabs.rooms"
+- assertVisible:
+    id: "tabs.rooms"

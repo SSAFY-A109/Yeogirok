@@ -59,6 +59,15 @@ async function main() {
     return item.$["android:name"] === "test.other";
   }).$["android:value"], "keep");
 
+  const detailActivities = manifestMod.modResults.manifest.application[0].activity.filter((item) => {
+    return item.$["android:name"] === "com.yeogirokarpoc.geo.TipDetailSheet";
+  });
+
+  assert.equal(detailActivities.length, 1);
+  assert.equal(detailActivities[0].$["android:exported"], "false");
+  assert.equal(detailActivities[0].$["android:process"], undefined);
+  assert.equal(detailActivities[0].$["android:theme"], "@style/ArTipDetailTheme");
+
   const gradleMod = { modResults: { language: "groovy", contents: "\n// BEGIN YEOGIROK AR\nold-api-key-setup\n// END YEOGIROK AR\n" } };
   mods.withAppBuildGradle(gradleMod); mods.withAppBuildGradle(gradleMod);
   assert.equal((gradleMod.modResults.contents.match(/implementation 'com.google.android.gms:play-services-auth:/g) ?? []).length, 1);
@@ -78,6 +87,9 @@ async function main() {
   const writes = [];
   let failSave = false;
   let selected;
+  const reactions = new Map();
+  let failReaction = false;
+  let detailCloseCount = 0;
   let photoResult = JSON.stringify({ photoName: "00000000-0000-4000-8000-000000000001.jpg", photoUri: "file:///test/tip-photos/00000000-0000-4000-8000-000000000001.jpg" });
   const geo = {
     getStatus: async () => {
@@ -97,6 +109,32 @@ async function main() {
     },
   };
   const tips = {
+    getTipDetail: async (id) => {
+      const tip = stored.find((item) => {
+        return item.id === id;
+      });
+
+      if (!tip) {
+        throw new Error("TIP_UNAVAILABLE");
+      }
+
+      return JSON.stringify({ ...tip, reaction: reactions.get(id) ?? null });
+    },
+
+    toggleTipReaction: async (id, choice) => {
+      if (failReaction) {
+        throw new Error("REACTION_FAILED");
+      }
+
+      const next = reactions.get(id) === choice ? null : choice;
+      reactions.set(id, next);
+      return next;
+    },
+
+    closeTipDetail: async () => {
+      detailCloseCount++;
+    },
+
     listTips: async () => {
       return JSON.stringify(stored);
     },
@@ -227,10 +265,62 @@ async function main() {
     return contracts.parsePlacement(JSON.stringify(located));
   }, /INVALID_RESULT/);
 
+  const writesBeforeDraft = writes.length;
+  result = record("draft-anchor");
+  const draftPlacement = await ar.placeTip(false);
+  assert.equal(writes.length, writesBeforeDraft);
+  await ar.exploreTips(null, false);
+  assert.equal(writes.length, writesBeforeDraft);
+  await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, null), /TYPE_REQUIRED/);
+  await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, "unknown"), /TYPE_REQUIRED/);
+  await assert.rejects(ar.saveTipDraft("", draftPlacement, null, "포토"), /PHOTO_REQUIRED/);
+  await assert.rejects(ar.saveTipDraft("x".repeat(121), draftPlacement, photo, "포토"), /DRAFT_BODY_TOO_LONG/);
+  const expiredDraft = contracts.parsePlacement(record("expired-draft", "2000-01-01T00:00:00Z"));
+  await assert.rejects(ar.saveTipDraft("", expiredDraft, photo, "포토"), /ANCHOR_EXPIRED/);
+  assert.equal(writes.length, writesBeforeDraft);
+  failSave = true;
+  await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, "포토"), /SAVE_FAILED/);
+  assert.equal(writes.length, writesBeforeDraft);
+  failSave = false;
+  const savedDraft = await ar.saveTipDraft("", draftPlacement, photo, "포토");
+  assert.equal(savedDraft.body, "");
+  assert.equal(savedDraft.tipType, "포토");
+  assert.equal(savedDraft.draft, true);
+  assert.equal(writes.at(-1).photoName, photo.photoName);
+  await ar.saveTipDraft("x".repeat(120), draftPlacement, photo, "TMI");
+  assert.equal(writes.at(-1).body.length, 120);
+  assert.equal((await reopened.loadArTips()).tips.at(-1).tipType, "TMI");
+  const malformedDraft = { ...stored.at(-1), tipType: "unknown" };
+
+  assert.throws(() => {
+    return contracts.parseLocalTip(JSON.stringify(malformedDraft));
+  }, /INVALID_RESULT/);
+
+  assert.equal((await ar.loadTipDetail(savedDraft.id)).tip.id, savedDraft.id);
+  assert.equal((await ar.loadTipDetail(savedDraft.id)).reaction, null);
+  assert.equal(await ar.toggleTipReaction(savedDraft.id, "LIKE"), "LIKE");
+  assert.equal((await freshAdapter().loadTipDetail(savedDraft.id)).reaction, "LIKE");
+  assert.equal(await ar.toggleTipReaction(savedDraft.id, "LIKE"), null);
+  assert.equal(await ar.toggleTipReaction(savedDraft.id, "DISLIKE"), "DISLIKE");
+  failReaction = true;
+  await assert.rejects(ar.toggleTipReaction(savedDraft.id, "LIKE"), /REACTION_FAILED/);
+  assert.equal((await ar.loadTipDetail(savedDraft.id)).reaction, "DISLIKE");
+  failReaction = false;
+  await assert.rejects(ar.loadTipDetail("missing-tip"), /TIP_UNAVAILABLE/);
+
+  assert.throws(() => {
+    return contracts.parseTipDetail(JSON.stringify({ ...stored.at(-1), reaction: "UNKNOWN" }));
+  }, /INVALID_RESULT/);
+
+  await ar.closeTipDetail();
+  assert.equal(detailCloseCount, 1);
+
   console.log("AR local save checks passed: auto-save, reload/reopen, no overwrite, cancel, expiry, failure/retry");
   console.log("AR compose checks passed: photo selection/capture/cancel, local URI, body limits, location evidence");
   console.log("AR Keyless TTL checks passed: mixed 1/365-day reload, reopen, expiry, invalid lifetimes");
   console.log("AR Keyless config checks passed: stale API key removal, prebuild idempotence, auth dependency");
+  console.log("AR service flow checks passed: no placeholder, required type/photo, optional 120-char body, draft reload, failure/retry");
+  console.log("AR shared sheet bridge checks passed: internal host, detail read, persisted reaction toggle/cancel, failure preservation, close");
 }
 
 main().catch((error) => {
