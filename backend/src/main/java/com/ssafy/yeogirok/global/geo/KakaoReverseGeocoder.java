@@ -36,7 +36,8 @@ public class KakaoReverseGeocoder implements ReverseGeocoder, LegalDongResolver 
 		this.restClient = restClient;
 		this.properties = properties;
 		if (!properties.hasRestApiKey()) {
-			log.warn("KAKAO_REST_API_KEY 가 없어 역지오코딩을 하지 않습니다. 발자취의 주소·위치명·법정동 코드는 null 로 저장됩니다.");
+			log.warn("KAKAO_REST_API_KEY 가 없어 역지오코딩을 하지 않습니다. 발자취의 주소·위치명·법정동 코드와"
+				+ " 지도 핀으로 직접 추가한 후보 장소의 법정동 코드·읍·면·동 이름은 null 로 저장됩니다.");
 		}
 	}
 
