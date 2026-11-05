@@ -21,3 +21,24 @@ internal fun isDepthOccluded(samples: IntArray, cameraDepthMeters: Float): Boole
     // Unknown/near/far depth never counts as a blocking wall. Require an absolute majority.
     return samples.count { it in 200..8000 && it < pinMm - toleranceMm } > samples.size / 2
 }
+
+internal fun pinDepthSamplePoints(bounds: PinBounds): FloatArray = FloatArray(18).also { points ->
+    for (row in 0..2) for (column in 0..2) {
+        val index = (row * 3 + column) * 2
+        points[index] = bounds.left + (bounds.right - bounds.left) * (0.3f + column * 0.2f)
+        points[index + 1] = bounds.top + (bounds.bottom - bounds.top) * (0.25f + row * 0.2f)
+    }
+}
+
+internal class DepthOcclusionGate {
+    private var blockedSince: Long? = null
+    private var lastSampleAt: Long? = null
+    fun hidden(blocked: Boolean, nowMs: Long): Boolean {
+        val previous = lastSampleAt
+        if (!blocked || previous == null || nowMs - previous !in 0..250L) blockedSince = null
+        lastSampleAt = nowMs
+        if (!blocked) return false
+        val start = blockedSince ?: nowMs.also { blockedSince = it }
+        return nowMs - start >= 400L
+    }
+}
