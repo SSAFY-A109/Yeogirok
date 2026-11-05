@@ -30,7 +30,7 @@ export function MainTabBar() {
     }
 
     if (value === "/ar-tip") {
-      router.navigate("./ar-tip");
+      router.navigate("/ar-tip");
     }
 
     if (value === "/rooms") {
