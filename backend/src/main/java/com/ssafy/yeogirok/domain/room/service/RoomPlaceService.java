@@ -20,14 +20,11 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
-import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.global.geo.LegalDongResolver;
-
-import jakarta.persistence.EntityManager;
 
 /**
  * 여행방 후보 장소 조회·직접 추가·빼기·복원(API-028·031·032·094).
@@ -44,23 +41,21 @@ import jakarta.persistence.EntityManager;
 public class RoomPlaceService {
 
 	private final RoomPlaceRepository roomPlaceRepository;
-	private final TravelRoomRepository travelRoomRepository;
 	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
+	private final RoomVersions roomVersions;
 	private final LegalDongResolver legalDongResolver;
-	private final EntityManager entityManager;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
-	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, TravelRoomRepository travelRoomRepository,
-		CategoryNames categoryNames, RoomFinder roomFinder, LegalDongResolver legalDongResolver,
-		EntityManager entityManager, PlatformTransactionManager transactionManager, Clock clock) {
+	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, CategoryNames categoryNames,
+		RoomFinder roomFinder, RoomVersions roomVersions, LegalDongResolver legalDongResolver,
+		PlatformTransactionManager transactionManager, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
-		this.travelRoomRepository = travelRoomRepository;
 		this.categoryNames = categoryNames;
 		this.roomFinder = roomFinder;
+		this.roomVersions = roomVersions;
 		this.legalDongResolver = legalDongResolver;
-		this.entityManager = entityManager;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 	}
@@ -158,14 +153,7 @@ public class RoomPlaceService {
 		}
 	}
 
-	/**
-	 * 이미 잡은 행 잠금 위에서 version 을 올리고 방을 다시 읽는다(바뀐 방 정보는 없어 버릴 것이 없다).
-	 * 그사이 API-023 이 읽은 version 은 낡게 되어 그쪽 저장은 C004 로 끝난다.
-	 * PESSIMISTIC_FORCE_INCREMENT 는 이미 PESSIMISTIC_WRITE 로 잠근 엔티티에서는 올리지 않아 쓰지 않는다.
-	 */
 	private int increaseVersion(TravelRoom room) {
-		travelRoomRepository.increaseVersion(room.getId(), clock.instant());
-		entityManager.refresh(room);
-		return room.getVersion();
+		return roomVersions.increase(room);
 	}
 }

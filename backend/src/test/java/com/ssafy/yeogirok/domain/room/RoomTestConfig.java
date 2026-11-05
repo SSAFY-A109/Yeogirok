@@ -13,6 +13,7 @@ import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
+import com.ssafy.yeogirok.domain.room.service.RoomVersions;
 import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.support.FixedLegalDongResolver;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -20,7 +21,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 /** 여행방 서비스 @DataJpaTest 용 빈. */
 @TestConfiguration
 @Import({RoomService.class, RoomInvitationService.class, RoomPlaceService.class, RoomFinder.class,
-	CategoryNames.class})
+	RoomVersions.class, CategoryNames.class})
 public class RoomTestConfig {
 
 	/** 직접 추가 후보의 기본 법정동. */

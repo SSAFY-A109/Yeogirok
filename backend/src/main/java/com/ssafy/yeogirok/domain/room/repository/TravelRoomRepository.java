@@ -36,11 +36,8 @@ public interface TravelRoomRepository extends JpaRepository<TravelRoom, Long> {
 	@Query("select r.id from TravelRoom r where r.inviteTokenEncrypted = :inviteTokenEncrypted")
 	Optional<Long> findIdByInviteTokenEncrypted(@Param("inviteTokenEncrypted") String inviteTokenEncrypted);
 
-	/**
-	 * 후보 장소가 바뀌어 여행방 version 을 1 올린다. 방 정보는 그대로라 dirty checking 으로는 오르지 않는다.
-	 * {@link #findByIdForUpdate} 로 행을 잠근 뒤에 부르고, 영속성 컨텍스트의 방은 호출한 쪽이 refresh 한다.
-	 */
-	@Modifying(flushAutomatically = true)
+	/** 직접 부르지 않는다. {@code RoomVersions#increase} 만 쓴다(flush·refresh 를 함께 해야 한다). */
+	@Modifying
 	@Query("update TravelRoom r set r.version = r.version + 1, r.updatedAt = :now where r.id = :id")
 	int increaseVersion(@Param("id") Long id, @Param("now") Instant now);
 
