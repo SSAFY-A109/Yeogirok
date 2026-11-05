@@ -1,35 +1,32 @@
-import { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } from "@react-native-google-signin/google-signin";
-import { Platform } from "react-native";
+import { GoogleOneTapSignIn, isCancelledResponse, isErrorWithCode, isSuccessResponse, statusCodes } from "react-native-nitro-google-signin";
 
 import { SocialLoginError } from "../../errors";
-import type { SocialLoginRequestDto } from "../../model";
+import type { SocialCredentials } from "../../model";
 
-export async function signInWithGoogle(): Promise<SocialLoginRequestDto> {
+// 로그인 버튼과 탈퇴 전 재로그인은 기기의 모든 구글 계정을 보여 주는 presentExplicitSignIn을 쓴다.
+// signIn()은 이 앱에 로그인한 적 있는 계정만 보여 줘서 처음 쓰는 계정을 고를 수 없다.
+export async function signInWithGoogle(nonce: string): Promise<SocialCredentials> {
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
-  if (!webClientId || (Platform.OS === "ios" && !iosClientId)) {
+  if (!webClientId) {
     throw new SocialLoginError("AUTH_NOT_CONFIGURED");
   }
 
   try {
-    GoogleSignin.configure({ webClientId, iosClientId });
+    GoogleOneTapSignIn.configure({ webClientId, nonce, offlineAccess: true });
+    await GoogleOneTapSignIn.checkPlayServices(true);
 
-    if (Platform.OS === "android") {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-    }
+    const response = await GoogleOneTapSignIn.presentExplicitSignIn();
 
-    const response = await GoogleSignin.signIn();
-
-    if (!isSuccessResponse(response)) {
+    if (isCancelledResponse(response)) {
       throw new SocialLoginError("AUTH_CANCELLED");
     }
 
-    if (!response.data.idToken) {
+    if (!isSuccessResponse(response) || !response.data.idToken) {
       throw new SocialLoginError("AUTH_NOT_CONFIGURED");
     }
 
-    return { provider: "google", idToken: response.data.idToken };
+    return { provider: "google", idToken: response.data.idToken, nonce, serverAuthCode: response.data.serverAuthCode };
   } catch (error) {
     if (error instanceof SocialLoginError) {
       throw error;

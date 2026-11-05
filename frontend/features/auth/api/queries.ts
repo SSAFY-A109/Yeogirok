@@ -1,6 +1,7 @@
 import { mutationOptions, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { performSocialLogin } from "../sign-in";
+import { signOutThisDevice } from "../sign-out";
 import { getTokens } from "../token-store";
 
 export const authKeys = {
@@ -35,6 +36,21 @@ export function useSocialLogin() {
 
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: authKeys.session });
+    },
+  });
+}
+
+/** 로그아웃 버튼용. 서버 요청이 실패해도 기기 토큰과 사용자별 캐시를 지우고 비로그인 상태로 바꾼다. */
+export function useSignOut() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: signOutThisDevice,
+    retry: false,
+
+    onSettled: () => {
+      queryClient.clear();
+      queryClient.setQueryData(authKeys.session, false);
     },
   });
 }

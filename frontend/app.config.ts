@@ -6,7 +6,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const nativeAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY;
 
   if (iosClientId) {
-    plugins.push(["@react-native-google-signin/google-signin", {
+    plugins.push(["react-native-nitro-google-signin", {
       iosUrlScheme: `com.googleusercontent.apps.${iosClientId.replace(/\.apps\.googleusercontent\.com$/, "")}`,
     }]);
   }

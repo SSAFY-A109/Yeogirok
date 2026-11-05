@@ -7,23 +7,23 @@ const { http, HttpResponse } = require("msw");
 
 const stored = new Map();
 const load = Module._load;
-const sdkState = { googleResponse: { type: "success", data: { idToken: "sdk-google-id-token" } }, kakaoResponse: { idToken: "sdk-kakao-id-token" }, googleError: null, kakaoError: null };
+const sdkState = { googleResponse: { type: "success", data: { idToken: "sdk-google-id-token", serverAuthCode: "sdk-google-auth-code" } }, kakaoResponse: { idToken: "sdk-kakao-id-token" }, googleError: null, kakaoError: null, googleConfig: null, kakaoLogin: null };
 
 Module._load = function (id, ...args) {
   if (id === "react-native") {
     return { Platform: { OS: "android" } };
   }
 
-  if (id === "@react-native-google-signin/google-signin") {
+  if (id === "react-native-nitro-google-signin") {
     return {
-      GoogleSignin: {
-        configure: () => {},
-
-        hasPlayServices: async () => {
-          return true;
+      GoogleOneTapSignIn: {
+        configure: (params) => {
+          sdkState.googleConfig = params;
         },
 
-        signIn: async () => {
+        checkPlayServices: async () => {},
+
+        presentExplicitSignIn: async () => {
           if (sdkState.googleError) {
             throw sdkState.googleError;
           }
@@ -36,11 +36,23 @@ Module._load = function (id, ...args) {
         return response.type === "success";
       },
 
+      isCancelledResponse: (response) => {
+        return response.type === "cancelled";
+      },
+
       isErrorWithCode: (error) => {
         return typeof error?.code === "string";
       },
 
-      statusCodes: { SIGN_IN_CANCELLED: "CANCELLED", PLAY_SERVICES_NOT_AVAILABLE: "PLAY_SERVICES" },
+      statusCodes: { SIGN_IN_CANCELLED: "SIGN_IN_CANCELLED", PLAY_SERVICES_NOT_AVAILABLE: "PLAY_SERVICES_NOT_AVAILABLE" },
+    };
+  }
+
+  if (id === "expo-crypto") {
+    return {
+      getRandomBytes: (count) => {
+        return require("node:crypto").randomBytes(count);
+      },
     };
   }
 
@@ -50,7 +62,9 @@ Module._load = function (id, ...args) {
 
   if (id === "@react-native-kakao/user") {
     return {
-      login: async () => {
+      login: async (params) => {
+        sdkState.kakaoLogin = params;
+
         if (sdkState.kakaoError) {
           throw sdkState.kakaoError;
         }
@@ -87,7 +101,11 @@ const { exchangeSocialToken, refreshServiceTokens } = require("../.expo/auth-che
 const { toLoginResult, toServiceTokens } = require("../.expo/auth-check/features/auth/model");
 const { getTokens, setTokens } = require("../.expo/auth-check/features/auth/token-store");
 const { server } = require("../.expo/auth-check/api/mocks/server");
-const { failedRefreshTokensFixture, serviceTokensFixture, socialCredentialsFixture } = require("../.expo/auth-check/api/mocks/fixtures/auth");
+const { failedRefreshTokensFixture, googleServerAuthCodeFixture, serviceTokensFixture, socialCredentialsFixture } = require("../.expo/auth-check/api/mocks/fixtures/auth");
+const { createNonce } = require("../.expo/auth-check/features/auth/nonce");
+const { signOutThisDevice } = require("../.expo/auth-check/features/auth/sign-out");
+const { deleteMe, getMe } = require("../.expo/auth-check/features/user/api/user.api");
+const { withdrawWithReauthentication } = require("../.expo/auth-check/features/user/withdraw");
 const { performSocialLogin } = require("../.expo/auth-check/features/auth/sign-in");
 const { signInWithGoogle } = loadNativeAdapter("google");
 const { signInWithKakao } = loadNativeAdapter("kakao");
@@ -125,29 +143,36 @@ async function check() {
     };
   };
 
-  await assert.rejects(signInWithGoogle(), socialCode("AUTH_NOT_CONFIGURED"));
-  await assert.rejects(signInWithKakao(), socialCode("AUTH_NOT_CONFIGURED"));
+  const nonce = createNonce();
+  assert.match(nonce, /^[0-9a-f]{64}$/);
+  assert.notEqual(createNonce(), nonce, "nonce는 로그인마다 새로 만들어야 합니다.");
+  await assert.rejects(signInWithGoogle(nonce), socialCode("AUTH_NOT_CONFIGURED"));
+  await assert.rejects(signInWithKakao(nonce), socialCode("AUTH_NOT_CONFIGURED"));
   assert.equal(configureApp({ config: {} }).plugins.length, 2);
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = "example-web.apps.googleusercontent.com";
   process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = "example-ios.apps.googleusercontent.com";
   process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY = "example-native-app-key";
-  assert.deepEqual(await signInWithGoogle(), { provider: "google", idToken: "sdk-google-id-token" });
-  assert.deepEqual(await signInWithKakao(), { provider: "kakao", idToken: "sdk-kakao-id-token" });
+  assert.deepEqual(await signInWithGoogle(nonce), { provider: "google", idToken: "sdk-google-id-token", nonce, serverAuthCode: "sdk-google-auth-code" });
+  assert.deepEqual(sdkState.googleConfig, { webClientId: "example-web.apps.googleusercontent.com", nonce, offlineAccess: true });
+  assert.deepEqual(await signInWithKakao(nonce), { provider: "kakao", idToken: "sdk-kakao-id-token", nonce, serverAuthCode: null });
+  assert.deepEqual(sdkState.kakaoLogin, { nonce });
   const plugins = configureApp({ config: {} }).plugins;
   assert.equal(plugins[2][1].iosUrlScheme, "com.googleusercontent.apps.example-ios");
   assert.equal(plugins[3][1].android.authCodeHandlerActivity, true);
   assert.equal(plugins[3][1].ios.handleKakaoOpenUrl, true);
   sdkState.googleResponse = { type: "cancelled" };
-  await assert.rejects(signInWithGoogle(), socialCode("AUTH_CANCELLED"));
-  sdkState.googleResponse = { type: "success", data: { idToken: null } };
-  await assert.rejects(signInWithGoogle(), socialCode("AUTH_NOT_CONFIGURED"));
-  sdkState.googleError = { code: "PLAY_SERVICES" };
-  await assert.rejects(signInWithGoogle(), socialCode("GOOGLE_PLAY_SERVICES"));
+  await assert.rejects(signInWithGoogle(nonce), socialCode("AUTH_CANCELLED"));
+  sdkState.googleResponse = { type: "success", data: { idToken: "", serverAuthCode: null } };
+  await assert.rejects(signInWithGoogle(nonce), socialCode("AUTH_NOT_CONFIGURED"));
+  sdkState.googleError = { code: "SIGN_IN_CANCELLED" };
+  await assert.rejects(signInWithGoogle(nonce), socialCode("AUTH_CANCELLED"));
+  sdkState.googleError = { code: "PLAY_SERVICES_NOT_AVAILABLE" };
+  await assert.rejects(signInWithGoogle(nonce), socialCode("GOOGLE_PLAY_SERVICES"));
   sdkState.kakaoError = { code: "Cancelled" };
-  await assert.rejects(signInWithKakao(), socialCode("AUTH_CANCELLED"));
+  await assert.rejects(signInWithKakao(nonce), socialCode("AUTH_CANCELLED"));
   sdkState.kakaoError = null;
   sdkState.kakaoResponse = {};
-  await assert.rejects(signInWithKakao(), socialCode("AUTH_NOT_CONFIGURED"));
+  await assert.rejects(signInWithKakao(nonce), socialCode("AUTH_NOT_CONFIGURED"));
   global.__DEV__ = false;
   await assert.rejects(getSocialCredentials("google"), socialCode("AUTH_UNSUPPORTED"));
   global.__DEV__ = true;
@@ -197,16 +222,15 @@ async function check() {
     await setTokens(serviceTokensFixture);
     const google = await exchangeSocialToken(socialCredentialsFixture.google);
     const kakao = await exchangeSocialToken(socialCredentialsFixture.kakao);
-    const withoutNonce = await exchangeSocialToken({ provider: "google", idToken: socialCredentialsFixture.google.idToken });
     assert.equal(google.isNewUser, true);
     assert.notEqual(google.refreshToken, kakao.refreshToken);
-    assert.notEqual(google.refreshToken, withoutNonce.refreshToken);
 
     for (const [body, code, status] of [
       [{ provider: "google" }, "C001", 400],
+      [{ provider: "google", idToken: socialCredentialsFixture.google.idToken }, "C001", 400],
       [{ provider: "google", idToken: "" }, "C001", 400],
-      [{ provider: "unsupported", idToken: "example" }, "C003", 400],
-      [{ provider: "google", idToken: "invalid" }, "A005", 401],
+      [{ provider: "unsupported", idToken: "example", nonce: "example" }, "C003", 400],
+      [{ provider: "google", idToken: "invalid", nonce: "example" }, "A005", 401],
       [{ ...socialCredentialsFixture.google, nonce: "wrong" }, "A006", 401],
     ]) {
       await assert.rejects(exchangeSocialToken(body), hasCode(code, status));
@@ -250,7 +274,47 @@ async function check() {
       return header === null;
     }), "로그인·갱신 요청에 서비스 토큰을 보내면 안 됩니다.");
 
-    console.info("Auth: 개발 MSW 로그인·토큰 저장·SDK 어댑터·키 누락/취소·Expo 설정·오류 8종·회전·자동 갱신 확인");
+    server.resetHandlers();
+
+    // 로그아웃(API-007): 이 기기 리프레시 토큰 폐기, 요청이 실패해도 기기 토큰 삭제
+    await performSocialLogin("kakao");
+    const beforeLogout = await getTokens();
+    await signOutThisDevice();
+    assert.equal(await getTokens(), null);
+    await assert.rejects(refreshServiceTokens(beforeLogout.refreshToken), hasCode("A007", 401));
+    await setTokens(serviceTokensFixture);
+
+    server.use(http.post("*/api/v1/auth/logout", () => {
+      return HttpResponse.json({ success: false, code: "C009", message: "fail" }, { status: 500 });
+    }));
+
+    await assert.rejects(signOutThisDevice(), hasCode("C009", 500));
+    assert.equal(await getTokens(), null, "로그아웃 요청이 실패해도 기기 토큰은 지워야 합니다.");
+    server.resetHandlers();
+
+    // 내 정보(API-008)
+    await performSocialLogin("kakao");
+    const me = await getMe();
+    assert.ok(me.nickname.length > 0);
+    assert.deepEqual(me.loginProviders, ["kakao"]);
+
+    // 탈퇴(API-009): 재발급 토큰이면 A011, 구글 코드 누락·불일치는 C001·A029
+    await setTokens(await refreshServiceTokens((await getTokens()).refreshToken));
+    await assert.rejects(deleteMe(null), hasCode("A011", 403));
+    await performSocialLogin("google");
+    await assert.rejects(deleteMe(null), hasCode("C001", 400));
+    await performSocialLogin("google");
+    await assert.rejects(deleteMe("wrong-code"), hasCode("A029", 400));
+    await performSocialLogin("google");
+    assert.deepEqual(await deleteMe(googleServerAuthCodeFixture), { withdrawn: true, dataCleanupStatus: "QUEUED" });
+
+    for (const provider of ["google", "kakao"]) {
+      await setTokens(serviceTokensFixture);
+      await withdrawWithReauthentication(provider);
+      assert.equal(await getTokens(), null, "탈퇴 후 기기 토큰을 지워야 합니다.");
+    }
+
+    console.info("Auth: 개발 MSW 로그인·nonce·토큰 저장·SDK 어댑터·키 누락/취소·Expo 설정·오류 8종·회전·자동 갱신·로그아웃·내 정보·재인증 탈퇴 확인");
   } finally {
     server.close();
   }
