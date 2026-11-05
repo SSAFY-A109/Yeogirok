@@ -1,0 +1,29 @@
+# 개인정보: 실제 영수증 사진, OCR 원문 (절대 올리지 않음)
+real/
+real_holdout/
+*_labels.csv
+results_*/
+vis/
+portfolio_record/
+*.tar.gz
+
+# 학습 데이터 (AI Hub 재배포 금지 포함)
+rec_data/
+synthetic/
+aihub*/
+
+# 모델 가중치, 실험 기록
+PaddleOCR/
+output/
+*.pdparams
+*.pdopt
+*.pdiparams
+mlruns/
+mlflow.db
+
+# 파이썬 환경
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
