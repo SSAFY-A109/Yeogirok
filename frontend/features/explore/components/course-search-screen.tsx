@@ -6,18 +6,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FilterChip } from "@/components/ui/filter-chip";
 import { Icon } from "@/components/ui/icon";
+import { MediaPhoto } from "@/components/ui/media-photo";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { TextField } from "@/components/ui/text-field";
-import { useCourseSearch } from "../api/queries";
-import { defaultCourseFilters, describeFilters, isDefaultFilters, type CourseFilters, type CourseSummary } from "../model";
+import { useRegions } from "@/features/common/api/queries";
+import { useCourseSearch } from "@/features/course/api/queries";
+import { getCourseErrorMessage } from "@/features/course/errors";
+import { formatCourseFacts, type CourseSummary } from "@/features/course/model";
+import { defaultCourseFilters, describeFilters, isDefaultFilters, toCourseSearchCondition, type CourseFilters } from "../model";
 import { addRecentSearch, clearRecentSearches, removeRecentSearch, useRecentSearches, type RecentSearch } from "../recent-searches";
-import { PhotoPlaceholder, toneAt } from "./photo-placeholder";
 import { InlineMessage, ListSkeleton } from "./query-states";
 import { SearchConditionBar } from "./search-condition-bar";
 import { SearchConditionSheet } from "./search-condition-sheet";
 
 // 서버 인기 지역 API가 정해지기 전 시안(W03-A) 문구 그대로 둔다(TBD).
 const popularKeywords = ["강릉", "제주", "부산", "경주", "여수", "전주", "속초"];
+
+const COURSE_THUMBNAIL_SIZE = 84;
 
 type CourseSearchScreenProps = { query: string; filters: CourseFilters; searched: boolean };
 
@@ -95,6 +101,8 @@ export function CourseSearchScreen({ query, filters, searched }: CourseSearchScr
   );
 }
 
+// #region 검색 전
+
 function SearchEntry({ onSelectRecent, onSelectKeyword }: { onSelectRecent: (item: RecentSearch) => void; onSelectKeyword: (keyword: string) => void }) {
   const recentSearches = useRecentSearches();
 
@@ -133,8 +141,9 @@ function SearchEntry({ onSelectRecent, onSelectKeyword }: { onSelectRecent: (ite
 }
 
 function RecentRow({ item, onPress }: { item: RecentSearch; onPress: (item: RecentSearch) => void }) {
+  const regions = useRegions();
   const title = item.query === "" ? "전체 코스" : item.query;
-  const conditions = describeFilters(item.filters);
+  const conditions = describeFilters(item.filters, regions.data ?? []);
 
   return (
     <View className="flex-row items-center gap-3">
@@ -168,75 +177,121 @@ function RecentRow({ item, onPress }: { item: RecentSearch; onPress: (item: Rece
   );
 }
 
+// #endregion
+
+// #region 검색 결과
+
 function CourseResults({ query, filters, onResetFilters }: { query: string; filters: CourseFilters; onResetFilters: () => void }) {
-  const search = useCourseSearch(query, filters);
+  const search = useCourseSearch(toCourseSearchCondition(query, filters));
   const filtered = !isDefaultFilters(filters);
+
+  const courses = search.data?.pages.flatMap((page) => {
+    return page.courses;
+  }) ?? [];
+
+  const totalCount = search.data?.pages[0]?.totalCount;
+
+  function loadMore() {
+    if (search.hasNextPage && !search.isFetchingNextPage && !search.isFetchNextPageError) {
+      void search.fetchNextPage();
+    }
+  }
 
   return (
     <View className="flex-1">
       <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
         <View className="flex-row items-center gap-1">
           <Text accessibilityRole="header" className="text-label text-foreground">{query ? `'${query}' 코스` : "전체 코스"}</Text>
-          {search.data && <Text className="text-label text-primary tabular-nums">{`${search.data.length}개`}</Text>}
+          {totalCount !== undefined && <Text className="text-label text-primary tabular-nums">{`${totalCount}개`}</Text>}
         </View>
-        <View className="flex-row items-center gap-1" accessibilityLabel="정렬 추천순">
-          <Text className="text-label text-foreground-secondary">추천순</Text>
+        <View className="flex-row items-center gap-1" accessibilityLabel="정렬 인기순">
+          <Text className="text-label text-foreground-secondary">인기순</Text>
           <Icon as={ChevronDown} size={16} className="text-icon" />
         </View>
       </View>
       {search.isPending && <View className="px-5"><ListSkeleton testID="course-search.loading" /></View>}
-      {search.isError && (
+      {search.isError && !search.data && (
         <View className="px-5">
-          <InlineMessage title="코스를 불러오지 못했어요" description="연결을 확인하고 다시 시도해 주세요." actionLabel="다시 시도" onAction={() => {
+          <InlineMessage title="코스를 불러오지 못했어요" description={getCourseErrorMessage(search.error)} actionLabel="다시 시도" onAction={() => {
             return void search.refetch();
           }} testID="course-search.error" />
         </View>
       )}
       {search.data && (
         <FlatList
-          data={search.data}
+          data={courses}
           keyExtractor={(course) => {
-            return course.id;
+            return String(course.id);
           }}
           keyboardShouldPersistTaps="handled"
           contentContainerClassName="px-5 pb-6"
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
           renderItem={({ item, index }) => {
-            return <CourseRow course={item} last={index === search.data.length - 1} tone={toneAt(index)} />;
+            return <CourseRow course={item} last={index === courses.length - 1} />;
           }}
           ListEmptyComponent={filtered ? (
             <InlineMessage title="조건에 맞는 코스가 없어요" description="지역·기간·이동 수단 조건을 줄여 보세요." actionLabel="조건 초기화" onAction={onResetFilters} testID="course-search.empty" />
           ) : (
             <InlineMessage title="검색 결과가 없어요" description="다른 지역이나 장소 이름으로 찾아보세요." testID="course-search.empty" />
           )}
+          ListFooterComponent={<ResultsFooter loading={search.isFetchingNextPage} failed={search.isFetchNextPageError} onRetry={() => {
+            void search.fetchNextPage();
+          }} />}
         />
       )}
     </View>
   );
 }
 
-type CourseRowProps = { course: CourseSummary; last: boolean; tone: ReturnType<typeof toneAt> };
+function ResultsFooter({ loading, failed, onRetry }: { loading: boolean; failed: boolean; onRetry: () => void }) {
+  if (loading) {
+    return (
+      <View className="items-center py-4" accessibilityLabel="코스 더 불러오는 중">
+        <Spinner tone="brand" accessible={false} />
+      </View>
+    );
+  }
 
-function CourseRow({ course, last, tone }: CourseRowProps) {
+  if (failed) {
+    return (
+      <View className="pt-4">
+        <InlineMessage title="코스를 더 불러오지 못했어요" actionLabel="다시 시도" onAction={onRetry} testID="course-search.more-error" />
+      </View>
+    );
+  }
+
+  return null;
+}
+
+function CourseRow({ course, last }: { course: CourseSummary; last: boolean }) {
+  const facts = formatCourseFacts(course);
+  const route = course.routePreview.join(" → ");
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${course.title}, 장소 ${course.placeCount}곳, ${course.duration}, ${course.transport}`}
+      accessibilityLabel={`${course.title}, ${course.regionName}, ${facts}`}
       onPress={() => {
-        return router.push({ pathname: "/courses/[courseId]", params: { courseId: course.id } });
+        return router.push({ pathname: "/courses/[courseId]", params: { courseId: String(course.id) } });
       }}
       className={last ? "flex-row gap-4 py-4 active:bg-muted" : "flex-row gap-4 border-b border-border py-4 active:bg-muted"}
       testID={`course-search.row.${course.id}`}
     >
-      <PhotoPlaceholder size={84} tone={tone} />
+      <View style={{ width: COURSE_THUMBNAIL_SIZE, height: COURSE_THUMBNAIL_SIZE }}>
+        <MediaPhoto uri={course.thumbnailUrl} className="size-full" />
+      </View>
       <View className="flex-1 gap-1">
         <Text numberOfLines={1} className="text-label text-foreground">{course.title}</Text>
-        <Text numberOfLines={1} className="text-caption text-foreground-secondary">{`장소 ${course.placeCount}곳 ${course.duration} ${course.transport}`}</Text>
-        <Text numberOfLines={1} className="text-caption text-muted-foreground">{course.summary}</Text>
+        <Text numberOfLines={1} className="text-caption text-foreground-secondary">{`${course.regionName} · ${facts}`}</Text>
+        {route !== "" && <Text numberOfLines={1} className="text-caption text-muted-foreground">{route}</Text>}
         <View className="flex-row items-center gap-1">
           <Icon as={Footprints} size={14} className="text-highlight" />
-          <Text className="text-caption text-highlight tabular-nums">{`${course.forkCount}명이 장소를 가져갔어요`}</Text>
+          <Text className="text-caption text-highlight tabular-nums">{`여행방 ${course.importCount}곳이 장소를 가져갔어요`}</Text>
         </View>
       </View>
     </Pressable>
   );
 }
+
+// #endregion

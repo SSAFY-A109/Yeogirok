@@ -99,6 +99,7 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   var clusterer = null;
   var routeLine = null;
   var routeOverlays = [];
+  var anchor = null;
 
   function post(message) {
     if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
@@ -232,19 +233,55 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
       var bounds = new kakao.maps.LatLngBounds();
       path.forEach(function (position) { bounds.extend(position); });
       map.setBounds(bounds, 48, 48, 48, 48);
+      anchor = map.getCenter();
     }
   };
 
+  function recenterOnAnchor() {
+    map.relayout();
+    map.setCenter(anchor);
+  }
+
+  function keepCenterOnResize(container) {
+    var lastWidth = container.clientWidth;
+    var lastHeight = container.clientHeight;
+    var userMoving = false;
+
+    kakao.maps.event.addListener(map, "dragstart", function () { userMoving = true; });
+    kakao.maps.event.addListener(map, "zoom_start", function () { userMoving = true; });
+    kakao.maps.event.addListener(map, "idle", function () {
+      if (!userMoving) return;
+      userMoving = false;
+      anchor = map.getCenter();
+    });
+
+    function handleResize() {
+      var width = container.clientWidth;
+      var height = container.clientHeight;
+      if (width === 0 || height === 0 || (width === lastWidth && height === lastHeight)) return;
+      lastWidth = width;
+      lastHeight = height;
+      recenterOnAnchor();
+    }
+
+    if (window.ResizeObserver) {
+      new ResizeObserver(handleResize).observe(container);
+    } else {
+      window.addEventListener("resize", handleResize);
+    }
+  }
+
   function createMap() {
     try {
-      map = new kakao.maps.Map(document.getElementById("map"), {
-        center: new kakao.maps.LatLng(camera.lat, camera.lng),
-        level: camera.level
-      });
+      var container = document.getElementById("map");
+      anchor = new kakao.maps.LatLng(camera.lat, camera.lng);
+      map = new kakao.maps.Map(container, { center: anchor, level: camera.level });
       clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: ${CLUSTER_MIN_LEVEL} });
       kakao.maps.event.addListener(map, "tilesloaded", function () {
+        if (!settled) recenterOnAnchor();
         settle({ type: "ready" });
       });
+      keepCenterOnResize(container);
       watchInteractionPerformance();
     } catch (error) {
       settle({ type: "error", reason: "map-init" });

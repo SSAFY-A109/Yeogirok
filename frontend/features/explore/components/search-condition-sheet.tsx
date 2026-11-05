@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { useRegions } from "@/features/common/api/queries";
+import { useCourseSearch } from "@/features/course/api/queries";
 import { cn } from "@/lib/utils";
-import { useCourseSearch } from "../api/queries";
-import { defaultCourseFilters, durationFilterOptions, regionFilterOptions, transportFilterOptions, type CourseFilters, type TransportFilter } from "../model";
+import { defaultCourseFilters, durationFilterOptions, toCourseSearchCondition, transportFilterOptions, type CourseFilters, type TransportFilter } from "../model";
 
-const transportIcons: Record<Exclude<TransportFilter, "all">, LucideIcon> = { car: Car, public: Bus };
+const transportIcons: Record<Exclude<TransportFilter, "all">, LucideIcon> = { CAR: Car, TRANSIT: Bus };
 
 type SearchConditionSheetProps = {
   visible: boolean;
@@ -31,7 +32,13 @@ export function SearchConditionSheet({ visible, onClose, ...props }: SearchCondi
 
 function ConditionForm({ query, filters, onApply }: Omit<SearchConditionSheetProps, "visible" | "onClose">) {
   const [draft, setDraft] = useState(filters);
-  const preview = useCourseSearch(query, draft);
+  const preview = useCourseSearch(toCourseSearchCondition(query, draft));
+  const regions = useRegions();
+  const previewCount = preview.data?.pages[0]?.totalCount;
+
+  const regionOptions = [{ value: "all", label: "전체" }, ...(regions.data ?? []).map((region) => {
+    return { value: region.code, label: region.name };
+  })];
 
   function update(next: Partial<CourseFilters>) {
     setDraft({ ...draft, ...next });
@@ -41,7 +48,7 @@ function ConditionForm({ query, filters, onApply }: Omit<SearchConditionSheetPro
     <View className="gap-6 px-5 pb-2 pt-2" testID="course-search.sheet">
       <Text accessibilityRole="header" className="text-h3 text-foreground">검색 조건</Text>
       <ConditionGroup title="지역" description="코스 장소가 있는 지역">
-        {regionFilterOptions.map((option) => {
+        {regionOptions.map((option) => {
           return (
             <FilterChip key={option.value} selected={draft.region === option.value} onSelectedChange={() => {
               update({ region: option.value });
@@ -93,7 +100,7 @@ function ConditionForm({ query, filters, onApply }: Omit<SearchConditionSheetPro
         <Button size="lg" className="h-button-lg flex-1" onPress={() => {
           onApply(draft);
         }} testID="course-search.sheet.apply">
-          <Text className="tabular-nums">{preview.data ? `코스 ${preview.data.length}개 보기` : "코스 보기"}</Text>
+          <Text className="tabular-nums">{previewCount === undefined ? "코스 보기" : `코스 ${previewCount}개 보기`}</Text>
         </Button>
       </View>
     </View>

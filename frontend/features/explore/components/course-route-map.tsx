@@ -6,7 +6,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { KakaoMapView, type MapCamera, type MapRoute } from "@/lib/native/map";
 import { getColors } from "@/lib/theme";
-import type { CoursePlace } from "../model";
+import type { CoursePlace } from "@/features/course/model";
 import { RouteMapPreview, type MapPin } from "./route-map-preview";
 
 const MAP_HEIGHT = 196;
@@ -33,7 +33,7 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
 
     return {
       points: places.map((place, index) => {
-        return { id: place.id, lat: place.lat, lng: place.lng, order: index + 1, selected: selectedIds.has(place.id) };
+        return { id: place.id, lat: place.coordinate.latitude, lng: place.coordinate.longitude, order: index + 1, selected: selectedIds.has(place.id) };
       }),
 
       colors: {
@@ -51,7 +51,7 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
   const initialCamera = useMemo<MapCamera>(() => {
     const first = places[0];
 
-    return { lat: first?.lat ?? 37.7519, lng: first?.lng ?? 128.8761, level: ROUTE_MAP_LEVEL };
+    return { lat: first?.coordinate.latitude ?? 37.7519, lng: first?.coordinate.longitude ?? 128.8761, level: ROUTE_MAP_LEVEL };
   }, [places]);
 
   if (canLoad && javascriptKey && phase !== "error") {
@@ -107,11 +107,11 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
 
 function toPreviewPins(places: CoursePlace[], selectedIds: ReadonlySet<string>): MapPin[] {
   const lats = places.map((place) => {
-    return place.lat;
+    return place.coordinate.latitude;
   });
 
   const lngs = places.map((place) => {
-    return place.lng;
+    return place.coordinate.longitude;
   });
 
   const minLat = Math.min(...lats);
@@ -125,8 +125,8 @@ function toPreviewPins(places: CoursePlace[], selectedIds: ReadonlySet<string>):
       id: place.id,
       order: index + 1,
       label: place.name,
-      x: FALLBACK_PADDING + ((place.lng - minLng) / lngRange) * span,
-      y: FALLBACK_PADDING + (1 - (place.lat - minLat) / latRange) * span,
+      x: FALLBACK_PADDING + ((place.coordinate.longitude - minLng) / lngRange) * span,
+      y: FALLBACK_PADDING + (1 - (place.coordinate.latitude - minLat) / latRange) * span,
       selected: selectedIds.has(place.id),
     };
   });

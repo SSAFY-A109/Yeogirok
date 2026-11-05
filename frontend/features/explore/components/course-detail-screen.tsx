@@ -6,43 +6,45 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
+import { MediaPhoto } from "@/components/ui/media-photo";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { useCourse } from "@/features/course/api/queries";
+import { getCourseErrorMessage, isCourseUnavailable } from "@/features/course/errors";
+import { formatCourseFacts, type CourseDetail, type CoursePlace } from "@/features/course/model";
 import { cn } from "@/lib/utils";
-import { useCourse } from "../api/queries";
-import { groupPlacesByDay, type CourseDetail, type CoursePlace } from "../model";
-import { placeCategories } from "./category-icons";
-import { PhotoPlaceholder, toneAt } from "./photo-placeholder";
+import { AuthorAvatars } from "./author-avatars";
+import { categoryIconOf } from "./category-icons";
+import { CourseRouteMap } from "./course-route-map";
 import { InlineMessage } from "./query-states";
 import { RoomSelectSheet } from "./room-select-sheet";
-import { CourseRouteMap } from "./course-route-map";
 
-const AVATAR_SIZE = 26;
-const AVATAR_OVERLAP = 6;
-const avatarToneClassNames = ["bg-brand-muted", "bg-highlight-muted", "bg-accent"];
+const PLACE_THUMBNAIL_SIZE = 52;
 
-export function CourseDetailScreen({ courseId }: { courseId: string }) {
+/** `courseId`가 `null`이면 주소의 코스 id가 숫자가 아닌 경우다. */
+export function CourseDetailScreen({ courseId }: { courseId: number | null }) {
   const course = useCourse(courseId);
+  const unavailable = courseId === null || isCourseUnavailable(course.error);
 
   return (
     <SafeAreaView className="flex-1 bg-background" testID="course-detail.screen">
       <ScreenHeader title="코스 상세" onBack={() => {
         return router.back();
       }} />
-      {course.isPending && <DetailSkeleton />}
-      {course.isError && (
+      {unavailable && (
         <View className="px-5 pt-4">
-          <InlineMessage title="코스를 불러오지 못했어요" description="연결을 확인하고 다시 시도해 주세요." actionLabel="다시 시도" onAction={() => {
-            return void course.refetch();
-          }} testID="course-detail.error" />
-        </View>
-      )}
-      {course.data === null && (
-        <View className="px-5 pt-4">
-          <InlineMessage title="코스를 찾을 수 없어요" description="삭제되었거나 주소가 잘못된 코스예요." actionLabel="돌아가기" onAction={() => {
+          <InlineMessage title="코스를 볼 수 없어요" description="공개가 해제되었거나 삭제된 코스예요." actionLabel="돌아가기" onAction={() => {
             return router.back();
           }} testID="course-detail.not-found" />
+        </View>
+      )}
+      {!unavailable && course.isPending && <DetailSkeleton />}
+      {!unavailable && course.isError && (
+        <View className="px-5 pt-4">
+          <InlineMessage title="코스를 불러오지 못했어요" description={getCourseErrorMessage(course.error)} actionLabel="다시 시도" onAction={() => {
+            return void course.refetch();
+          }} testID="course-detail.error" />
         </View>
       )}
       {course.data && <PlacePicker course={course.data} />}
@@ -59,7 +61,7 @@ function PlacePicker({ course }: { course: CourseDetail }) {
     return [place.id, index + 1];
   }));
 
-  const sections = groupPlacesByDay(course.places).map((group) => {
+  const sections = course.days.map((group) => {
     return { day: group.day, data: group.places };
   });
 
@@ -67,15 +69,7 @@ function PlacePicker({ course }: { course: CourseDetail }) {
     return selected.has(place.id);
   });
 
-  const selectedIds = selectedPlaces.map((place) => {
-    return place.id;
-  });
-
-  const selectedNames = selectedPlaces.map((place) => {
-    return place.name;
-  });
-
-  const allSelected = selected.size === course.places.length;
+  const allSelected = course.places.length > 0 && selected.size === course.places.length;
 
   function toggle(placeId: string) {
     const next = new Set(selected);
@@ -111,6 +105,8 @@ function PlacePicker({ course }: { course: CourseDetail }) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={allSelected ? "전체 선택 해제" : "전체 선택"}
+                accessibilityState={{ disabled: course.places.length === 0 }}
+                disabled={course.places.length === 0}
                 hitSlop={12}
                 onPress={toggleAll}
                 testID="course-detail.select-all"
@@ -122,13 +118,14 @@ function PlacePicker({ course }: { course: CourseDetail }) {
         }
         renderSectionHeader={({ section }) => {
           return (
-            <Text accessibilityRole="header" className="px-5 pb-1 pt-4 text-label-sm text-muted-foreground">{`${section.day}일차`}</Text>
+            <View className="px-5 pb-1 pt-4">
+              <Text accessibilityRole="header" className="text-label-sm text-muted-foreground">{`${section.day}일차`}</Text>
+              {section.data.length === 0 && <Text className="pt-2 text-caption text-muted-foreground">공개된 장소가 없는 날이에요</Text>}
+            </View>
           );
         }}
         renderItem={({ item }) => {
-          const order = orderById.get(item.id) ?? 0;
-
-          return <PlaceRow place={item} order={order} selected={selected.has(item.id)} onToggle={() => {
+          return <PlaceRow place={item} order={orderById.get(item.id) ?? 0} selected={selected.has(item.id)} onToggle={() => {
             return toggle(item.id);
           }} />;
         }}
@@ -143,8 +140,12 @@ function PlacePicker({ course }: { course: CourseDetail }) {
       }} />
       <RoomSelectSheet
         visible={sheetOpen}
-        placeIds={selectedIds}
-        placeNames={selectedNames}
+        placeIds={selectedPlaces.map((place) => {
+          return place.id;
+        })}
+        placeNames={selectedPlaces.map((place) => {
+          return place.name;
+        })}
         onClose={() => {
           setSheetOpen(false);
         }}
@@ -163,22 +164,10 @@ function CourseInfo({ course }: { course: CourseDetail }) {
     <View className="gap-2 px-5 pb-4 pt-5">
       <Text accessibilityRole="header" className="text-h2 text-foreground">{course.title}</Text>
       <View className="flex-row items-center gap-2.5">
-        <View className="flex-row" accessibilityLabel={`다녀온 사람 ${course.travelers.length}명`}>
-          {course.travelers.map((name, index) => {
-            return (
-              <View
-                key={name}
-                className={cn("items-center justify-center rounded-full border-2 border-card", avatarToneClassNames[index % avatarToneClassNames.length])}
-                style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, marginRight: index < course.travelers.length - 1 ? -AVATAR_OVERLAP : 0, zIndex: course.travelers.length - index }}
-              >
-                <Text className="text-micro text-foreground">{name}</Text>
-              </View>
-            );
-          })}
-        </View>
-        <Text className="text-caption text-foreground-secondary">{`${course.duration} ${course.transport} 장소 ${course.placeCount}곳`}</Text>
+        <AuthorAvatars authors={course.authors} size={26} overlap={6} />
+        <Text className="text-caption text-foreground-secondary">{formatCourseFacts({ ...course, placeCount: course.places.length })}</Text>
       </View>
-      <Text className="text-body-sm text-foreground-secondary">{course.description}</Text>
+      {course.description !== "" && <Text className="text-body-sm text-foreground-secondary">{course.description}</Text>}
     </View>
   );
 }
@@ -186,12 +175,12 @@ function CourseInfo({ course }: { course: CourseDetail }) {
 type PlaceRowProps = { place: CoursePlace; order: number; selected: boolean; onToggle: () => void };
 
 function PlaceRow({ place, order, selected, onToggle }: PlaceRowProps) {
-  const category = placeCategories[place.category];
+  const categoryName = place.categoryName ?? "분류 없음";
 
   return (
     <Pressable
       accessibilityRole="checkbox"
-      accessibilityLabel={`${order}번 ${place.name}, ${placeCategories[place.category].label}`}
+      accessibilityLabel={`${order}번 ${place.name}, ${categoryName}`}
       accessibilityState={{ checked: selected }}
       onPress={onToggle}
       className="flex-row items-center gap-3 px-5 py-3 active:bg-muted"
@@ -204,11 +193,13 @@ function PlaceRow({ place, order, selected, onToggle }: PlaceRowProps) {
       <View className="flex-1 gap-1">
         <Text numberOfLines={1} className="text-label text-foreground">{place.name}</Text>
         <View className="flex-row items-center gap-1">
-          <Icon as={category.icon} size={14} className="text-icon" />
-          <Text numberOfLines={1} className="shrink-0 text-caption text-foreground-secondary">{category.label}</Text>
+          <Icon as={categoryIconOf(place.categoryCode)} size={14} className="text-icon" />
+          <Text numberOfLines={1} className="shrink-0 text-caption text-foreground-secondary">{categoryName}</Text>
         </View>
       </View>
-      <PhotoPlaceholder size={52} tone={toneAt(order)} className="rounded-sm" />
+      <View style={{ width: PLACE_THUMBNAIL_SIZE, height: PLACE_THUMBNAIL_SIZE }}>
+        <MediaPhoto uri={place.imageUrl} className="size-full rounded-sm" />
+      </View>
     </Pressable>
   );
 }

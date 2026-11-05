@@ -4,6 +4,7 @@ import { CalendarDays, Car, MapPin, type LucideIcon } from "lucide-react-native"
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { useRegions } from "@/features/common/api/queries";
 import { cn } from "@/lib/utils";
 import { filterLabels, type ConditionGroup, type CourseFilters } from "../model";
 
@@ -20,7 +21,8 @@ type SearchConditionBarProps = {
 
 // 지역 | 기간 | 이동 수단을 한 줄로 보여 주고, 칸을 누르면 조건 시트를 연다.
 export function SearchConditionBar({ filters, onPress }: SearchConditionBarProps) {
-  const labels = filterLabels(filters);
+  const regions = useRegions();
+  const labels = filterLabels(filters, regions.data ?? []);
 
   return (
     <View className="mx-5 flex-row items-center rounded-md border border-border bg-card" testID="course-search.conditions">
