@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.room.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -26,16 +27,20 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
+import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
+import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomInvitationResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomJoinResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.TestUsers;
 
 /**
- * 방 행 잠금으로 참여·나가기·초대 링크 생성이 한 줄로 서는지 본다. 요청마다 실제로 커밋해야 하므로 테스트 트랜잭션을 쓰지 않고,
+ * 방 행 잠금으로 참여·나가기·초대 링크 생성·후보 장소 변경이 한 줄로 서는지 본다. 요청마다 실제로 커밋해야 하므로 테스트 트랜잭션을 쓰지 않고,
  * 만든 행은 끝나고 지운다.
  */
 @DataJpaTest
@@ -53,6 +58,8 @@ class RoomConcurrencyTest {
 	@Autowired
 	RoomInvitationService roomInvitationService;
 	@Autowired
+	RoomPlaceService roomPlaceService;
+	@Autowired
 	DataSource dataSource;
 
 	JdbcTemplate jdbc;
@@ -68,6 +75,7 @@ class RoomConcurrencyTest {
 
 	@AfterEach
 	void tearDown() {
+		jdbc.update("DELETE FROM room_places WHERE room_id = ?", roomId);
 		jdbc.update("DELETE FROM room_members WHERE room_id = ?", roomId);
 		jdbc.update("DELETE FROM travel_rooms WHERE id = ?", roomId);
 		jdbc.update("DELETE FROM users WHERE id BETWEEN ? AND ?", OWNER, CROWD_START + CROWD);
@@ -155,6 +163,73 @@ class RoomConcurrencyTest {
 		assertThat(responses).filteredOn(RoomInvitationResponse::created).hasSize(1);
 		assertThat(responses).extracting(RoomInvitationResponse::inviteToken).containsOnly(
 			responses.getFirst().inviteToken());
+	}
+
+	/* ── 후보 장소 ──────────────────────────────────────────── */
+
+	@Test
+	void 같은_후보를_동시에_빼도_모두_성공하고_version은_한_번만_오른다() throws Exception {
+		Long placeId = addPlace();
+		int before = roomVersion();
+
+		List<Object> outcomes = runConcurrently(LongStream.range(0, 5)
+			.<Callable<Object>>mapToObj(i -> () -> roomPlaceService.remove(OWNER, roomId, placeId, before))
+			.toList());
+
+		assertThat(outcomes).allMatch(RoomPlaceRemoveResponse.class::isInstance);
+		assertThat(outcomes).map(outcome -> ((RoomPlaceRemoveResponse)outcome).version()).containsOnly(before + 1);
+		assertThat(roomVersion()).isEqualTo(before + 1);
+	}
+
+	@Test
+	void 같은_후보를_동시에_복원해도_모두_성공하고_version은_한_번만_오른다() throws Exception {
+		Long placeId = addPlace();
+		roomPlaceService.remove(OWNER, roomId, placeId, roomVersion());
+		int before = roomVersion();
+
+		List<Object> outcomes = runConcurrently(LongStream.range(0, 5)
+			.<Callable<Object>>mapToObj(i -> () -> roomPlaceService.restore(OWNER, roomId, placeId, before))
+			.toList());
+
+		assertThat(outcomes).allMatch(RoomPlaceRestoreResponse.class::isInstance);
+		assertThat(roomVersion()).isEqualTo(before + 1);
+		assertThat(jdbc.queryForObject("SELECT removed_at IS NULL FROM room_places WHERE id = ?", Boolean.class,
+			placeId)).isTrue();
+	}
+
+	@Test
+	void 여러_참여자가_동시에_직접_추가하면_모두_저장되고_version도_그만큼_오른다() throws Exception {
+		String token = inviteToken();
+		for (long id = CROWD_START; id < CROWD_START + 4; id++) {
+			roomInvitationService.accept(id, token);
+		}
+		int before = roomVersion();
+
+		List<Callable<Object>> adds = new ArrayList<>();
+		adds.add(() -> addPlaceBy(OWNER));
+		for (long id = CROWD_START; id < CROWD_START + 4; id++) {
+			long userId = id;
+			adds.add(() -> addPlaceBy(userId));
+		}
+		List<Object> outcomes = runConcurrently(adds);
+
+		assertThat(outcomes).allMatch(CustomPlaceCreateResponse.class::isInstance);
+		assertThat(outcomes).map(outcome -> ((CustomPlaceCreateResponse)outcome).version())
+			.containsExactlyInAnyOrder(before + 1, before + 2, before + 3, before + 4, before + 5);
+		assertThat(roomVersion()).isEqualTo(before + 5);
+	}
+
+	private Long addPlace() {
+		return addPlaceBy(OWNER).roomPlace().id();
+	}
+
+	private CustomPlaceCreateResponse addPlaceBy(long userId) {
+		return roomPlaceService.addCustomPlace(userId, roomId,
+			new CustomPlaceCreateCommand("경포대", new BigDecimal("37.7519000"), new BigDecimal("128.8761000"), null));
+	}
+
+	private int roomVersion() {
+		return jdbc.queryForObject("SELECT version FROM travel_rooms WHERE id = ?", Integer.class, roomId);
 	}
 
 	private String inviteToken() {
