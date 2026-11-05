@@ -1,11 +1,13 @@
 package com.ssafy.yeogirok.domain.room.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -33,6 +35,14 @@ public interface TravelRoomRepository extends JpaRepository<TravelRoom, Long> {
 	 */
 	@Query("select r.id from TravelRoom r where r.inviteTokenEncrypted = :inviteTokenEncrypted")
 	Optional<Long> findIdByInviteTokenEncrypted(@Param("inviteTokenEncrypted") String inviteTokenEncrypted);
+
+	/**
+	 * 후보 장소가 바뀌어 여행방 version 을 1 올린다. 방 정보는 그대로라 dirty checking 으로는 오르지 않는다.
+	 * {@link #findByIdForUpdate} 로 행을 잠근 뒤에 부르고, 영속성 컨텍스트의 방은 호출한 쪽이 refresh 한다.
+	 */
+	@Modifying(flushAutomatically = true)
+	@Query("update TravelRoom r set r.version = r.version + 1, r.updatedAt = :now where r.id = :id")
+	int increaseVersion(@Param("id") Long id, @Param("now") Instant now);
 
 	/** API-020. 사용자가 현재 참여 중인 삭제되지 않은 방을 id 내림차순으로, {@code beforeId} 보다 작은 것만. */
 	@Query("select r from TravelRoom r, RoomMember m where m.roomId = r.id and m.userId = :userId"
