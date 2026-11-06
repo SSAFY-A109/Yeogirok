@@ -5,62 +5,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.time.Instant;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.ssafy.yeogirok.domain.file.FilePurpose;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
 import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestRedis;
 
 import tools.jackson.databind.json.JsonMapper;
 
-/** 업로드 세션 저장·조회와 키 수명(최초 발급 + 멱등키 보관 기간). 실제 Redis(Testcontainers). */
-@Testcontainers
+/** 업로드 세션 저장·조회와 키 수명(최초 발급 + 멱등키 보관 기간). 실제 Redis. */
 class UploadSessionStoreTest {
 
 	static final Instant NOW = Instant.parse("2026-11-06T00:00:00Z");
 	static final Duration RETENTION = Duration.ofHours(24);
 
-	@Container
-	static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379);
-
-	static LettuceConnectionFactory connectionFactory;
-	static StringRedisTemplate redis;
-
 	MutableClock clock;
 	UploadSessionStore store;
 
-	@BeforeAll
-	static void connect() {
-		connectionFactory = new LettuceConnectionFactory(
-			new RedisStandaloneConfiguration(REDIS.getHost(), REDIS.getMappedPort(6379)));
-		connectionFactory.afterPropertiesSet();
-		connectionFactory.start();
-		redis = new StringRedisTemplate(connectionFactory);
-	}
-
-	@AfterAll
-	static void disconnect() {
-		connectionFactory.destroy();
-	}
-
 	@BeforeEach
 	void setUp() {
-		redis.execute((RedisCallback<Void>)connection -> {
-			connection.serverCommands().flushAll();
-			return null;
-		});
+		TestRedis.flushAll();
 		clock = new MutableClock(NOW);
-		store = new UploadSessionStore(redis, JsonMapper.builder().build(),
+		store = new UploadSessionStore(TestRedis.template(), JsonMapper.builder().build(),
 			new IdempotencyProperties(RETENTION, Duration.ofSeconds(30)), clock);
 	}
 
@@ -86,7 +54,7 @@ class UploadSessionStoreTest {
 		clock.advance(Duration.ofHours(10));
 		store.save(saved);
 
-		Long ttlSeconds = redis.getExpire("upload:" + saved.uploadId());
+		Long ttlSeconds = TestRedis.template().getExpire("upload:" + saved.uploadId());
 		assertThat(ttlSeconds).isBetween(RETENTION.minusHours(10).toSeconds() - 5, RETENTION.minusHours(10).toSeconds());
 	}
 

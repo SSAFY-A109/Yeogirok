@@ -28,19 +28,22 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.ssafy.yeogirok.domain.file.FilePurpose;
+import com.ssafy.yeogirok.domain.file.dto.UploadCompleteResponse;
 import com.ssafy.yeogirok.domain.file.dto.UploadCreateCommand;
 import com.ssafy.yeogirok.domain.file.dto.UploadCreateResponse;
+import com.ssafy.yeogirok.domain.file.service.UploadCompleteService;
 import com.ssafy.yeogirok.domain.file.service.UploadService;
 import com.ssafy.yeogirok.domain.file.session.UploadStatus;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
 
-/** API-012 HTTP 계약: 응답 모양·요청 필드 오류 코드. 규칙은 UploadServiceTest 가 본다. */
+/** API-012·086 HTTP 계약: 응답 모양·요청 필드 오류 코드. 규칙은 UploadServiceTest·UploadCompleteServiceTest 가 본다. */
 @WebMvcTest(UploadController.class)
 @Import(WebMvcSecurity.class)
 class UploadControllerTest {
 
 	static final Long USER_ID = 7L;
+	static final String UPLOAD_ID = "550e8400-e29b-41d4-a716-446655440010";
 	static final String TIP = """
 		{ "purpose": "TIP_PHOTO", "fileName": "a.png", "contentType": "image/png", "sizeBytes": 1024 }
 		""";
@@ -50,6 +53,9 @@ class UploadControllerTest {
 
 	@MockitoBean
 	UploadService uploadService;
+
+	@MockitoBean
+	UploadCompleteService uploadCompleteService;
 
 	@MockitoBean
 	IdempotencyService idempotencyService;
@@ -113,6 +119,39 @@ class UploadControllerTest {
 	void Idempotency_Key_가_없으면_C001() throws Exception {
 		mockMvc.perform(post("/api/v1/uploads").with(asUser(USER_ID))
 				.contentType(MediaType.APPLICATION_JSON).content(TIP))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("C001"));
+	}
+
+	@Test
+	void 완료_확인은_200과_명세의_응답을_돌려준다() throws Exception {
+		given(uploadCompleteService.complete(USER_ID, UPLOAD_ID)).willReturn(new UploadCompleteResponse(UPLOAD_ID,
+			UploadStatus.READY, 801L, null, "image/png", 1024));
+
+		mockMvc.perform(post("/api/v1/uploads/" + UPLOAD_ID + "/complete").with(asUser(USER_ID))
+				.header("Idempotency-Key", "key-1"))
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{
+				  "success": true,
+				  "data": { "uploadId": "%s", "status": "READY", "imageId": 801, "materialId": null,
+				            "contentType": "image/png", "sizeBytes": 1024 }
+				}
+				""".formatted(UPLOAD_ID), JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 완료_확인의_uploadId_가_UUID_가_아니면_C002() throws Exception {
+		mockMvc.perform(post("/api/v1/uploads/not-a-uuid/complete").with(asUser(USER_ID))
+				.header("Idempotency-Key", "key-1"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("C002"));
+		verifyNoInteractions(idempotencyService);
+	}
+
+	@Test
+	void 완료_확인에_Idempotency_Key_가_없으면_C001() throws Exception {
+		mockMvc.perform(post("/api/v1/uploads/" + UPLOAD_ID + "/complete").with(asUser(USER_ID)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("C001"));
 	}

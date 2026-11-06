@@ -40,6 +40,18 @@ public record UploadSession(
 			TMP_PREFIX + uploadId, null, contentType, sizeBytes, acceptedAt, expiresAt, null, null);
 	}
 
+	/** API-086 검증·확정 성공. sizeBytes 는 실제 저장된 크기로 바꾼다. */
+	public UploadSession ready(String confirmedKey, long actualSizeBytes, Long imageId, String materialId) {
+		return new UploadSession(uploadId, uploadedBy, purpose, recordId, roomId, UploadStatus.READY, bucket, tmpKey,
+			confirmedKey, contentType, actualSizeBytes, uploadAcceptedAt, uploadExpiresAt, imageId, materialId);
+	}
+
+	/** API-086 크기·형식·내용 검증 실패. 새 012 세션으로 다시 올린다. */
+	public UploadSession failed() {
+		return new UploadSession(uploadId, uploadedBy, purpose, recordId, roomId, UploadStatus.FAILED, bucket, tmpKey,
+			null, contentType, sizeBytes, uploadAcceptedAt, uploadExpiresAt, null, null);
+	}
+
 	public boolean isExpired(Instant now) {
 		return !now.isBefore(uploadExpiresAt);
 	}

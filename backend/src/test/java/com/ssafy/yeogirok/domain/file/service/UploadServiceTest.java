@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -16,9 +15,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +35,7 @@ import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.record.service.RecordAccess;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.InMemoryUploadSessions;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestFileProperties;
 
@@ -52,8 +50,9 @@ class UploadServiceTest {
 	static final UploadCreateCommand RECEIPT = new UploadCreateCommand(FilePurpose.RECEIPT, "r.jpg", "image/jpeg",
 		2048, null, RECORD_ID);
 
-	final Map<String, UploadSession> sessions = new HashMap<>();
-	final UploadSessionStore store = mock(UploadSessionStore.class);
+	final InMemoryUploadSessions memory = new InMemoryUploadSessions();
+	final Map<String, UploadSession> sessions = memory.sessions;
+	final UploadSessionStore store = memory.store;
 	final FileStorage storage = mock(FileStorage.class);
 	final ReceiptCleanupQueue cleanupQueue = mock(ReceiptCleanupQueue.class);
 	final RecordAccess recordAccess = mock(RecordAccess.class);
@@ -63,13 +62,6 @@ class UploadServiceTest {
 	@BeforeEach
 	void setUp() {
 		clock = new MutableClock(NOW);
-		doAnswer(invocation -> {
-			UploadSession session = invocation.getArgument(0);
-			sessions.put(session.uploadId(), session);
-			return null;
-		}).when(store).save(any());
-		given(store.find(anyString()))
-			.willAnswer(invocation -> Optional.ofNullable(sessions.get(invocation.<String>getArgument(0))));
 		given(storage.presignPut(anyString(), anyString(), anyString(), any())).willReturn("https://signed");
 		given(recordAccess.isCurrentMember(RECORD_ID, USER_ID)).willReturn(true);
 		service = new UploadService(new FilePolicy(TestFileProperties.VALUE), TestFileProperties.VALUE, store,
@@ -184,10 +176,9 @@ class UploadServiceTest {
 	@EnumSource(value = UploadStatus.class, names = {"READY", "FAILED"})
 	void 끝난_세션의_재요청은_만료_전이어도_M013(UploadStatus status) {
 		String uploadId = service.create(USER_ID, TIP).uploadId();
-		UploadSession done = sessions.get(uploadId);
-		sessions.put(uploadId, new UploadSession(done.uploadId(), done.uploadedBy(), done.purpose(), null, null, status,
-			done.bucket(), done.tmpKey(), null, done.contentType(), done.sizeBytes(), done.uploadAcceptedAt(),
-			done.uploadExpiresAt(), null, null));
+		UploadSession uploading = sessions.get(uploadId);
+		memory.put(status == UploadStatus.READY ? uploading.ready("tip-photo/" + uploadId, 1024, null, null)
+			: uploading.failed());
 
 		assertError(() -> service.getCreated(USER_ID, uploadId), ExceptionType.UPLOAD_ALREADY_COMPLETED);
 	}

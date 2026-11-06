@@ -2,10 +2,16 @@ package com.ssafy.yeogirok.domain.file.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
+import java.util.function.Consumer;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -14,23 +20,31 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
- * Presigned URL 서명. 서명은 네트워크 없이 만들어지므로 가짜 자격 증명으로 실제 SDK 를 쓴다(S3 는 부르지 않는다).
+ * S3 호출과 오류 변환. 서명은 네트워크 없이 만들어지므로 가짜 자격 증명으로 실제 SDK 를 쓰고, 나머지 호출은 S3Client 를 대신한다.
  */
 class FileStorageTest {
 
-	static S3Presigner presigner(StaticCredentialsProvider credentials) {
-		return S3Presigner.builder().region(Region.AP_NORTHEAST_2).credentialsProvider(credentials).build();
+	final S3Client s3Client = mock(S3Client.class);
+
+	FileStorage storageWith(S3Presigner presigner) {
+		return new FileStorage(s3Client, presigner);
+	}
+
+	FileStorage storage() {
+		return storageWith(S3Presigner.builder().region(Region.AP_NORTHEAST_2)
+			.credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("AKIATESTONLY", "test")))
+			.build());
 	}
 
 	@Test
 	void PUT_URL_은_지정한_key_와_Content_Type_에만_쓰도록_서명된다() {
-		FileStorage storage = new FileStorage(
-			presigner(StaticCredentialsProvider.create(AwsBasicCredentials.create("AKIATESTONLY", "test-secret"))));
-
-		String url = storage.presignPut("photos", "tmp/abc", "image/png", Duration.ofMinutes(10));
+		String url = storage().presignPut("photos", "tmp/abc", "image/png", Duration.ofMinutes(10));
 
 		assertThat(url).startsWith("https://photos.s3.ap-northeast-2.amazonaws.com/tmp/abc?")
 			.contains("X-Amz-Expires=600")
@@ -39,13 +53,52 @@ class FileStorageTest {
 
 	@Test
 	void 자격_증명을_찾지_못하면_M012() {
-		FileStorage storage = new FileStorage(S3Presigner.builder().region(Region.AP_NORTHEAST_2)
+		FileStorage storage = storageWith(S3Presigner.builder().region(Region.AP_NORTHEAST_2)
 			.credentialsProvider(() -> {
 				throw SdkClientException.create("자격 증명 없음");
 			}).build());
 
-		assertThatThrownBy(() -> storage.presignPut("photos", "tmp/abc", "image/png", Duration.ofMinutes(10)))
-			.isInstanceOfSatisfying(BusinessException.class,
-				e -> assertThat(e.getExceptionType()).isEqualTo(ExceptionType.FILE_STORAGE_UNAVAILABLE));
+		assertError(() -> storage.presignPut("photos", "tmp/abc", "image/png", Duration.ofMinutes(10)),
+			ExceptionType.FILE_STORAGE_UNAVAILABLE);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void HEAD_는_크기와_ETag_를_주고_없으면_비어_있다() {
+		given(s3Client.headObject(any(Consumer.class)))
+			.willReturn(HeadObjectResponse.builder().contentLength(12L).eTag("\"e1\"").build())
+			.willThrow(s3Error(404));
+
+		assertThat(storage().head("photos", "tmp/abc")).contains(new StoredObject(12, "\"e1\""));
+		assertThat(storage().head("photos", "tmp/abc")).isEmpty();
+	}
+
+	@ParameterizedTest(name = "{0} → {1}")
+	@CsvSource({"412, FILE_VERIFICATION_FAILED", "404, FILE_NOT_UPLOADED", "500, FILE_STORAGE_UNAVAILABLE"})
+	@SuppressWarnings("unchecked")
+	void 복사_실패는_상태_코드로_나눈다(int status, ExceptionType expected) {
+		given(s3Client.copyObject(any(Consumer.class))).willThrow(s3Error(status));
+
+		assertError(() -> storage().copyIfMatch("photos", "tmp/abc", "tip-photo/abc", "\"e1\""), expected);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 앞부분을_읽는_중_객체가_바뀌었으면_M003_HEAD_장애는_M012() {
+		given(s3Client.getObjectAsBytes(any(Consumer.class))).willThrow(s3Error(412));
+		given(s3Client.headObject(any(Consumer.class))).willThrow(SdkClientException.create("연결 실패"));
+
+		assertError(() -> storage().readHeader("photos", "tmp/abc", 12, "\"e1\""),
+			ExceptionType.FILE_VERIFICATION_FAILED);
+		assertError(() -> storage().head("photos", "tmp/abc"), ExceptionType.FILE_STORAGE_UNAVAILABLE);
+	}
+
+	private static S3Exception s3Error(int status) {
+		return (S3Exception)S3Exception.builder().statusCode(status).message("status " + status).build();
+	}
+
+	private static void assertError(Runnable call, ExceptionType expected) {
+		assertThatThrownBy(call::run).isInstanceOfSatisfying(BusinessException.class,
+			e -> assertThat(e.getExceptionType()).isEqualTo(expected));
 	}
 }
