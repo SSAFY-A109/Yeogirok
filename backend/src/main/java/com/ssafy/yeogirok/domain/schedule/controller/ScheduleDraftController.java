@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.schedule.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,6 +15,7 @@ import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftService;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateRequest;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.schedule.dto.DraftResponse;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
@@ -50,5 +52,13 @@ public class ScheduleDraftController {
 			DraftJobResponse::draftKey,
 			scheduleDraftService::created);
 		return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-038 생성한 일정 초안 조회")
+	@GetMapping("/rooms/{roomId}/schedule-drafts/{draftKey}")
+	public ResponseEntity<ApiResponseBody<DraftResponse>> get(@AuthenticationPrincipal AuthenticatedUser user,
+		@PathVariable Long roomId, @PathVariable String draftKey) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			scheduleDraftService.get(user.userId(), roomId, draftKey)));
 	}
 }

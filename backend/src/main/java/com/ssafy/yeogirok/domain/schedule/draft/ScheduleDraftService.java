@@ -28,6 +28,7 @@ import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.NamedPoint;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand.FixedItem;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.schedule.dto.DraftResponse;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleReader;
 import com.ssafy.yeogirok.domain.schedule.travel.GeoPoint;
 import com.ssafy.yeogirok.domain.schedule.travel.TravelTimeProvider;
@@ -97,6 +98,12 @@ public class ScheduleDraftService {
 		ScheduleDraft draft = draftStore.find(draftKey)
 			.orElseThrow(() -> new BusinessException(ExceptionType.SCHEDULE_DRAFT_NOT_FOUND));
 		return DraftJobResponse.queued(draft.jobId(), draft.draftKey());
+	}
+
+	/** API-038. 방 참여자면 누구나 본다. 초안 조회는 확정 일정을 바꾸지 않는다. */
+	public DraftResponse get(Long userId, Long roomId, String draftKey) {
+		roomFinder.getForMember(roomId, userId);
+		return DraftViews.of(draftStore.get(roomId, draftKey));
 	}
 
 	/* ── 요청 확인 ─────────────────────────────────────────── */

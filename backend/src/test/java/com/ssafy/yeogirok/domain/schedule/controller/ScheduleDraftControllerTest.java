@@ -7,12 +7,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -33,12 +35,17 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import com.ssafy.yeogirok.domain.job.JobStatus;
+import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.DayOption;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.NamedPoint;
 import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftService;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand.FixedItem;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.schedule.dto.DraftResponse;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -136,6 +143,49 @@ class ScheduleDraftControllerTest {
 			.andExpect(status().is4xxClientError())
 			.andExpect(jsonPath("$.code").value(code));
 		verifyNoInteractions(scheduleDraftService);
+	}
+
+	/* ── API-038 ────────────────────────────────────────────── */
+
+	@Test
+	void 초안_조회_응답_모양() throws Exception {
+		DayOption day = new DayOption(DAY, LocalTime.of(9, 0), LocalTime.of(18, 0));
+		given(scheduleDraftService.get(USER_ID, 7L, DRAFT_KEY)).willReturn(new DraftResponse(JobStatus.SUCCEEDED, 3, 1,
+			new DraftResponse.Conditions(List.of(new DraftResponse.DayCondition(DAY, day.startTime(), day.endTime())),
+				null, null),
+			new DraftResponse.Schedule(List.of(new DraftResponse.Day(DAY, day.startTime(), day.endTime(),
+				List.of(new DraftResponse.Item(1, 401L, 1, Instant.parse("2026-11-08T00:00:00Z"),
+					Instant.parse("2026-11-08T01:00:00Z"), 60, false)),
+				List.of(), List.of())), List.of(new DraftResponse.Unassigned(2, 402L)), List.of(), null, null),
+			TransportMode.CAR, "KAKAO_CAR", null));
+
+		mockMvc.perform(get("/api/v1/rooms/7/schedule-drafts/" + DRAFT_KEY).with(asUser(USER_ID)))
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{"success": true, "data": {
+				  "status": "SUCCEEDED", "baseVersion": 3, "draftVersion": 1,
+				  "conditions": {"days": [{"date": "2026-11-08", "startTime": "09:00:00", "endTime": "18:00:00"}],
+				                 "startPoint": null, "endPoint": null},
+				  "schedule": {
+				    "days": [{"date": "2026-11-08", "startTime": "09:00:00", "endTime": "18:00:00",
+				      "items": [{"itemId": 1, "roomPlaceId": 401, "order": 1,
+				        "arrivalAt": "2026-11-08 09:00:00+09", "departureAt": "2026-11-08 10:00:00+09",
+				        "stayMinutes": 60, "fixed": false}],
+				      "legs": [], "warnings": []}],
+				    "unassignedPlaces": [{"itemId": 2, "roomPlaceId": 402}],
+				    "warnings": [], "startPoint": null, "endPoint": null},
+				  "transportMode": "CAR", "travelDataSource": "KAKAO_CAR", "error": null}}
+				""", JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 없는_초안은_SC001() throws Exception {
+		given(scheduleDraftService.get(USER_ID, 7L, DRAFT_KEY))
+			.willThrow(new BusinessException(ExceptionType.SCHEDULE_DRAFT_NOT_FOUND));
+
+		mockMvc.perform(get("/api/v1/rooms/7/schedule-drafts/" + DRAFT_KEY).with(asUser(USER_ID)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("SC001"));
 	}
 
 	@Test

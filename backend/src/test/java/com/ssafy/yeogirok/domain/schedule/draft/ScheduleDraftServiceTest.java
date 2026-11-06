@@ -34,6 +34,8 @@ import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.NamedPoint;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand.FixedItem;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.schedule.dto.DraftResponse;
+import com.ssafy.yeogirok.domain.schedule.dto.ScheduleView;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -239,6 +241,62 @@ class ScheduleDraftServiceTest {
 		assertError(() -> jobService.get(FRIEND, response.jobId()), ExceptionType.JOB_NOT_REQUESTER);
 		roomService.leave(OWNER, roomId);
 		assertError(() -> jobService.get(OWNER, response.jobId()), ExceptionType.JOB_RESOURCE_FORBIDDEN);
+	}
+
+	/* ── API-038 조회 ───────────────────────────────────────── */
+
+	@Test
+	void 초안을_조회하면_모든_일차와_itemId로_이은_구간과_조건을_보여_준다() {
+		NamedPoint station = new NamedPoint("강릉역", new BigDecimal("37.764"), new BigDecimal("128.899"));
+		DraftJobResponse created = draftService.create(OWNER, roomId,
+			new DraftCreateCommand(version(), places, nineToSix(), station, null, Map.of(), List.of()));
+
+		DraftResponse response = draftService.get(FRIEND, roomId, created.draftKey());
+
+		assertThat(response.status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(response.draftVersion()).isEqualTo(1);
+		assertThat(response.transportMode()).isEqualTo(TransportMode.CAR);
+		assertThat(response.travelDataSource()).isEqualTo(FakeTravelTimeProvider.SOURCE);
+		assertThat(response.error()).isNull();
+		assertThat(response.conditions().days()).extracting(DraftResponse.DayCondition::date)
+			.containsExactly(DAY1, DAY2);
+		assertThat(response.conditions().startPoint().name()).isEqualTo("강릉역");
+		DraftResponse.Schedule schedule = response.schedule();
+		assertThat(schedule.days()).extracting(DraftResponse.Day::date).containsExactly(DAY1, DAY2);
+		assertThat(schedule.days().stream().mapToInt(day -> day.items().size()).sum()
+			+ schedule.unassignedPlaces().size()).isEqualTo(4);
+		DraftResponse.Day first = schedule.days().getFirst();
+		// 첫날은 출발지 → 첫 항목 구간부터 항목 사이 구간까지 itemId 로 잇는다.
+		assertThat(first.legs()).extracting(ScheduleView.Leg::fromItemId).first().isNull();
+		assertThat(first.legs()).extracting(ScheduleView.Leg::toItemId)
+			.containsExactlyElementsOf(first.items().stream().map(item -> (long)item.itemId()).toList());
+		assertThat(schedule.startPoint().name()).isEqualTo("강릉역");
+	}
+
+	@Test
+	void 실패한_초안은_schedule_없이_오류를_보여_준다() {
+		List<FixedItem> fixed = List.of(new FixedItem(places.get(0), DAY1, 1, 600, true),
+			new FixedItem(places.get(1), DAY1, 2, 600, true));
+		DraftJobResponse created = create(command(places, nineToSix(), Map.of(), fixed));
+
+		DraftResponse response = draftService.get(OWNER, roomId, created.draftKey());
+
+		assertThat(response.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(response.schedule()).isNull();
+		assertThat(response.travelDataSource()).isNull();
+		assertThat(response.error().code()).isEqualTo("SC002");
+	}
+
+	@Test
+	void 참여자가_아니면_RO002_다른_방이나_없는_초안은_SC001() {
+		DraftJobResponse created = create(command(places, nineToSix(), Map.of(), List.of()));
+		Long otherRoom = roomService.create(OWNER, new RoomCreateCommand("다른 방", DAY1, DAY2, TransportMode.CAR))
+			.id();
+
+		assertError(() -> draftService.get(STRANGER, roomId, created.draftKey()), ExceptionType.ROOM_NOT_MEMBER);
+		assertError(() -> draftService.get(OWNER, otherRoom, created.draftKey()),
+			ExceptionType.SCHEDULE_DRAFT_NOT_FOUND);
+		assertError(() -> draftService.get(OWNER, roomId, "no-such-draft"), ExceptionType.SCHEDULE_DRAFT_NOT_FOUND);
 	}
 
 	/* ── 요청 확인 ─────────────────────────────────────────── */
