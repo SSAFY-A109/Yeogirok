@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass, asdict
 from typing import Optional
 
+from address_parser import extract_address   # S15P31A109-94
+
 # ---------- 1. 박스 -> 줄 묶기 ----------
 
 @dataclass
@@ -290,6 +292,7 @@ class ReceiptResult:
     visitedAt: Optional[str]   # ISO 8601, KST
     confidence: str            # "high" | "low"
     rawLines: list[str]
+    addressComplete: bool = False   # 주소를 건물번호까지 다 읽었는지 (S15P31A109-94)
 
     def to_dict(self):
         return asdict(self)
@@ -297,6 +300,10 @@ class ReceiptResult:
 
 def parse_receipt(lines: list[tuple[str, float]], min_score: float = 0.8) -> ReceiptResult:
     name, address, name_score = extract_place(lines)
+    try:                                            # S15P31A109-94 주소: 시·도~도로명, 건물번호 인식 여부는 addressComplete
+        address, address_complete = extract_address(lines)
+    except Exception:                               # 주소 처리 오류가 상호명·날짜·시간 응답을 막지 않게
+        address, address_complete = None, False
     if name:   # OCR이 '㈜'를 '(장', '(추' 등으로 읽는 경우 보정
         name = re.sub(r"^\((?:장|추|쥬|주)(?!\))", "(주)", name)
     date, time, dt_score = extract_datetime(lines)
@@ -312,4 +319,5 @@ def parse_receipt(lines: list[tuple[str, float]], min_score: float = 0.8) -> Rec
         visitedAt=visited_at,
         confidence="high" if ok else "low",
         rawLines=[t for t, _ in lines],
+        addressComplete=address_complete,
     )
