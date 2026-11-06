@@ -9,9 +9,11 @@ type FilterChipProps = Omit<ComponentProps<typeof Pressable>, "children"> & {
   size?: "sm" | "md";
   selected?: boolean;
   onSelectedChange?: (selected: boolean) => void;
+  /** 글자에 더할 클래스. 격자 칸처럼 이름이 두 줄로 줄바꿈될 때 가운데 정렬에 쓴다. */
+  textClassName?: string;
 };
 
-export function FilterChip({ children, className, size = "sm", selected = false, disabled = false, onSelectedChange, onPress, ...props }: FilterChipProps) {
+export function FilterChip({ children, className, textClassName, size = "sm", selected = false, disabled = false, onSelectedChange, onPress, ...props }: FilterChipProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -25,7 +27,7 @@ export function FilterChip({ children, className, size = "sm", selected = false,
       }}
       {...props}
     >
-      <Text className={cn("text-label text-foreground-secondary", selected && "text-primary-hover", disabled && "text-muted-foreground")}>{children}</Text>
+      <Text className={cn("text-label text-foreground-secondary", selected && "text-primary-hover", disabled && "text-muted-foreground", textClassName)}>{children}</Text>
     </Pressable>
   );
 }

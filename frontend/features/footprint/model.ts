@@ -79,36 +79,6 @@ export function formatLocationEvidence({ accuracyMeters, measuredAt }: Footprint
   return accuracyMeters === null ? checkedAt : `정확도 ${Math.round(accuracyMeters)}m · ${checkedAt}`;
 }
 
-const EARTH_RADIUS_METERS = 6_371_000;
-const METERS_PER_KILOMETER = 1_000;
-/** 이보다 가까우면 거리를 숫자로 적지 않는다(m). */
-const NEAR_DISTANCE_METERS = 10;
-
-function toRadians(degree: number) {
-  return (degree * Math.PI) / 180;
-}
-
-/** 두 좌표 사이 거리(m, 하버사인). 화면 안내용이다. */
-export function distanceMeters(a: FootprintPoint, b: FootprintPoint): number {
-  const dLatitude = toRadians(b.latitude - a.latitude);
-  const dLongitude = toRadians(b.longitude - a.longitude);
-  const h = Math.sin(dLatitude / 2) ** 2 + Math.cos(toRadians(a.latitude)) * Math.cos(toRadians(b.latitude)) * Math.sin(dLongitude / 2) ** 2;
-  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/** 거리를 "약 350m", "약 1.2km"처럼 적는다. 아주 가까우면 "10m 이내"다. */
-export function formatDistance(meters: number): string {
-  if (meters < NEAR_DISTANCE_METERS) {
-    return `${NEAR_DISTANCE_METERS}m 이내`;
-  }
-
-  if (meters < METERS_PER_KILOMETER) {
-    return `약 ${Math.round(meters / NEAR_DISTANCE_METERS) * NEAR_DISTANCE_METERS}m`;
-  }
-
-  return `약 ${(meters / METERS_PER_KILOMETER).toFixed(1)}km`;
-}
-
 /** 서버와 같은 기준으로 방명록 글자 수를 센다(CRLF·CR → LF, 코드 포인트). */
 export function countFootprintBody(body: string): number {
   return [...body.replace(/\r\n?/g, "\n")].length;

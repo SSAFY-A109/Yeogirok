@@ -1,6 +1,6 @@
 import { randomUUID } from "expo-crypto";
 import { router } from "expo-router";
-import { Lock, MapPin } from "lucide-react-native";
+import { Lock, MapPin, RotateCcw } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -26,11 +26,9 @@ import { useKeyboardFollowingScroll } from "@/features/footprint/components/use-
 import { getFootprintErrorMessage, getLocationFailureMessage, isLocationEvidenceError } from "@/features/footprint/errors";
 import {
   countFootprintBody,
-  distanceMeters,
   FOOTPRINT_BODY_MAX_LENGTH,
   FOOTPRINT_CATEGORY_MAX_COUNT,
   FOOTPRINT_CATEGORY_MIN_COUNT,
-  formatDistance,
   formatLocationEvidence,
   toCreateFootprintRequest,
   type CreateFootprintRequestDto,
@@ -40,7 +38,10 @@ import { useCurrentLocation, type CurrentLocation } from "@/hooks/use-current-lo
 import { describePlace } from "@/lib/native/location";
 import { cn } from "@/lib/utils";
 
-const CATEGORY_SKELETON_COUNT = 4;
+/** 카테고리를 불러오는 동안 보여 줄 칸 수. 공통 카테고리 8개가 4열 2행으로 놓이는 자리와 같다. */
+const CATEGORY_SKELETON_COUNT = 8;
+/** 격자 칸의 칩 터치 영역. 칸 사이 간격(8)의 절반씩만 넓혀 옆 칩과 겹치지 않게 하고, 높이 36 + 4 + 4 = 44를 맞춘다. */
+const CATEGORY_CHIP_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
 
 type PendingSubmission = { fingerprint: string; idempotencyKey: string };
 
@@ -277,9 +278,12 @@ export function NewFootprintScreen() {
 
 // --- 위치
 
+/** 직접 수정한 위치라는 표시. 주소를 못 찾으면 이 문구를 제목으로 쓴다. */
+const CHOSEN_PLACE_TEXT = "직접 수정한 위치";
+
 function toPlaceTitle(location: CurrentLocation, chosen: ChosenPlace | null): string {
   if (chosen !== null) {
-    return chosen.label === null ? "직접 고른 위치" : `${chosen.label} 부근`;
+    return chosen.label === null ? CHOSEN_PLACE_TEXT : `${chosen.label} 부근`;
   }
 
   return location.placeLabel === null ? "지금 있는 곳" : `${location.placeLabel} 부근`;
@@ -353,11 +357,12 @@ function LocationSection({ location, chosen, onRemeasure, onPick, onResetToMeasu
         <Icon as={MapPin} size={20} className="text-icon" />
         <View className="flex-1 gap-1">
           <Text className="text-label text-foreground">{toPlaceTitle(location, chosen)}</Text>
-          <Text className="text-caption text-foreground-secondary">
-            {chosen === null
-              ? formatLocationEvidence(measured)
-              : `직접 고른 위치 · 잰 위치에서 ${formatDistance(distanceMeters(measured, chosen.point))}`}
-          </Text>
+          {chosen === null ? (
+            <Text className="text-caption text-foreground-secondary">{formatLocationEvidence(measured)}</Text>
+          ) : null}
+          {chosen !== null && chosen.label !== null ? (
+            <Text className="text-caption text-foreground-secondary">{CHOSEN_PLACE_TEXT}</Text>
+          ) : null}
           {location.failure !== null ? (
             <Text accessibilityRole="alert" className="text-caption text-destructive">{getLocationFailureMessage(location.failure)}</Text>
           ) : null}
@@ -382,8 +387,14 @@ function LocationSection({ location, chosen, onRemeasure, onPick, onResetToMeasu
             <Text>위치 수정</Text>
           </Button>
           {chosen !== null ? (
-            <Button variant="outline" onPress={onResetToMeasured} testID="footprint.reset-location">
-              <Text>잰 위치로 되돌리기</Text>
+            <Button
+              variant="outline"
+              className="w-touch px-0"
+              accessibilityLabel="잰 위치로 되돌리기"
+              onPress={onResetToMeasured}
+              testID="footprint.reset-location"
+            >
+              <Icon as={RotateCcw} size={20} className="text-icon-active" />
             </Button>
           ) : null}
         </View>
@@ -406,7 +417,10 @@ type CategoryFieldProps = {
   onToggle: (code: string) => void;
 };
 
-/** 카테고리 1~3개(Figma W16 `Category (필수)`). 목록은 서버 기준 데이터(API-079)다. */
+/**
+ * 카테고리 1~3개(Figma W16 `Category (필수)`). 목록은 서버 기준 데이터(API-079)다.
+ * 사용자 요청(2026-11-06)으로 4열 격자에 놓는다(공통 카테고리 8개 → 2행). 이름이 길면 칸 안에서 두 줄로 가운데 정렬한다.
+ */
 function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: CategoryFieldProps) {
   const categories = useCategories();
 
@@ -417,9 +431,13 @@ function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: Cate
         <Text className="text-caption text-highlight">{`${FOOTPRINT_CATEGORY_MIN_COUNT}~${FOOTPRINT_CATEGORY_MAX_COUNT}개`}</Text>
       </View>
       {categories.isPending ? (
-        <View className="flex-row flex-wrap gap-2" accessibilityLabel="카테고리 불러오는 중">
+        <View className="-m-1 flex-row flex-wrap" accessibilityLabel="카테고리 불러오는 중">
           {Array.from({ length: CATEGORY_SKELETON_COUNT }, (_, index) => {
-            return <Skeleton key={index} className="h-chip-md w-20 rounded-sm" />;
+            return (
+              <View key={index} className="w-1/4 p-1">
+                <Skeleton className="min-h-button-sm w-full rounded-sm" />
+              </View>
+            );
           })}
         </View>
       ) : null}
@@ -438,21 +456,25 @@ function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: Cate
         </View>
       ) : null}
       {categories.data ? (
-        <View className="flex-row flex-wrap gap-2">
+        <View className="-m-1 flex-row flex-wrap">
           {categories.data.map((category) => {
             return (
-              <FilterChip
-                key={category.code}
-                size="md"
-                selected={selectedCodes.includes(category.code)}
-                disabled={disabled}
-                onPress={() => {
-                  onToggle(category.code);
-                }}
-                testID={`footprint.category-${category.code}`}
-              >
-                {category.name}
-              </FilterChip>
+              <View key={category.code} className="w-1/4 p-1">
+                <FilterChip
+                  size="md"
+                  className="h-auto min-h-button-sm flex-1 px-1 py-1.5"
+                  textClassName="text-center"
+                  hitSlop={CATEGORY_CHIP_HIT_SLOP}
+                  selected={selectedCodes.includes(category.code)}
+                  disabled={disabled}
+                  onPress={() => {
+                    onToggle(category.code);
+                  }}
+                  testID={`footprint.category-${category.code}`}
+                >
+                  {category.name}
+                </FilterChip>
+              </View>
             );
           })}
         </View>
