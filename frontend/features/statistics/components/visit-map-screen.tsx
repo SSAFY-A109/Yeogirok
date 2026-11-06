@@ -12,7 +12,7 @@ import { useCategories } from "@/features/common/api/queries";
 import { FootprintEntryCard } from "@/features/footprint/components/footprint-entry-card";
 import { toVisitQueryArea, useVisitStatistics } from "@/features/statistics/api/queries";
 import { getStatisticsErrorMessage } from "@/features/statistics/errors";
-import type { VisitArea, VisitMapArea } from "@/features/statistics/model";
+import { formatVisitPeriod, type VisitCell, type VisitMapArea } from "@/features/statistics/model";
 import { useCurrentLocation, type CurrentLocation } from "@/hooks/use-current-location";
 import type { MeasuredPosition } from "@/lib/native/location";
 import type { MapCurrentLocation, MapFocusRequest, MapRegion } from "@/lib/native/map";
@@ -27,19 +27,21 @@ const MAP_SETTLE_MS = 400;
 const LOCATE_ME_LEVEL = 5;
 /** 상태바와 지도 필터 사이 간격(Figma `Map filters` y=58, 상태바 54). */
 const MAP_FILTERS_TOP_GAP = 4;
-const NO_AREAS: readonly VisitArea[] = [];
+const NO_CELLS: readonly VisitCell[] = [];
 const legendIconColor = getColors("light")["map-footprint"];
 
 /**
- * 지도 탭(Figma W15·W15-A·W15-P). 서버가 집계한 방문 분포를 발바닥 크기로 보여 주고, 발바닥을 누르면 그 일대 집계를 보여 준다.
+ * 지도 탭(Figma W15·W15-A·W15-P). 서버가 격자 칸으로 묶은 방문 분포(API-046)를 발바닥 크기로 보여 주고, 발바닥을 누르면 그 칸 집계를 보여 준다.
+ * 멀리 볼수록 서버가 칸을 크게 묶어 보내므로 발바닥이 합쳐진다. 클라이언트에서 따로 묶거나 수를 더하지 않는다(규칙 80).
  * 아래 카드에서 위치 권한을 안내하고(W15-P), 권한이 있으면 지금 있는 곳에 발자취를 남기러 간다(W15 `Bottom card`).
  */
 export function VisitMapScreen() {
   const [categoryCode, setCategoryCode] = useState<string | null>(null);
-  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedCellId, setSelectedCellId] = useState<string | null>(null);
   const { area, handleRegionChange } = useSettledMapArea();
   const statistics = useVisitStatistics(area, categoryCode);
-  const areas = statistics.data?.areas ?? NO_AREAS;
+  const cells = statistics.data?.cells ?? NO_CELLS;
+  const categories = useCategories();
   const location = useCurrentLocation();
   const { focusRequest, locateMe } = useLocateMe(location);
   const [isPermissionCardHidden, setIsPermissionCardHidden] = useState(false);
@@ -56,34 +58,38 @@ export function VisitMapScreen() {
     };
   }, [measuredPosition]);
 
-  const selectedArea = areas.find((visitArea) => {
-    return visitArea.id === selectedAreaId;
+  const selectedCell = cells.find((cell) => {
+    return cell.id === selectedCellId;
   }) ?? null;
+
+  const categoryFilterName = categoryCode === null ? null : categories.data?.find((category) => {
+    return category.code === categoryCode;
+  })?.name ?? categoryCode;
 
   const changeCategory = (code: string | null) => {
     setCategoryCode(code);
-    setSelectedAreaId(null);
+    setSelectedCellId(null);
   };
 
-  const closeArea = () => {
-    setSelectedAreaId(null);
+  const closeCell = () => {
+    setSelectedCellId(null);
   };
 
   return (
     <View className="flex-1 bg-brand-muted" testID="visit-map.screen">
       <VisitDistributionMap
-        areas={areas}
-        selectedAreaId={selectedArea?.id ?? null}
+        cells={cells}
+        selectedCellId={selectedCell?.id ?? null}
         currentLocation={currentLocation}
         focusRequest={focusRequest}
-        onPressArea={setSelectedAreaId}
-        onPressMap={closeArea}
+        onPressCell={setSelectedCellId}
+        onPressMap={closeCell}
         onRegionChange={handleRegionChange}
       />
       <MapFilters
         categoryCode={categoryCode}
         onChangeCategory={changeCategory}
-        periodDays={statistics.data?.periodDays ?? null}
+        periodLabel={statistics.data ? formatVisitPeriod(statistics.data.period) : null}
         isFetching={statistics.isFetching}
       />
       <View pointerEvents="box-none" className="absolute bottom-3 left-4 right-4 gap-3">
@@ -103,13 +109,19 @@ export function VisitMapScreen() {
             />
           </View>
         )}
-        {selectedArea && statistics.data ? (
-          <VisitAreaCard area={selectedArea} periodDays={statistics.data.periodDays} onClose={closeArea} />
+        {selectedCell && statistics.data ? (
+          <VisitAreaCard
+            cell={selectedCell}
+            statistics={statistics.data}
+            categoryFilterName={categoryFilterName}
+            onClose={closeCell}
+          />
         ) : (
           <>
             <StatisticsStatus
               errorMessage={statistics.isError ? getStatisticsErrorMessage(statistics.error) : null}
-              isEmpty={statistics.isSuccess && !statistics.isPlaceholderData && areas.length === 0}
+              isEmpty={statistics.isSuccess && !statistics.isPlaceholderData && cells.length === 0}
+              minCount={statistics.data?.minCount ?? null}
               isFetching={statistics.isFetching}
               onRetry={() => {
                 void statistics.refetch();
@@ -220,12 +232,16 @@ function useSettledMapArea() {
 type MapFiltersProps = {
   categoryCode: string | null;
   onChangeCategory: (code: string | null) => void;
-  periodDays: number | null;
+  /** 서버가 집계한 기간("전체 기간" 등). 아직 응답이 없으면 `null`. */
+  periodLabel: string | null;
   isFetching: boolean;
 };
 
-/** 지도 위 필터(Figma `Map filters`). 카테고리는 서버 기준 데이터(API-079)로 받는다. 기간은 DEC-02 결정 전이라 서버 값을 보여 주기만 한다. */
-function MapFilters({ categoryCode, onChangeCategory, periodDays, isFetching }: MapFiltersProps) {
+/**
+ * 지도 위 필터(Figma `Map filters`). 카테고리는 서버 기준 데이터(API-079)로 받는다.
+ * 기간 선택은 DEC-02 결정 전이라 기간을 보내지 않고, 서버가 집계한 기간(지금은 전체 기간)을 보여 주기만 한다.
+ */
+function MapFilters({ categoryCode, onChangeCategory, periodLabel, isFetching }: MapFiltersProps) {
   const insets = useSafeAreaInsets();
   const categories = useCategories();
 
@@ -268,7 +284,7 @@ function MapFilters({ categoryCode, onChangeCategory, periodDays, isFetching }: 
       </ScrollView>
       <View pointerEvents="none" className="flex-row flex-wrap items-center gap-2 px-4">
         <MapPill>
-          <Text className="text-label-sm text-foreground">{periodDays === null ? "다녀간 사람" : `다녀간 사람 최근 ${periodDays}일`}</Text>
+          <Text className="text-label-sm text-foreground">{periodLabel === null ? "남긴 발자취" : `남긴 발자취 ${periodLabel}`}</Text>
         </MapPill>
         <MapPill>
           <Icon as={Footprints} size={14} color={legendIconColor} />
@@ -298,12 +314,14 @@ function MapPill({ children, testID }: { children: ReactNode; testID?: string })
 type StatisticsStatusProps = {
   errorMessage: string | null;
   isEmpty: boolean;
+  /** 서버가 이 수보다 적게 남은 칸을 빼고 보낸다(DEC-07). 1보다 크면 빈 상태에서 함께 알려 준다. */
+  minCount: number | null;
   isFetching: boolean;
   onRetry: () => void;
 };
 
 /** 지금 영역의 분포를 못 받았거나, 받았는데 다녀간 기록이 없을 때 지도 아래에 띄우는 안내. 지도는 그대로 둔다. */
-function StatisticsStatus({ errorMessage, isEmpty, isFetching, onRetry }: StatisticsStatusProps) {
+function StatisticsStatus({ errorMessage, isEmpty, minCount, isFetching, onRetry }: StatisticsStatusProps) {
   if (errorMessage) {
     return (
       <View className="flex-row items-center gap-3 rounded-lg border border-border bg-card px-4 py-3" testID="visit-map.error">
@@ -319,8 +337,11 @@ function StatisticsStatus({ errorMessage, isEmpty, isFetching, onRetry }: Statis
 
   if (isEmpty) {
     return (
-      <View className="rounded-lg border border-border bg-card px-4 py-3" testID="visit-map.empty">
+      <View className="gap-1 rounded-lg border border-border bg-card px-4 py-3" testID="visit-map.empty">
         <Text className="text-body-sm text-foreground-secondary">이 근처에는 아직 남겨진 발자취가 없어요. 지도를 옮겨 다른 곳을 둘러보세요.</Text>
+        {minCount !== null && minCount > 1 ? (
+          <Text className="text-caption text-muted-foreground">{`발자취가 ${minCount}개보다 적은 곳은 지도에 보이지 않아요.`}</Text>
+        ) : null}
       </View>
     );
   }

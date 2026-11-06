@@ -181,31 +181,35 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 - 도메인 오류 code(`RO`·`P`·`AI`·`SC`)는 미확정이라 화면은 공통 code와 도메인 기본 문구만 쓴다. MSW는 없는 여행방에 목 전용 `RO404`를 돌려준다.
 - 버전 충돌(C008)용 버전 필드와 멱등성 헤더는 이 엔드포인트들에서 아직 보내지 않는다.
 
-### 3-2. 방문 분포도 가정 DTO (2026-11-05)
+### 3-2. 방문 분포도 API-046 — 백엔드 코드 대조 (2026-11-06)
 
-지도 탭(Figma W15·W15-A)을 MSW로 먼저 만들기 위해 API-046의 요청·응답을 화면에서 역산해 **가정**했다. 타입은 `features/statistics/model.ts`에 있다. 명세가 나오면 타입과 `api/mocks/`를 함께 고친다.
+2026-11-05에는 화면에서 역산한 가정 DTO(`swLat`… `level`, `areas[{ name, visitorCount, visitCount, categoryShares }]`)로 만들었다. 2026-11-06 `origin/backend/dev`(fc7b266)의 `VisitStatisticsController`·`VisitStatisticsService`·`VisitStatisticsResponse`·`VisitGrid`·`BoundingBox`를 읽고 실제 계약으로 바꿨다. Swagger는 502로 대조하지 못했다. 타입은 `features/statistics/model.ts`, 목은 `api/mocks/handlers/statistics.ts`에 있다.
 
 ```ts
-// GET /visit-statistics?swLat&swLng&neLat&neLng&level&category — 가정
-// swLat·swLng·neLat·neLng: 지도에 보이는 영역(남서·북동). 클라이언트가 소수 셋째 자리로 넓혀 반올림한다
-// level: 카카오 지도 확대 단계. 서버가 이 단계에 맞는 집계 단위로 묶는다고 가정
-// category: API-079 카테고리 code. 없으면 전체
+// GET /visit-statistics?bbox&zoom&category&from&to&metric
+// bbox: "west,south,east,north"(필수). 범위 밖·west≥east·south≥north·숫자 아님 → 400 C013
+// zoom: 웹 지도 zoom(필수, 0 이상, 음수 → 400 C003). 클라이언트는 카카오 level을 zoom = 20 − level로 바꿔 보낸다(근사, TBD)
+// category: 공통 카테고리 code(선택, 없는 code → 400 C003). 주면 그 code를 고른 발자취만 센다
+// from·to: yyyy-MM-dd(선택, from > to → 400 C012). 기간 선택(DEC-02) 전이라 앱은 보내지 않는다 → 전체 기간
+// metric: VISIT_COUNT만(생략 가능, 다르면 400 ST001)
 type VisitStatisticsResponseDto = {
-  periodDays: number; // 집계 기간(DEC-02). 화면은 "최근 N일"로 표시만 한다
-  areas: {
-    areaId: string; // 집계 단위 id. 데이터베이스 키가 아닐 수 있어 문자열로 가정
-    name: string; // "경포호 일대"
-    latitude: number;
-    longitude: number;
-    visitorCount: number; // 다녀간 사람(중복 제거)
-    visitCount: number; // 방문 수
-    categoryShares: { categoryCode: string; categoryName: string; percent: number }[]; // 서버가 계산한 비율
-  }[];
+  metric: "VISIT_COUNT";
+  period: { from: string | null; to: string | null };
+  aggregation: { unit: "LAT_LNG_GRID"; version: string; precision: string; minCount: number }; // precision 예 "0.01deg"
+  cells: {
+    cellId: string; // "배수:위도칸:경도칸"
+    center: { latitude: number; longitude: number };
+    count: number; // 이 칸의 발자취 수(탈퇴자 보존분 포함)
+    categoryCounts: Record<string, number>; // 여러 개 고른 발자취는 각 code에 1씩 → 합이 count보다 클 수 있다. 0인 code는 없다
+  }[]; // 북쪽 칸부터, 같은 줄은 서쪽부터
+  updatedAt: string; // 응답을 만든 시각
 };
-// 400 C017(영역 형식·범위), 도메인 ST*** 미확정
 ```
 
-- 최소 집계 수 미만 지역을 숨기는 일(DEC-07)과 기간 선택(DEC-02)은 서버가 정한다고 보고, 클라이언트는 받은 값을 그대로 그린다.
+- 서버가 격자로 묶는다: 기본 칸(설정 `base-cell-size-degrees`, 로컬 0.005°)에 zoom별 배수(설정 `zoom-multipliers`, 로컬 `15:1,13:2,11:8,9:32,0:128`)를 곱한 크기로 센다. 멀리 볼수록 칸이 커져 발바닥이 합쳐진다. 앱은 따로 묶거나 수를 더하지 않는다(규칙 80).
+- 조회 영역을 한국 범위(124~132E, 33~39N)로 자르고, 걸치는 칸 전체를 덮도록 칸 경계까지 넓혀 센다. 그래서 큰 칸에서는 화면 가장자리 밖 발자취가 포함될 수 있다. 넓힌 영역의 칸 수가 `max-cells`(2500)를 넘으면 400 C013이다.
+- `min-count`(DEC-07, 로컬 1)보다 적게 남은 칸은 응답에서 빠진다. 배포 값은 환경 변수다(TBD).
+- 지역 이름·다녀간 사람 수·카테고리 비율은 응답에 없다. W15-A 카드는 칸의 발자취 수와 카테고리별 수, 기간·기준 시각만 보여 준다(2026-11-06 사용자 결정).
 
 ### 3-3. 발자취 저장 API-041 — 백엔드 코드 대조 (2026-11-06)
 
@@ -246,7 +250,7 @@ type CreateFootprintResponse = {
 | A001·A002·A003·A004 | 401·401·401·403 | 액세스 토큰 없음·만료·무효, 권한 부족 |
 
 - 영향: `api/errors.ts`의 `COMMON_ERROR_MESSAGES`와 `api/client.ts`의 토큰 갱신 조건(`code === "C005"`, 서버의 만료 code는 `A002`)이 예전 번호를 쓴다. 이번 작업에서는 고치지 않았고, 발자취 화면만 `features/footprint/errors.ts`에서 서버 번호로 먼저 찾는다. §3-0과 공통 처리를 고치는 일은 팀 확인 뒤 따로 한다(TBD).
-- API-046 실제 계약도 §3-2 가정과 다르다: `GET /visit-statistics?bbox=west,south,east,north&zoom&category&from&to&metric` → `{ metric, period, aggregation: { unit, version, precision, minCount }, cells: [{ cellId, center: { latitude, longitude }, count, categoryCounts }], updatedAt }`. 지역 이름과 인원·방문 수 구분이 없다. W15·W15-A를 실제 계약에 맞추는 작업은 따로 한다(TBD).
+- API-046도 2026-11-06 실제 계약으로 옮겼다(§3-2). 방문 분포 화면도 서버 code(C003·C012·C013·ST001)를 `features/statistics/errors.ts`에서 먼저 찾는다.
 
 ## 4. 열거형과 기준 데이터
 

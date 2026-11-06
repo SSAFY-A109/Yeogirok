@@ -1,6 +1,7 @@
 import { api } from "@/api/client";
 import {
   toVisitStatistics,
+  toVisitStatisticsParams,
   type VisitMapArea,
   type VisitStatistics,
   type VisitStatisticsResponseDto,
@@ -8,17 +9,10 @@ import {
 
 export type VisitStatisticsInput = { area: VisitMapArea; categoryCode: string | null };
 
-/** API-046 카테고리별 방문 분포도. 카테고리가 없으면 전체를 묻는다. 쿼리 이름은 명세 미확정이라 가정이다(TBD). */
+/** API-046 카테고리별 방문 분포. 보이는 영역과 확대 정도로 묻고, 서버가 묶은 격자 칸을 받는다. 기간(DEC-02)은 보내지 않는다(전체 기간). */
 export async function getVisitStatistics({ area, categoryCode }: VisitStatisticsInput, signal?: AbortSignal): Promise<VisitStatistics> {
   const { data } = await api.get<VisitStatisticsResponseDto>("/visit-statistics", {
-    params: {
-      swLat: area.south,
-      swLng: area.west,
-      neLat: area.north,
-      neLng: area.east,
-      level: area.level,
-      category: categoryCode ?? undefined,
-    },
+    params: toVisitStatisticsParams(area, categoryCode),
     signal,
   });
   return toVisitStatistics(data);

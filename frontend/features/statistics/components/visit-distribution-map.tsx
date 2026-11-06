@@ -4,7 +4,7 @@ import { Platform, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
-import type { VisitArea } from "@/features/statistics/model";
+import type { VisitCell } from "@/features/statistics/model";
 import {
   footprintPinImage,
   KakaoMapView,
@@ -23,9 +23,11 @@ const kakaoJavascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
 /** 현재 위치를 쓰기 전(발자취 남기기 단계)까지 처음 보여 줄 곳. 시연 지역인 강릉 해변 일대다(TBD). */
 const INITIAL_CAMERA: MapCamera = { lat: 37.7801, lng: 128.9205, level: 7 };
 
-/** 발바닥 크기 배율. 화면에서 가장 많이 다녀간 일대가 1.25배, 거의 없는 일대가 0.75배이고 사이는 인원수에 비례한다(Figma W15). */
+/** 발바닥 크기 배율. 화면에서 발자취가 가장 많은 칸이 1.25배, 거의 없는 칸이 0.75배이고 사이는 발자취 수에 비례한다(Figma W15). */
 const MIN_FOOTPRINT_SCALE = 0.75;
 const FOOTPRINT_SCALE_RANGE = 0.5;
+/** 배지에 그대로 적는 최대 수. 넘으면 "999+"로 줄인다(Figma `Map / FootprintMarker` 설명). */
+const MAX_BADGE_COUNT = 999;
 
 function createFootprintStyle(): MapFootprintStyle {
   const colors = getColors("light");
@@ -56,43 +58,48 @@ function createCurrentLocationStyle(): MapCurrentLocationStyle {
 /** 내 위치 점(Figma W15 `Current location`). 발자취 핀과 구분되는 파란 점이다. */
 const CURRENT_LOCATION_STYLE = createCurrentLocationStyle();
 
-function toFootprintScale(visitorCount: number, maxVisitorCount: number) {
-  const ratio = maxVisitorCount > 0 ? visitorCount / maxVisitorCount : 0;
+function toFootprintScale(count: number, maxCount: number) {
+  const ratio = maxCount > 0 ? count / maxCount : 0;
   return Math.round((MIN_FOOTPRINT_SCALE + FOOTPRINT_SCALE_RANGE * ratio) * 100) / 100;
 }
 
-function toFootprints(areas: readonly VisitArea[], selectedAreaId: string | null): MapFootprint[] {
-  const maxVisitorCount = Math.max(0, ...areas.map((area) => {
-    return area.visitorCount;
+function toBadgeLabel(count: number) {
+  return count > MAX_BADGE_COUNT ? `${MAX_BADGE_COUNT}+` : String(count);
+}
+
+function toFootprints(cells: readonly VisitCell[], selectedCellId: string | null): MapFootprint[] {
+  const maxCount = Math.max(0, ...cells.map((cell) => {
+    return cell.count;
   }));
 
-  return areas.map((area) => {
+  return cells.map((cell) => {
     return {
-      id: area.id,
-      lat: area.latitude,
-      lng: area.longitude,
-      label: String(area.visitorCount),
-      accessibilityLabel: `${area.name}, 다녀간 사람 ${area.visitorCount}명`,
-      scale: toFootprintScale(area.visitorCount, maxVisitorCount),
-      selected: area.id === selectedAreaId,
+      id: cell.id,
+      lat: cell.latitude,
+      lng: cell.longitude,
+      label: toBadgeLabel(cell.count),
+      accessibilityLabel: `발자취 ${cell.count}개가 남은 곳`,
+      scale: toFootprintScale(cell.count, maxCount),
+      selected: cell.id === selectedCellId,
     };
   });
 }
 
 type VisitDistributionMapProps = {
-  areas: readonly VisitArea[];
-  selectedAreaId: string | null;
+  /** 서버가 묶은 격자 칸. 멀리 볼수록 칸이 커져 여러 칸이 하나로 묶여 온다. */
+  cells: readonly VisitCell[];
+  selectedCellId: string | null;
   /** 잰 내 위치. 권한이 없거나 아직 못 쟀으면 `null`. */
   currentLocation: MapCurrentLocation | null;
   focusRequest: MapFocusRequest | null;
-  onPressArea: (areaId: string) => void;
+  onPressCell: (cellId: string) => void;
   onPressMap: () => void;
   onRegionChange: (region: MapRegion) => void;
 };
 
 type MapPhase = "loading" | "ready" | "error";
 
-/** 서버가 집계한 일대를 발바닥 마커로 그리는 카카오 지도(EXP-01·02). 웹이거나 지도 키가 없으면 안내만 보여 준다. */
+/** 서버가 묶은 격자 칸을 발바닥 마커로 그리는 카카오 지도(EXP-01·02). 웹이거나 지도 키가 없으면 안내만 보여 준다. */
 export function VisitDistributionMap(props: VisitDistributionMapProps) {
   if (Platform.OS === "web") {
     return <MapNotice message="지도는 Android·iOS 앱에서 볼 수 있어요." />;
@@ -107,11 +114,11 @@ export function VisitDistributionMap(props: VisitDistributionMapProps) {
 
 function VisitDistributionMapView({
   javascriptKey,
-  areas,
-  selectedAreaId,
+  cells,
+  selectedCellId,
   currentLocation,
   focusRequest,
-  onPressArea,
+  onPressCell,
   onPressMap,
   onRegionChange,
 }: VisitDistributionMapProps & { javascriptKey: string }) {
@@ -119,8 +126,8 @@ function VisitDistributionMapView({
   const [attempt, setAttempt] = useState(0);
 
   const footprints = useMemo(() => {
-    return toFootprints(areas, selectedAreaId);
-  }, [areas, selectedAreaId]);
+    return toFootprints(cells, selectedCellId);
+  }, [cells, selectedCellId]);
 
   const retry = () => {
     setPhase("loading");
@@ -147,7 +154,7 @@ function VisitDistributionMapView({
     <View className="flex-1 bg-brand-muted">
       <KakaoMapView
         key={attempt}
-        accessibilityLabel="다녀간 사람이 많을수록 발바닥이 큰 방문 분포 지도"
+        accessibilityLabel="발자취가 많을수록 발바닥이 큰 방문 분포 지도"
         javascriptKey={javascriptKey}
         initialCamera={INITIAL_CAMERA}
         footprints={footprints}
@@ -155,7 +162,7 @@ function VisitDistributionMapView({
         currentLocation={currentLocation}
         currentLocationStyle={CURRENT_LOCATION_STYLE}
         focusRequest={focusRequest}
-        onPressPoint={onPressArea}
+        onPressPoint={onPressCell}
         onPressMap={onPressMap}
         onRegionChange={onRegionChange}
         onReady={() => {
