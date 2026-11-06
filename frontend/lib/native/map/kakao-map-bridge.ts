@@ -5,15 +5,17 @@ export type MapCamera = {
 };
 
 export type MapMarker = {
+  id?: string;
   lat: number;
   lng: number;
 };
 
-/** 기본 마커 대신 쓸 이미지. uri는 WebView에서 바로 읽히는 data URI이고, 끝이 좌표를 가리키도록 아래 가운데에 맞춘다. */
+/** WebView에서 읽을 data URI 이미지. 기본은 아래 가운데를 좌표에 맞추며 offset으로 기준점을 바꿀 수 있다. */
 export type MapMarkerImage = {
   uri: string;
   width: number;
   height: number;
+  offset?: { x: number; y: number };
 };
 
 /** 코스 경로의 한 지점. order는 코스 안 순서(1부터)이고, selected는 핀 강조 여부다. */
@@ -169,18 +171,31 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   }
 
   window.yeogirokMap = {
-    setMarkers: function (points, image) {
+    setMarkers: function (points, image, fit) {
       if (!clusterer) return;
       var startedAt = performance.now();
       var markerImage = image
-        ? new kakao.maps.MarkerImage(image.uri, new kakao.maps.Size(image.width, image.height), { offset: new kakao.maps.Point(image.width / 2, image.height) })
+        ? new kakao.maps.MarkerImage(image.uri, new kakao.maps.Size(image.width, image.height), { offset: new kakao.maps.Point(image.offset ? image.offset.x : image.width / 2, image.offset ? image.offset.y : image.height) })
         : null;
       clusterer.clear();
       clusterer.addMarkers(points.map(function (point) {
         var options = { position: new kakao.maps.LatLng(point.lat, point.lng) };
         if (markerImage) options.image = markerImage;
-        return new kakao.maps.Marker(options);
+        var marker = new kakao.maps.Marker(options);
+        if (typeof point.id === "string") {
+          kakao.maps.event.addListener(marker, "click", function () {
+            post({ type: "point-pressed", id: point.id });
+          });
+        }
+        return marker;
       }));
+      if (fit && points.length === 1) {
+        map.setCenter(new kakao.maps.LatLng(points[0].lat, points[0].lng));
+      } else if (fit && points.length > 1) {
+        var bounds = new kakao.maps.LatLngBounds();
+        points.forEach(function (point) { bounds.extend(new kakao.maps.LatLng(point.lat, point.lng)); });
+        map.setBounds(bounds, 32, 32, 32, 32);
+      }
       afterNextPaint(function () {
         post({ type: "markers-rendered", count: points.length, renderMs: Math.round(performance.now() - startedAt) });
       });
@@ -315,12 +330,12 @@ export function buildSetRouteScript(route: MapRoute, fit: boolean): string {
   return `window.yeogirokMap && window.yeogirokMap.setRoute(${toScriptLiteral({ points, colors: route.colors })}, ${fit ? "true" : "false"}); true;`;
 }
 
-export function buildSetMarkersScript(markers: readonly MapMarker[], image?: MapMarkerImage): string {
-  const points = markers.map(({ lat, lng }) => {
-    return { lat, lng };
+export function buildSetMarkersScript(markers: readonly MapMarker[], image?: MapMarkerImage, fit = false): string {
+  const points = markers.map(({ id, lat, lng }) => {
+    return { id, lat, lng };
   });
 
-  return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}, ${toScriptLiteral(image ?? null)}); true;`;
+  return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}, ${toScriptLiteral(image ?? null)}, ${fit ? "true" : "false"}); true;`;
 }
 
 function isPageFailureReason(value: unknown): value is KakaoMapFailure {
