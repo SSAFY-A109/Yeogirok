@@ -43,7 +43,7 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
-import com.ssafy.yeogirok.domain.room.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.global.exception.BusinessException;

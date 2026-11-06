@@ -43,7 +43,7 @@ public record RoomDetailResponse(
 		Object sourceRecord, Long addedBy) {
 
 		static Place from(RoomPlace place, Map<String, String> categoryNames) {
-			return new Place(place.getId(), PlaceInfo.from(place, categoryNames), place.getSourceType(),
+			return new Place(place.getId(), PlaceInfo.from(place.getPlace(), categoryNames), place.getSourceType(),
 				place.getSourceRecordId(), null, place.getAddedBy());
 		}
 	}

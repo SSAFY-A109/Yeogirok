@@ -8,7 +8,7 @@ import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 import java.math.BigDecimal;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
+import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.Coordinates;
@@ -51,7 +51,7 @@ public class CustomPlaceCreateRequest {
 		String trimmed = value.strip();
 		// DB char_length 와 같게 코드 포인트로 센다.
 		int length = trimmed.codePointCount(0, trimmed.length());
-		if (length == 0 || length > RoomPlace.NAME_MAX_LENGTH) {
+		if (length == 0 || length > Place.NAME_MAX_LENGTH) {
 			throw new BusinessException(ExceptionType.CUSTOM_PLACE_NAME_INVALID);
 		}
 		return trimmed;

@@ -1,4 +1,4 @@
-package com.ssafy.yeogirok.domain.room.entity;
+package com.ssafy.yeogirok.domain.place.entity;
 
 /** 주차 가능 여부. 장소 상세(API-027)에서 채우기 전에는 UNKNOWN. */
 public enum ParkingStatus {

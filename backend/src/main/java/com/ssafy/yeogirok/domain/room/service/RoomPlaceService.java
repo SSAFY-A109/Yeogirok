@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.room.service;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -10,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
+import com.ssafy.yeogirok.domain.place.entity.Place;
+import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse;
@@ -33,14 +36,19 @@ import com.ssafy.yeogirok.global.geo.LegalDongResolver;
  * 이미 있는 후보 복원은 바꾸는 것이 없어 version 을 보지도 올리지도 않고 성공한다(동시에 같은 요청이 와도 오류 없이).
  *
  * <p>TODO API-029(검색·AI 추천 담기): 투어API 장소 조회(API-026·027)와 추천 기록(recommendation_logs)이 생기면 만든다.
- * 지역은 투어API 코드(시·군·구 단위까지)를 그대로 넣지 말고, 장소 좌표(mapx·mapy)로 {@link LegalDongResolver} 를 불러
- * 직접 추가와 같은 10자리 법정동 코드·읍·면·동 이름을 저장한다(region_code 단위가 섞이지 않게).
+ * <ul>
+ *   <li>같은 투어API 장소는 places 한 행을 재사용한다. 두 요청이 동시에 처음 담으면 UNIQUE(provider, provider_place_id)
+ *       충돌이 나므로 "없으면 넣고 있으면 그 행"(INSERT ... ON CONFLICT DO NOTHING 후 조회)으로 처리한다.</li>
+ *   <li>지역은 투어API 코드(시·군·구 단위까지)를 그대로 넣지 말고, 장소 좌표(mapx·mapy)로 {@link LegalDongResolver} 를
+ *       불러 직접 추가와 같은 10자리 법정동 코드·읍·면·동 이름을 저장한다(region_code 단위가 섞이지 않게).</li>
+ * </ul>
  * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
  */
 @Service
 public class RoomPlaceService {
 
 	private final RoomPlaceRepository roomPlaceRepository;
+	private final PlaceRepository placeRepository;
 	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
@@ -48,10 +56,11 @@ public class RoomPlaceService {
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
-	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, CategoryNames categoryNames,
-		RoomFinder roomFinder, RoomVersions roomVersions, LegalDongResolver legalDongResolver,
-		PlatformTransactionManager transactionManager, Clock clock) {
+	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
+		CategoryNames categoryNames, RoomFinder roomFinder, RoomVersions roomVersions,
+		LegalDongResolver legalDongResolver, PlatformTransactionManager transactionManager, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
+		this.placeRepository = placeRepository;
 		this.categoryNames = categoryNames;
 		this.roomFinder = roomFinder;
 		this.roomVersions = roomVersions;
@@ -85,10 +94,13 @@ public class RoomPlaceService {
 
 		return transactionTemplate.execute(status -> {
 			TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
-			RoomPlace place = roomPlaceRepository.save(RoomPlace.manual(roomId, command.name(), command.latitude(),
-				command.longitude(), command.address(), legalDong.code(), legalDong.name(), userId, clock.instant()));
-			// 직접 추가 후보에는 카테고리가 없다.
-			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(place, Map.of()), increaseVersion(room));
+			Instant now = clock.instant();
+			// 직접 입력은 같은 이름·좌표여도 재사용하지 않고 새 장소 행을 만든다(명세).
+			Place place = placeRepository.save(Place.manual(command.name(), command.latitude(), command.longitude(),
+				command.address(), legalDong.code(), legalDong.name(), now));
+			RoomPlace roomPlace = roomPlaceRepository.save(RoomPlace.manual(roomId, place, userId, now));
+			// 직접 추가 장소에는 카테고리가 없다.
+			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(roomPlace, Map.of()), increaseVersion(room));
 		});
 	}
 
@@ -144,7 +156,7 @@ public class RoomPlaceService {
 	}
 
 	private Map<String, String> categoryNamesOf(List<RoomPlace> places) {
-		return categoryNames.of(places.stream().map(RoomPlace::getCategoryCode).toList());
+		return categoryNames.of(places.stream().map(place -> place.getPlace().getCategoryCode()).toList());
 	}
 
 	private static void checkVersion(TravelRoom room, int version) {

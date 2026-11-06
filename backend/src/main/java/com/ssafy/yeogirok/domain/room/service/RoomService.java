@@ -111,8 +111,9 @@ public class RoomService {
 	public RoomDetailResponse getRoom(Long userId, Long roomId) {
 		MemberRoom found = roomFinder.getForMember(roomId, userId);
 		List<RoomPlace> places = roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
+		List<String> categoryCodes = places.stream().map(place -> place.getPlace().getCategoryCode()).toList();
 		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)), places,
-			categoryNames.of(places.stream().map(RoomPlace::getCategoryCode).toList()), found.member());
+			categoryNames.of(categoryCodes), found.member());
 	}
 
 	/**
