@@ -31,6 +31,7 @@ import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.request.PageSize;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 import lombok.RequiredArgsConstructor;
@@ -39,10 +40,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class RoomService {
-
-	/** API-020 limit 기본값·최댓값. */
-	static final int DEFAULT_LIST_LIMIT = 20;
-	static final int MAX_LIST_LIMIT = 50;
 
 	private final TravelRoomRepository travelRoomRepository;
 	private final RoomMemberRepository roomMemberRepository;
@@ -82,11 +79,7 @@ public class RoomService {
 	@Transactional(readOnly = true)
 	public RoomListResponse getMyRooms(Long userId, String cursor, Integer limit) {
 		RoomCursor after = RoomCursor.decodeOrNull(cursor);
-		int size = limit == null ? DEFAULT_LIST_LIMIT : limit;
-		if (size < 1 || size > MAX_LIST_LIMIT) {
-			throw new BusinessException(ExceptionType.PAGE_SIZE_OUT_OF_RANGE,
-				"limit: 1~%d 사이여야 합니다.".formatted(MAX_LIST_LIMIT));
-		}
+		int size = PageSize.resolve(limit);
 
 		// 한 개 더 읽어서 다음 쪽이 있는지 본다.
 		List<TravelRoom> rows = travelRoomRepository.findJoinedRooms(userId,
