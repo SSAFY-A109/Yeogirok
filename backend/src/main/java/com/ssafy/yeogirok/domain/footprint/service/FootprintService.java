@@ -23,16 +23,13 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.BoundingBox;
 import com.ssafy.yeogirok.global.lock.UserLock;
 import com.ssafy.yeogirok.global.request.DateRange;
+import com.ssafy.yeogirok.global.request.PageSize;
 
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
 public class FootprintService {
-
-	/** API-042 limit 기본값·최댓값. */
-	static final int DEFAULT_LIST_LIMIT = 20;
-	static final int MAX_LIST_LIMIT = 50;
 
 	private final FootprintFinder footprintFinder;
 	private final FootprintRepository footprintRepository;
@@ -80,11 +77,7 @@ public class FootprintService {
 		DateRange dates = new DateRange(from, to);
 		TravelCategory.validateFilter(category);
 		FootprintCursor after = FootprintCursor.decodeOrNull(cursor);
-		int size = limit == null ? DEFAULT_LIST_LIMIT : limit;
-		if (size < 1 || size > MAX_LIST_LIMIT) {
-			throw new BusinessException(ExceptionType.PAGE_SIZE_OUT_OF_RANGE,
-				"limit: 1~%d 사이여야 합니다.".formatted(MAX_LIST_LIMIT));
-		}
+		int size = PageSize.resolve(limit);
 
 		Specification<Footprint> spec = FootprintSpecifications.ownedAndNotDeleted(userId);
 		if (box != null) {

@@ -18,6 +18,11 @@ yeogirok:
   idempotency:
     retention: 24h
     processing-timeout: 30s
+  room:
+    invite:
+      # 테스트 전용 값(Base64, 64바이트). 운영 값과 무관하다.
+      token-key: dGVzdC1vbmx5LXJvb20taW52aXRlLWtleS1mb3IteWVvZ2lyb2stdGVzdHMtMDEyMzQ1Njc4OWFiY2RlZmdoaQ==
+      url-base: https://test.yeogirok/invite
 
 auth:
   jwt:

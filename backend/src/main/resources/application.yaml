@@ -19,9 +19,16 @@ yeogirok:
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
+  room:
+    invite:
+      # 초대 토큰 암호화 키(AES-SIV). Base64, 디코드했을 때 64바이트. 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
+      # 생성(한 줄로): openssl rand -base64 -A 64
+      token-key: ${ROOM_INVITE_TOKEN_KEY}
+      # inviteUrl 앞부분. 앱 딥링크 주소가 정해지면 바꾼다.
+      url-base: ${ROOM_INVITE_URL_BASE}
   kakao:
     local:
-      # 주소 표시용(API-041 역지오코딩). 키가 없으면 주소·위치명·법정동 코드를 null 로 저장하고 앱은 그대로 뜬다.
+      # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.
       # 키는 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
       rest-api-key: ${KAKAO_REST_API_KEY:}
       base-url: https://dapi.kakao.com

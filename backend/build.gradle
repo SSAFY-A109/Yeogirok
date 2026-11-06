@@ -33,6 +33,9 @@ dependencies {
 	// Redis: 멱등키·업로드 세션 등 짧게 보관하는 값 (global.idempotency)
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+	/* 암호화: 여행방 초대 토큰을 결정적 암호화(AES-SIV)로 저장해 조회·재표시에 함께 쓴다 */
+	implementation 'com.google.crypto.tink:tink:1.15.0'
+
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

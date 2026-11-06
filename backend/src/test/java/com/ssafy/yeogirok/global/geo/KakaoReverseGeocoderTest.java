@@ -133,6 +133,35 @@ class KakaoReverseGeocoderTest {
 	}
 
 	@Test
+	void 법정동_조회는_coord2regioncode만_불러_B_유형의_코드와_읍면동_이름을_준다() {
+		expect(REGION_PATH).andRespond(withSuccess(REGION_JSON, MediaType.APPLICATION_JSON));
+
+		assertThat(geocoder.resolve(LAT, LNG)).isEqualTo(new LegalDong("1168010100", "역삼동"));
+		server.verify();  // 주소 조회는 기대하지 않았으니 가면 실패한다
+	}
+
+	@Test
+	void 법정동_이름은_법정리를_합치지_않는다() {
+		expect(REGION_PATH).andRespond(withSuccess("""
+			{"meta":{"total_count":1},"documents":[
+			  {"region_type":"B","code":"4182025021","region_3depth_name":"청평면","region_4depth_name":"대성리"}
+			]}
+			""", MediaType.APPLICATION_JSON));
+
+		assertThat(geocoder.resolve(LAT, LNG)).isEqualTo(new LegalDong("4182025021", "청평면"));
+	}
+
+	@Test
+	void 법정동_조회가_실패하거나_키가_없으면_빈_값() {
+		expect(REGION_PATH).andRespond(withServerError());
+		assertThat(geocoder.resolve(LAT, LNG)).isEqualTo(LegalDong.EMPTY);
+
+		geocoder = geocoderWithKey("");
+		assertThat(geocoder.resolve(LAT, LNG)).isEqualTo(LegalDong.EMPTY);
+		server.verify();
+	}
+
+	@Test
 	void 설정의_toString에_키가_나오지_않는다() {
 		assertThat(properties("secret-key-value").toString()).doesNotContain("secret-key-value");
 	}

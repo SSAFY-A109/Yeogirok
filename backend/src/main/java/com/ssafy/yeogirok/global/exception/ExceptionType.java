@@ -10,7 +10,7 @@ import lombok.Getter;
 /**
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
- * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계.
+ * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -67,6 +67,21 @@ public enum ExceptionType {
 	/* ── 방문 통계 ST ───────────────────────────────────────── */
 
 	UNSUPPORTED_METRIC(BAD_REQUEST, "ST001", "지원하지 않는 방문 통계 지표입니다."),
+
+	/* ── 여행방 RO ──────────────────────────────────────────── */
+
+	/** 없는 방과 마지막 참여자가 나가 삭제된 방을 구분하지 않는다. */
+	ROOM_NOT_FOUND(NOT_FOUND, "RO001", "여행방을 찾을 수 없습니다."),
+	/** 현재 참여자가 아니다(참여한 적 없거나 나갔다). 참여자 권한은 모두 같아 권한 부족도 이 코드로 알린다. */
+	ROOM_NOT_MEMBER(FORBIDDEN, "RO002", "여행방 참여자가 아닙니다."),
+	ROOM_INVITE_TOKEN_INVALID(NOT_FOUND, "RO005", "여행방 초대 토큰이 유효하지 않습니다."),
+	ROOM_FULL(CONFLICT, "RO007", "여행방 참여 인원이 가득 찼습니다."),
+	/** 없는 후보이거나 다른 방의 후보다. 뺀 후보(removed_at)는 찾을 수 있다. */
+	ROOM_PLACE_NOT_FOUND(NOT_FOUND, "RO009", "요청한 후보 장소가 해당 여행방에 없습니다."),
+
+	/* ── 장소 P ─────────────────────────────────────────────── */
+
+	CUSTOM_PLACE_NAME_INVALID(BAD_REQUEST, "P004", "직접 추가할 장소명은 앞뒤 공백을 빼고 1~255자여야 합니다."),
 
 	;
 

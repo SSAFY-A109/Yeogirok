@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.geo.Coordinates;
 
 import lombok.RequiredArgsConstructor;
 
@@ -15,16 +16,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class LocationEvidencePolicy {
 
-	private static final BigDecimal MAX_LATITUDE = BigDecimal.valueOf(90);
-	private static final BigDecimal MAX_LONGITUDE = BigDecimal.valueOf(180);
-
 	private final LocationEvidenceProperties properties;
 
-	/** @throws BusinessException 위도 -90~90, 경도 -180~180 밖이면 C011 */
+	/** @throws BusinessException 위도 -90~90, 경도 -180~180 밖이면 C011({@link Coordinates#checkRange}) */
 	public void checkCoordinates(BigDecimal latitude, BigDecimal longitude) {
-		if (latitude.abs().compareTo(MAX_LATITUDE) > 0 || longitude.abs().compareTo(MAX_LONGITUDE) > 0) {
-			throw new BusinessException(ExceptionType.COORDINATE_OUT_OF_RANGE);
-		}
+		Coordinates.checkRange(latitude, longitude);
 	}
 
 	/** @throws BusinessException capturedAt 이 {@code now} 기준 허용 범위(과거 maxAge, 미래 maxFutureSkew) 밖이면 C009 */
