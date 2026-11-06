@@ -1,0 +1,32 @@
+# 실험 기본 설정 = 지금 운영 API 와 같은 값 (ocrlab/settings.py DEFAULTS 와 동일).
+# 이 파일을 복사해 값을 바꾸고 --config 로 넘기면 된다. 한 번에 한 요소만 바꿔 비교한다.
+decode:
+  exif_mode: opencv        # opencv(운영과 같음) | explicit(EXIF 직접 1회) | ignore
+resize:
+  max_side: null           # 예: 1600 → 긴 변을 1600 으로 (비율 유지). null = 원본
+  min_side: null
+pre:                       # 새 전처리는 모두 꺼짐
+  clahe: false
+  denoise: false
+  binarize: false
+  orient_retry: legacy     # [실험] legacy(운영과 같음) | auto(깨져 보일 때만 돌려서 다시 읽기) | fast(맞을 듯한 방향부터, 충분하면 멈춤)
+ocr:
+  lang: korean
+  device: gpu:0            # CUDA_VISIBLE_DEVICES=2 와 함께 → 실제 2번 GPU
+  use_doc_orientation_classify: false
+  use_doc_unwarping: false
+  use_textline_orientation: false
+  text_det_thresh: 0.2
+  text_det_box_thresh: 0.4
+fields:
+  datetime_ambiguity: legacy   # [미합의] legacy | null_if_ambiguous
+  date_validation: legacy      # [미합의] legacy | calendar
+  name_rule: legacy           # [실험] legacy(운영과 같음) | v2(상호 줄 자르기·고르기 개선)
+  date_lookalike_fix: legacy   # [실험] legacy(운영과 같음) | fallback(날짜를 못 찾았을 때만 날짜 자리 O·C→0, I·l→1 보정)
+address:
+  return_level: road           # [확정 v3] 도로명까지
+  sido_style: as_printed       # [미합의] as_printed | full
+  include_eupmyeon: true       # [미합의]
+  complete_requires_sido: true # [미합의]
+  allow_no_sido: true          # [미합의]
+  join_next_line: true         # [미합의]

@@ -1,0 +1,15 @@
+# 검출(det) 파인튜닝 설정. 사용: venv/bin/python ocr_v3/lab.py finetune --settings ocr_v3/configs/finetune_det.yaml --action check
+# 사전학습 가중치(PP-OCRv5_server_det_pretrained.pdparams)는 서버에 있는지 확인되지 않음 → 없으면 check 가 멈춘다 (자동 다운로드 안 함).
+task: det
+paddleocr_repo: ~/receipt_ocr/PaddleOCR
+base_config: configs/det/PP-OCRv5/PP-OCRv5_server_det.yml
+pretrained_model: ~/receipt_ocr/pretrained/PP-OCRv5_server_det_pretrained.pdparams
+data_dir: ~/receipt_ocr/labeling/dev2_candidates  # 이미지 기준 폴더 = dataset export-det 의 --root
+label_dir: ~/receipt_ocr/det_real                 # dataset export-det 출력 폴더 (train.txt, val.txt, export_meta.json)
+train_list: [train.txt]
+val_list: [val.txt]
+save_model_dir: ~/receipt_ocr/output/det_real_v1
+epochs: 50                # 시작값. 실측 비교 전에는 최적값이라고 보지 않음
+learning_rate: 0.0001
+batch_size: 4
+gpu: 2
