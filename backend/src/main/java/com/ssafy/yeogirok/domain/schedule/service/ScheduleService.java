@@ -235,8 +235,8 @@ public class ScheduleService {
 		if (edit.stayMinutes() < 0) {
 			throw new BusinessException(ExceptionType.SCHEDULE_STAY_NEGATIVE);
 		}
-		if (edit.stayMinutes() == 0 || edit.stayMinutes() % 10 != 0) {
-			throw notAllowed("items[].stayMinutes: 10분 단위 양수여야 합니다.");
+		if (edit.stayMinutes() == 0 || edit.stayMinutes() > ScheduleItem.MAX_STAY_MINUTES) {
+			throw notAllowed("items[].stayMinutes: 1~%d분이어야 합니다.".formatted(ScheduleItem.MAX_STAY_MINUTES));
 		}
 		if (room.getStartDate() == null || edit.visitDate().isBefore(room.getStartDate())
 			|| edit.visitDate().isAfter(room.getEndDate())) {

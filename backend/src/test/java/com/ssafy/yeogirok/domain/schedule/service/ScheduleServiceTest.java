@@ -247,11 +247,20 @@ class ScheduleServiceTest {
 	}
 
 	@Test
-	void 체류_시간은_10분_단위_양수다() {
+	void 체류_시간은_1분_단위로_1분부터_720분까지다() {
 		assertError(() -> update(newItem(placeA, DAY1, 1, -10)), ExceptionType.SCHEDULE_STAY_NEGATIVE);
 		assertError(() -> update(newItem(placeA, DAY1, 1, 0)), ExceptionType.NOT_ALLOWED_VALUE);
-		assertError(() -> update(newItem(placeA, DAY1, 1, 15)), ExceptionType.NOT_ALLOWED_VALUE);
+		assertError(() -> update(newItem(placeA, DAY1, 1, 721)), ExceptionType.NOT_ALLOWED_VALUE);
+		assertThat(items(update(newItem(placeB, DAY2, 1, 720)).schedule(), DAY2)).singleElement()
+			.extracting(ScheduleView.Item::stayMinutes).isEqualTo(720);
 		assertError(() -> update(newItem(placeA, DAY1, 0, 60)), ExceptionType.NOT_ALLOWED_VALUE);
+
+		ScheduleView schedule = update(new ItemEdit(null, placeA, DAY1, 1, DAY1_10AM, 47, null)).schedule();
+
+		assertThat(items(schedule, DAY1)).singleElement().satisfies(item -> {
+			assertThat(item.stayMinutes()).isEqualTo(47);
+			assertThat(item.departureAt()).isEqualTo(DAY1_10AM.plusSeconds(47 * 60));
+		});
 	}
 
 	@Test

@@ -41,7 +41,7 @@ import lombok.NoArgsConstructor;
 	check = {
 		@CheckConstraint(name = "schedule_items_position_check", constraint = "position >= 1"),
 		@CheckConstraint(name = "schedule_items_stay_minutes_check",
-			constraint = "stay_minutes > 0 AND MOD(stay_minutes, 10) = 0"),
+			constraint = "stay_minutes BETWEEN 1 AND " + ScheduleItem.MAX_STAY_MINUTES),
 		@CheckConstraint(name = "schedule_items_travel_minutes_check",
 			constraint = "travel_minutes_from_previous >= 0"),
 		@CheckConstraint(name = "schedule_items_distance_check", constraint = "distance_from_previous_meters >= 0"),
@@ -50,6 +50,9 @@ import lombok.NoArgsConstructor;
 	})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ScheduleItem {
+
+	/** 체류 시간 최댓값(분). 1분 단위로 1~720분(12시간)이다(명세·ERD). */
+	public static final int MAX_STAY_MINUTES = 720;
 
 	/** 순서를 바꿀 때 잠시 옮겨 두는 순서의 시작값. 실제 순서(하루 항목 수)와 겹치지 않을 만큼 크다. */
 	public static final int TEMPORARY_POSITION_BASE = 100_000;
