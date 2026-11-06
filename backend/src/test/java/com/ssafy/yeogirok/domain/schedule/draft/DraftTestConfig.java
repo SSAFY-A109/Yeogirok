@@ -25,7 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @TestConfiguration
 @Import({RoomTestConfig.class, JobStore.class, JobRunner.class, JobService.class, ScheduleDraftStore.class,
-	ScheduleDraftLock.class, ScheduleDraftService.class, ScheduleDraftJobPolicy.class})
+	ScheduleDraftLock.class, ScheduleDraftService.class, ScheduleDraftJobPolicy.class, ScheduleDraftSaveService.class})
 public class DraftTestConfig {
 
 	public static final Duration RUN_TIMEOUT = Duration.ofMinutes(2);

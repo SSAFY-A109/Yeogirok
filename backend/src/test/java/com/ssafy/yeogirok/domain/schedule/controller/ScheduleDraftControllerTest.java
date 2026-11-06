@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -39,11 +40,14 @@ import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.DayOption;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.NamedPoint;
+import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftSaveService;
 import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftService;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand.FixedItem;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftJobResponse;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftResponse;
+import com.ssafy.yeogirok.domain.schedule.dto.DraftSaveCommand;
+import com.ssafy.yeogirok.domain.schedule.dto.ScheduleResponse;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
@@ -65,6 +69,8 @@ class ScheduleDraftControllerTest {
 
 	@MockitoBean
 	ScheduleDraftService scheduleDraftService;
+	@MockitoBean
+	ScheduleDraftSaveService scheduleDraftSaveService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -186,6 +192,57 @@ class ScheduleDraftControllerTest {
 		mockMvc.perform(get("/api/v1/rooms/7/schedule-drafts/" + DRAFT_KEY).with(asUser(USER_ID)))
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.code").value("SC001"));
+	}
+
+	/* ── API-039 ────────────────────────────────────────────── */
+
+	private ResultActions putJson(String json) throws Exception {
+		return mockMvc.perform(put("/api/v1/rooms/7/schedule").with(asUser(USER_ID))
+			.header("Idempotency-Key", "key-2").contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	@Test
+	void 최종_저장_요청을_읽어_넘기고_저장한_일정과_version을_돌려준다() throws Exception {
+		given(scheduleDraftSaveService.save(eq(USER_ID), eq(7L), any(), eq("key-2")))
+			.willReturn(new ScheduleResponse(null, 5));
+
+		putJson("""
+			{"draftKey": "550e8400-e29b-41d4-a716-446655440001", "draftVersion": 2, "baseVersion": 4,
+			 "days": [{"date": "2026-11-08", "startTime": "09:00:00", "endTime": "18:00:00",
+			   "items": [{"itemId": 1, "roomPlaceId": 401, "order": 1, "stayMinutes": 60, "fixed": false}]}],
+			 "unassignedItemIds": [2],
+			 "startPoint": null,
+			 "endPoint": {"name": null, "latitude": 37.5, "longitude": 127.0}}
+			""")
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{"success": true, "data": {"schedule": null, "version": 5}}
+				""", JsonCompareMode.STRICT));
+
+		DraftSaveCommand expected = new DraftSaveCommand(DRAFT_KEY, 2, 4, List.of(new DraftSaveCommand.Day(DAY,
+			LocalTime.of(9, 0), LocalTime.of(18, 0), List.of(new DraftSaveCommand.Item(1, 401L, 1, 60, false)))),
+			List.of(2), null, new NamedPoint(null, new BigDecimal("37.5"), new BigDecimal("127.0")));
+		verify(scheduleDraftSaveService).save(USER_ID, 7L, expected, "key-2");
+		ArgumentCaptor<IdempotencyKey> key = ArgumentCaptor.forClass(IdempotencyKey.class);
+		verify(idempotencyService).execute(key.capture(), eq(expected), any(), any(), any());
+		assertThat(key.getValue()).isEqualTo(new IdempotencyKey(USER_ID, "schedule-save", "7", "key-2"));
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+		"{\"draftVersion\": 1, \"baseVersion\": 1, \"days\": [], \"unassignedItemIds\": [], \"startPoint\": null, \"endPoint\": null} | C001",
+		"{\"draftKey\": \"k\", \"draftVersion\": 1, \"baseVersion\": 1, \"days\": [], \"unassignedItemIds\": [], \"endPoint\": null} | C001",
+		"{\"draftKey\": \"k\", \"draftVersion\": 1, \"baseVersion\": 1, \"days\": [], \"startPoint\": null, \"endPoint\": null} | C001",
+		"{\"draftKey\": 1, \"draftVersion\": 1, \"baseVersion\": 1, \"days\": [], \"unassignedItemIds\": [], \"startPoint\": null, \"endPoint\": null} | C002",
+		"{\"draftKey\": \"k\", \"draftVersion\": 1, \"baseVersion\": 1, \"days\": [{\"date\": \"2026-11-08\", \"startTime\": \"09:00:00\", \"endTime\": \"18:00:00\"}], \"unassignedItemIds\": [], \"startPoint\": null, \"endPoint\": null} | C001",
+		"{\"draftKey\": \"k\", \"draftVersion\": 1, \"baseVersion\": 1, \"days\": [{\"date\": \"2026-11-08\", \"startTime\": \"09:00:00\", \"endTime\": \"18:00:00\", \"items\": [{\"itemId\": 1, \"roomPlaceId\": 1, \"order\": 1, \"stayMinutes\": 60}]}], \"unassignedItemIds\": [], \"startPoint\": null, \"endPoint\": null} | C001",
+		"{\"draftKey\": \"k\", \"draftVersion\": 1, \"baseVersion\": 1, \"days\": [], \"unassignedItemIds\": [\"1\"], \"startPoint\": null, \"endPoint\": null} | C002",
+	})
+	void 최종_저장_요청_형식_오류는_서비스를_부르지_않는다(String json, String code) throws Exception {
+		putJson(json)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(code));
+		verifyNoInteractions(scheduleDraftSaveService);
 	}
 
 	@Test
