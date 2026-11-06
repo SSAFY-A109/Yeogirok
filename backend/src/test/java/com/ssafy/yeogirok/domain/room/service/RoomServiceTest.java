@@ -207,7 +207,7 @@ class RoomServiceTest {
 			.containsExactly(tuple(OWNER, true), tuple(FRIEND, false));
 		assertThat(detail.version()).isEqualTo(1);
 		assertThat(detail.places()).isEmpty();
-		assertThat(detail.scheduleId()).isNull();
+		assertThat(detail.schedule()).isNull();
 	}
 
 	@Test

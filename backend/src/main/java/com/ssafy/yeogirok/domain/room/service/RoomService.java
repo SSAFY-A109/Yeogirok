@@ -10,7 +10,9 @@ import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
@@ -29,16 +31,15 @@ import com.ssafy.yeogirok.domain.room.repository.RoomPlaceCount;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleRoomChanges;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleRoomChanges.Recalculation;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.request.PageSize;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
-import lombok.RequiredArgsConstructor;
-
 /** 여행방 생성·조회·수정·나가기(API-020·021·022·023·087). 초대는 {@link RoomInvitationService}. */
 @Service
-@RequiredArgsConstructor
 public class RoomService {
 
 	private final TravelRoomRepository travelRoomRepository;
@@ -46,7 +47,22 @@ public class RoomService {
 	private final RoomPlaceRepository roomPlaceRepository;
 	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
+	private final ScheduleRoomChanges scheduleRoomChanges;
+	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
+
+	public RoomService(TravelRoomRepository travelRoomRepository, RoomMemberRepository roomMemberRepository,
+		RoomPlaceRepository roomPlaceRepository, CategoryNames categoryNames, RoomFinder roomFinder,
+		ScheduleRoomChanges scheduleRoomChanges, PlatformTransactionManager transactionManager, Clock clock) {
+		this.travelRoomRepository = travelRoomRepository;
+		this.roomMemberRepository = roomMemberRepository;
+		this.roomPlaceRepository = roomPlaceRepository;
+		this.categoryNames = categoryNames;
+		this.roomFinder = roomFinder;
+		this.scheduleRoomChanges = scheduleRoomChanges;
+		this.transactionTemplate = new TransactionTemplate(transactionManager);
+		this.clock = clock;
+	}
 
 	/** API-021. 방과 생성자의 참여 행을 한 트랜잭션에서 만든다. 멱등키는 컨트롤러가 이 밖에서 처리한다. */
 	@Transactional
@@ -113,14 +129,16 @@ public class RoomService {
 		List<RoomPlace> places = roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
 		List<String> categoryCodes = places.stream().map(place -> place.getPlace().getCategoryCode()).toList();
 		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)), places,
-			categoryNames.of(categoryCodes), found.member());
+			categoryNames.of(categoryCodes), found.member(), scheduleRoomChanges.view(found.room()));
 	}
 
 	/**
-	 * API-023. previewOnly=true 면 검증만 하고 아무것도 바꾸지 않는다. 일정이 아직 없어 날짜를 줄여도 빠질 항목이 없고
-	 * 재계산도 하지 않는다(일정 API 에서 이어서 만든다). version 이 다르거나 동시 수정이 @Version 에 걸리면 C004.
+	 * API-023. previewOnly=true 면 검증만 하고 아무것도 바꾸지 않는다(새 날짜 밖으로 빠질 일정 항목만 알려 준다).
+	 * 저장하면 새 날짜 밖 일정 항목을 지우고(후보 장소는 그대로), 이동 수단을 바꿨으면 남은 일정의 이동 시간·시각을
+	 * 다시 계산한다. 일정이 있는 방의 날짜를 지우면(null) C003. version 이 다르거나 동시 수정이 @Version 에 걸리면 C004.
+	 *
+	 * <p>재계산은 외부 호출이라 방 잠금 밖에서 먼저 하고, 방을 잠근 뒤 version 을 다시 확인하고 저장한다.
 	 */
-	@Transactional
 	public RoomUpdateResponse update(Long userId, Long roomId, RoomUpdateCommand command) {
 		// 요청값 오류는 조회보다 먼저 알린다.
 		String newTitle = command.title() == null ? null : normalizeTitle(command.title());
@@ -128,26 +146,60 @@ public class RoomService {
 			validateDates(command.startDate(), command.endDate());
 		}
 
-		TravelRoom room = roomFinder.getForMember(roomId, userId).room();
+		Recalculation recalculation = null;
+		if (!command.previewOnly() && command.transportMode() != null) {
+			TravelRoom current = roomFinder.getForMember(roomId, userId).room();
+			if (current.getVersion().equals(command.version())
+				&& command.transportMode() != current.getTransportMode()) {
+				recalculation = scheduleRoomChanges.prepare(roomId, command.transportMode(),
+					command.datesGiven() ? command.startDate() : current.getStartDate(),
+					command.datesGiven() ? command.endDate() : current.getEndDate());
+			}
+		}
+		Recalculation prepared = recalculation;
+		return transactionTemplate.execute(status -> updateLocked(userId, roomId, command, newTitle, prepared));
+	}
+
+	private RoomUpdateResponse updateLocked(Long userId, Long roomId, RoomUpdateCommand command, String newTitle,
+		Recalculation recalculation) {
+		TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
 		if (!room.getVersion().equals(command.version())) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
 		}
 		if (command.datesGiven() && !Objects.equals(command.startDate(), room.getStartDate())) {
 			rejectPastStart(command.startDate(), today());
 		}
+		LocalDate startDate = command.datesGiven() ? command.startDate() : room.getStartDate();
+		LocalDate endDate = command.datesGiven() ? command.endDate() : room.getEndDate();
+		List<RoomUpdateResponse.AffectedItem> affectedItems = command.datesGiven()
+			? scheduleRoomChanges.affectedItems(roomId, startDate, endDate).stream()
+				.map(item -> new RoomUpdateResponse.AffectedItem(item.scheduleItemId(), item.roomPlaceId(),
+					item.name(), item.visitDate()))
+				.toList()
+			: List.of();
+		if (startDate == null && !affectedItems.isEmpty()) {
+			// 일정이 있는 방의 날짜를 지우는 처리는 정책이 정해지지 않았다(명세).
+			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "일정이 있는 여행방의 날짜는 지울 수 없습니다.");
+		}
 		if (command.previewOnly()) {
-			return RoomUpdateResponse.of(room, false);
+			return RoomUpdateResponse.preview(room, affectedItems);
 		}
 
+		// 일정 항목을 먼저 저장하고 방 필드는 한 번에 바꾼다(version 이 한 번만 오르게).
+		Map<String, Object> scheduleOptions = scheduleRoomChanges.apply(room, startDate, endDate, recalculation);
+		Instant now = clock.instant();
 		room.updateInfo(
 			newTitle == null ? room.getTitle() : newTitle,
-			command.datesGiven() ? command.startDate() : room.getStartDate(),
-			command.datesGiven() ? command.endDate() : room.getEndDate(),
+			startDate,
+			endDate,
 			command.transportMode() == null ? room.getTransportMode() : command.transportMode(),
-			clock.instant());
+			now);
+		if (!scheduleOptions.equals(room.getScheduleOptions())) {
+			room.updateScheduleOptions(scheduleOptions, now);
+		}
 		// 응답에 올라간 version 을 담으려고 지금 반영한다.
 		travelRoomRepository.flush();
-		return RoomUpdateResponse.of(room, true);
+		return RoomUpdateResponse.applied(room, affectedItems, scheduleRoomChanges.view(room));
 	}
 
 	/**
