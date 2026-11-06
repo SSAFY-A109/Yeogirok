@@ -91,6 +91,12 @@ public class TravelRoom {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
+	/**
+	 * 시각만 바뀐 것으로 version 을 올리지 않는다. 초대 링크 생성·소프트 삭제처럼 방 정보가 아닌 변경이 시각을 바꿔도
+	 * 다른 참여자가 보던 version 이 낡지 않게 한다. 방 정보 수정은 다른 필드가 바뀌어 version 이 오르고,
+	 * 후보 변경은 RoomVersions 가 올린다.
+	 */
+	@OptimisticLock(excluded = true)
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 

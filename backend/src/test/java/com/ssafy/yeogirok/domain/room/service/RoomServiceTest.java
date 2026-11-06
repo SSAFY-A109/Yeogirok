@@ -288,10 +288,26 @@ class RoomServiceTest {
 	@Test
 	void 초대_링크를_만들어도_방_version은_그대로다() {
 		Long roomId = createRoom(OWNER);
+		// 시각이 같으면 updatedAt 이 그대로라 변경으로 잡히지 않는다. 시계를 돌려야 version 증가 여부가 드러난다.
+		clock.advance(Duration.ofMinutes(1));
 		roomInvitationService.getOrCreateInvitation(OWNER, roomId);
+		em.flush();
 		em.clear();
 
 		assertThat(em.find(TravelRoom.class, roomId).getVersion()).isEqualTo(1);
+	}
+
+	@Test
+	void 다른_참여자가_초대_링크를_만들어도_보고_있던_version으로_방을_수정할_수_있다() {
+		Long roomId = createRoom(OWNER);
+		int seen = roomService.getRoom(OWNER, roomId).version();
+		clock.advance(Duration.ofMinutes(1));
+		roomInvitationService.getOrCreateInvitation(OWNER, roomId);
+		em.flush();
+		em.clear();
+
+		assertThat(roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(seen, "새 제목", false, null, null, null, false)).version()).isEqualTo(seen + 1);
 	}
 
 	/* ── API-087 나가기 ─────────────────────────────────────── */
