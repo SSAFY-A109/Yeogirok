@@ -7,11 +7,10 @@ import { Text } from "./text";
 
 type SocialLoginButtonProps = Omit<ComponentProps<typeof Button>, "children" | "variant" | "size"> & {
   provider: "kakao" | "google";
+  label?: string;
 };
 
-export function SocialLoginButton({ provider, className, accessibilityLabel, ...props }: SocialLoginButtonProps) {
-  const label = provider === "kakao" ? "카카오 로그인" : "Google 계정으로 로그인";
-
+export function SocialLoginButton({ provider, label = provider === "kakao" ? "카카오 로그인" : "Google 계정으로 로그인", className, accessibilityLabel, ...props }: SocialLoginButtonProps) {
   return (
     <Button
       size="lg"

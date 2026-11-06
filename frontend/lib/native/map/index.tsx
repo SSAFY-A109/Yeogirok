@@ -6,6 +6,7 @@ export {
   KAKAO_JS_SDK_DOMAIN,
   type KakaoMapFailure,
   type MapCamera,
+  type MapClusterBadge,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,

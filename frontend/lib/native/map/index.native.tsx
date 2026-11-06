@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import {
@@ -9,6 +9,7 @@ import {
   parseKakaoMapMessage,
   type KakaoMapFailure,
   type MapCamera,
+  type MapClusterBadge,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
@@ -19,6 +20,7 @@ export {
   KAKAO_JS_SDK_DOMAIN,
   type KakaoMapFailure,
   type MapCamera,
+  type MapClusterBadge,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
@@ -36,6 +38,8 @@ type KakaoMapViewProps = {
   initialCamera: MapCamera;
   markers?: readonly MapMarker[];
   markerImage?: MapMarkerImage;
+  clusterBadge?: MapClusterBadge;
+  fitToMarkers?: boolean;
   route?: MapRoute;
   onPressPoint?: (id: string) => void;
   onReady: () => void;
@@ -49,6 +53,8 @@ export function KakaoMapView({
   initialCamera,
   markers,
   markerImage,
+  clusterBadge,
+  fitToMarkers = false,
   route,
   onPressPoint,
   onReady,
@@ -67,6 +73,7 @@ export function KakaoMapView({
   const hasResponded = useRef(false);
   const isMapReady = useRef(false);
   const markersSentAt = useRef(0);
+  const markersSignature = useRef("");
   const routeSignature = useRef("");
 
   const reportNoResponse = useEffectEvent(() => {
@@ -83,16 +90,18 @@ export function KakaoMapView({
     };
   }, []);
 
-  function sendMarkers(nextMarkers: readonly MapMarker[], image: MapMarkerImage | undefined) {
+  const sendMarkers = useCallback((nextMarkers: readonly MapMarker[], image: MapMarkerImage | undefined) => {
+    const signature = JSON.stringify(nextMarkers);
     markersSentAt.current = Date.now();
-    webViewRef.current?.injectJavaScript(buildSetMarkersScript(nextMarkers, image));
-  }
+    webViewRef.current?.injectJavaScript(buildSetMarkersScript(nextMarkers, image, fitToMarkers && signature !== markersSignature.current, clusterBadge));
+    markersSignature.current = signature;
+  }, [fitToMarkers, clusterBadge]);
 
   useEffect(() => {
     if (isMapReady.current && markers) {
       sendMarkers(markers, markerImage);
     }
-  }, [markers, markerImage]);
+  }, [markers, markerImage, sendMarkers]);
 
   function sendRoute(nextRoute: MapRoute) {
     const signature = nextRoute.points.map(({ id }) => {

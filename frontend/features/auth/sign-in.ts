@@ -1,7 +1,7 @@
 import { exchangeSocialToken } from "./api/auth.api";
 import type { SocialProvider } from "./model";
 import { getSocialCredentials } from "./native/social-login";
-import { setTokens } from "./token-store";
+import { setLoginProvider, setTokens } from "./token-store";
 
 /**
  * 소셜 SDK 로그인 → API-005 → 토큰 저장까지 하고, 구글 탈퇴에 쓸 1회용 코드를 돌려준다.
@@ -11,6 +11,7 @@ export async function signInAndStoreTokens(provider: SocialProvider): Promise<{ 
   const credentials = await getSocialCredentials(provider);
   const tokens = await exchangeSocialToken(credentials);
   await setTokens(tokens);
+  await setLoginProvider(provider);
 
   return { serverAuthCode: credentials.serverAuthCode };
 }

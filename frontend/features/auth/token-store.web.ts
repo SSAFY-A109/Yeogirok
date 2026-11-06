@@ -1,6 +1,16 @@
+import type { SocialProvider } from "./model";
 import { isTokenPair, type TokenPair } from "./tokens";
 
 let currentTokens: TokenPair | null = null;
+let currentProvider: SocialProvider | null = null;
+
+export async function getLoginProvider(): Promise<SocialProvider | null> {
+  return currentProvider;
+}
+
+export async function setLoginProvider(provider: SocialProvider): Promise<void> {
+  currentProvider = provider;
+}
 
 export async function getTokens(): Promise<TokenPair | null> {
   return currentTokens ? { ...currentTokens } : null;
@@ -16,4 +26,5 @@ export async function setTokens(tokens: TokenPair): Promise<void> {
 
 export async function clearTokens(): Promise<void> {
   currentTokens = null;
+  currentProvider = null;
 }
