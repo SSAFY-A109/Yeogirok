@@ -379,7 +379,7 @@ function LocationSection({ location, chosen, onRemeasure, onPick, onResetToMeasu
       {canShowLocationMap ? (
         <View className="flex-row gap-2 px-5 pt-3">
           <Button variant="outline" onPress={onPick} testID="footprint.pick-location">
-            <Text>지도에서 고르기</Text>
+            <Text>위치 수정</Text>
           </Button>
           {chosen !== null ? (
             <Button variant="outline" onPress={onResetToMeasured} testID="footprint.reset-location">

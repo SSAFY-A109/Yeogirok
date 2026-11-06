@@ -1,6 +1,7 @@
 import { X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Modal, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { BottomCta } from "@/components/ui/bottom-cta";
 import { Button } from "@/components/ui/button";
@@ -34,11 +35,15 @@ type FootprintPointPickerProps = {
 /**
  * 발자취를 남길 위치를 지도에서 직접 고르는 화면(2026-11-06 사용자 결정, 거리 제한 없음, Figma 시안 없음).
  * 지도 가운데 고정된 발바닥에 맞춰 지도를 움직이고, 잰 위치에서 얼마나 떨어졌는지 함께 보여 준다.
+ * Modal은 새 창이라 바깥 화면의 안전 영역 값이 맞지 않는다. 창 안에 SafeAreaProvider를 따로 두어
+ * 상태 바·내비게이션 바 높이를 이 창 기준으로 재고, 헤더와 아래 버튼이 그 밑에 가리지 않게 한다.
  */
 export function FootprintPointPicker({ visible, measured, initialPoint, onConfirm, onClose }: FootprintPointPickerProps) {
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      {visible ? <PickerContent measured={measured} initialPoint={initialPoint} onConfirm={onConfirm} onClose={onClose} /> : null}
+      <SafeAreaProvider>
+        {visible ? <PickerContent measured={measured} initialPoint={initialPoint} onConfirm={onConfirm} onClose={onClose} /> : null}
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -71,9 +76,9 @@ function PickerContent({ measured, initialPoint, onConfirm, onClose }: Omit<Foot
   return (
     <Screen>
       <ScreenHeader
-        title="남길 위치 고르기"
+        title="위치 수정"
         leading={null}
-        trailing={<HeaderIconButton icon={X} accessibilityLabel="위치 고르기 닫기" onPress={onClose} testID="footprint-picker.close" />}
+        trailing={<HeaderIconButton icon={X} accessibilityLabel="위치 수정 닫기" onPress={onClose} testID="footprint-picker.close" />}
         testID="footprint-picker.header"
       />
       <View className="flex-1 bg-brand-muted" testID="footprint-picker.map">
