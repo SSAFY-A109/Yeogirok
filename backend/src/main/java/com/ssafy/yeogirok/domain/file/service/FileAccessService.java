@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.file.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.springframework.stereotype.Service;
 
@@ -36,28 +37,27 @@ public class FileAccessService {
 	private final FileProperties properties;
 	private final Clock clock;
 
-	/** 참여자가 아니거나 다른 기록의 사진이면 M005, 사진이 없으면 M004. */
+	/** 참여자가 아니면 M005. 사진이 없거나 다른 기록의 사진이면 M004(다른 기록 사진 ID 의 존재를 드러내지 않는다). */
 	public FileAccessResponse recordPhoto(Long userId, Long recordId, Long imageId) {
 		requireRecordMember(recordId, userId);
 		VisitImage image = visitImageRepository.findById(imageId)
+			.filter(found -> found.getRecordId().equals(recordId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.FILE_NOT_FOUND));
-		if (!image.getRecordId().equals(recordId)) {
-			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED);
-		}
 		Instant now = clock.instant();
 		return issue(properties.bucketFor(FilePurpose.RECORD_PHOTO), image.getImagePath(), now,
 			properties.downloadUrlTtl());
 	}
 
 	/**
-	 * 참여자가 아니거나, 다른 기록의 자료이거나, 업로더가 아니면 M005. 자료가 없거나 원본을 지웠거나 삭제 기한이 지났으면 M004.
+	 * 참여자가 아니거나 업로더가 아니면 M005. 자료가 없거나, 다른 기록의 자료이거나, 원본을 지웠거나, 삭제 기한이 지났으면 M004.
 	 * URL 만료는 삭제 기한을 넘기지 않는다.
 	 */
 	public FileAccessResponse receipt(Long userId, Long recordId, String materialId) {
 		requireRecordMember(recordId, userId);
 		ReceiptMaterial material = materialStore.find(materialId)
+			.filter(found -> found.recordId().equals(recordId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.FILE_NOT_FOUND));
-		if (!material.recordId().equals(recordId) || !material.uploadedBy().equals(userId)) {
+		if (!material.uploadedBy().equals(userId)) {
 			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED);
 		}
 		Instant now = clock.instant();
@@ -65,8 +65,12 @@ public class FileAccessService {
 			throw new BusinessException(ExceptionType.FILE_NOT_FOUND);
 		}
 		Duration untilDelete = Duration.between(now, material.deleteAfter());
-		Duration validFor = untilDelete.compareTo(properties.downloadUrlTtl()) < 0
-			? untilDelete : properties.downloadUrlTtl();
+		// Presigned URL 은 초 단위(최소 1초)로 서명된다. 내림해 expiresAt 을 실제 만료와 맞추고, 1초 미만이면 기한으로 본다.
+		Duration validFor = (untilDelete.compareTo(properties.downloadUrlTtl()) < 0
+			? untilDelete : properties.downloadUrlTtl()).truncatedTo(ChronoUnit.SECONDS);
+		if (validFor.isZero()) {
+			throw new BusinessException(ExceptionType.FILE_NOT_FOUND);
+		}
 		return issue(properties.receiptBucket(), material.objectKey(), now, validFor);
 	}
 

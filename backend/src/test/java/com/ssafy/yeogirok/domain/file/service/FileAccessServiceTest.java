@@ -91,9 +91,9 @@ class FileAccessServiceTest {
 	}
 
 	@Test
-	void 다른_기록의_사진이면_M005_없는_사진이면_M004() {
+	void 다른_기록의_사진도_없는_사진과_같이_M004() {
 		photo(RECORD_ID + 1);
-		assertError(() -> service.recordPhoto(USER_ID, RECORD_ID, IMAGE_ID), ExceptionType.FILE_ACCESS_DENIED);
+		assertError(() -> service.recordPhoto(USER_ID, RECORD_ID, IMAGE_ID), ExceptionType.FILE_NOT_FOUND);
 		assertError(() -> service.recordPhoto(USER_ID, RECORD_ID, IMAGE_ID + 1), ExceptionType.FILE_NOT_FOUND);
 	}
 
@@ -129,6 +129,21 @@ class FileAccessServiceTest {
 	}
 
 	@Test
+	void URL_수명은_초_단위로_내림하고_1초_미만이면_M004() {
+		receipt(uploadedBy(USER_ID));
+		Instant deleteAfter = ACCEPTED.plus(Duration.ofHours(24));
+		clock.set(deleteAfter.minusMillis(1500));
+
+		FileAccessResponse response = service.receipt(USER_ID, RECORD_ID, MATERIAL_ID);
+
+		assertThat(response.expiresAt()).isEqualTo(deleteAfter.minusMillis(500));
+		verify(storage).presignGet("receipts", "receipt/abc", Duration.ofSeconds(1));
+
+		clock.set(deleteAfter.minusMillis(999));
+		assertError(() -> service.receipt(USER_ID, RECORD_ID, MATERIAL_ID), ExceptionType.FILE_NOT_FOUND);
+	}
+
+	@Test
 	void 삭제_기한이_되면_물리_삭제_전이어도_M004() {
 		receipt(uploadedBy(USER_ID));
 		clock.set(ACCEPTED.plus(Duration.ofHours(24)));
@@ -154,10 +169,10 @@ class FileAccessServiceTest {
 	}
 
 	@Test
-	void 다른_기록의_자료면_M005_자료가_없으면_M004() {
+	void 다른_기록의_자료도_없는_자료와_같이_M004() {
 		given(recordAccess.isCurrentMember(RECORD_ID + 1, USER_ID)).willReturn(true);
 		receipt(uploadedBy(USER_ID));
-		assertError(() -> service.receipt(USER_ID, RECORD_ID + 1, MATERIAL_ID), ExceptionType.FILE_ACCESS_DENIED);
+		assertError(() -> service.receipt(USER_ID, RECORD_ID + 1, MATERIAL_ID), ExceptionType.FILE_NOT_FOUND);
 
 		given(materialStore.find(MATERIAL_ID)).willReturn(Optional.empty());
 		assertError(() -> service.receipt(USER_ID, RECORD_ID, MATERIAL_ID), ExceptionType.FILE_NOT_FOUND);
