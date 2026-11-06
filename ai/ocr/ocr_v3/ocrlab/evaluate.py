@@ -187,11 +187,16 @@ def run_eval(args) -> dict:
         t1 = time.perf_counter()
         img, pmeta = imageio.preprocess(img, cfg)
         t2 = time.perf_counter()
+        ometa = {"triggered": False, "angle": 0}
         if engine is None:
             from .engine import OcrOutput
             out = OcrOutput([], 0.0, None)
         else:
             out = engine.run(img)
+            if cfg["pre"].get("orient_retry", "legacy") == "auto":
+                from . import orient
+                out, ometa = orient.run(engine, img, out)
+        pmeta["orient"] = ometa
         t3 = time.perf_counter()
         resp, diag = extract(to_lines(out), cfg)
         t4 = time.perf_counter()
@@ -212,7 +217,8 @@ def run_eval(args) -> dict:
                    "exif_orientation": dmeta["exif_orientation"], "n_tokens": len(out.tokens),
                    "n_tall_boxes": tall_boxes(out.tokens),             # 여러 줄이 한 박스로 합쳐진 것으로 의심되는 박스 수
                    **{f"has_{k}": resp[k] is not None for k in ("placeName", "date", "time", "address")},
-                   "address_complete": resp["addressComplete"]}
+                   "address_complete": resp["addressComplete"],
+                   "orient_retry": int(pmeta["orient"]["triggered"]), "orient_angle": pmeta["orient"]["angle"]}
             if gold:
                 gv = gold_values(gold[name], addr_given)
                 for fld, key in FIELDS:
@@ -270,6 +276,9 @@ def run_eval(args) -> dict:
                       "scope": "디코딩+전처리+OCR+후처리 (HTTP 전송 제외)"},
         "init_s": None if init_s is None else round(init_s, 2),
         "input_long_side": {"min": min(long_sides), "median": statistics.median(long_sides), "max": max(long_sides)},
+        "orient": {"mode": cfg["pre"].get("orient_retry", "legacy"),
+                   "retried_n": sum(r["orient_retry"] for r in rows if r["repeat"] == 0),
+                   "rotated_n": sum(r["orient_angle"] != 0 for r in rows if r["repeat"] == 0)},
         "presence": presence(rows),        # 정답 없이도 볼 수 있는 값: 필드가 채워진 사진 수 (정확도 아님)
         "memory": {"after_init": mem_after_init, "end": mem_end},
         "env": env_info(engine), "dry_run": args.dry_run,

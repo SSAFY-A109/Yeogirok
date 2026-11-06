@@ -9,6 +9,7 @@ pre:                       # 새 전처리는 모두 꺼짐
   clahe: false
   denoise: false
   binarize: false
+  orient_retry: legacy     # [실험] legacy(운영과 같음) | auto(깨져 보일 때만 돌려서 다시 읽기)
 ocr:
   lang: korean
   device: gpu:0            # CUDA_VISIBLE_DEVICES=2 와 함께 → 실제 2번 GPU
