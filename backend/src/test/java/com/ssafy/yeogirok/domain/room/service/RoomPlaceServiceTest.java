@@ -16,6 +16,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
 import com.ssafy.yeogirok.domain.category.entity.TravelCategoryEntity;
+import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
@@ -26,7 +27,7 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
 import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
-import com.ssafy.yeogirok.domain.room.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
@@ -106,9 +107,14 @@ class RoomPlaceServiceTest {
 		em.clear();
 		RoomPlace saved = em.find(RoomPlace.class, response.roomPlace().id());
 		assertThat(saved.getRoomId()).isEqualTo(roomId);
-		assertThat(saved.getRegionName()).isEqualTo("강릉동");
-		assertThat(saved.getRegionCode()).isEqualTo("4215010100");
 		assertThat(saved.getCreatedAt()).isEqualTo(NOW);
+		Place place = saved.getPlace();
+		assertThat(place.getProvider()).isEqualTo(PlaceProvider.MANUAL);
+		assertThat(place.getProviderPlaceId()).isNull();
+		assertThat(place.getName()).isEqualTo("경포 해변 주차장");
+		assertThat(place.getRegionName()).isEqualTo("강릉동");
+		assertThat(place.getRegionCode()).isEqualTo("4215010100");
+		assertThat(place.getCreatedAt()).isEqualTo(NOW);
 	}
 
 	@Test
@@ -121,12 +127,16 @@ class RoomPlaceServiceTest {
 	}
 
 	@Test
-	void 같은_장소를_여러_번_담으면_후보도_여러_개다() {
+	void 같은_장소를_여러_번_직접_추가하면_후보도_장소_행도_따로_생긴다() {
 		Long first = add(OWNER, "경포대").roomPlace().id();
 		Long second = add(OWNER, "경포대").roomPlace().id();
+		em.flush();
+		em.clear();
 
 		assertThat(first).isNotEqualTo(second);
 		assertThat(roomPlaceService.getPlaces(OWNER, roomId, RoomPlaceState.ACTIVE).items()).hasSize(2);
+		assertThat(em.find(RoomPlace.class, first).getPlace().getId())
+			.isNotEqualTo(em.find(RoomPlace.class, second).getPlace().getId());
 	}
 
 	@Test
@@ -184,8 +194,8 @@ class RoomPlaceServiceTest {
 	@Test
 	void categoryName은_travel_categories의_이름이고_행이_없으면_null() {
 		em.persist(new TravelCategoryEntity("NATURE", "테스트 자연"));
-		insertTourPlace("NATURE");
-		insertTourPlace("CAFE");
+		insertCandidate(insertTourPlace("NATURE"));
+		insertCandidate(insertTourPlace("CAFE"));
 
 		RoomPlaceListResponse list = roomPlaceService.getPlaces(OWNER, roomId, RoomPlaceState.ACTIVE);
 
@@ -195,16 +205,39 @@ class RoomPlaceServiceTest {
 			.extracting(place -> place.place().categoryName()).containsExactly("테스트 자연", null);
 	}
 
-	/** 투어API 담기(API-029)가 아직 없어 카테고리가 있는 후보를 직접 넣는다. */
-	private void insertTourPlace(String categoryCode) {
-		em.getEntityManager().createNativeQuery("INSERT INTO room_places (room_id, place_name, latitude, longitude,"
-				+ " category_code, provider, provider_place_id, parking_status, parking_info, added_by, source_type,"
-				+ " created_at, updated_at) VALUES (?1, '투어 장소', 37.75, 128.87, ?2, 'TOUR_API', ?3, 'UNKNOWN',"
-				+ " '{}' FORMAT JSON, ?4, 'SEARCH', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-			.setParameter(1, roomId)
+	@Test
+	void 같은_투어API_장소를_참조하는_후보들은_같은_장소_정보를_준다() {
+		long placeId = insertTourPlace("NATURE");
+		insertCandidate(placeId);
+		insertCandidate(placeId);
+
+		RoomPlaceListResponse list = roomPlaceService.getPlaces(OWNER, roomId, RoomPlaceState.ACTIVE);
+
+		assertThat(list.items()).hasSize(2);
+		assertThat(list.items().get(0).id()).isNotEqualTo(list.items().get(1).id());
+		assertThat(list.items().get(0).place()).isEqualTo(list.items().get(1).place());
+		assertThat(list.items().getFirst().place().providerPlaceId()).isEqualTo("tour-NATURE");
+	}
+
+	/** 투어API 담기(API-029)가 아직 없어 투어API 장소를 직접 넣는다. @return places.id */
+	private long insertTourPlace(String categoryCode) {
+		em.getEntityManager().createNativeQuery("INSERT INTO places (provider, provider_place_id, name, latitude,"
+				+ " longitude, category_code, parking_status, parking_info, created_at) VALUES ('TOUR_API', ?1,"
+				+ " '투어 장소', 37.75, 128.87, ?2, 'UNKNOWN', '{}' FORMAT JSON, CURRENT_TIMESTAMP)")
+			.setParameter(1, "tour-" + categoryCode)
 			.setParameter(2, categoryCode)
-			.setParameter(3, "tour-" + categoryCode)
-			.setParameter(4, OWNER)
+			.executeUpdate();
+		return ((Number)em.getEntityManager().createNativeQuery("SELECT id FROM places WHERE provider_place_id = ?1")
+			.setParameter(1, "tour-" + categoryCode)
+			.getSingleResult()).longValue();
+	}
+
+	private void insertCandidate(long placeId) {
+		em.getEntityManager().createNativeQuery("INSERT INTO room_places (room_id, place_id, added_by, source_type,"
+				+ " created_at, updated_at) VALUES (?1, ?2, ?3, 'SEARCH', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+			.setParameter(1, roomId)
+			.setParameter(2, placeId)
+			.setParameter(3, OWNER)
 			.executeUpdate();
 	}
 

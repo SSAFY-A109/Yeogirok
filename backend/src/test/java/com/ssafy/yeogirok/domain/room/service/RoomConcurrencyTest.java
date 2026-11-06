@@ -75,7 +75,11 @@ class RoomConcurrencyTest {
 
 	@AfterEach
 	void tearDown() {
+		// 직접 추가한 장소 행은 이 방 후보만 참조하므로 후보를 지운 뒤 같이 지운다.
+		List<Long> placeIds = jdbc.queryForList("SELECT place_id FROM room_places WHERE room_id = ?", Long.class,
+			roomId);
 		jdbc.update("DELETE FROM room_places WHERE room_id = ?", roomId);
+		placeIds.forEach(placeId -> jdbc.update("DELETE FROM places WHERE id = ?", placeId));
 		jdbc.update("DELETE FROM room_members WHERE room_id = ?", roomId);
 		jdbc.update("DELETE FROM travel_rooms WHERE id = ?", roomId);
 		jdbc.update("DELETE FROM users WHERE id BETWEEN ? AND ?", OWNER, CROWD_START + CROWD);

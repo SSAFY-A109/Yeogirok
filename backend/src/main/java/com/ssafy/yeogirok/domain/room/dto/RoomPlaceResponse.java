@@ -10,7 +10,7 @@ public record RoomPlaceResponse(Long id, PlaceInfo place, PlaceSourceType source
 	Long addedBy) {
 
 	public static RoomPlaceResponse from(RoomPlace place, Map<String, String> categoryNames) {
-		return new RoomPlaceResponse(place.getId(), PlaceInfo.from(place, categoryNames), place.getSourceType(),
-			place.getSourceRecordId(), place.getAddedBy());
+		return new RoomPlaceResponse(place.getId(), PlaceInfo.from(place.getPlace(), categoryNames),
+			place.getSourceType(), place.getSourceRecordId(), place.getAddedBy());
 	}
 }

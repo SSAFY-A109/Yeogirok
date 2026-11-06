@@ -27,9 +27,8 @@ public record RoomPlaceListResponse(List<Item> items, Integer version) {
 	) {
 
 		public static Item from(RoomPlace place, Map<String, String> categoryNames) {
-			return new Item(place.getId(), PlaceInfo.from(place, categoryNames), place.getSourceType(),
-				place.getSourceRecordId(),
-				null, place.getAddedBy(), place.getRemovedAt());
+			return new Item(place.getId(), PlaceInfo.from(place.getPlace(), categoryNames), place.getSourceType(),
+				place.getSourceRecordId(), null, place.getAddedBy(), place.getRemovedAt());
 		}
 	}
 }
