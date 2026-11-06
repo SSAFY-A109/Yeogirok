@@ -10,7 +10,7 @@ import lombok.Getter;
 /**
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
- * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
+ * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code J} 비동기 작업, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
  * {@code P} 장소, {@code M} 파일, {@code T} AR 팁, {@code SC} 계획 일정.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
@@ -59,6 +59,12 @@ public enum ExceptionType {
 	REFRESH_TOKEN_REUSED(UNAUTHORIZED, "A010", "이미 재발급에 사용된 리프레시 토큰입니다."),
 	REAUTHENTICATION_REQUIRED(UNAUTHORIZED, "A011", "최근 재인증이 필요합니다."),
 	GOOGLE_AUTH_CODE_INVALID(UNAUTHORIZED, "A029", "구글 인증 코드가 유효하지 않거나 다른 계정의 코드입니다."),
+
+	/* ── 비동기 작업 J ──────────────────────────────────────── */
+
+	JOB_NOT_FOUND(NOT_FOUND, "J001", "비동기 작업을 찾을 수 없습니다."),
+	JOB_NOT_REQUESTER(FORBIDDEN, "J002", "비동기 작업 요청자 본인이 아닙니다."),
+	JOB_RESOURCE_FORBIDDEN(FORBIDDEN, "J003", "작업이 연결된 자원에 접근할 권한이 없습니다."),
 
 	/* ── 발자취 F ───────────────────────────────────────────── */
 

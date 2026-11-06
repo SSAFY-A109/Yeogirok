@@ -22,6 +22,11 @@ yeogirok:
   footprint:
     # API-041 작성 제한(11/4 팀 결정): 같은 날(Asia/Seoul 04:00 기준) 이미 남긴 내 발자취와 이 거리 이내면 거부(F003).
     same-day-radius-meters: 500
+  job:
+    # 비동기 작업(API-011) 기록 보관 기간·제한 시간·실행 스레드 수. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
+    retention: 24h
+    run-timeout: 2m
+    threads: 2
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
