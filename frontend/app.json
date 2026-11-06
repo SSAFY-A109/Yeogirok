@@ -27,6 +27,19 @@
       "expo-router",
       "./plugins/with-ar-tip.cjs",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "지금 있는 곳에 발자취를 남기거나 주변 AR 팁을 찾을 때 현재 위치를 확인해요. 앱을 쓰는 동안에만 위치를 사용해요.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#FFFFFF",
