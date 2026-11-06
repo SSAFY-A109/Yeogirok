@@ -26,6 +26,21 @@ yeogirok:
       token-key: ${ROOM_INVITE_TOKEN_KEY}
       # inviteUrl 앞부분. 앱 딥링크 주소가 정해지면 바꾼다.
       url-base: ${ROOM_INVITE_URL_BASE}
+  file:
+    # Presigned URL 수명(11/3 결정). 업로드 URL 수명은 미완료 업로드 세션의 만료 시각이기도 하다.
+    upload-url-ttl: 10m
+    download-url-ttl: 15m
+    # 영수증 원본 최대 보관 기간(노션 API-012). 최초 발급 시각부터 세고 재전송·완료·보정으로 늘리지 않는다.
+    receipt-retention: 24h
+    # 파일당 최대 크기(노션 API-012). 같은 크기는 허용한다. 1MB = 1,048,576바이트(앱과 같은 기준, 11/6 결정).
+    max-size:
+      TIP_PHOTO: 20MB
+      RECORD_PHOTO: 20MB
+      RECEIPT: 10MB
+    # 영수증 원본 정리 주기(11/6 결정). 기한 목록은 자주, Redis 유실 대비 버킷 전체 스캔은 드물게 돈다.
+    cleanup:
+      due-interval: PT10M
+      safety-scan-interval: PT1H
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.

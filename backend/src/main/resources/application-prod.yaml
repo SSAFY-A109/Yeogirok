@@ -33,6 +33,11 @@ yeogirok:
     # 정하지 않은 수치는 기본값 없이 받는다. 값이 없으면 실행이 바로 실패한다.
     retention: ${IDEMPOTENCY_RETENTION}
     processing-timeout: ${IDEMPOTENCY_PROCESSING_TIMEOUT}
+  # S3 버킷·리전. 서버 compose 가 이미 넘기는 값이다(새 환경 변수 아님). 키는 AWS_ACCESS_KEY_ID·AWS_SECRET_ACCESS_KEY 로 SDK 가 읽는다.
+  file:
+    region: ${AWS_REGION}
+    photo-bucket: ${S3_PHOTO_BUCKET}
+    receipt-bucket: ${S3_RECEIPT_BUCKET}
 
 server:
   # Nginx(HTTPS) 뒤에서 X-Forwarded-* 헤더로 원래 주소(https, 도메인)를 복원한다.

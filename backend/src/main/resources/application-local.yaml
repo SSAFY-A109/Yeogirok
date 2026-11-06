@@ -31,3 +31,8 @@ yeogirok:
     # 멱등키 보관 기간(11/3 결정, 요청 종류와 상관없이 같다)과 처리 중 표시 수명(제안값).
     retention: ${IDEMPOTENCY_RETENTION:24h}
     processing-timeout: ${IDEMPOTENCY_PROCESSING_TIMEOUT:30s}
+  # S3 버킷·리전. 기본값은 dev 버킷이다. 자격 증명은 AWS_PROFILE 등 SDK 기본 방식으로 넣고 여기에 쓰지 않는다.
+  file:
+    region: ${AWS_REGION:ap-northeast-2}
+    photo-bucket: ${S3_PHOTO_BUCKET:yeogirok-a109-photos-dev}
+    receipt-bucket: ${S3_RECEIPT_BUCKET:yeogirok-a109-receipts-dev}

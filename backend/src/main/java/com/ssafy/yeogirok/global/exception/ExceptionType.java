@@ -10,7 +10,8 @@ import lombok.Getter;
 /**
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
- * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방.
+ * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
+ * {@code P} 장소, {@code M} 파일.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -82,6 +83,22 @@ public enum ExceptionType {
 	/* ── 장소 P ─────────────────────────────────────────────── */
 
 	CUSTOM_PLACE_NAME_INVALID(BAD_REQUEST, "P004", "직접 추가할 장소명은 앞뒤 공백을 빼고 1~255자여야 합니다."),
+
+	/* ── 파일 M (M007·M009·M010 은 쓰는 곳이 없어 넣지 않는다) ──────── */
+
+	FILE_TOO_LARGE(CONTENT_TOO_LARGE, "M001", "업로드 파일 크기가 허용 범위를 넘었습니다."),
+	FILE_TYPE_NOT_SUPPORTED(UNSUPPORTED_MEDIA_TYPE, "M002", "지원하지 않는 파일 형식입니다. JPEG·PNG·WEBP 만 올릴 수 있습니다."),
+	/** 요청한 크기·형식과 실물이 다르거나, 손상됐거나, 검증 중에 객체가 바뀌었다. 새 업로드 세션으로 다시 올린다. */
+	FILE_VERIFICATION_FAILED(UNPROCESSABLE_CONTENT, "M003", "파일 검증에 실패했습니다. 다시 업로드해 주세요."),
+	FILE_NOT_FOUND(NOT_FOUND, "M004", "파일 또는 업로드 세션을 찾을 수 없습니다."),
+	FILE_ACCESS_DENIED(FORBIDDEN, "M005", "파일을 열람하거나 사용할 권한이 없습니다."),
+	/** S3 에 객체가 아직 없다. 같은 uploadId 로 다시 시도할 수 있다. */
+	FILE_NOT_UPLOADED(UNPROCESSABLE_CONTENT, "M006", "파일 업로드·검증이 끝나지 않았습니다."),
+	UPLOAD_TARGET_ACCESS_DENIED(FORBIDDEN, "M008", "파일 업로드 대상 여행방·기록에 접근할 권한이 없습니다."),
+	UPLOAD_SESSION_EXPIRED(GONE, "M011", "업로드 세션 유효기간이 지났습니다. 새로 업로드해 주세요."),
+	/** 같은 요청으로 다시 시도할 수 있다. */
+	FILE_STORAGE_UNAVAILABLE(SERVICE_UNAVAILABLE, "M012", "파일 저장소를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+	UPLOAD_ALREADY_COMPLETED(CONFLICT, "M013", "이미 완료된 업로드 세션에는 업로드 URL 을 다시 발급하지 않습니다."),
 
 	;
 

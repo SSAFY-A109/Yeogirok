@@ -36,6 +36,10 @@ dependencies {
 	/* 암호화: 여행방 초대 토큰을 결정적 암호화(AES-SIV)로 저장해 조회·재표시에 함께 쓴다 */
 	implementation 'com.google.crypto.tink:tink:1.15.0'
 
+	/* 파일: S3 Presigned URL 발급·조건부 복사(API-012·086·013). 대안이 없어 AWS SDK v2 를 쓴다 */
+	implementation platform('software.amazon.awssdk:bom:2.57.10')
+	implementation 'software.amazon.awssdk:s3'
+
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
