@@ -13,6 +13,7 @@
     "lint:fix": "expo lint . --fix",
     "lint:check": "node scripts/check-eslint.cjs",
     "typecheck": "tsc --noEmit",
+    "tip:check": "node scripts/check-tip-api.cjs",
     "api:check": "tsc --ignoreConfig --module node16 --moduleResolution node16 --target es2022 --types expo/types --skipLibCheck --rootDir . --outDir .expo/api-check api/client.ts && node scripts/check-api.cjs",
     "native:check": "tsc --ignoreConfig --module node16 --moduleResolution node16 --target es2022 --types expo/types --skipLibCheck --rootDir . --outDir .expo/native-check api/client.ts && node scripts/check-native-transport.cjs",
     "auth:check": "tsc --ignoreConfig --module node16 --moduleResolution node16 --target es2022 --types expo/types --skipLibCheck --rootDir . --outDir .expo/auth-check features/auth/sign-in.ts features/auth/sign-out.ts features/auth/nonce.ts features/user/withdraw.ts app.config.ts api/mocks/server.ts && node scripts/check-auth.cjs",

@@ -49,7 +49,7 @@ export function parsePlacement(raw: unknown): CloudPlacement {
 
   if (
     !isObject(value) || value.schemaVersion !== 1 || value.kind !== "yeogirok-cloud-anchor" ||
-    typeof value.anchorId !== "string" || !value.anchorId.trim() ||
+    typeof value.anchorId !== "string" || !value.anchorId.trim() || value.anchorId.length > 255 ||
     typeof value.ttlDays !== "number" || !Number.isInteger(value.ttlDays) || value.ttlDays < 1 || value.ttlDays > 365 ||
     typeof value.hostedAt !== "string" || !Number.isFinite(Date.parse(value.hostedAt)) ||
     typeof value.expiresAtEstimate !== "string" || !Number.isFinite(Date.parse(value.expiresAtEstimate))
@@ -101,7 +101,7 @@ function parseTipValue(value: unknown): LocalTip {
   }
 
   if (value.draft === true && (!isTipType(value.tipType) || value.body.length > 120 ||
-    typeof value.photoName !== "string" || !/^[a-f0-9-]{36}\.jpg$/.test(value.photoName))) {
+    (value.photoName != null && (typeof value.photoName !== "string" || !/^[a-f0-9-]{36}\.jpg$/.test(value.photoName))))) {
     throw new Error("INVALID_RESULT");
   }
 
