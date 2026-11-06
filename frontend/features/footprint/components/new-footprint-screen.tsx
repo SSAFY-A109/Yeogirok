@@ -17,6 +17,7 @@ import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { useCategories } from "@/features/common/api/queries";
+import { categoryIconOf } from "@/features/explore/components/category-icons";
 import { useCreateFootprint } from "@/features/footprint/api/queries";
 import { canShowLocationMap, FootprintLocationMap, LocationMapPlaceholder } from "@/features/footprint/components/footprint-location-map";
 import { FootprintPointPicker } from "@/features/footprint/components/footprint-point-picker";
@@ -419,7 +420,8 @@ type CategoryFieldProps = {
 
 /**
  * 카테고리 1~3개(Figma W16 `Category (필수)`). 목록은 서버 기준 데이터(API-079)다.
- * 사용자 요청(2026-11-06)으로 4열 격자에 놓는다(공통 카테고리 8개 → 2행). 이름이 길면 칸 안에서 두 줄로 가운데 정렬한다.
+ * 사용자 요청(2026-11-06)으로 4열 격자에 놓는다(공통 카테고리 8개 → 2행). 칸마다 위에 카테고리 아이콘(Figma `카테고리 기준 (v3)`),
+ * 아래에 이름을 두고, 이름이 길면 칸 안에서 두 줄로 가운데 정렬한다.
  */
 function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: CategoryFieldProps) {
   const categories = useCategories();
@@ -435,7 +437,7 @@ function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: Cate
           {Array.from({ length: CATEGORY_SKELETON_COUNT }, (_, index) => {
             return (
               <View key={index} className="w-1/4 p-1">
-                <Skeleton className="min-h-button-sm w-full rounded-sm" />
+                <Skeleton className="h-16 w-full rounded-sm" />
               </View>
             );
           })}
@@ -462,8 +464,9 @@ function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: Cate
               <View key={category.code} className="w-1/4 p-1">
                 <FilterChip
                   size="md"
-                  className="h-auto min-h-button-sm flex-1 px-1 py-1.5"
+                  className="h-auto min-h-button-sm flex-1 gap-1 px-1 py-2"
                   textClassName="text-center"
+                  icon={categoryIconOf(category.code)}
                   hitSlop={CATEGORY_CHIP_HIT_SLOP}
                   selected={selectedCodes.includes(category.code)}
                   disabled={disabled}
