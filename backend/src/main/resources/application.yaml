@@ -67,6 +67,9 @@ yeogirok:
       # 멱등키 처리 중 표시 수명(30s)보다 충분히 짧게 둔다.
       connect-timeout: 2s
       read-timeout: 3s
+    mobility:
+      # 자동차 길찾기(일정 이동 시간). 키·제한 시간은 위 local 값을 같이 쓴다. 대중교통·도보는 local base-url(dapi)로 부른다.
+      base-url: https://apis-navi.kakaomobility.com
 auth:
   jwt:
     issuer: yeogirok
