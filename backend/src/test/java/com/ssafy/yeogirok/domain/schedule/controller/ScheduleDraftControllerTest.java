@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -40,8 +41,10 @@ import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.DayOption;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions.NamedPoint;
+import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftAdjustService;
 import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftSaveService;
 import com.ssafy.yeogirok.domain.schedule.draft.ScheduleDraftService;
+import com.ssafy.yeogirok.domain.schedule.dto.DraftAdjustCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftCreateCommand.FixedItem;
 import com.ssafy.yeogirok.domain.schedule.dto.DraftJobResponse;
@@ -71,6 +74,8 @@ class ScheduleDraftControllerTest {
 	ScheduleDraftService scheduleDraftService;
 	@MockitoBean
 	ScheduleDraftSaveService scheduleDraftSaveService;
+	@MockitoBean
+	ScheduleDraftAdjustService scheduleDraftAdjustService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -243,6 +248,53 @@ class ScheduleDraftControllerTest {
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(code));
 		verifyNoInteractions(scheduleDraftSaveService);
+	}
+
+	/* ── API-084 ────────────────────────────────────────────── */
+
+	private ResultActions patchJson(String json) throws Exception {
+		return mockMvc.perform(patch("/api/v1/rooms/7/schedule-drafts/" + DRAFT_KEY).with(asUser(USER_ID))
+			.header("Idempotency-Key", "key-3").contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	@Test
+	void 조정_요청을_읽어_넘기고_202로_작업을_돌려준다_지점은_생략이면_그대로_null이면_해제() throws Exception {
+		given(scheduleDraftAdjustService.adjust(eq(USER_ID), eq(7L), eq(DRAFT_KEY), any()))
+			.willReturn(DraftJobResponse.queued(JOB_ID, DRAFT_KEY));
+
+		patchJson("""
+			{"baseVersion": 1, "draftVersion": 1,
+			 "items": [{"itemId": 1, "roomPlaceId": 401, "visitDate": "2026-11-08", "order": 1, "stayMinutes": 90}],
+			 "removeItemIds": [2],
+			 "endPoint": null}
+			""")
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.data.jobId").value(JOB_ID))
+			.andExpect(jsonPath("$.data.draftKey").value(DRAFT_KEY))
+			.andExpect(jsonPath("$.data.status").value("QUEUED"));
+
+		DraftAdjustCommand expected = new DraftAdjustCommand(1, 1,
+			List.of(new DraftAdjustCommand.Item(1, 401L, DAY, 1, 90, null)), List.of(2), null, null,
+			new DraftAdjustCommand.PointUpdate(null));
+		verify(scheduleDraftAdjustService).adjust(USER_ID, 7L, DRAFT_KEY, expected);
+		ArgumentCaptor<IdempotencyKey> key = ArgumentCaptor.forClass(IdempotencyKey.class);
+		verify(idempotencyService).execute(key.capture(), any(), any(), any(), any());
+		assertThat(key.getValue()).isEqualTo(new IdempotencyKey(USER_ID, "schedule-draft-adjust", "7", "key-3"));
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+		"{\"draftVersion\": 1, \"items\": []}                                   | C001",
+		"{\"baseVersion\": 1, \"draftVersion\": 1}                              | C001",
+		"{\"baseVersion\": 1, \"draftVersion\": 1, \"items\": [{\"itemId\": 1, \"roomPlaceId\": 1, \"order\": 1, \"stayMinutes\": 60}]} | C001",
+		"{\"baseVersion\": 1, \"draftVersion\": 1, \"items\": [], \"removeItemIds\": {}} | C002",
+		"{\"baseVersion\": 1, \"draftVersion\": 1, \"items\": [], \"startPoint\": {\"latitude\": 1, \"longitude\": 200}} | C011",
+	})
+	void 조정_요청_형식_오류는_서비스를_부르지_않는다(String json, String code) throws Exception {
+		patchJson(json)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(code));
+		verifyNoInteractions(scheduleDraftAdjustService);
 	}
 
 	@Test
