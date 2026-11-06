@@ -18,21 +18,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { useCategories } from "@/features/common/api/queries";
 import { useCreateFootprint } from "@/features/footprint/api/queries";
-import { FootprintLocationMap, LocationMapPlaceholder } from "@/features/footprint/components/footprint-location-map";
+import { canShowLocationMap, FootprintLocationMap, LocationMapPlaceholder } from "@/features/footprint/components/footprint-location-map";
+import { FootprintPointPicker } from "@/features/footprint/components/footprint-point-picker";
 import { LocationPermissionCard } from "@/features/footprint/components/location-permission-card";
 import { PreciseLocationNotice } from "@/features/footprint/components/precise-location-notice";
 import { useKeyboardFollowingScroll } from "@/features/footprint/components/use-keyboard-following-scroll";
 import { getFootprintErrorMessage, getLocationFailureMessage, isLocationEvidenceError } from "@/features/footprint/errors";
 import {
   countFootprintBody,
+  distanceMeters,
   FOOTPRINT_BODY_MAX_LENGTH,
   FOOTPRINT_CATEGORY_MAX_COUNT,
   FOOTPRINT_CATEGORY_MIN_COUNT,
+  formatDistance,
   formatLocationEvidence,
   toCreateFootprintRequest,
   type CreateFootprintRequestDto,
+  type FootprintPoint,
 } from "@/features/footprint/model";
 import { useCurrentLocation, type CurrentLocation } from "@/hooks/use-current-location";
+import { describePlace } from "@/lib/native/location";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_SKELETON_COUNT = 4;
@@ -63,6 +68,33 @@ function useIdempotencyKey() {
   return { keyFor, clear };
 }
 
+/** 지도에서 직접 고른 위치와 그 근처 주소(기기 지오코더, 찾는 중이거나 못 찾으면 `null`). */
+type ChosenPlace = { point: FootprintPoint; label: string | null };
+
+/** 직접 고른 위치. 잰 위치를 다시 재도 사용자가 고른 곳은 그대로 둔다. */
+function useChosenPlace() {
+  const [chosen, setChosen] = useState<ChosenPlace | null>(null);
+  const latestPoint = useRef<FootprintPoint | null>(null);
+
+  const choose = (point: FootprintPoint) => {
+    latestPoint.current = point;
+    setChosen({ point, label: null });
+
+    void describePlace(point).then((label) => {
+      if (latestPoint.current === point) {
+        setChosen({ point, label });
+      }
+    });
+  };
+
+  const clear = () => {
+    latestPoint.current = null;
+    setChosen(null);
+  };
+
+  return { chosen, choose, clear };
+}
+
 function leaveToMap() {
   if (router.canGoBack()) {
     router.back();
@@ -85,8 +117,15 @@ export function NewFootprintScreen() {
   const [body, setBody] = useState("");
   const [isCategoryLimitShown, setIsCategoryLimitShown] = useState(false);
   const keyboard = useKeyboardFollowingScroll();
+  const chosenPlace = useChosenPlace();
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
-  const request = location.position === null ? null : toCreateFootprintRequest({ position: location.position, categoryCodes, body });
+  const request = location.position === null ? null : toCreateFootprintRequest({
+    position: location.position,
+    chosenPoint: chosenPlace.chosen?.point ?? null,
+    categoryCodes,
+    body,
+  });
   const saveError = createFootprint.error;
   const isSaving = createFootprint.isPending;
 
@@ -151,7 +190,18 @@ export function NewFootprintScreen() {
           contentContainerClassName="pb-6"
           keyboardShouldPersistTaps="handled"
         >
-          <LocationSection location={location} onRemeasure={remeasure} />
+          <LocationSection
+            location={location}
+            chosen={chosenPlace.chosen}
+            onRemeasure={remeasure}
+            onPick={() => {
+              setIsPickerOpen(true);
+            }}
+            onResetToMeasured={() => {
+              chosenPlace.clear();
+              clearSaveError();
+            }}
+          />
           <View className="gap-6 px-5 pt-4">
             <CategoryField
               selectedCodes={categoryCodes}
@@ -206,19 +256,48 @@ export function NewFootprintScreen() {
         </BottomCta>
         <Animated.View style={keyboard.keyboardSpacerStyle} />
       </View>
+      {location.position !== null ? (
+        <FootprintPointPicker
+          visible={isPickerOpen}
+          measured={location.position}
+          initialPoint={chosenPlace.chosen?.point ?? location.position}
+          onConfirm={(point) => {
+            chosenPlace.choose(point);
+            clearSaveError();
+            setIsPickerOpen(false);
+          }}
+          onClose={() => {
+            setIsPickerOpen(false);
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }
 
 // --- 위치
 
+function toPlaceTitle(location: CurrentLocation, chosen: ChosenPlace | null): string {
+  if (chosen !== null) {
+    return chosen.label === null ? "직접 고른 위치" : `${chosen.label} 부근`;
+  }
+
+  return location.placeLabel === null ? "지금 있는 곳" : `${location.placeLabel} 부근`;
+}
+
 type LocationSectionProps = {
   location: CurrentLocation;
+  chosen: ChosenPlace | null;
   onRemeasure: () => Promise<void>;
+  onPick: () => void;
+  onResetToMeasured: () => void;
 };
 
-/** 발자취를 남길 곳(Figma W16 `Location map`·`Location`). 권한·측정 상태에 따라 안내를 바꾼다. */
-function LocationSection({ location, onRemeasure }: LocationSectionProps) {
+/**
+ * 발자취를 남길 곳(Figma W16 `Location map`·`Location`). 권한·측정 상태에 따라 안내를 바꾼다.
+ * 잰 위치가 빗나가면 지도에서 직접 고를 수 있고(거리 제한 없음), 언제든 잰 위치로 되돌릴 수 있다.
+ */
+function LocationSection({ location, chosen, onRemeasure, onPick, onResetToMeasured }: LocationSectionProps) {
   const remeasure = () => {
     void onRemeasure();
   };
@@ -265,16 +344,20 @@ function LocationSection({ location, onRemeasure }: LocationSectionProps) {
     );
   }
 
+  const measured = location.position;
+
   return (
     <View>
-      <FootprintLocationMap position={location.position} />
+      <FootprintLocationMap measured={measured} point={chosen?.point ?? measured} />
       <View className="flex-row items-start gap-2 px-5 pt-4" testID="footprint.location">
         <Icon as={MapPin} size={20} className="text-icon" />
         <View className="flex-1 gap-1">
-          <Text className="text-label text-foreground">
-            {location.placeLabel === null ? "지금 있는 곳" : `${location.placeLabel} 부근`}
+          <Text className="text-label text-foreground">{toPlaceTitle(location, chosen)}</Text>
+          <Text className="text-caption text-foreground-secondary">
+            {chosen === null
+              ? formatLocationEvidence(measured)
+              : `직접 고른 위치 · 잰 위치에서 ${formatDistance(distanceMeters(measured, chosen.point))}`}
           </Text>
-          <Text className="text-caption text-foreground-secondary">{formatLocationEvidence(location.position)}</Text>
           {location.failure !== null ? (
             <Text accessibilityRole="alert" className="text-caption text-destructive">{getLocationFailureMessage(location.failure)}</Text>
           ) : null}
@@ -293,6 +376,18 @@ function LocationSection({ location, onRemeasure }: LocationSectionProps) {
           </Text>
         </Pressable>
       </View>
+      {canShowLocationMap ? (
+        <View className="flex-row gap-2 px-5 pt-3">
+          <Button variant="outline" onPress={onPick} testID="footprint.pick-location">
+            <Text>지도에서 고르기</Text>
+          </Button>
+          {chosen !== null ? (
+            <Button variant="outline" onPress={onResetToMeasured} testID="footprint.reset-location">
+              <Text>잰 위치로 되돌리기</Text>
+            </Button>
+          ) : null}
+        </View>
+      ) : null}
       {location.isApproximate ? (
         <View className="px-5 pt-3">
           <PreciseLocationNotice location={location} testID="footprint.precise-location" />

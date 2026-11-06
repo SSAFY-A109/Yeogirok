@@ -52,8 +52,17 @@ export type FootprintPosition = {
   measuredAt: Date;
 };
 
+/** 발자취를 남길 좌표. */
+export type FootprintPoint = { latitude: number; longitude: number };
+
 export type FootprintDraft = {
+  /** 기기가 잰 위치. 측정 시각을 위치 증거로 보낸다. */
   position: FootprintPosition;
+  /**
+   * 사용자가 지도에서 직접 고른 위치(2026-11-06 사용자 결정, 거리 제한 없음). 없으면 잰 위치를 그대로 쓴다.
+   * 서버는 고른 위치인지 알 수 없어 잰 위치처럼 저장한다. 고른 여부·원래 측정 좌표를 받을 필드는 백엔드에 요청할 일이다(TBD).
+   */
+  chosenPoint: FootprintPoint | null;
   categoryCodes: readonly string[];
   body: string;
 };
@@ -68,6 +77,36 @@ export type SavedFootprint = {
 export function formatLocationEvidence({ accuracyMeters, measuredAt }: FootprintPosition): string {
   const checkedAt = `${formatTimeOfDay(measuredAt)} 확인`;
   return accuracyMeters === null ? checkedAt : `정확도 ${Math.round(accuracyMeters)}m · ${checkedAt}`;
+}
+
+const EARTH_RADIUS_METERS = 6_371_000;
+const METERS_PER_KILOMETER = 1_000;
+/** 이보다 가까우면 거리를 숫자로 적지 않는다(m). */
+const NEAR_DISTANCE_METERS = 10;
+
+function toRadians(degree: number) {
+  return (degree * Math.PI) / 180;
+}
+
+/** 두 좌표 사이 거리(m, 하버사인). 화면 안내용이다. */
+export function distanceMeters(a: FootprintPoint, b: FootprintPoint): number {
+  const dLatitude = toRadians(b.latitude - a.latitude);
+  const dLongitude = toRadians(b.longitude - a.longitude);
+  const h = Math.sin(dLatitude / 2) ** 2 + Math.cos(toRadians(a.latitude)) * Math.cos(toRadians(b.latitude)) * Math.sin(dLongitude / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** 거리를 "약 350m", "약 1.2km"처럼 적는다. 아주 가까우면 "10m 이내"다. */
+export function formatDistance(meters: number): string {
+  if (meters < NEAR_DISTANCE_METERS) {
+    return `${NEAR_DISTANCE_METERS}m 이내`;
+  }
+
+  if (meters < METERS_PER_KILOMETER) {
+    return `약 ${Math.round(meters / NEAR_DISTANCE_METERS) * NEAR_DISTANCE_METERS}m`;
+  }
+
+  return `약 ${(meters / METERS_PER_KILOMETER).toFixed(1)}km`;
 }
 
 /** 서버와 같은 기준으로 방명록 글자 수를 센다(CRLF·CR → LF, 코드 포인트). */
@@ -92,9 +131,11 @@ export function isValidCoordinate(latitude: number, longitude: number): boolean 
  * 입력을 저장 요청으로 바꾼다. 카테고리 수·본문 길이·좌표 범위가 맞지 않으면 `null`이다.
  * 공백만 쓴 본문은 서버처럼 `null`로 보낸다.
  */
-export function toCreateFootprintRequest({ position, categoryCodes, body }: FootprintDraft): CreateFootprintRequestDto | null {
+export function toCreateFootprintRequest({ position, chosenPoint, categoryCodes, body }: FootprintDraft): CreateFootprintRequestDto | null {
+  const point = chosenPoint ?? position;
+
   if (
-    !isValidCoordinate(position.latitude, position.longitude) ||
+    !isValidCoordinate(point.latitude, point.longitude) ||
     !isValidCategoryCount(categoryCodes.length) ||
     new Set(categoryCodes).size !== categoryCodes.length ||
     isFootprintBodyTooLong(body)
@@ -104,8 +145,8 @@ export function toCreateFootprintRequest({ position, categoryCodes, body }: Foot
 
   return {
     location: {
-      latitude: position.latitude,
-      longitude: position.longitude,
+      latitude: point.latitude,
+      longitude: point.longitude,
       capturedAt: formatServerDateTime(position.measuredAt),
     },
     body: body.trim() === "" ? null : body,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { assets, DesignAsset } from "@/components/ui/design-asset";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
-import type { FootprintPosition } from "@/features/footprint/model";
+import type { FootprintPoint, FootprintPosition } from "@/features/footprint/model";
 import {
   footprintPinImage,
   KakaoMapView,
@@ -22,7 +22,15 @@ import { getColors } from "@/lib/theme";
 const MAP_HEIGHT = 170;
 /** 정확도 원과 발바닥이 함께 보이는 확대 단계. */
 const LOCATION_MAP_LEVEL = 3;
-const javascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
+/** 좌표로 지도 이동 요청 id를 만들 때의 자릿수(약 1m). 같은 곳이면 다시 옮기지 않는다. */
+const FOCUS_ID_SCALE = 100_000;
+const FOCUS_ID_LONGITUDE_SPAN = 100_000_000;
+
+export const KAKAO_JAVASCRIPT_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim() ?? "";
+
+/** 이 기기에서 카카오 지도를 띄울 수 있는지. 웹이거나 키가 없으면 지도 대신 안내를 보여 준다. */
+export const canShowLocationMap = Platform.OS !== "web" && KAKAO_JAVASCRIPT_KEY !== "";
+
 const colors = getColors("light");
 
 const FOOTPRINT_STYLE: MapFootprintStyle = {
@@ -34,49 +42,66 @@ const FOOTPRINT_STYLE: MapFootprintStyle = {
   selectionFill: colors.card,
 };
 
-const CURRENT_LOCATION_STYLE: MapCurrentLocationStyle = {
+export const CURRENT_LOCATION_STYLE: MapCurrentLocationStyle = {
   dot: colors["map-pin"],
   dotBorder: colors.card,
   halo: colors["map-route"],
   accuracy: colors["map-route"],
 };
 
+export function isSamePoint(a: FootprintPoint, b: FootprintPoint): boolean {
+  return a.latitude === b.latitude && a.longitude === b.longitude;
+}
+
+/** 좌표가 바뀔 때만 달라지는 지도 이동 요청 id. */
+export function toFocusId({ latitude, longitude }: FootprintPoint): number {
+  return Math.round(latitude * FOCUS_ID_SCALE) * FOCUS_ID_LONGITUDE_SPAN + Math.round(longitude * FOCUS_ID_SCALE);
+}
+
 type MapPhase = "loading" | "ready" | "error";
 
+type FootprintLocationMapProps = {
+  /** 기기가 잰 위치. 정확도 원을 그린다. */
+  measured: FootprintPosition;
+  /** 발자취를 남길 곳. 직접 고르지 않았으면 잰 위치와 같다. */
+  point: FootprintPoint;
+};
+
 /**
- * 발자취를 남길 곳(Figma W16 `Location map`). 잰 위치에 선택된 발바닥과 정확도 원을 그린다.
- * 다시 재면 새 위치로 옮긴다. 지도를 못 띄워도 저장은 할 수 있으므로 이 영역만 대체 안내로 바꾼다.
+ * 발자취를 남길 곳(Figma W16 `Location map`). 남길 곳에 선택된 발바닥을, 잰 위치에 정확도 원을 그린다.
+ * 직접 고른 위치면 잰 위치에 파란 점을 함께 그려 얼마나 옮겼는지 보이게 한다. 다시 재거나 고르면 새 위치로 옮긴다.
+ * 지도를 못 띄워도 저장은 할 수 있으므로 이 영역만 대체 안내로 바꾼다.
  */
-export function FootprintLocationMap({ position }: { position: FootprintPosition }) {
+export function FootprintLocationMap({ measured, point }: FootprintLocationMapProps) {
   const [phase, setPhase] = useState<MapPhase>("loading");
   const [attempt, setAttempt] = useState(0);
-  const canLoad = Platform.OS !== "web" && Boolean(javascriptKey);
+  const isChosen = !isSamePoint(measured, point);
 
   const [initialCamera] = useState<MapCamera>(() => {
-    return { lat: position.latitude, lng: position.longitude, level: LOCATION_MAP_LEVEL };
+    return { lat: point.latitude, lng: point.longitude, level: LOCATION_MAP_LEVEL };
   });
 
   const currentLocation = useMemo<MapCurrentLocation>(() => {
-    return { lat: position.latitude, lng: position.longitude, accuracyMeters: position.accuracyMeters, showDot: false };
-  }, [position]);
+    return { lat: measured.latitude, lng: measured.longitude, accuracyMeters: measured.accuracyMeters, showDot: isChosen };
+  }, [measured, isChosen]);
 
   const footprints = useMemo<MapFootprint[]>(() => {
     return [{
       id: "here",
-      lat: position.latitude,
-      lng: position.longitude,
+      lat: point.latitude,
+      lng: point.longitude,
       label: "",
       accessibilityLabel: "발자취를 남길 곳",
       scale: 1,
       selected: true,
     }];
-  }, [position]);
+  }, [point]);
 
   const focusRequest = useMemo<MapFocusRequest>(() => {
-    return { id: position.measuredAt.getTime(), lat: position.latitude, lng: position.longitude, level: LOCATION_MAP_LEVEL };
-  }, [position]);
+    return { id: toFocusId(point), lat: point.latitude, lng: point.longitude, level: LOCATION_MAP_LEVEL };
+  }, [point]);
 
-  if (!canLoad || !javascriptKey) {
+  if (!canShowLocationMap) {
     return (
       <LocationMapPlaceholder testID="footprint.map-unavailable">
         <PawImage />
@@ -111,7 +136,7 @@ export function FootprintLocationMap({ position }: { position: FootprintPosition
       <KakaoMapView
         key={attempt}
         accessibilityLabel="발자취를 남길 위치 지도"
-        javascriptKey={javascriptKey}
+        javascriptKey={KAKAO_JAVASCRIPT_KEY}
         initialCamera={initialCamera}
         footprints={footprints}
         footprintStyle={FOOTPRINT_STYLE}
@@ -144,6 +169,6 @@ export function LocationMapPlaceholder({ children, testID }: { children: ReactNo
   );
 }
 
-function PawImage() {
+export function PawImage() {
   return <DesignAsset source={assets.footprint} contentFit="contain" className="h-touch w-touch" accessible={false} />;
 }
