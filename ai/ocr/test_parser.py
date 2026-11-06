@@ -16,7 +16,8 @@ def test_labeled_pos_receipt():
         "합계 58,000",
     ))
     assert r.placeName == "바다향기 횟집"
-    assert r.address == "강원 강릉시 창해로 307"
+    assert r.address == "강원 강릉시 창해로"          # v3: 도로명까지 반환
+    assert r.addressComplete is True                # 원문에는 건물번호 307 까지 있음
     assert r.visitedAt == "2026-10-25T19:42:00+09:00"
     assert r.confidence == "high"
 
