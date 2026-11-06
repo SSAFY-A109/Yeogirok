@@ -1,15 +1,38 @@
 import type { LucideIcon } from "lucide-react-native";
 import type { ComponentProps } from "react";
-import { Pressable } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { getColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Icon } from "./icon";
 import { Text } from "./text";
 
-/** 칩 안 아이콘 크기. 글자(label 14)와 함께 보이는 크기다. */
-const CHIP_ICON_SIZE = 18;
+/** 칩 안 아이콘 크기(`icon-sm` 토큰과 같은 20). 글자(label 14)와 함께 보이는 크기다. */
+const CHIP_ICON_SIZE = 20;
 const colors = getColors("light");
+
+type ChipIconProps = { icon: LucideIcon; selected: boolean; disabled: boolean };
+
+/**
+ * 칩 아이콘. 고르면 면을 채우는데, 선과 면을 한 번에 그리면 나중에 그려지는 면이 먼저 그린 선을 덮는다
+ * (예: 쇼핑백은 손잡이 다음에 가방 몸통을 그려 손잡이가 가려진다). 그래서 채운 면만 아래에 깔고, 그 위에 선 아이콘을 다시 그린다.
+ */
+function ChipIcon({ icon, selected, disabled }: ChipIconProps) {
+  const lineClassName = cn("text-icon", selected && "text-primary-pressed", disabled && "text-muted-foreground");
+
+  if (!selected || disabled) {
+    return <Icon as={icon} size={CHIP_ICON_SIZE} className={lineClassName} />;
+  }
+
+  return (
+    <View className="h-icon-sm w-icon-sm">
+      <View className="absolute inset-0">
+        <Icon as={icon} size={CHIP_ICON_SIZE} fill={colors.accent} strokeWidth={0} />
+      </View>
+      <Icon as={icon} size={CHIP_ICON_SIZE} className={lineClassName} />
+    </View>
+  );
+}
 
 type FilterChipProps = Omit<ComponentProps<typeof Pressable>, "children"> & {
   children: string;
@@ -40,14 +63,7 @@ export function FilterChip({ children, className, textClassName, icon, size = "s
       }}
       {...props}
     >
-      {icon ? (
-        <Icon
-          as={icon}
-          size={CHIP_ICON_SIZE}
-          fill={selected && !disabled ? colors.accent : "none"}
-          className={cn("text-icon", selected && "text-primary-pressed", disabled && "text-muted-foreground")}
-        />
-      ) : null}
+      {icon ? <ChipIcon icon={icon} selected={selected} disabled={Boolean(disabled)} /> : null}
       <Text className={cn("text-label text-foreground-secondary", selected && "text-primary-pressed", disabled && "text-muted-foreground", textClassName)}>{children}</Text>
     </Pressable>
   );
