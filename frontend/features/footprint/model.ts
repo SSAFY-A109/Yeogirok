@@ -55,17 +55,29 @@ export type FootprintPosition = {
 /** 발자취를 남길 좌표. */
 export type FootprintPoint = { latitude: number; longitude: number };
 
+/** 사용자가 지도에서 직접 고친 위치와 그 위치를 확정한 시각. */
+export type ChosenFootprintPoint = { point: FootprintPoint; chosenAt: Date };
+
 export type FootprintDraft = {
-  /** 기기가 잰 위치. 측정 시각을 위치 증거로 보낸다. */
+  /** 기기가 잰 위치. */
   position: FootprintPosition;
   /**
-   * 사용자가 지도에서 직접 고른 위치(2026-11-06 사용자 결정, 거리 제한 없음). 없으면 잰 위치를 그대로 쓴다.
-   * 서버는 고른 위치인지 알 수 없어 잰 위치처럼 저장한다. 고른 여부·원래 측정 좌표를 받을 필드는 백엔드에 요청할 일이다(TBD).
+   * 사용자가 지도에서 직접 고친 위치(2026-11-06 사용자 결정, 거리 제한 없음). 없으면 잰 위치를 그대로 쓴다.
+   * 백엔드 답변(2026-11-06): 고친 위치를 사용자의 실제 위치로 보고 그대로 저장·주소·500m 작성 제한·방문 분포에 반영한다.
+   * 고친 여부·원래 측정 좌표 필드는 거리 제한이 생기면 그때 정한다.
    */
-  chosenPoint: FootprintPoint | null;
+  chosen: ChosenFootprintPoint | null;
   categoryCodes: readonly string[];
   body: string;
 };
+
+/**
+ * 위치 증거로 보낼 시각(`capturedAt`, 서버가 방문 시각으로도 저장한다). 백엔드 답변대로 처음 잰 시각이나 핀을 확정한 시각을
+ * 보낼 수 있어, 둘 중 늦은 쪽을 쓴다. 핀을 고치고 글을 쓰다 유효 시간(C009, 개발 서버 2분)을 넘기면 "위치 다시 확인"으로 새로 잰다.
+ */
+function evidenceTime({ position, chosen }: Pick<FootprintDraft, "position" | "chosen">): Date {
+  return chosen !== null && chosen.chosenAt > position.measuredAt ? chosen.chosenAt : position.measuredAt;
+}
 
 export type SavedFootprint = {
   id: number;
@@ -101,8 +113,8 @@ export function isValidCoordinate(latitude: number, longitude: number): boolean 
  * 입력을 저장 요청으로 바꾼다. 카테고리 수·본문 길이·좌표 범위가 맞지 않으면 `null`이다.
  * 공백만 쓴 본문은 서버처럼 `null`로 보낸다.
  */
-export function toCreateFootprintRequest({ position, chosenPoint, categoryCodes, body }: FootprintDraft): CreateFootprintRequestDto | null {
-  const point = chosenPoint ?? position;
+export function toCreateFootprintRequest({ position, chosen, categoryCodes, body }: FootprintDraft): CreateFootprintRequestDto | null {
+  const point = chosen?.point ?? position;
 
   if (
     !isValidCoordinate(point.latitude, point.longitude) ||
@@ -117,7 +129,7 @@ export function toCreateFootprintRequest({ position, chosenPoint, categoryCodes,
     location: {
       latitude: point.latitude,
       longitude: point.longitude,
-      capturedAt: formatServerDateTime(position.measuredAt),
+      capturedAt: formatServerDateTime(evidenceTime({ position, chosen })),
     },
     body: body.trim() === "" ? null : body,
     categoryCodes: [...categoryCodes],

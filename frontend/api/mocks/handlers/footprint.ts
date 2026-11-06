@@ -16,7 +16,7 @@ import { fail, MOCK_DELAY_MS, ok } from "./respond";
 // API-041 목. backend/dev(90aaede) FootprintController·FootprintCreateService·FootprintCreateRequest의 검사 순서를 따른다.
 // 형식 검사 → 멱등키(같은 내용이면 저장한 결과, 다른 내용이면 C005) → 값 검사 → 같은 날 가까운 발자취(F003) → 저장.
 
-/** 목 전용 위치 증거 유효 시간. 서버 값(`yeogirok.location-evidence.max-age`)은 설정이라 클라이언트는 모른다(DEC-01). */
+/** 목 전용 위치 증거 유효 시간. 서버 값(`yeogirok.location-evidence.max-age`)은 설정이다(DEC-01). 개발 서버는 2분이고 백엔드가 늘릴 예정이라(2026-11-06 답변) 목은 넉넉히 둔다. */
 const MOCK_EVIDENCE_MAX_AGE_MS = 10 * 60_000;
 /** 기기 시계가 이만큼 앞서도 받아 준다(서버 `max-future-skew`의 목 값). */
 const MOCK_EVIDENCE_MAX_FUTURE_MS = 60_000;

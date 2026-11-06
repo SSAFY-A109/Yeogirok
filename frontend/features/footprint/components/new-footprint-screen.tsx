@@ -32,6 +32,7 @@ import {
   FOOTPRINT_CATEGORY_MIN_COUNT,
   formatLocationEvidence,
   toCreateFootprintRequest,
+  type ChosenFootprintPoint,
   type CreateFootprintRequestDto,
   type FootprintPoint,
 } from "@/features/footprint/model";
@@ -70,21 +71,22 @@ function useIdempotencyKey() {
   return { keyFor, clear };
 }
 
-/** 지도에서 직접 고른 위치와 그 근처 주소(기기 지오코더, 찾는 중이거나 못 찾으면 `null`). */
-type ChosenPlace = { point: FootprintPoint; label: string | null };
+/** 지도에서 직접 고친 위치, 확정한 시각, 그 근처 주소(기기 지오코더, 찾는 중이거나 못 찾으면 `null`). */
+type ChosenPlace = ChosenFootprintPoint & { label: string | null };
 
-/** 직접 고른 위치. 잰 위치를 다시 재도 사용자가 고른 곳은 그대로 둔다. */
+/** 직접 고친 위치. 잰 위치를 다시 재도 사용자가 고친 곳은 그대로 둔다. */
 function useChosenPlace() {
   const [chosen, setChosen] = useState<ChosenPlace | null>(null);
   const latestPoint = useRef<FootprintPoint | null>(null);
 
   const choose = (point: FootprintPoint) => {
+    const chosenAt = new Date();
     latestPoint.current = point;
-    setChosen({ point, label: null });
+    setChosen({ point, chosenAt, label: null });
 
     void describePlace(point).then((label) => {
       if (latestPoint.current === point) {
-        setChosen({ point, label });
+        setChosen({ point, chosenAt, label });
       }
     });
   };
@@ -124,7 +126,7 @@ export function NewFootprintScreen() {
 
   const request = location.position === null ? null : toCreateFootprintRequest({
     position: location.position,
-    chosenPoint: chosenPlace.chosen?.point ?? null,
+    chosen: chosenPlace.chosen,
     categoryCodes,
     body,
   });
