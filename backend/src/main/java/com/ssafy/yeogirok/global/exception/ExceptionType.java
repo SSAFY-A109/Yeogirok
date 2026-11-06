@@ -90,7 +90,11 @@ public enum ExceptionType {
 
 	/* ── 계획 일정 SC ───────────────────────────────────────── */
 
-	// SC001~004 는 일정 초안(API-037·038·039) 전용이라 초안 API 를 만들 때 추가한다.
+	SCHEDULE_DRAFT_NOT_FOUND(NOT_FOUND, "SC001", "요청한 일정 초안이 해당 여행방에 없습니다."),
+	SCHEDULE_UNSATISFIABLE(UNPROCESSABLE_CONTENT, "SC002", "주어진 일정 조건을 만족할 수 없습니다."),
+	/** 초안을 만들거나 다시 계산하는 중이다(API-084 처리 중 포함). */
+	SCHEDULE_DRAFT_IN_PROGRESS(UNPROCESSABLE_CONTENT, "SC003", "일정 초안을 아직 계산하고 있습니다."),
+	SCHEDULE_DRAFT_FAILED(UNPROCESSABLE_CONTENT, "SC004", "생성에 실패한 일정 초안입니다."),
 	SCHEDULE_ORDER_DUPLICATED(BAD_REQUEST, "SC005", "같은 날짜에 방문 순서가 중복됩니다."),
 	SCHEDULE_STAY_NEGATIVE(BAD_REQUEST, "SC006", "체류 시간은 음수일 수 없습니다."),
 

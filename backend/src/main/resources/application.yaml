@@ -27,6 +27,9 @@ yeogirok:
     retention: 24h
     run-timeout: 2m
     threads: 2
+  schedule:
+    # 일정 초안(API-037~039·084) 보관 기간. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
+    draft-retention: 24h
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
