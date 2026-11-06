@@ -82,9 +82,9 @@ class UploadCompleteServiceTest {
 	/** 앱이 tmp key 에 올린 실물. 복사본도 같은 크기·ETag 다. */
 	void uploaded(long sizeBytes, byte[] header) {
 		given(storage.head(anyString(), eq("tmp/" + UPLOAD_ID)))
-			.willReturn(Optional.of(new StoredObject(sizeBytes, ETAG)));
+			.willReturn(Optional.of(new StoredObject(sizeBytes, ETAG, "image/png")));
 		given(storage.head(anyString(), eq(session().purpose().confirmedKey(UPLOAD_ID))))
-			.willReturn(Optional.of(new StoredObject(sizeBytes, ETAG)));
+			.willReturn(Optional.of(new StoredObject(sizeBytes, ETAG, "image/png")));
 		given(storage.readHeader(anyString(), eq("tmp/" + UPLOAD_ID), anyInt(), eq(ETAG))).willReturn(header);
 	}
 
@@ -249,7 +249,7 @@ class UploadCompleteServiceTest {
 		uploading(FilePurpose.TIP_PHOTO, 1024);
 		uploaded(1024, PNG);
 		given(storage.head(anyString(), eq("tip-photo/" + UPLOAD_ID)))
-			.willReturn(Optional.of(new StoredObject(1024, "\"other\"")));
+			.willReturn(Optional.of(new StoredObject(1024, "\"other\"", "image/png")));
 
 		assertFailed(ExceptionType.FILE_VERIFICATION_FAILED);
 	}

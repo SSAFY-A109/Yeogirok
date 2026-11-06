@@ -1,7 +1,5 @@
 package com.ssafy.yeogirok.domain.file.controller;
 
-import java.util.regex.Pattern;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,10 +16,9 @@ import com.ssafy.yeogirok.domain.file.dto.UploadCreateRequest;
 import com.ssafy.yeogirok.domain.file.dto.UploadCreateResponse;
 import com.ssafy.yeogirok.domain.file.service.UploadCompleteService;
 import com.ssafy.yeogirok.domain.file.service.UploadService;
-import com.ssafy.yeogirok.global.exception.BusinessException;
-import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
+import com.ssafy.yeogirok.global.request.Uuids;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
 import com.ssafy.yeogirok.global.response.ApiResponseUtil;
 import com.ssafy.yeogirok.global.security.AuthenticatedUser;
@@ -37,9 +34,6 @@ public class UploadController {
 	/** 멱등키 scope. 발급은 새로 만드는 요청이라 대상이 "-", 완료는 uploadId 다. */
 	static final String CREATE_SCOPE = "upload-create";
 	static final String COMPLETE_SCOPE = "upload-complete";
-
-	/** uploadId 는 서버가 만든 소문자 UUID 다. */
-	private static final Pattern UPLOAD_ID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
 	private final UploadService uploadService;
 	private final UploadCompleteService uploadCompleteService;
@@ -69,9 +63,7 @@ public class UploadController {
 		@AuthenticationPrincipal AuthenticatedUser user,
 		@RequestHeader("Idempotency-Key") String idempotencyKey,
 		@PathVariable String uploadId) {
-		if (!UPLOAD_ID.matcher(uploadId).matches()) {
-			throw new BusinessException(ExceptionType.INVALID_VALUE_FORMAT, "uploadId: UUID 여야 합니다.");
-		}
+		Uuids.require(uploadId, "uploadId");
 		UploadCompleteResponse response = idempotencyService.execute(
 			new IdempotencyKey(user.userId(), COMPLETE_SCOPE, uploadId, idempotencyKey),
 			uploadId,

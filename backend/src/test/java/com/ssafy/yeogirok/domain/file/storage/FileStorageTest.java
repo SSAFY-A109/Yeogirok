@@ -52,6 +52,14 @@ class FileStorageTest {
 	}
 
 	@Test
+	void GET_URL_은_지정한_key_를_정한_시간_동안만_읽도록_서명된다() {
+		String url = storage().presignGet("receipts", "receipt/abc", Duration.ofMinutes(15));
+
+		assertThat(url).startsWith("https://receipts.s3.ap-northeast-2.amazonaws.com/receipt/abc?")
+			.contains("X-Amz-Expires=900");
+	}
+
+	@Test
 	void 자격_증명을_찾지_못하면_M012() {
 		FileStorage storage = storageWith(S3Presigner.builder().region(Region.AP_NORTHEAST_2)
 			.credentialsProvider(() -> {
@@ -64,12 +72,12 @@ class FileStorageTest {
 
 	@Test
 	@SuppressWarnings("unchecked")
-	void HEAD_는_크기와_ETag_를_주고_없으면_비어_있다() {
+	void HEAD_는_크기_ETag_Content_Type_을_주고_없으면_비어_있다() {
 		given(s3Client.headObject(any(Consumer.class)))
-			.willReturn(HeadObjectResponse.builder().contentLength(12L).eTag("\"e1\"").build())
+			.willReturn(HeadObjectResponse.builder().contentLength(12L).eTag("\"e1\"").contentType("image/png").build())
 			.willThrow(s3Error(404));
 
-		assertThat(storage().head("photos", "tmp/abc")).contains(new StoredObject(12, "\"e1\""));
+		assertThat(storage().head("photos", "tmp/abc")).contains(new StoredObject(12, "\"e1\"", "image/png"));
 		assertThat(storage().head("photos", "tmp/abc")).isEmpty();
 	}
 
