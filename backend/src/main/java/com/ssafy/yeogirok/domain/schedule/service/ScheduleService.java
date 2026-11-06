@@ -23,7 +23,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
-import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.domain.room.service.RoomVersions;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions;
@@ -32,10 +31,8 @@ import com.ssafy.yeogirok.domain.schedule.dto.ScheduleUpdateCommand;
 import com.ssafy.yeogirok.domain.schedule.dto.ScheduleUpdateCommand.ItemEdit;
 import com.ssafy.yeogirok.domain.schedule.dto.ScheduleUpdateResponse;
 import com.ssafy.yeogirok.domain.schedule.entity.ScheduleItem;
-import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleCalculator.PlannedItem;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleWriter.Placement;
-import com.ssafy.yeogirok.domain.schedule.travel.GeoPoint;
 import com.ssafy.yeogirok.domain.schedule.travel.TravelTimeProvider;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -53,8 +50,7 @@ import jakarta.persistence.EntityManager;
 @Service
 public class ScheduleService {
 
-	private final ScheduleItemRepository scheduleItemRepository;
-	private final RoomPlaceRepository roomPlaceRepository;
+	private final ScheduleReader scheduleReader;
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
 	private final ScheduleWriter scheduleWriter;
@@ -64,13 +60,11 @@ public class ScheduleService {
 	private final EntityManager entityManager;
 	private final Clock clock;
 
-	public ScheduleService(ScheduleItemRepository scheduleItemRepository, RoomPlaceRepository roomPlaceRepository,
-		RoomFinder roomFinder, RoomVersions roomVersions, ScheduleWriter scheduleWriter,
-		TravelTimeProvider travelTimeProvider, PlatformTransactionManager transactionManager,
-		EntityManager entityManager, Clock clock) {
+	public ScheduleService(ScheduleReader scheduleReader, RoomFinder roomFinder, RoomVersions roomVersions,
+		ScheduleWriter scheduleWriter, TravelTimeProvider travelTimeProvider,
+		PlatformTransactionManager transactionManager, EntityManager entityManager, Clock clock) {
 		this.entityManager = entityManager;
-		this.scheduleItemRepository = scheduleItemRepository;
-		this.roomPlaceRepository = roomPlaceRepository;
+		this.scheduleReader = scheduleReader;
 		this.roomFinder = roomFinder;
 		this.roomVersions = roomVersions;
 		this.scheduleWriter = scheduleWriter;
@@ -85,7 +79,7 @@ public class ScheduleService {
 	@Transactional(readOnly = true)
 	public ScheduleResponse getSchedule(Long userId, Long roomId) {
 		TravelRoom room = roomFinder.getForMember(roomId, userId).room();
-		return new ScheduleResponse(ScheduleViews.of(room, items(roomId)), room.getVersion());
+		return new ScheduleResponse(ScheduleViews.of(room, scheduleReader.items(roomId)), room.getVersion());
 	}
 
 	/**
@@ -103,10 +97,9 @@ public class ScheduleService {
 	private EditPlan plan(Long userId, Long roomId, ScheduleUpdateCommand command) {
 		TravelRoom room = roomFinder.getForMember(roomId, userId).room();
 		checkVersion(room, command.version());
-		Map<Long, ScheduleItem> existing = items(roomId).stream()
+		Map<Long, ScheduleItem> existing = scheduleReader.items(roomId).stream()
 			.collect(Collectors.toMap(ScheduleItem::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
-		Map<Long, RoomPlace> places = roomPlaceRepository.findByRoomIdOrderByIdAsc(roomId).stream()
-			.collect(Collectors.toMap(RoomPlace::getId, Function.identity()));
+		Map<Long, RoomPlace> places = scheduleReader.places(roomId);
 
 		Set<Long> removeIds = new HashSet<>();
 		for (Long id : command.removeItemIds()) {
@@ -175,7 +168,7 @@ public class ScheduleService {
 			RoomPlace place = places.get(entry.roomPlaceId());
 			return new PlannedItem(entry.visitDate(), entry.order(), entry.stayMinutes(),
 				entry.edit() == null ? null : entry.edit().arrivalAt(),
-				new GeoPoint(place.getPlace().getLatitude(), place.getPlace().getLongitude()));
+				ScheduleReader.location(place));
 		}).toList();
 		return new EditPlan(room.getTransportMode(), room.getStartDate(), room.getEndDate(),
 			ScheduleOptions.fromMap(room.getScheduleOptions()),
@@ -192,7 +185,7 @@ public class ScheduleService {
 		}
 
 		// version 이 같으면 계획을 만든 뒤로 일정이 바뀌지 않았다. 같은 항목 행을 다시 읽어 고친다.
-		Map<Long, ScheduleItem> current = items(roomId).stream()
+		Map<Long, ScheduleItem> current = scheduleReader.items(roomId).stream()
 			.collect(Collectors.toMap(ScheduleItem::getId, Function.identity()));
 		List<ScheduleItem> toDelete = command.removeItemIds().stream().distinct().map(current::get).toList();
 
@@ -223,7 +216,7 @@ public class ScheduleService {
 	}
 
 	private ScheduleUpdateResponse response(TravelRoom room) {
-		return new ScheduleUpdateResponse(ScheduleViews.of(room, items(room.getId())), room.getVersion(),
+		return new ScheduleUpdateResponse(ScheduleViews.of(room, scheduleReader.items(room.getId())), room.getVersion(),
 			room.isScheduleNeedsRecalculation());
 	}
 
@@ -257,10 +250,6 @@ public class ScheduleService {
 		if (place.isRemoved()) {
 			throw notAllowed("items[].roomPlaceId: 뺀 후보는 복원하거나 다시 담은 뒤 배치할 수 있습니다.");
 		}
-	}
-
-	private List<ScheduleItem> items(Long roomId) {
-		return scheduleItemRepository.findByRoomIdOrderByVisitDateAscPositionAsc(roomId);
 	}
 
 	private static void checkVersion(TravelRoom room, int version) {

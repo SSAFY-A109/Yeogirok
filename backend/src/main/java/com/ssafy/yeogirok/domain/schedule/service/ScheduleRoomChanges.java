@@ -14,19 +14,17 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.ssafy.yeogirok.domain.room.dto.RoomUpdateResponse;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
-import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions;
 import com.ssafy.yeogirok.domain.schedule.dto.ScheduleView;
 import com.ssafy.yeogirok.domain.schedule.entity.ScheduleItem;
-import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleCalculator.PlannedItem;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleCalculator.Timing;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleWriter.Placement;
-import com.ssafy.yeogirok.domain.schedule.travel.GeoPoint;
 import com.ssafy.yeogirok.domain.schedule.travel.TravelTimeProvider;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -44,19 +42,16 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 @Component
 public class ScheduleRoomChanges {
 
-	private final ScheduleItemRepository scheduleItemRepository;
-	private final RoomPlaceRepository roomPlaceRepository;
+	private final ScheduleReader scheduleReader;
 	private final TravelRoomRepository travelRoomRepository;
 	private final ScheduleWriter scheduleWriter;
 	private final TravelTimeProvider travelTimeProvider;
 	private final TransactionTemplate readOnlyTransactionTemplate;
 
-	public ScheduleRoomChanges(ScheduleItemRepository scheduleItemRepository,
-		RoomPlaceRepository roomPlaceRepository, TravelRoomRepository travelRoomRepository,
+	public ScheduleRoomChanges(ScheduleReader scheduleReader, TravelRoomRepository travelRoomRepository,
 		ScheduleWriter scheduleWriter, TravelTimeProvider travelTimeProvider,
 		PlatformTransactionManager transactionManager) {
-		this.scheduleItemRepository = scheduleItemRepository;
-		this.roomPlaceRepository = roomPlaceRepository;
+		this.scheduleReader = scheduleReader;
 		this.travelRoomRepository = travelRoomRepository;
 		this.scheduleWriter = scheduleWriter;
 		this.travelTimeProvider = travelTimeProvider;
@@ -66,18 +61,17 @@ public class ScheduleRoomChanges {
 
 	/** 새 날짜 범위 밖 항목. 범위가 null(날짜 미정)이면 모든 항목. 항목 이름은 후보 장소 이름이다. */
 	@Transactional(readOnly = true)
-	public List<AffectedItem> affectedItems(Long roomId, LocalDate start, LocalDate end) {
-		List<ScheduleItem> outside = items(roomId).stream()
+	public List<RoomUpdateResponse.AffectedItem> affectedItems(Long roomId, LocalDate start, LocalDate end) {
+		List<ScheduleItem> outside = scheduleReader.items(roomId).stream()
 			.filter(item -> !inRange(item.getVisitDate(), start, end))
 			.toList();
 		if (outside.isEmpty()) {
 			return List.of();
 		}
-		Map<Long, String> names = places(roomId).values().stream()
-			.collect(Collectors.toMap(RoomPlace::getId, place -> place.getPlace().getName()));
+		Map<Long, RoomPlace> places = scheduleReader.places(roomId);
 		return outside.stream()
-			.map(item -> new AffectedItem(item.getId(), item.getRoomPlaceId(), names.get(item.getRoomPlaceId()),
-				item.getVisitDate()))
+			.map(item -> new RoomUpdateResponse.AffectedItem(item.getId(), item.getRoomPlaceId(),
+				places.get(item.getRoomPlaceId()).getPlace().getName(), item.getVisitDate()))
 			.toList();
 	}
 
@@ -89,14 +83,14 @@ public class ScheduleRoomChanges {
 		Snapshot snapshot = readOnlyTransactionTemplate.execute(status -> {
 			TravelRoom room = travelRoomRepository.findById(roomId)
 				.orElseThrow(() -> new BusinessException(ExceptionType.ROOM_NOT_FOUND));
-			Map<Long, RoomPlace> places = places(roomId);
-			List<ScheduleItem> kept = items(roomId).stream()
+			Map<Long, RoomPlace> places = scheduleReader.places(roomId);
+			List<ScheduleItem> kept = scheduleReader.items(roomId).stream()
 				.filter(item -> inRange(item.getVisitDate(), start, end))
 				.toList();
 			List<PlannedItem> planned = kept.stream().map(item -> {
 				RoomPlace place = places.get(item.getRoomPlaceId());
 				return new PlannedItem(item.getVisitDate(), item.getPosition(), item.getStayMinutes(), null,
-					new GeoPoint(place.getPlace().getLatitude(), place.getPlace().getLongitude()));
+					ScheduleReader.location(place));
 			}).toList();
 			return new Snapshot(room.getVersion(), kept.stream().map(ScheduleItem::getId).toList(), planned,
 				ScheduleOptions.fromMap(room.getScheduleOptions()).within(start, end),
@@ -122,7 +116,7 @@ public class ScheduleRoomChanges {
 		if (recalculation != null && recalculation.version() != room.getVersion()) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
 		}
-		List<ScheduleItem> items = items(room.getId());
+		List<ScheduleItem> items = scheduleReader.items(room.getId());
 		List<ScheduleItem> outside = items.stream().filter(item -> !inRange(item.getVisitDate(), start, end)).toList();
 		ScheduleOptions options = ScheduleOptions.fromMap(room.getScheduleOptions()).within(start, end);
 		if (recalculation == null) {
@@ -148,24 +142,11 @@ public class ScheduleRoomChanges {
 	/** 저장한 일정. 없으면 null. */
 	@Transactional(readOnly = true)
 	public ScheduleView view(TravelRoom room) {
-		return ScheduleViews.of(room, items(room.getId()));
-	}
-
-	private List<ScheduleItem> items(Long roomId) {
-		return scheduleItemRepository.findByRoomIdOrderByVisitDateAscPositionAsc(roomId);
-	}
-
-	private Map<Long, RoomPlace> places(Long roomId) {
-		return roomPlaceRepository.findByRoomIdOrderByIdAsc(roomId).stream()
-			.collect(Collectors.toMap(RoomPlace::getId, Function.identity()));
+		return ScheduleViews.of(room, scheduleReader.items(room.getId()));
 	}
 
 	private static boolean inRange(LocalDate date, LocalDate start, LocalDate end) {
 		return start != null && !date.isBefore(start) && !date.isAfter(end);
-	}
-
-	/** API-023 affectedItems. */
-	public record AffectedItem(Long scheduleItemId, Long roomPlaceId, String name, LocalDate visitDate) {
 	}
 
 	/**

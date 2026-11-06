@@ -175,10 +175,7 @@ public class RoomService {
 		LocalDate startDate = command.datesGiven() ? command.startDate() : room.getStartDate();
 		LocalDate endDate = command.datesGiven() ? command.endDate() : room.getEndDate();
 		List<RoomUpdateResponse.AffectedItem> affectedItems = command.datesGiven()
-			? scheduleRoomChanges.affectedItems(roomId, startDate, endDate).stream()
-				.map(item -> new RoomUpdateResponse.AffectedItem(item.scheduleItemId(), item.roomPlaceId(),
-					item.name(), item.visitDate()))
-				.toList()
+			? scheduleRoomChanges.affectedItems(roomId, startDate, endDate)
 			: List.of();
 		if (startDate == null && !affectedItems.isEmpty()) {
 			// 일정이 있는 방의 날짜를 지우는 처리는 정책이 정해지지 않았다(명세).
