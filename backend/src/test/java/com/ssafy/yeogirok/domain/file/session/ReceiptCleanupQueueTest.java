@@ -14,7 +14,7 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.TestRedis;
 
-/** 영수증 정리 대상 등록(score = 삭제 기한 Unix 초)과 Redis 장애 시 M012. 실제 Redis. */
+/** 영수증 정리 대상 등록(score = 삭제 기한 Unix 초)·기한 지난 대상 조회·제거, Redis 장애 시 M012. 실제 Redis. */
 class ReceiptCleanupQueueTest {
 
 	static final Instant DELETE_AFTER = Instant.parse("2026-11-07T00:00:00Z");
@@ -30,6 +30,19 @@ class ReceiptCleanupQueueTest {
 
 		assertThat(TestRedis.template().opsForZSet().score(ReceiptCleanupQueue.KEY, "receipts/tmp/abc"))
 			.isEqualTo((double)DELETE_AFTER.getEpochSecond());
+	}
+
+	@Test
+	void 기한이_지난_대상만_주고_뺀_대상은_다시_주지_않는다() {
+		ReceiptCleanupQueue queue = new ReceiptCleanupQueue(TestRedis.template());
+		queue.register("receipts", "tmp/past", DELETE_AFTER.minusSeconds(1));
+		queue.register("receipts", "tmp/now", DELETE_AFTER);
+		queue.register("receipts", "tmp/future", DELETE_AFTER.plusSeconds(1));
+
+		assertThat(queue.due(DELETE_AFTER)).containsExactlyInAnyOrder("receipts/tmp/past", "receipts/tmp/now");
+
+		queue.remove("receipts/tmp/past");
+		assertThat(queue.due(DELETE_AFTER)).containsExactly("receipts/tmp/now");
 	}
 
 	@Test

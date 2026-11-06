@@ -131,7 +131,7 @@ class UploadCompleteServiceTest {
 		verify(cleanupQueue).register("receipts", "receipt/" + UPLOAD_ID, deleteAfter);
 		verify(materialStore).save(response.materialId(), ReceiptMaterial.uploaded(RECORD_ID, USER_ID,
 			"receipt/" + UPLOAD_ID, NOW, deleteAfter));
-		assertThat(response.materialId()).isNotEqualTo(UPLOAD_ID).hasSize(36);
+		assertThat(response.materialId()).isEqualTo(ReceiptMaterial.idOf(UPLOAD_ID)).isNotEqualTo(UPLOAD_ID);
 		assertThat(response.imageId()).isNull();
 	}
 

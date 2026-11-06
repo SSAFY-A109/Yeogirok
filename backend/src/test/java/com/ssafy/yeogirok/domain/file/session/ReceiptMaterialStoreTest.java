@@ -2,17 +2,19 @@ package com.ssafy.yeogirok.domain.file.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
 import com.ssafy.yeogirok.support.TestRedis;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 영수증 자료는 노션 Redis 4절 필드로 저장하고, 삭제 확인 전에는 수명을 걸지 않는다. 실제 Redis. */
+/** 영수증 자료는 노션 Redis 4절 필드로 저장하고, 삭제 확인 전에는 수명을 걸지 않다가 확인 뒤 24시간 둔다. 실제 Redis. */
 class ReceiptMaterialStoreTest {
 
 	static final JsonMapper JSON = JsonMapper.builder().build();
@@ -23,7 +25,8 @@ class ReceiptMaterialStoreTest {
 	@BeforeEach
 	void setUp() {
 		TestRedis.flushAll();
-		store = new ReceiptMaterialStore(TestRedis.template(), JSON);
+		store = new ReceiptMaterialStore(TestRedis.template(), JSON,
+			new IdempotencyProperties(Duration.ofHours(24), Duration.ofSeconds(30)));
 	}
 
 	@Test
@@ -40,5 +43,27 @@ class ReceiptMaterialStoreTest {
 		assertThat(stored.get("objectKey").stringValue()).isEqualTo("receipt/abc");
 		assertThat(stored.get("jobId").isNull()).isTrue();
 		assertThat(TestRedis.template().getExpire("material:m-1")).isEqualTo(-1L);
+	}
+
+	@Test
+	void 원본을_지우면_경로를_비우고_DELETED_로_바꾼_뒤_24시간_둔다() {
+		ReceiptMaterial material = ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED,
+			ACCEPTED.plusSeconds(86_400));
+		store.save("m-1", material);
+
+		store.markOriginalDeleted("m-1");
+
+		ReceiptMaterial deleted = store.find("m-1").orElseThrow();
+		assertThat(deleted.objectKey()).isNull();
+		assertThat(deleted.deleteStatus()).isEqualTo("DELETED");
+		assertThat(deleted.isOriginalAvailable(ACCEPTED)).isFalse();
+		assertThat(TestRedis.template().getExpire("material:m-1")).isBetween(86_395L, 86_400L);
+	}
+
+	@Test
+	void 이미_없는_자료는_만들지_않는다() {
+		store.markOriginalDeleted("missing");
+
+		assertThat(TestRedis.template().hasKey("material:missing")).isFalse();
 	}
 }

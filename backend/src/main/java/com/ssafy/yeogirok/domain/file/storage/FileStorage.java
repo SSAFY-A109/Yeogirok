@@ -1,6 +1,9 @@
 package com.ssafy.yeogirok.domain.file.storage;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Component;
@@ -14,6 +17,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -95,6 +99,35 @@ public class FileStorage {
 				.destinationBucket(bucket).destinationKey(targetKey).copySourceIfMatch(eTag));
 		} catch (SdkException e) {
 			throw translate(e);
+		}
+	}
+
+	/** 없는 객체를 지워도 성공이다(S3 는 204). */
+	public void delete(String bucket, String key) {
+		try {
+			s3Client.deleteObject(builder -> builder.bucket(bucket).key(key));
+		} catch (SdkException e) {
+			throw unavailable(e);
+		}
+	}
+
+	/** 마지막 수정 시각이 {@code cutoff} 보다 이른 객체의 key. 정리 작업의 안전망 스캔에 쓴다. */
+	public List<String> listKeysModifiedBefore(String bucket, Instant cutoff) {
+		try {
+			List<String> keys = new ArrayList<>();
+			String token = null;
+			do {
+				String continuation = token;
+				ListObjectsV2Response page = s3Client.listObjectsV2(builder -> builder.bucket(bucket)
+					.continuationToken(continuation));
+				page.contents().stream()
+					.filter(object -> object.lastModified().isBefore(cutoff))
+					.forEach(object -> keys.add(object.key()));
+				token = page.nextContinuationToken();
+			} while (token != null);
+			return keys;
+		} catch (SdkException e) {
+			throw unavailable(e);
 		}
 	}
 

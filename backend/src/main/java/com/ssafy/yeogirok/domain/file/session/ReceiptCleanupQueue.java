@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.file.session;
 
 import java.time.Instant;
+import java.util.Set;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,6 +25,17 @@ public class ReceiptCleanupQueue {
 	static final String KEY = "material-cleanup:due";
 
 	private final StringRedisTemplate redis;
+
+	/** 삭제 기한이 {@code now} 이전인 대상({@code {버킷}/{key}}). */
+	public Set<String> due(Instant now) {
+		Set<String> members = redis.opsForZSet().rangeByScore(KEY, Double.NEGATIVE_INFINITY, now.getEpochSecond());
+		return members == null ? Set.of() : members;
+	}
+
+	/** 삭제를 확인한 뒤에만 뺀다. */
+	public void remove(String member) {
+		redis.opsForZSet().remove(KEY, member);
+	}
 
 	/** 같은 대상을 다시 등록하면 기한만 덮어쓴다. */
 	public void register(String bucket, String key, Instant deleteAfter) {

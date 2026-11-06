@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.function.Consumer;
 
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,9 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
@@ -99,6 +102,28 @@ class FileStorageTest {
 		assertError(() -> storage().readHeader("photos", "tmp/abc", 12, "\"e1\""),
 			ExceptionType.FILE_VERIFICATION_FAILED);
 		assertError(() -> storage().head("photos", "tmp/abc"), ExceptionType.FILE_STORAGE_UNAVAILABLE);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 목록은_모든_쪽을_넘기며_기준_시각보다_오래된_key_만_준다() {
+		Instant cutoff = Instant.parse("2026-11-06T00:00:00Z");
+		given(s3Client.listObjectsV2(any(Consumer.class)))
+			.willReturn(ListObjectsV2Response.builder().nextContinuationToken("next").contents(
+				S3Object.builder().key("tmp/old").lastModified(cutoff.minusSeconds(1)).build(),
+				S3Object.builder().key("tmp/edge").lastModified(cutoff).build()).build())
+			.willReturn(ListObjectsV2Response.builder().contents(
+				S3Object.builder().key("receipt/old").lastModified(cutoff.minusSeconds(3600)).build()).build());
+
+		assertThat(storage().listKeysModifiedBefore("receipts", cutoff)).containsExactly("tmp/old", "receipt/old");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 삭제_장애는_M012() {
+		given(s3Client.deleteObject(any(Consumer.class))).willThrow(s3Error(500));
+
+		assertError(() -> storage().delete("receipts", "tmp/abc"), ExceptionType.FILE_STORAGE_UNAVAILABLE);
 	}
 
 	private static S3Exception s3Error(int status) {

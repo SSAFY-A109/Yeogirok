@@ -37,6 +37,10 @@ yeogirok:
       TIP_PHOTO: 20MB
       RECORD_PHOTO: 20MB
       RECEIPT: 10MB
+    # 영수증 원본 정리 주기(11/6 결정). 기한 목록은 자주, Redis 유실 대비 버킷 전체 스캔은 드물게 돈다.
+    cleanup:
+      due-interval: PT10M
+      safety-scan-interval: PT1H
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.

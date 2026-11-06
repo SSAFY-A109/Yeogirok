@@ -1,11 +1,9 @@
 package com.ssafy.yeogirok.domain.file.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Set;
-import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
@@ -132,20 +130,13 @@ public class UploadCompleteService {
 		if (session.purpose() == FilePurpose.RECEIPT) {
 			Instant deleteAfter = session.uploadAcceptedAt().plus(properties.receiptRetention());
 			receiptCleanupQueue.register(session.bucket(), confirmedKey, deleteAfter);
-			String materialId = materialIdOf(session.uploadId());
+			String materialId = ReceiptMaterial.idOf(session.uploadId());
 			materialStore.save(materialId, ReceiptMaterial.uploaded(session.recordId(), session.uploadedBy(),
 				confirmedKey, session.uploadAcceptedAt(), deleteAfter));
 			return session.ready(confirmedKey, sizeBytes, null, materialId);
 		}
 		// TIP_PHOTO 는 팁에 연결할 때 ar_tip_images 에 저장한다(AR 팁 API).
 		return session.ready(confirmedKey, sizeBytes, null, null);
-	}
-
-	/**
-	 * uploadId 로 정해지는 다른 UUID. 자료 저장 뒤 세션 갱신이 실패해 완료를 다시 처리해도 같은 자료를 덮어써 자료가 늘지 않는다.
-	 */
-	private static String materialIdOf(String uploadId) {
-		return UUID.nameUUIDFromBytes(("material:" + uploadId).getBytes(StandardCharsets.UTF_8)).toString();
 	}
 
 	/** 세션이 없으면 M004, 다른 사람 세션이면 M005. */
