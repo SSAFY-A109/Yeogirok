@@ -1,0 +1,87 @@
+appId: ${MAESTRO_APP_ID}
+name: My에서 mock 팁과 방명록을 고치고 계정 동작을 취소한다
+---
+- launchApp:
+    clearState: false
+- runFlow:
+    when:
+      visible:
+        id: "login.screen"
+    commands:
+      - tapOn:
+          id: "login.kakao"
+      - assertVisible:
+          id: "home.screen"
+- tapOn:
+    id: "tabs.my"
+- assertVisible:
+    id: "my.screen"
+- tapOn:
+    id: "my.tips"
+- assertVisible: "내가 남긴 AR 팁 4개"
+- tapOn:
+    id: "my-tips.edit-photo"
+- assertVisible:
+    id: "my-tip-edit.body"
+- tapOn:
+    id: "my-tip-edit.category-TMI"
+- tapOn:
+    id: "my-tip-edit.remove-photo"
+- assertVisible: "사진을 1장 선택해 주세요."
+- tapOn:
+    id: "my-tip-edit.add-photo"
+- tapOn:
+    id: "my-tip-edit.photo-cafe"
+- tapOn:
+    id: "my-tip-edit.save"
+- assertVisible: "TMI · 2026.11.04 등록"
+- tapOn:
+    id: "my-tips.delete-photo"
+- tapOn:
+    id: "my-tips.delete-dialog.cancel"
+- assertVisible:
+    id: "my-tips.card-photo"
+- tapOn:
+    id: "my-tips.delete-photo"
+- tapOn:
+    id: "my-tips.delete-dialog.confirm"
+- assertVisible: "내가 남긴 AR 팁 3개"
+- assertNotVisible:
+    id: "my-tips.card-photo"
+- back
+- tapOn:
+    id: "my.footprints"
+- tapOn:
+    id: "my-footprints.row-anmok"
+- tapOn:
+    id: "my-guestbook.body"
+- eraseText
+- inputText: "My page mock note"
+- hideKeyboard
+- tapOn:
+    id: "my-guestbook.save"
+- assertVisible: "My page mock note"
+- back
+- scrollUntilVisible:
+    element:
+      id: "my.logout"
+- tapOn:
+    id: "my.logout"
+- assertVisible: "로그아웃할까요?"
+- tapOn:
+    id: "my.logout-dialog.cancel"
+- tapOn:
+    id: "my.withdraw"
+- assertVisible:
+    id: "my-withdrawal.verify"
+- tapOn:
+    id: "my-withdrawal.consent"
+- tapOn:
+    id: "my-withdrawal.verify"
+- assertVisible: "정말 탈퇴할까요?"
+- tapOn:
+    id: "my-withdrawal.dialog.cancel"
+- tapOn:
+    id: "my-withdrawal.cancel"
+- assertVisible:
+    id: "my.screen"
