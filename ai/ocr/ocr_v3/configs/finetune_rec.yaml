@@ -1,0 +1,18 @@
+# 인식(rec) 파인튜닝 설정. 사용: venv/bin/python ocr_v3/lab.py finetune --settings ocr_v3/configs/finetune_rec.yaml --action check
+# 지금은 실제 영수증의 사람 검수 줄 단위 정답이 없어서 data_dir 가 비어 있음 → check 가 멈추는 것이 정상.
+task: rec
+paddleocr_repo: ~/receipt_ocr/PaddleOCR          # 공식 저장소 (설치된 paddleocr 3.7.0 과 같은 버전 태그 권장)
+base_config: configs/rec/PP-OCRv5/multi_language/korean_PP-OCRv5_mobile_rec.yml
+pretrained_model: ~/receipt_ocr/pretrained/korean_PP-OCRv5_mobile_rec_pretrained.pdparams   # 10/28 rec_v1 학습에 쓴 파일
+inference_reference: ~/.paddlex/official_models/korean_PP-OCRv5_mobile_rec/inference.yml     # 운영 추론 모델 사전과 비교
+data_dir: ~/receipt_ocr/rec_real                  # dataset export-rec 출력 폴더 (crops/ 와 train.txt 등)
+train_list: [train.txt]
+val_list: [val.txt]
+save_model_dir: ~/receipt_ocr/output/rec_real_v1
+epochs: 10                # 시작값 (10/28 rec_v1 과 같음). 실측 비교 전에는 최적값이라고 보지 않음
+learning_rate: 0.0002
+batch_size: 64
+gpu: 2
+extra_overrides:
+  Global.eval_batch_step: "[0,200]"
+  Global.save_epoch_step: 1
