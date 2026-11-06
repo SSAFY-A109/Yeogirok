@@ -27,7 +27,7 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
  *   <li>하루의 기준 시각은 일차 시작 시각이다. 일차 시작 시각이 없으면 지금 일정의 그날 첫 도착 시각(사용자가 정했거나
  *   전에 계산한 값)을 쓰고, 그것도 없으면 기준 시각을 모른다.</li>
  *   <li>도착 시각 = 요청이 정한 도착 시각, 없으면 직전 출발(또는 기준) 시각 + 이동 시간.
- *   첫 항목인데 출발 지점이 없으면 이동 없이 기준 시각에 도착한다.</li>
+ *   첫 항목인데 출발 지점이 없으면 이동 없이 기준 시각에 도착한다. 출발 지점은 첫날 출발지뿐이다.</li>
  *   <li>이동 시간이나 직전 시각을 모르면 도착 시각을 null 로 두고, 그 뒤 항목도 다음 정한 도착 시각 전까지 null 이다.</li>
  *   <li>출발 시각 = 도착 시각 + 체류 시간.</li>
  * </ul>
@@ -39,24 +39,28 @@ public final class ScheduleCalculator {
 
 	/**
 	 * @param items          계산할 날짜의 항목 전체. 날짜 안에서는 order 순서대로 놓는다
+	 * @param firstDay       여행 첫날. 이날만 출발지(options.startPoint)에서 출발한다
+	 * @param lastDay        여행 마지막 날. 이날만 도착지(options.endPoint)로 간다
 	 * @param fallbackStarts 일차 시작 시각이 없는 날의 기준 시각(지금 일정의 첫 도착 시각). 없는 날은 기준 시각을 모른다
-	 * @return 항목 순서와 같은 순서의 시각·구간과 일차별 도착 지점 구간(도착 지점이 있는 날만)
+	 * @return 항목 순서와 같은 순서의 시각·구간과 마지막 날 도착지 구간(계산했을 때만)
 	 */
-	public static Result calculate(List<PlannedItem> items, ScheduleOptions options,
-		Map<LocalDate, Instant> fallbackStarts, TransportMode mode, TravelTimeProvider travelTimeProvider) {
+	public static Result calculate(List<PlannedItem> items, ScheduleOptions options, LocalDate firstDay,
+		LocalDate lastDay, Map<LocalDate, Instant> fallbackStarts, TransportMode mode,
+		TravelTimeProvider travelTimeProvider) {
 		Map<LocalDate, List<Integer>> indexesByDate = new TreeMap<>();
 		for (int i = 0; i < items.size(); i++) {
 			indexesByDate.computeIfAbsent(items.get(i).visitDate(), date -> new ArrayList<>()).add(i);
 		}
 
 		Timing[] timings = new Timing[items.size()];
-		Map<LocalDate, TravelLeg> endLegs = new HashMap<>();
+		TravelLeg[] endLeg = new TravelLeg[1];
 		indexesByDate.forEach((date, indexes) -> {
 			indexes.sort((a, b) -> Integer.compare(items.get(a).order(), items.get(b).order()));
 			DayOption day = options.day(date).orElse(null);
 			Instant cursor = day == null || day.startTime() == null ? fallbackStarts.get(date)
 				: ZonedDateTime.of(date, day.startTime(), ApiDateTime.ZONE).toInstant();
-			GeoPoint previous = day == null || day.startPoint() == null ? null : day.startPoint().toGeoPoint();
+			GeoPoint previous = date.equals(firstDay) && options.startPoint() != null
+				? options.startPoint().toGeoPoint() : null;
 
 			for (int index : indexes) {
 				PlannedItem item = items.get(index);
@@ -77,11 +81,11 @@ public final class ScheduleCalculator {
 				previous = item.location();
 			}
 
-			if (day != null && day.endPoint() != null && previous != null) {
-				endLegs.put(date, travelTimeProvider.estimate(previous, day.endPoint().toGeoPoint(), mode));
+			if (date.equals(lastDay) && options.endPoint() != null && previous != null) {
+				endLeg[0] = travelTimeProvider.estimate(previous, options.endPoint().toGeoPoint(), mode);
 			}
 		});
-		return new Result(List.of(timings), endLegs);
+		return new Result(List.of(timings), endLeg[0]);
 	}
 
 	/** 날짜별 지금 첫 항목(순서가 가장 앞)의 도착 시각. 도착 시각이 없으면 그날은 넣지 않는다. */
@@ -113,8 +117,8 @@ public final class ScheduleCalculator {
 
 	/**
 	 * @param timings 입력 항목과 같은 순서
-	 * @param endLegs 도착 지점이 있는 날의 마지막 항목 → 도착 지점 구간
+	 * @param endLeg  마지막 날 마지막 항목 → 도착지 구간. 마지막 날에 항목이 있고 도착지가 있을 때만, 아니면 null
 	 */
-	public record Result(List<Timing> timings, Map<LocalDate, TravelLeg> endLegs) {
+	public record Result(List<Timing> timings, TravelLeg endLeg) {
 	}
 }

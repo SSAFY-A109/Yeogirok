@@ -26,28 +26,36 @@ import com.ssafy.yeogirok.support.FakeTravelTimeProvider;
 class ScheduleCalculatorTest {
 
 	static final LocalDate DAY = LocalDate.of(2026, 11, 5);
+	static final LocalDate NEXT = DAY.plusDays(1);
 	/** DAY 09:00 Asia/Seoul. */
 	static final Instant NINE = Instant.parse("2026-11-05T00:00:00Z");
+	/** NEXT 09:00 Asia/Seoul. */
+	static final Instant NEXT_NINE = Instant.parse("2026-11-06T00:00:00Z");
 	static final GeoPoint SPOT = new GeoPoint(new BigDecimal("37.75"), new BigDecimal("128.87"));
-	static final NamedPoint HOTEL = new NamedPoint("숙소", new BigDecimal("37.70"), new BigDecimal("128.80"));
+	static final NamedPoint STATION = new NamedPoint("강릉역", new BigDecimal("37.76"), new BigDecimal("128.89"));
 
 	final FakeTravelTimeProvider travel = new FakeTravelTimeProvider(20);
 
-	private static PlannedItem item(int order, int stay) {
-		return new PlannedItem(DAY, order, stay, null, SPOT);
+	private static PlannedItem item(LocalDate date, int order, int stay) {
+		return new PlannedItem(date, order, stay, null, SPOT);
 	}
 
-	private static ScheduleOptions options(DayOption... days) {
-		return new ScheduleOptions("NORMAL", List.of(days), List.of());
+	private static DayOption nineToSix(LocalDate date) {
+		return new DayOption(date, LocalTime.of(9, 0), LocalTime.of(18, 0));
+	}
+
+	private static ScheduleOptions options(NamedPoint start, NamedPoint end, DayOption... days) {
+		return new ScheduleOptions(List.of(days), start, end, null, List.of());
+	}
+
+	private Result calculate(List<PlannedItem> items, ScheduleOptions options, LocalDate first, LocalDate last) {
+		return ScheduleCalculator.calculate(items, options, first, last, Map.of(), TransportMode.CAR, travel);
 	}
 
 	@Test
-	void 일차_시작_시각부터_출발_지점_구간을_더해_차례로_계산하고_도착_지점_구간도_구한다() {
-		ScheduleOptions options = options(
-			new DayOption(DAY, LocalTime.of(9, 0), LocalTime.of(18, 0), HOTEL, HOTEL, null));
-
-		Result result = ScheduleCalculator.calculate(List.of(item(2, 30), item(1, 60)), options, Map.of(),
-			TransportMode.CAR, travel);
+	void 당일치기는_출발지에서_출발해_차례로_계산하고_도착지_구간도_구한다() {
+		Result result = calculate(List.of(item(DAY, 2, 30), item(DAY, 1, 60)),
+			options(STATION, STATION, nineToSix(DAY)), DAY, DAY);
 
 		// order 1(입력 두 번째): 09:00 + 20분 이동 → 09:20 도착, 10:20 출발
 		assertThat(result.timings().get(1).arrivalAt()).isEqualTo(NINE.plusSeconds(20 * 60));
@@ -56,29 +64,40 @@ class ScheduleCalculatorTest {
 		assertThat(result.timings().get(0).arrivalAt()).isEqualTo(NINE.plusSeconds(100 * 60));
 		assertThat(result.timings().get(0).departureAt()).isEqualTo(NINE.plusSeconds(130 * 60));
 		assertThat(result.timings()).allSatisfy(timing -> assertThat(timing.legFromPrevious()).isNotNull());
-		assertThat(result.endLegs().get(DAY).travelMinutes()).isEqualTo(20);
+		assertThat(result.endLeg().travelMinutes()).isEqualTo(20);
 		assertThat(travel.calls()).hasSize(3);
 	}
 
 	@Test
-	void 출발_지점이_없으면_첫_항목은_이동_없이_기준_시각에_도착한다() {
-		ScheduleOptions options = options(new DayOption(DAY, LocalTime.of(9, 0), LocalTime.of(18, 0), null, null,
-			null));
+	void 출발지는_첫날에만_도착지는_마지막_날에만_붙는다() {
+		Result result = calculate(List.of(item(DAY, 1, 60), item(NEXT, 1, 60)),
+			options(STATION, STATION, nineToSix(DAY), nineToSix(NEXT)), DAY, NEXT);
 
-		Result result = ScheduleCalculator.calculate(List.of(item(1, 60)), options, Map.of(), TransportMode.CAR,
-			travel);
+		// 첫날: 출발지 → 첫 장소 구간이 있고 09:20 도착
+		assertThat(result.timings().get(0).legFromPrevious()).isNotNull();
+		assertThat(result.timings().get(0).arrivalAt()).isEqualTo(NINE.plusSeconds(20 * 60));
+		// 둘째 날: 출발 지점이 없어 이동 없이 09:00 도착
+		assertThat(result.timings().get(1).legFromPrevious()).isNull();
+		assertThat(result.timings().get(1).arrivalAt()).isEqualTo(NEXT_NINE);
+		// 도착지 구간은 마지막 날 한 번
+		assertThat(result.endLeg()).isNotNull();
+		assertThat(travel.calls()).hasSize(2);
+	}
 
-		assertThat(result.timings().getFirst().arrivalAt()).isEqualTo(NINE);
-		assertThat(result.timings().getFirst().legFromPrevious()).isNull();
-		assertThat(result.endLegs()).isEmpty();
+	@Test
+	void 마지막_날을_계산하지_않거나_도착지가_없으면_도착지_구간이_없다() {
+		ScheduleOptions withEnd = options(null, STATION, nineToSix(DAY), nineToSix(NEXT));
+
+		assertThat(calculate(List.of(item(DAY, 1, 60)), withEnd, DAY, NEXT).endLeg()).isNull();
+		assertThat(calculate(List.of(item(NEXT, 1, 60)), options(null, null, nineToSix(NEXT)), DAY, NEXT).endLeg())
+			.isNull();
 	}
 
 	@Test
 	void 일차_조건이_없으면_지금_첫_도착_시각을_기준으로_쓰고_그것도_없으면_null() {
-		Result withFallback = ScheduleCalculator.calculate(List.of(item(1, 60)), ScheduleOptions.EMPTY,
+		Result withFallback = ScheduleCalculator.calculate(List.of(item(DAY, 1, 60)), ScheduleOptions.EMPTY, DAY, DAY,
 			Map.of(DAY, NINE), TransportMode.CAR, travel);
-		Result without = ScheduleCalculator.calculate(List.of(item(1, 60)), ScheduleOptions.EMPTY, Map.of(),
-			TransportMode.CAR, travel);
+		Result without = calculate(List.of(item(DAY, 1, 60)), ScheduleOptions.EMPTY, DAY, DAY);
 
 		assertThat(withFallback.timings().getFirst().arrivalAt()).isEqualTo(NINE);
 		assertThat(without.timings().getFirst().arrivalAt()).isNull();
@@ -89,9 +108,9 @@ class ScheduleCalculatorTest {
 		travel.willReturn(null);
 		Instant noon = NINE.plusSeconds(3 * 3600);
 
-		Result result = ScheduleCalculator.calculate(List.of(
-			new PlannedItem(DAY, 1, 60, NINE, SPOT), item(2, 60), new PlannedItem(DAY, 3, 60, noon, SPOT),
-			item(4, 60)), ScheduleOptions.EMPTY, Map.of(), TransportMode.TRANSIT, travel);
+		Result result = calculate(List.of(
+			new PlannedItem(DAY, 1, 60, NINE, SPOT), item(DAY, 2, 60), new PlannedItem(DAY, 3, 60, noon, SPOT),
+			item(DAY, 4, 60)), ScheduleOptions.EMPTY, DAY, DAY);
 
 		assertThat(result.timings()).extracting(ScheduleCalculator.Timing::arrivalAt)
 			.containsExactly(NINE, null, noon, null);
@@ -100,10 +119,11 @@ class ScheduleCalculatorTest {
 
 	@Test
 	void 일정_옵션은_JSON_맵으로_바꿨다_되돌려도_같다() {
-		ScheduleOptions options = new ScheduleOptions("RELAXED",
-			List.of(new DayOption(DAY, LocalTime.of(9, 30), LocalTime.of(18, 0), HOTEL, null,
-				TravelLeg.found(15, new BigDecimal("1200.00"), "KAKAO_CAR", NINE))),
-			List.of(new UnassignedPlace(401L, "END_TIME_EXCEEDED", DAY), new UnassignedPlace(402L, "NO_ROUTE", null)));
+		ScheduleOptions options = new ScheduleOptions(
+			List.of(new DayOption(DAY, LocalTime.of(9, 30), LocalTime.of(18, 0))), STATION,
+			new NamedPoint(null, new BigDecimal("37.50"), new BigDecimal("127.00")),
+			TravelLeg.found(15, new BigDecimal("1200.00"), "KAKAO_CAR", NINE),
+			List.of(new UnassignedPlace(401L), new UnassignedPlace(402L)));
 
 		assertThat(ScheduleOptions.fromMap(options.toMap())).isEqualTo(options);
 		assertThat(ScheduleOptions.fromMap(Map.of())).isEqualTo(ScheduleOptions.EMPTY);
@@ -111,15 +131,15 @@ class ScheduleCalculatorTest {
 	}
 
 	@Test
-	void 날짜_범위_밖_일차와_미배치_항목을_뺀다() {
-		ScheduleOptions options = new ScheduleOptions(null,
-			List.of(new DayOption(DAY, LocalTime.NOON, LocalTime.MIDNIGHT, null, null, null),
-				new DayOption(DAY.plusDays(1), LocalTime.NOON, LocalTime.MIDNIGHT, null, null, null)),
-			List.of(new UnassignedPlace(1L, "r", DAY.plusDays(1)), new UnassignedPlace(2L, "r", null)));
+	void 날짜_범위_밖_일차만_빼고_지점과_미배치_항목은_남긴다() {
+		ScheduleOptions options = new ScheduleOptions(List.of(nineToSix(DAY), nineToSix(NEXT)), STATION, STATION,
+			null, List.of(new UnassignedPlace(1L)));
 
 		ScheduleOptions within = options.within(DAY, DAY);
 
 		assertThat(within.days()).extracting(DayOption::date).containsExactly(DAY);
-		assertThat(within.unassignedPlaces()).extracting(UnassignedPlace::roomPlaceId).containsExactly(2L);
+		assertThat(within.startPoint()).isEqualTo(STATION);
+		assertThat(within.endPoint()).isEqualTo(STATION);
+		assertThat(within.unassignedPlaces()).extracting(UnassignedPlace::roomPlaceId).containsExactly(1L);
 	}
 }

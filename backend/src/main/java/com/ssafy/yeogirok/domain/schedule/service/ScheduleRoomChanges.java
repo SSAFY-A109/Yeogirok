@@ -35,7 +35,8 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
  * 여행방 날짜·이동 수단 수정(API-023)이 일정에 주는 영향.
  * <ul>
  *   <li>날짜를 줄이면 새 날짜 밖 항목(affectedItems)을 확정 일정에서 지운다. 후보 장소는 그대로 둔다.</li>
- *   <li>이동 수단을 바꾸면 남은 항목의 이동 시간·시각을 새 이동 수단으로 다시 계산한다.</li>
+ *   <li>날짜나 이동 수단을 바꾸면 남은 항목의 이동 시간·시각을 새 조건으로 다시 계산한다. 날짜가 바뀌면 첫날
+ *   출발지·마지막 날 도착지가 붙는 날도 바뀌기 때문이다.</li>
  * </ul>
  * 재계산은 외부 호출이라 {@link #prepare} 로 트랜잭션 밖에서 먼저 하고, 방을 잠근 트랜잭션에서 {@link #apply} 로
  * 저장한다. 그사이 일정이 바뀌었으면 방 version 이 달라져 저장 전에 C004 로 끝난다.
@@ -81,7 +82,8 @@ public class ScheduleRoomChanges {
 	}
 
 	/**
-	 * 새 이동 수단으로 새 날짜 범위 안 항목의 이동 시간·시각을 계산한다. 트랜잭션 밖에서 부른다. 항목이 없으면 null.
+	 * 새 이동 수단·날짜 범위로 범위 안 항목의 이동 시간·시각을 계산한다. 첫날 출발지·마지막 날 도착지는 새 첫날·마지막
+	 * 날에 붙는다. 트랜잭션 밖에서 부른다. 남는 항목이 없으면 null.
 	 */
 	public Recalculation prepare(Long roomId, TransportMode mode, LocalDate start, LocalDate end) {
 		Snapshot snapshot = readOnlyTransactionTemplate.execute(status -> {
@@ -103,8 +105,8 @@ public class ScheduleRoomChanges {
 		if (snapshot.itemIds().isEmpty()) {
 			return null;
 		}
-		ScheduleCalculator.Result result = ScheduleCalculator.calculate(snapshot.planned(), snapshot.options(),
-			snapshot.firstArrivals(), mode, travelTimeProvider);
+		ScheduleCalculator.Result result = ScheduleCalculator.calculate(snapshot.planned(), snapshot.options(), start,
+			end, snapshot.firstArrivals(), mode, travelTimeProvider);
 		return new Recalculation(snapshot.version(), snapshot.itemIds(), result);
 	}
 
@@ -112,7 +114,7 @@ public class ScheduleRoomChanges {
 	 * 방을 잠근 트랜잭션에서 방 필드를 바꾸기 전에 부른다. 날짜 밖 항목을 지우고, 재계산 결과가 있으면 남은 항목에 넣는다.
 	 * 방 필드는 바꾸지 않고 새 일정 옵션(JSON)을 돌려준다(부르는 쪽이 방 정보와 함께 한 번에 바꾼다).
 	 *
-	 * @param recalculation 이동 수단을 바꾸지 않으면 null
+	 * @param recalculation 날짜·이동 수단을 바꾸지 않았거나 남는 항목이 없으면 null
 	 * @return 새 일정 옵션
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
@@ -140,7 +142,7 @@ public class ScheduleRoomChanges {
 				item.getStayMinutes(), item.isFixed(), timing));
 		}
 		scheduleWriter.write(room.getId(), outside, placements);
-		return options.withEndLegs(recalculation.result().endLegs()).toMap();
+		return options.withEndLeg(recalculation.result().endLeg()).toMap();
 	}
 
 	/** 저장한 일정. 없으면 null. */

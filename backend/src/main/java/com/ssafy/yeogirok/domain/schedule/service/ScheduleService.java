@@ -36,7 +36,6 @@ import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleCalculator.PlannedItem;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleWriter.Placement;
 import com.ssafy.yeogirok.domain.schedule.travel.GeoPoint;
-import com.ssafy.yeogirok.domain.schedule.travel.TravelLeg;
 import com.ssafy.yeogirok.domain.schedule.travel.TravelTimeProvider;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -97,7 +96,7 @@ public class ScheduleService {
 	public ScheduleUpdateResponse update(Long userId, Long roomId, ScheduleUpdateCommand command) {
 		EditPlan plan = readOnlyTransactionTemplate.execute(status -> plan(userId, roomId, command));
 		ScheduleCalculator.Result result = ScheduleCalculator.calculate(plan.plannedItems(), plan.options(),
-			plan.fallbackStarts(), plan.transportMode(), travelTimeProvider);
+			plan.startDate(), plan.endDate(), plan.fallbackStarts(), plan.transportMode(), travelTimeProvider);
 		return transactionTemplate.execute(status -> apply(userId, roomId, command, plan, result));
 	}
 
@@ -178,7 +177,8 @@ public class ScheduleService {
 				entry.edit() == null ? null : entry.edit().arrivalAt(),
 				new GeoPoint(place.getPlace().getLatitude(), place.getPlace().getLongitude()));
 		}).toList();
-		return new EditPlan(room.getTransportMode(), ScheduleOptions.fromMap(room.getScheduleOptions()),
+		return new EditPlan(room.getTransportMode(), room.getStartDate(), room.getEndDate(),
+			ScheduleOptions.fromMap(room.getScheduleOptions()),
 			ScheduleCalculator.firstArrivals(List.copyOf(existing.values())), Set.copyOf(changedDates), entries,
 			planned);
 	}
@@ -207,9 +207,9 @@ public class ScheduleService {
 		}
 
 		// 바뀐 날짜의 도착 지점 구간을 새 계산값으로 바꾼다. 그날 항목이 없어졌으면 구간도 없다.
-		Map<LocalDate, TravelLeg> endLegs = new HashMap<>();
-		plan.changedDates().forEach(date -> endLegs.put(date, result.endLegs().get(date)));
-		Map<String, Object> newOptions = plan.options().withEndLegs(endLegs).toMap();
+		Map<String, Object> newOptions = plan.changedDates().contains(plan.endDate())
+			? plan.options().withEndLeg(result.endLeg()).toMap()
+			: plan.options().toMap();
 
 		scheduleWriter.write(roomId, toDelete, placements);
 		if (newOptions.equals(room.getScheduleOptions())) {
@@ -289,7 +289,8 @@ public class ScheduleService {
 	 * @param entries        날짜·순서로 놓은 바뀐 날짜의 항목
 	 * @param plannedItems   entries 와 같은 순서의 계산 입력
 	 */
-	private record EditPlan(TransportMode transportMode, ScheduleOptions options,
+	private record EditPlan(TransportMode transportMode, LocalDate startDate, LocalDate endDate,
+		ScheduleOptions options,
 		Map<LocalDate, Instant> fallbackStarts, Set<LocalDate> changedDates, List<Entry> entries,
 		List<PlannedItem> plannedItems) {
 	}

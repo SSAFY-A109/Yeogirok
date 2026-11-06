@@ -28,12 +28,12 @@ public final class ScheduleViews {
 	private ScheduleViews() {
 	}
 
-	/** 항목·일차 조건·미배치 항목이 하나도 없으면 null(일정 없음). */
+	/** 확정 항목이 하나도 없으면 null(일정 없음, 명세). */
 	public static ScheduleView of(TravelRoom room, List<ScheduleItem> items) {
-		ScheduleOptions options = ScheduleOptions.fromMap(room.getScheduleOptions());
-		if (items.isEmpty() && options.isEmpty()) {
+		if (items.isEmpty()) {
 			return null;
 		}
+		ScheduleOptions options = ScheduleOptions.fromMap(room.getScheduleOptions());
 
 		Map<LocalDate, List<ScheduleItem>> itemsByDate = new TreeMap<>();
 		options.days().forEach(day -> itemsByDate.put(day.date(), new ArrayList<>()));
@@ -42,15 +42,18 @@ public final class ScheduleViews {
 		List<ScheduleView.Day> days = new ArrayList<>();
 		itemsByDate.forEach((date, dayItems) -> {
 			dayItems.sort((a, b) -> Integer.compare(a.getPosition(), b.getPosition()));
-			days.add(day(room, date, options.day(date).orElse(null), dayItems));
+			// 도착지 구간은 마지막 날에만 있다.
+			TravelLeg endLeg = date.equals(room.getEndDate()) && !dayItems.isEmpty() ? options.endLeg() : null;
+			days.add(day(room, date, options.day(date).orElse(null), dayItems, endLeg));
 		});
 		List<ScheduleView.Unassigned> unassigned = options.unassignedPlaces().stream()
-			.map(place -> new ScheduleView.Unassigned(place.roomPlaceId(), place.reason(), place.attemptedDate()))
+			.map(place -> new ScheduleView.Unassigned(place.roomPlaceId()))
 			.toList();
-		return new ScheduleView(room.getId(), days, unassigned, List.of());
+		return new ScheduleView(days, unassigned, List.of(), point(options.startPoint()), point(options.endPoint()));
 	}
 
-	private static ScheduleView.Day day(TravelRoom room, LocalDate date, DayOption option, List<ScheduleItem> items) {
+	private static ScheduleView.Day day(TravelRoom room, LocalDate date, DayOption option, List<ScheduleItem> items,
+		TravelLeg endLeg) {
 		List<ScheduleView.Item> viewItems = new ArrayList<>();
 		List<ScheduleView.Leg> legs = new ArrayList<>();
 		Set<String> warnings = new LinkedHashSet<>();
@@ -68,7 +71,6 @@ public final class ScheduleViews {
 			previousId = item.getId();
 		}
 
-		TravelLeg endLeg = option == null || items.isEmpty() ? null : option.endLeg();
 		if (endLeg != null) {
 			legs.add(leg(room, previousId, null, endLeg, warnings));
 		}
@@ -78,8 +80,6 @@ public final class ScheduleViews {
 		return new ScheduleView.Day(date,
 			option == null ? null : option.startTime(),
 			option == null ? null : option.endTime(),
-			point(option == null ? null : option.startPoint()),
-			point(option == null ? null : option.endPoint()),
 			viewItems, legs, List.copyOf(warnings));
 	}
 
@@ -90,7 +90,7 @@ public final class ScheduleViews {
 		return new ScheduleView.Leg(fromId, toId, room.getTransportMode(), leg.travelMinutes(), leg.source());
 	}
 
-	/** 마지막 출발 시각(도착 지점까지 이동 시간을 알면 더한다)이 일차 종료 시각보다 늦은지. 모르면 false. */
+	/** 마지막 출발 시각(도착지까지 이동 시간을 알면 더한다)이 일차 종료 시각보다 늦은지. 모르면 false. */
 	private static boolean exceedsEndTime(LocalDate date, DayOption option, List<ScheduleItem> items,
 		TravelLeg endLeg) {
 		if (option == null || option.endTime() == null || items.isEmpty()) {

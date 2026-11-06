@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,8 @@ import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomUpdateResponse;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.schedule.ScheduleOptions;
 import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
@@ -142,7 +145,8 @@ class ScheduleServiceTest {
 
 		ScheduleView schedule = response.schedule();
 		assertThat(response.version()).isEqualTo(5);
-		assertThat(schedule.id()).isEqualTo(roomId);
+		assertThat(schedule.startPoint()).isNull();
+		assertThat(schedule.endPoint()).isNull();
 		assertThat(items(schedule, DAY1))
 			.extracting(ScheduleView.Item::roomPlaceId, ScheduleView.Item::order, ScheduleView.Item::arrivalAt,
 				ScheduleView.Item::departureAt, ScheduleView.Item::fixed)
@@ -161,6 +165,51 @@ class ScheduleServiceTest {
 		assertThat(day.warnings()).isEmpty();
 		// 다시 조회해도 같다.
 		assertThat(scheduleService.getSchedule(OWNER, roomId).schedule()).isEqualTo(schedule);
+	}
+
+	@Test
+	void 첫날_출발지와_마지막_날_도착지는_그날에만_구간이_생긴다() {
+		// 일차 조건·지점은 초안 저장(API-039)이 채운다. 그 API 전이라 직접 넣는다.
+		ScheduleOptions.NamedPoint station = new ScheduleOptions.NamedPoint("강릉역", new BigDecimal("37.7640000"),
+			new BigDecimal("128.8990000"));
+		TravelRoom room = em.find(TravelRoom.class, roomId);
+		room.updateScheduleOptions(new ScheduleOptions(List.of(
+			new ScheduleOptions.DayOption(DAY1, LocalTime.of(10, 0), LocalTime.of(18, 0)),
+			new ScheduleOptions.DayOption(DAY2, LocalTime.of(9, 0), LocalTime.of(13, 0))),
+			station, station, null, List.of()).toMap(), NOW);
+		em.flush();
+
+		ScheduleView schedule = update(newItem(placeA, DAY1, 1, 60), newItem(placeB, DAY2, 1, 60)).schedule();
+
+		assertThat(schedule.startPoint()).isEqualTo(new ScheduleView.Point("강릉역", station.latitude(),
+			station.longitude()));
+		ScheduleView.Day first = schedule.days().get(0);
+		ScheduleView.Day last = schedule.days().get(1);
+		// 첫날: 출발지 → 첫 장소 구간만, 10:00 + 20분에 도착
+		assertThat(first.legs()).extracting(ScheduleView.Leg::fromItemId, ScheduleView.Leg::toItemId)
+			.containsExactly(tuple(null, first.items().getFirst().id()));
+		assertThat(first.items().getFirst().arrivalAt()).isEqualTo(DAY1_10AM.plusSeconds(TRAVEL_MINUTES * 60));
+		// 마지막 날: 출발 구간 없이 09:00 도착, 마지막 장소 → 도착지 구간만
+		assertThat(last.legs()).extracting(ScheduleView.Leg::fromItemId, ScheduleView.Leg::toItemId)
+			.containsExactly(tuple(last.items().getFirst().id(), null));
+		assertThat(last.items().getFirst().arrivalAt()).isEqualTo(Instant.parse("2026-11-06T00:00:00Z"));
+		assertThat(scheduleService.getSchedule(OWNER, roomId).schedule()).isEqualTo(schedule);
+	}
+
+	@Test
+	void 항목을_모두_지우면_일차_조건이_있어도_schedule은_null이다() {
+		TravelRoom room = em.find(TravelRoom.class, roomId);
+		room.updateScheduleOptions(new ScheduleOptions(List.of(
+			new ScheduleOptions.DayOption(DAY1, LocalTime.of(10, 0), LocalTime.of(18, 0))), null, null, null,
+			List.of()).toMap(), NOW);
+		em.flush();
+		Long itemId = items(update(newItem(placeA, DAY1, 1, 60)).schedule(), DAY1).getFirst().id();
+
+		ScheduleUpdateResponse response = scheduleService.update(OWNER, roomId,
+			new ScheduleUpdateCommand(version(), List.of(), List.of(itemId)));
+
+		assertThat(response.schedule()).isNull();
+		assertThat(scheduleService.getSchedule(OWNER, roomId).schedule()).isNull();
 	}
 
 	@Test

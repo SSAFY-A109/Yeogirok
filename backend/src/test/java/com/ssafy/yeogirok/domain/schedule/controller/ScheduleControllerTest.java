@@ -61,12 +61,12 @@ class ScheduleControllerTest {
 	}
 
 	private static ScheduleView schedule() {
-		return new ScheduleView(7L, List.of(new ScheduleView.Day(DAY, LocalTime.of(9, 0), LocalTime.of(18, 0),
-			new ScheduleView.Point("숙소", new BigDecimal("37.5"), new BigDecimal("127.0")), null,
+		return new ScheduleView(List.of(new ScheduleView.Day(DAY, LocalTime.of(9, 0), LocalTime.of(18, 0),
 			List.of(new ScheduleView.Item(1701L, 401L, 1, Instant.parse("2026-10-23T00:30:00Z"),
 				Instant.parse("2026-10-23T01:30:00Z"), 60, false)),
 			List.of(new ScheduleView.Leg(null, 1701L, TransportMode.CAR, 30, "KAKAO_CAR")), List.of())),
-			List.of(new ScheduleView.Unassigned(402L, "END_TIME_EXCEEDED", DAY)), List.of());
+			List.of(new ScheduleView.Unassigned(402L)), List.of(),
+			new ScheduleView.Point("강릉역", new BigDecimal("37.5"), new BigDecimal("127.0")), null);
 	}
 
 	/* ── API-036 ────────────────────────────────────────────── */
@@ -78,18 +78,18 @@ class ScheduleControllerTest {
 		mockMvc.perform(get("/api/v1/rooms/7/schedule").with(asUser(USER_ID)))
 			.andExpect(status().isOk())
 			.andExpect(content().json("""
-				{"success": true, "data": {"schedule": {"id": 7, "days": [{
+				{"success": true, "data": {"schedule": {"days": [{
 				  "date": "2026-10-23", "startTime": "09:00:00", "endTime": "18:00:00",
-				  "startPoint": {"name": "숙소", "latitude": 37.5, "longitude": 127.0}, "endPoint": null,
 				  "items": [{"id": 1701, "roomPlaceId": 401, "order": 1,
 				    "arrivalAt": "2026-10-23 09:30:00+09", "departureAt": "2026-10-23 10:30:00+09",
 				    "stayMinutes": 60, "fixed": false}],
 				  "legs": [{"fromItemId": null, "toItemId": 1701, "transportMode": "CAR", "travelMinutes": 30,
 				    "source": "KAKAO_CAR"}],
 				  "warnings": []}],
-				  "unassignedPlaces": [{"roomPlaceId": 402, "reason": "END_TIME_EXCEEDED",
-				    "attemptedDate": "2026-10-23"}],
-				  "warnings": []}, "version": 3}}
+				  "unassignedPlaces": [{"roomPlaceId": 402}],
+				  "warnings": [],
+				  "startPoint": {"name": "강릉역", "latitude": 37.5, "longitude": 127.0}, "endPoint": null},
+				  "version": 3}}
 				""", JsonCompareMode.STRICT));
 	}
 
@@ -129,7 +129,7 @@ class ScheduleControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.version").value(2))
 			.andExpect(jsonPath("$.data.needsRecalculation").value(false))
-			.andExpect(jsonPath("$.data.schedule.id").value(7));
+			.andExpect(jsonPath("$.data.schedule.startPoint.name").value("강릉역"));
 
 		verify(scheduleService).update(USER_ID, 7L, new ScheduleUpdateCommand(1, List.of(
 			new ItemEdit(1L, 401L, DAY, 1, Instant.parse("2026-10-23T00:00:00Z"), 60, true),
