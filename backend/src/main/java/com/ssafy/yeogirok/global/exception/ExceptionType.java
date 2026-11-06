@@ -11,7 +11,7 @@ import lombok.Getter;
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
  * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
- * {@code P} 장소, {@code M} 파일, {@code T} AR 팁.
+ * {@code P} 장소, {@code M} 파일, {@code T} AR 팁, {@code SC} 계획 일정.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -80,6 +80,13 @@ public enum ExceptionType {
 	ROOM_FULL(CONFLICT, "RO007", "여행방 참여 인원이 가득 찼습니다."),
 	/** 없는 후보이거나 다른 방의 후보다. 뺀 후보(removed_at)는 찾을 수 있다. */
 	ROOM_PLACE_NOT_FOUND(NOT_FOUND, "RO009", "요청한 후보 장소가 해당 여행방에 없습니다."),
+	// RO003(계획 편집 권한 없음)은 명세에서 미사용 이력으로 보존한다. 참여자 권한이 모두 같아 RO002 로 알린다.
+
+	/* ── 계획 일정 SC ───────────────────────────────────────── */
+
+	// SC001~004 는 일정 초안(API-037·038·039) 전용이라 초안 API 를 만들 때 추가한다.
+	SCHEDULE_ORDER_DUPLICATED(BAD_REQUEST, "SC005", "같은 날짜에 방문 순서가 중복됩니다."),
+	SCHEDULE_STAY_NEGATIVE(BAD_REQUEST, "SC006", "체류 시간은 음수일 수 없습니다."),
 
 	/* ── 장소 P ─────────────────────────────────────────────── */
 
