@@ -46,12 +46,12 @@ class FileStorageTest {
 	}
 
 	@Test
-	void PUT_URL_은_지정한_key_와_Content_Type_에만_쓰도록_서명된다() {
-		String url = storage().presignPut("photos", "tmp/abc", "image/png", Duration.ofMinutes(10));
+	void PUT_URL_은_지정한_key_Content_Type_크기에만_쓰도록_서명된다() {
+		String url = storage().presignPut("photos", "tmp/abc", "image/png", 1024, Duration.ofMinutes(10));
 
 		assertThat(url).startsWith("https://photos.s3.ap-northeast-2.amazonaws.com/tmp/abc?")
 			.contains("X-Amz-Expires=600")
-			.contains("X-Amz-SignedHeaders=content-type%3Bhost");
+			.contains("X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost");
 	}
 
 	@Test
@@ -69,7 +69,7 @@ class FileStorageTest {
 				throw SdkClientException.create("자격 증명 없음");
 			}).build());
 
-		assertError(() -> storage.presignPut("photos", "tmp/abc", "image/png", Duration.ofMinutes(10)),
+		assertError(() -> storage.presignPut("photos", "tmp/abc", "image/png", 1024, Duration.ofMinutes(10)),
 			ExceptionType.FILE_STORAGE_UNAVAILABLE);
 	}
 

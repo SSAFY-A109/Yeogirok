@@ -100,7 +100,7 @@ public class UploadCompleteService {
 		return ready;
 	}
 
-	/** 크기 M001 → 신고 크기 불일치 M003 → 형식 M002 → 신고 형식 불일치 M003 → 같은 ETag 일 때만 복사 → 복사본 재확인. */
+	/** 크기 M001 → 요청한 크기와 다름 M003 → 형식 M002 → 요청한 형식과 다름 M003 → 같은 ETag 일 때만 복사 → 복사본 재확인. */
 	private void verifyAndCopy(UploadSession session, StoredObject uploaded, String confirmedKey) {
 		filePolicy.requireSize(session.purpose(), uploaded.sizeBytes());
 		if (uploaded.sizeBytes() != session.sizeBytes()) {
@@ -117,6 +117,7 @@ public class UploadCompleteService {
 		fileStorage.copyIfMatch(session.bucket(), session.tmpKey(), confirmedKey, uploaded.eTag());
 		StoredObject confirmed = fileStorage.head(session.bucket(), confirmedKey)
 			.orElseThrow(() -> new BusinessException(ExceptionType.FILE_NOT_UPLOADED));
+		// SSE-S3 라 복사해도 ETag 가 같다. SSE-KMS 로 바꾸면 ETag 가 달라지므로 이 비교를 바꿔야 한다.
 		if (confirmed.sizeBytes() != uploaded.sizeBytes() || !confirmed.eTag().equals(uploaded.eTag())) {
 			throw new BusinessException(ExceptionType.FILE_VERIFICATION_FAILED);
 		}

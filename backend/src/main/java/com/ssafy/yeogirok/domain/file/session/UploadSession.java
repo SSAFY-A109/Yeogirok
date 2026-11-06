@@ -18,7 +18,6 @@ public record UploadSession(
 	Long uploadedBy,
 	FilePurpose purpose,
 	Long recordId,
-	Long roomId,
 	UploadStatus status,
 	String bucket,
 	String tmpKey,
@@ -35,20 +34,20 @@ public record UploadSession(
 
 	/** API-012. 임시 경로는 {@code tmp/{uploadId}} 다. */
 	public static UploadSession start(String uploadId, Long uploadedBy, FilePurpose purpose, Long recordId,
-		Long roomId, String bucket, String contentType, long sizeBytes, Instant acceptedAt, Instant expiresAt) {
-		return new UploadSession(uploadId, uploadedBy, purpose, recordId, roomId, UploadStatus.UPLOADING, bucket,
+		String bucket, String contentType, long sizeBytes, Instant acceptedAt, Instant expiresAt) {
+		return new UploadSession(uploadId, uploadedBy, purpose, recordId, UploadStatus.UPLOADING, bucket,
 			TMP_PREFIX + uploadId, null, contentType, sizeBytes, acceptedAt, expiresAt, null, null);
 	}
 
 	/** API-086 검증·확정 성공. sizeBytes 는 실제 저장된 크기로 바꾼다. */
 	public UploadSession ready(String confirmedKey, long actualSizeBytes, Long imageId, String materialId) {
-		return new UploadSession(uploadId, uploadedBy, purpose, recordId, roomId, UploadStatus.READY, bucket, tmpKey,
+		return new UploadSession(uploadId, uploadedBy, purpose, recordId, UploadStatus.READY, bucket, tmpKey,
 			confirmedKey, contentType, actualSizeBytes, uploadAcceptedAt, uploadExpiresAt, imageId, materialId);
 	}
 
 	/** API-086 크기·형식·내용 검증 실패. 새 012 세션으로 다시 올린다. */
 	public UploadSession failed() {
-		return new UploadSession(uploadId, uploadedBy, purpose, recordId, roomId, UploadStatus.FAILED, bucket, tmpKey,
+		return new UploadSession(uploadId, uploadedBy, purpose, recordId, UploadStatus.FAILED, bucket, tmpKey,
 			null, contentType, sizeBytes, uploadAcceptedAt, uploadExpiresAt, null, null);
 	}
 

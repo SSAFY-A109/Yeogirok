@@ -88,7 +88,7 @@ public enum ExceptionType {
 
 	FILE_TOO_LARGE(CONTENT_TOO_LARGE, "M001", "업로드 파일 크기가 허용 범위를 넘었습니다."),
 	FILE_TYPE_NOT_SUPPORTED(UNSUPPORTED_MEDIA_TYPE, "M002", "지원하지 않는 파일 형식입니다. JPEG·PNG·WEBP 만 올릴 수 있습니다."),
-	/** 신고한 크기·형식과 실물이 다르거나, 손상됐거나, 검증 중에 객체가 바뀌었다. 새 업로드 세션으로 다시 올린다. */
+	/** 요청한 크기·형식과 실물이 다르거나, 손상됐거나, 검증 중에 객체가 바뀌었다. 새 업로드 세션으로 다시 올린다. */
 	FILE_VERIFICATION_FAILED(UNPROCESSABLE_CONTENT, "M003", "파일 검증에 실패했습니다. 다시 업로드해 주세요."),
 	FILE_NOT_FOUND(NOT_FOUND, "M004", "파일 또는 업로드 세션을 찾을 수 없습니다."),
 	FILE_ACCESS_DENIED(FORBIDDEN, "M005", "파일을 열람하거나 사용할 권한이 없습니다."),

@@ -40,11 +40,12 @@ public class FileStorage {
 	private final S3Presigner presigner;
 
 	/**
-	 * 이 key 에만, 이 Content-Type 으로만 올릴 수 있는 PUT URL. 크기는 서명하지 않고 API-086 이 실제 객체로 검사한다.
+	 * 이 key 에만, 이 Content-Type·크기로만 올릴 수 있는 PUT URL. 크기가 다르면 S3 가 서명 불일치(403)로 막는다.
 	 */
-	public String presignPut(String bucket, String key, String contentType, Duration validFor) {
+	public String presignPut(String bucket, String key, String contentType, long contentLength, Duration validFor) {
 		try {
-			PutObjectRequest object = PutObjectRequest.builder().bucket(bucket).key(key).contentType(contentType).build();
+			PutObjectRequest object = PutObjectRequest.builder().bucket(bucket).key(key).contentType(contentType)
+				.contentLength(contentLength).build();
 			return presigner.presignPutObject(PutObjectPresignRequest.builder()
 				.signatureDuration(validFor)
 				.putObjectRequest(object)

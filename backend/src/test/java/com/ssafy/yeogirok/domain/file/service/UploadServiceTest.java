@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.file.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -62,7 +63,7 @@ class UploadServiceTest {
 	@BeforeEach
 	void setUp() {
 		clock = new MutableClock(NOW);
-		given(storage.presignPut(anyString(), anyString(), anyString(), any())).willReturn("https://signed");
+		given(storage.presignPut(anyString(), anyString(), anyString(), anyLong(), any())).willReturn("https://signed");
 		given(recordAccess.isCurrentMember(RECORD_ID, USER_ID)).willReturn(true);
 		service = new UploadService(new FilePolicy(TestFileProperties.VALUE), TestFileProperties.VALUE, store,
 			storage, cleanupQueue, recordAccess, clock);
@@ -83,7 +84,7 @@ class UploadServiceTest {
 		assertThat(response.uploadHeaders()).containsEntry("Content-Type", "image/png");
 		assertThat(response.uploadMethod()).isEqualTo("PUT");
 		assertThat(response.uploadUrl()).isEqualTo("https://signed");
-		verify(storage).presignPut("photos", saved.tmpKey(), "image/png", Duration.ofMinutes(10));
+		verify(storage).presignPut("photos", saved.tmpKey(), "image/png", 1024L, Duration.ofMinutes(10));
 	}
 
 	@Test
@@ -107,7 +108,7 @@ class UploadServiceTest {
 		InOrder order = inOrder(cleanupQueue, store, storage);
 		order.verify(cleanupQueue).register("receipts", saved.tmpKey(), NOW.plus(Duration.ofHours(24)));
 		order.verify(store).save(saved);
-		order.verify(storage).presignPut(any(), any(), any(), any());
+		order.verify(storage).presignPut(any(), any(), any(), anyLong(), any());
 	}
 
 	@Test
@@ -161,7 +162,8 @@ class UploadServiceTest {
 
 		assertThat(again.uploadId()).isEqualTo(uploadId);
 		assertThat(again.uploadExpiresAt()).isEqualTo(NOW.plus(Duration.ofMinutes(10)));
-		verify(storage).presignPut(eq("photos"), eq("tmp/" + uploadId), eq("image/png"), eq(Duration.ofMinutes(6)));
+		verify(storage).presignPut(eq("photos"), eq("tmp/" + uploadId), eq("image/png"), eq(1024L),
+			eq(Duration.ofMinutes(6)));
 	}
 
 	@Test

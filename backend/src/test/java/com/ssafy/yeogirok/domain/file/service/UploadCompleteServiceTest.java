@@ -74,7 +74,7 @@ class UploadCompleteServiceTest {
 
 	/** 012 가 만든 것과 같은 세션. 사진은 photos, 영수증은 receipts 버킷. */
 	void uploading(FilePurpose purpose, long sizeBytes) {
-		memory.put(UploadSession.start(UPLOAD_ID, USER_ID, purpose, purpose.recordRequired() ? RECORD_ID : null, null,
+		memory.put(UploadSession.start(UPLOAD_ID, USER_ID, purpose, purpose.recordRequired() ? RECORD_ID : null,
 			TestFileProperties.VALUE.bucketFor(purpose), "image/png", sizeBytes, NOW,
 			NOW.plus(Duration.ofMinutes(10))));
 	}
@@ -211,7 +211,7 @@ class UploadCompleteServiceTest {
 	}
 
 	@Test
-	void 실물_크기가_신고와_다르면_M003() {
+	void 실물_크기가_요청한_크기와_다르면_M003() {
 		uploading(FilePurpose.TIP_PHOTO, 1024);
 		uploaded(1025, PNG);
 
@@ -227,7 +227,7 @@ class UploadCompleteServiceTest {
 	}
 
 	@Test
-	void PNG_로_신고하고_JPEG_를_올리면_M003() {
+	void PNG_로_요청하고_JPEG_를_올리면_M003() {
 		uploading(FilePurpose.TIP_PHOTO, 1024);
 		uploaded(1024, JPEG);
 

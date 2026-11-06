@@ -46,7 +46,7 @@ public class UploadService {
 
 		Instant now = clock.instant();
 		UploadSession session = UploadSession.start(UUID.randomUUID().toString(), userId, command.purpose(),
-			command.recordId(), command.roomId(), properties.bucketFor(command.purpose()), contentType,
+			command.recordId(), properties.bucketFor(command.purpose()), contentType,
 			command.sizeBytes(), now, now.plus(properties.uploadUrlTtl()));
 		if (command.purpose().isReceipt()) {
 			receiptCleanupQueue.register(session.bucket(), session.tmpKey(), now.plus(properties.receiptRetention()));
@@ -81,6 +81,7 @@ public class UploadService {
 	}
 
 	private String presign(UploadSession session, Duration validFor) {
-		return fileStorage.presignPut(session.bucket(), session.tmpKey(), session.contentType(), validFor);
+		return fileStorage.presignPut(session.bucket(), session.tmpKey(), session.contentType(), session.sizeBytes(),
+			validFor);
 	}
 }

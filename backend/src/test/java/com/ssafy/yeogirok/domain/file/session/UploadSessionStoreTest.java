@@ -33,7 +33,7 @@ class UploadSessionStoreTest {
 	}
 
 	static UploadSession session(Instant acceptedAt) {
-		return UploadSession.start("550e8400-e29b-41d4-a716-446655440010", 7L, FilePurpose.RECEIPT, 100L, null,
+		return UploadSession.start("550e8400-e29b-41d4-a716-446655440010", 7L, FilePurpose.RECEIPT, 100L,
 			"receipts", "image/png", 1024, acceptedAt, acceptedAt.plus(Duration.ofMinutes(10)));
 	}
 
