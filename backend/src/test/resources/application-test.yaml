@@ -23,6 +23,11 @@ yeogirok:
       # 테스트 전용 값(Base64, 64바이트). 운영 값과 무관하다.
       token-key: dGVzdC1vbmx5LXJvb20taW52aXRlLWtleS1mb3IteWVvZ2lyb2stdGVzdHMtMDEyMzQ1Njc4OWFiY2RlZmdoaQ==
       url-base: https://test.yeogirok/invite
+  # 테스트는 실제 S3 를 부르지 않는다. 이름만 있는 값이다.
+  file:
+    region: ap-northeast-2
+    photo-bucket: test-photos
+    receipt-bucket: test-receipts
 
 auth:
   jwt:
