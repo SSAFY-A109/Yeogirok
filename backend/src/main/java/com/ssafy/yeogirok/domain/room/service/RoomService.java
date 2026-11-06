@@ -180,9 +180,11 @@ public class RoomService {
 	}
 
 	/** 앞뒤 공백을 지운다. 비었거나 200자를 넘으면 C003. */
-	private static String normalizeTitle(String title) {
+	static String normalizeTitle(String title) {
 		String trimmed = title.strip();
-		if (trimmed.isEmpty() || trimmed.length() > TravelRoom.TITLE_MAX_LENGTH) {
+		// DB VARCHAR 길이와 같게 코드 포인트로 센다(이모지 하나는 UTF-16 으로 2칸이지만 1자다).
+		int length = trimmed.codePointCount(0, trimmed.length());
+		if (length == 0 || length > TravelRoom.TITLE_MAX_LENGTH) {
 			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
 				"title: 1~%d자여야 합니다.".formatted(TravelRoom.TITLE_MAX_LENGTH));
 		}

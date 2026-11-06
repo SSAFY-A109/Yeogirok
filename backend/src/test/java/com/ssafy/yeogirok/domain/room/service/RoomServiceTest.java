@@ -125,6 +125,18 @@ class RoomServiceTest {
 			new RoomCreateCommand("가".repeat(201), null, null, TransportMode.CAR)), ExceptionType.NOT_ALLOWED_VALUE);
 	}
 
+	/**
+	 * PostgreSQL VARCHAR(200) 은 문자(코드 포인트) 단위라 이모지 200개가 들어간다(로컬 PostgreSQL 16 에서 확인).
+	 * H2 는 UTF-16 단위로 세어 저장까지 가면 거부되므로 검사만 본다.
+	 */
+	@Test
+	void 제목_길이는_이모지도_1자로_센다() {
+		String emoji200 = "😀".repeat(200);
+
+		assertThat(RoomService.normalizeTitle(" " + emoji200 + " ")).isEqualTo(emoji200);
+		assertError(() -> RoomService.normalizeTitle(emoji200 + "😀"), ExceptionType.NOT_ALLOWED_VALUE);
+	}
+
 	/* ── API-020 목록 ───────────────────────────────────────── */
 
 	@Test
