@@ -10,6 +10,8 @@ import { fail, MOCK_DELAY_MS, ok } from "./respond";
 // API-046 목. backend/dev(fc7b266) VisitStatisticsService·VisitGrid·BoundingBox의 검사와 격자 집계를 따른다.
 // 격자 설정은 backend application-local.yaml 값이다. 배포 값은 환경 변수라 다를 수 있다(TBD).
 // 예시 묶음(fixtures)과 앱에서 남긴 발자취(mockDb.footprints, API-041 목)를 함께 센다.
+// 다른 점(백엔드에 요청 중, TBD): 서버는 칸의 center로 칸 한가운데를 주어 해안 칸 마커가 바다에 찍힌다.
+// 목은 칸 안 발자취의 평균 위치(수로 가중)를 center로 준다. 서버가 바꾸면 이 줄을 지운다.
 
 const BASE_CELL_DEGREES = 0.005;
 /** "최소zoom:배수". zoom이 클수록(가까울수록) 칸이 작다. */
@@ -131,7 +133,15 @@ function countedFootprints(from: string | null, to: string | null): MockFootprin
   return [...visitFootprintSeeds, ...saved];
 }
 
-type Tally = { latitudeIndex: number; longitudeIndex: number; count: number; byCategory: Map<string, number> };
+type Tally = {
+  latitudeIndex: number;
+  longitudeIndex: number;
+  count: number;
+  /** 발자취 위치를 수로 가중해 더한 값. 평균 위치(center)를 구한다. */
+  latitudeSum: number;
+  longitudeSum: number;
+  byCategory: Map<string, number>;
+};
 
 function toCells(points: readonly MockFootprintSeed[], area: Box, size: number, multiplier: number, category: string | null): VisitCellDto[] {
   const tallies = new Map<string, Tally>();
@@ -146,8 +156,10 @@ function toCells(points: readonly MockFootprintSeed[], area: Box, size: number, 
     const latitudeIndex = Math.floor(point.latitude / size);
     const longitudeIndex = Math.floor(point.longitude / size);
     const key = `${latitudeIndex}:${longitudeIndex}`;
-    const tally = tallies.get(key) ?? { latitudeIndex, longitudeIndex, count: 0, byCategory: new Map<string, number>() };
+    const tally = tallies.get(key) ?? { latitudeIndex, longitudeIndex, count: 0, latitudeSum: 0, longitudeSum: 0, byCategory: new Map<string, number>() };
     tally.count += point.count;
+    tally.latitudeSum += point.latitude * point.count;
+    tally.longitudeSum += point.longitude * point.count;
 
     for (const code of point.categoryCodes) {
       tally.byCategory.set(code, (tally.byCategory.get(code) ?? 0) + point.count);
@@ -174,8 +186,8 @@ function toCells(points: readonly MockFootprintSeed[], area: Box, size: number, 
     return {
       cellId: `${multiplier}:${tally.latitudeIndex}:${tally.longitudeIndex}`,
       center: {
-        latitude: roundCoordinate((tally.latitudeIndex + 0.5) * size),
-        longitude: roundCoordinate((tally.longitudeIndex + 0.5) * size),
+        latitude: roundCoordinate(tally.latitudeSum / tally.count),
+        longitude: roundCoordinate(tally.longitudeSum / tally.count),
       },
       count: tally.count,
       categoryCounts,

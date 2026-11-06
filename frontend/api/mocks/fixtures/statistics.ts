@@ -7,24 +7,24 @@ export type MockFootprintSeed = {
 };
 
 /**
- * 강릉·속초·정동진 일대의 방문 분포 예시. 좌표는 공개 장소의 대표 좌표 근처이고, 수는 Figma W15·W15-A 시안 값에서 나눴다.
+ * 강릉·속초·정동진 일대의 방문 분포 예시. 좌표는 공개 장소의 대표 좌표 근처의 육지이고(해변·해안선 바로 바깥 좌표는 2026-11-06 육지 쪽으로 옮겼다), 수는 Figma W15·W15-A 시안 값에서 나눴다.
  * 한 장소 안에서도 카테고리별로 조금씩 떨어뜨려, 가까이 보면 여러 칸으로 나뉘고 멀리 보면 한 칸으로 묶이게 했다.
  * 카테고리를 여러 개 고른 묶음도 섞어 칸의 카테고리별 수를 더하면 전체보다 커지는 경우를 보여 준다.
  */
 export const visitFootprintSeeds: readonly MockFootprintSeed[] = [
   // 안목해변
   { latitude: 37.772, longitude: 128.9475, categoryCodes: ["CAFE"], count: 220 },
-  { latitude: 37.7735, longitude: 128.95, categoryCodes: ["CAFE", "NATURE"], count: 29 },
+  { latitude: 37.7735, longitude: 128.9465, categoryCodes: ["CAFE", "NATURE"], count: 29 },
   { latitude: 37.7745, longitude: 128.944, categoryCodes: ["NATURE"], count: 112 },
   { latitude: 37.7695, longitude: 128.9455, categoryCodes: ["FOOD"], count: 40 },
   // 경포해변
-  { latitude: 37.8057, longitude: 128.9085, categoryCodes: ["NATURE"], count: 160 },
-  { latitude: 37.8085, longitude: 128.911, categoryCodes: ["ACTIVITY"], count: 72 },
-  { latitude: 37.803, longitude: 128.906, categoryCodes: ["FOOD", "NATURE"], count: 58 },
+  { latitude: 37.8045, longitude: 128.906, categoryCodes: ["NATURE"], count: 160 },
+  { latitude: 37.8075, longitude: 128.9025, categoryCodes: ["ACTIVITY"], count: 72 },
+  { latitude: 37.8025, longitude: 128.9045, categoryCodes: ["FOOD", "NATURE"], count: 58 },
   // 경포호
   { latitude: 37.7955, longitude: 128.8963, categoryCodes: ["NATURE"], count: 157 },
   { latitude: 37.798, longitude: 128.8935, categoryCodes: ["FOOD"], count: 38 },
-  { latitude: 37.793, longitude: 128.899, categoryCodes: ["CULTURE"], count: 17 },
+  { latitude: 37.7861, longitude: 128.8915, categoryCodes: ["CULTURE"], count: 17 },
   // 오죽헌
   { latitude: 37.7792, longitude: 128.8786, categoryCodes: ["CULTURE"], count: 136 },
   { latitude: 37.7815, longitude: 128.881, categoryCodes: ["NATURE", "CULTURE"], count: 32 },
@@ -36,13 +36,13 @@ export const visitFootprintSeeds: readonly MockFootprintSeed[] = [
   // 초당순두부마을·강문해변
   { latitude: 37.791, longitude: 128.915, categoryCodes: ["FOOD"], count: 62 },
   { latitude: 37.7925, longitude: 128.9175, categoryCodes: ["CAFE"], count: 8 },
-  { latitude: 37.7952, longitude: 128.9188, categoryCodes: ["NATURE"], count: 27 },
-  { latitude: 37.797, longitude: 128.921, categoryCodes: ["CAFE"], count: 18 },
+  { latitude: 37.7948, longitude: 128.9165, categoryCodes: ["NATURE"], count: 27 },
+  { latitude: 37.7955, longitude: 128.9135, categoryCodes: ["CAFE"], count: 18 },
   // 정동진
-  { latitude: 37.6905, longitude: 129.0345, categoryCodes: ["SIGHT", "NATURE"], count: 54 },
+  { latitude: 37.6915, longitude: 129.031, categoryCodes: ["SIGHT", "NATURE"], count: 54 },
   // 속초해수욕장
-  { latitude: 38.1906, longitude: 128.6017, categoryCodes: ["NATURE"], count: 151 },
-  { latitude: 38.193, longitude: 128.604, categoryCodes: ["ACTIVITY"], count: 70 },
+  { latitude: 38.1903, longitude: 128.5985, categoryCodes: ["NATURE"], count: 151 },
+  { latitude: 38.1925, longitude: 128.5975, categoryCodes: ["ACTIVITY"], count: 70 },
   { latitude: 38.1885, longitude: 128.5995, categoryCodes: ["FOOD"], count: 39 },
   // 속초관광수산시장
   { latitude: 38.2047, longitude: 128.5904, categoryCodes: ["FOOD", "SHOPPING"], count: 148 },
