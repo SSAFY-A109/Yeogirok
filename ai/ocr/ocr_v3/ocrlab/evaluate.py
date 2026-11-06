@@ -187,15 +187,15 @@ def run_eval(args) -> dict:
         t1 = time.perf_counter()
         img, pmeta = imageio.preprocess(img, cfg)
         t2 = time.perf_counter()
-        ometa = {"triggered": False, "angle": 0}
+        ometa = {"triggered": False, "angle": 0, "reads": 0}
         if engine is None:
             from .engine import OcrOutput
             out = OcrOutput([], 0.0, None)
         else:
             out = engine.run(img)
-            if cfg["pre"].get("orient_retry", "legacy") == "auto":
+            if cfg["pre"].get("orient_retry", "legacy") in ("auto", "fast"):
                 from . import orient
-                out, ometa = orient.run(engine, img, out)
+                out, ometa = orient.run(engine, img, out, cfg["pre"]["orient_retry"])
         pmeta["orient"] = ometa
         t3 = time.perf_counter()
         resp, diag = extract(to_lines(out), cfg)
@@ -218,7 +218,8 @@ def run_eval(args) -> dict:
                    "n_tall_boxes": tall_boxes(out.tokens),             # 여러 줄이 한 박스로 합쳐진 것으로 의심되는 박스 수
                    **{f"has_{k}": resp[k] is not None for k in ("placeName", "date", "time", "address")},
                    "address_complete": resp["addressComplete"],
-                   "orient_retry": int(pmeta["orient"]["triggered"]), "orient_angle": pmeta["orient"]["angle"]}
+                   "orient_retry": int(pmeta["orient"]["triggered"]), "orient_angle": pmeta["orient"]["angle"],
+                   "orient_reads": pmeta["orient"].get("reads", 0)}
             if gold:
                 gv = gold_values(gold[name], addr_given)
                 for fld, key in FIELDS:
@@ -278,7 +279,8 @@ def run_eval(args) -> dict:
         "input_long_side": {"min": min(long_sides), "median": statistics.median(long_sides), "max": max(long_sides)},
         "orient": {"mode": cfg["pre"].get("orient_retry", "legacy"),
                    "retried_n": sum(r["orient_retry"] for r in rows if r["repeat"] == 0),
-                   "rotated_n": sum(r["orient_angle"] != 0 for r in rows if r["repeat"] == 0)},
+                   "rotated_n": sum(r["orient_angle"] != 0 for r in rows if r["repeat"] == 0),
+                   "extra_reads_n": sum(r["orient_reads"] for r in rows if r["repeat"] == 0)},
         "presence": presence(rows),        # 정답 없이도 볼 수 있는 값: 필드가 채워진 사진 수 (정확도 아님)
         "memory": {"after_init": mem_after_init, "end": mem_end},
         "env": env_info(engine), "dry_run": args.dry_run,

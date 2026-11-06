@@ -20,7 +20,7 @@ DEFAULTS = {
         "clahe": False, "clahe_clip": 2.0, "clahe_tile": 8,
         "denoise": False, "denoise_h": 10, "denoise_hcolor": 10, "denoise_template": 7, "denoise_search": 21,
         "binarize": False, "binarize_block": 11, "binarize_c": 2,
-        "orient_retry": "legacy",   # [실험 11/05] legacy: 운영과 같음 / auto: 결과가 깨져 보일 때만 180·90·270도로 다시 읽기 (ocrlab/orient.py)
+        "orient_retry": "legacy",   # [실험 11/05] legacy: 운영과 같음 / auto: 결과가 깨져 보일 때만 180·90·270도로 다시 읽기 / fast: 맞을 듯한 방향부터, 충분하면 멈춤 (ocrlab/orient.py)
     },
     "ocr": {
         "lang": "korean",
@@ -70,7 +70,7 @@ CHOICES = {
     "fields.date_validation": ("legacy", "calendar"),
     "fields.date_lookalike_fix": ("legacy", "fallback"),
     "fields.name_rule": ("legacy", "v2"),
-    "pre.orient_retry": ("legacy", "auto"),
+    "pre.orient_retry": ("legacy", "auto", "fast"),
     "address.return_level": ("road", "building"),
     "address.sido_style": ("as_printed", "full"),
 }
