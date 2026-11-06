@@ -4,24 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Duration;
-import java.util.Map;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.springframework.util.unit.DataSize;
 
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.TestFileProperties;
 
 /** AC-03 크기 경계(한도와 같으면 허용, 1바이트 넘으면 M001), 형식 M002. */
 class FilePolicyTest {
 
-	static final FileProperties PROPERTIES = new FileProperties("ap-northeast-2", "photos", "receipts",
-		Duration.ofMinutes(10), Duration.ofMinutes(15),
-		Map.of(FilePurpose.TIP_PHOTO, DataSize.ofMegabytes(20), FilePurpose.RECORD_PHOTO, DataSize.ofMegabytes(20),
-			FilePurpose.RECEIPT, DataSize.ofMegabytes(10)));
+	static final FileProperties PROPERTIES = TestFileProperties.VALUE;
 
 	final FilePolicy policy = new FilePolicy(PROPERTIES);
 

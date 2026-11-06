@@ -21,6 +21,7 @@ class FilePropertiesTest {
 		values.put("yeogirok.file.receipt-bucket", "receipts");
 		values.put("yeogirok.file.upload-url-ttl", "10m");
 		values.put("yeogirok.file.download-url-ttl", "15m");
+		values.put("yeogirok.file.receipt-retention", "24h");
 		values.put("yeogirok.file.max-size.TIP_PHOTO", "20MB");
 		values.put("yeogirok.file.max-size.RECORD_PHOTO", "20MB");
 		values.put("yeogirok.file.max-size.RECEIPT", "10MB");

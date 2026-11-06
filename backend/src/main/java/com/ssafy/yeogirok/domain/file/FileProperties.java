@@ -15,6 +15,7 @@ import org.springframework.util.unit.DataSize;
  * @param receiptBucket  영수증 버킷(RECEIPT)
  * @param uploadUrlTtl   Presigned PUT URL 과 미완료 업로드 세션의 수명(11/3 결정 10분)
  * @param downloadUrlTtl Presigned GET URL 수명(11/3 결정 15분)
+ * @param receiptRetention 영수증 원본 최대 보관 기간. 012 최초 발급 시각부터 센다(노션 API-012 24시간)
  * @param maxSize        용도별 파일당 최대 크기. 같은 크기는 허용한다. {@code 20MB} 는 20 × 1,048,576 바이트다(DataSize 는 1MB = 1,048,576)
  */
 @ConfigurationProperties("yeogirok.file")
@@ -24,6 +25,7 @@ public record FileProperties(
 	String receiptBucket,
 	Duration uploadUrlTtl,
 	Duration downloadUrlTtl,
+	Duration receiptRetention,
 	Map<FilePurpose, DataSize> maxSize
 ) {
 
@@ -33,6 +35,7 @@ public record FileProperties(
 		requireText(receiptBucket, "receipt-bucket");
 		requirePositive(uploadUrlTtl, "upload-url-ttl");
 		requirePositive(downloadUrlTtl, "download-url-ttl");
+		requirePositive(receiptRetention, "receipt-retention");
 		if (maxSize == null || !maxSize.keySet().containsAll(Arrays.asList(FilePurpose.values()))
 			|| maxSize.values().stream().anyMatch(size -> size.toBytes() <= 0)) {
 			throw new IllegalArgumentException("yeogirok.file.max-size 는 모든 용도에 0보다 큰 값이 필요합니다.");

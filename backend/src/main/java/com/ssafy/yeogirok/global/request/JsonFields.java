@@ -52,6 +52,17 @@ public final class JsonFields {
 		return value.stringValue();
 	}
 
+	/** 생략·null 이면 null, 정수(long 범위) 아님 C002. */
+	public static Long optionalLong(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			return null;
+		}
+		if (!value.isIntegralNumber() || !value.canConvertToLong()) {
+			throw invalidFormat(field, "정수여야 합니다.");
+		}
+		return value.longValue();
+	}
+
 	public static BusinessException missing(String field) {
 		return new BusinessException(ExceptionType.REQUIRED_VALUE_MISSING, field + ": 값이 필요합니다.");
 	}
