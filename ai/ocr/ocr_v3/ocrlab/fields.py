@@ -54,6 +54,38 @@ def _ambiguous(cands, key, chosen) -> bool:
     return not any(c["label"] and chosen in (c["dates"] if key == "date" else [c["time"]]) for c in cands)
 
 
+# 날짜 자리 혼동 문자 보정 (실험 옵션 fields.date_lookalike_fix=fallback, 기본 legacy = 운영과 같음)
+# 근거: 11/04 B 모델이 dev2 093452 의 흐린 '0'을 'C'로 읽어 '26-1C-01' → 날짜 형식이 아니라 누락.
+# 날짜 모양(연-월-일) 안의 월·일 칸에 있는 글자만 바꾼다. 연도는 숫자만 인정한다.
+LOOKALIKE = {"O": "0", "o": "0", "C": "0", "c": "0", "D": "0", "I": "1", "l": "1", "|": "1"}
+_LK_GROUP = r"[\d" + re.escape("".join(LOOKALIKE)) + r"]{1,2}"
+DATE_SHAPE_RE = re.compile(r"(?<![0-9A-Za-z])(20\d{2}|\d{2})(\s*[.\-/년]\s*)(" + _LK_GROUP + r")(\s*[.\-/월]\s*)(" + _LK_GROUP + r")")
+
+
+def fix_date_lookalikes(text: str) -> str:
+    """'26-1C-01' → '26-10-01'. 월·일 칸에 숫자가 하나 이상 있고 혼동 문자가 있을 때만 바꾼다.
+    바꾼 뒤에도 기존 DATE_RE·날짜 범위 검사를 그대로 통과해야 날짜로 쓰인다."""
+    def rep(m):
+        y, s1, mo, s2, d = m.groups()
+        if not any(ch in LOOKALIKE for ch in mo + d):
+            return m.group(0)
+        if not (any(ch.isdigit() for ch in mo) and any(ch.isdigit() for ch in d)):
+            return m.group(0)
+        tr = lambda g: "".join(LOOKALIKE.get(ch, ch) for ch in g)
+        return y + s1 + tr(mo) + s2 + tr(d)
+    return DATE_SHAPE_RE.sub(rep, text)
+
+
+def lookalike_fallback(lines):
+    """기존 규칙으로 날짜를 못 찾았을 때만 부른다. (date, time, 바뀐 줄 번호) — 못 찾으면 date None."""
+    fixed = [(fix_date_lookalikes(t), s) for t, s in lines]
+    changed = [i for i, (a, b) in enumerate(zip(lines, fixed)) if a[0] != b[0]]
+    if not changed:
+        return None, None, []
+    date, time_, _ = rp.extract_datetime(fixed)
+    return date, time_, changed
+
+
 def calendar_ok(date: str | None) -> bool:
     if date is None:
         return True
@@ -98,6 +130,14 @@ def extract(lines, cfg: dict) -> tuple[dict, dict]:
             "placeName": {"selected": d["placeName"], "candidates": name_candidates(lines)},
             "address": addr.diagnostics(), "policy": {"fields": dict(cfg["fields"]), "address": dict(cfg["address"])}}
     f = cfg["fields"]
+    if f.get("date_lookalike_fix", "legacy") == "fallback" and d["date"] is None:   # 이미 찾은 날짜는 바꾸지 않는다
+        date2, time2, changed = lookalike_fallback(lines)
+        if date2:
+            d["date"] = date2
+            diag["datetime"]["actions"].append(f"날짜 자리 혼동 문자 보정 (줄 {changed}) → date {date2}")
+            if d["time"] is None and time2:                   # 기존 규칙에서 시간도 못 찾았을 때만 채운다
+                d["time"] = time2
+                diag["datetime"]["actions"].append(f"같은 보정으로 time {time2}")
     if f["date_validation"] == "calendar" and not calendar_ok(d["date"]):
         diag["datetime"]["actions"].append(f"달력에 없는 날짜 {d['date']} → null")
         d["date"] = None

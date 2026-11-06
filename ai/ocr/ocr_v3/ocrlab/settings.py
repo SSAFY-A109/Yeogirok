@@ -36,6 +36,8 @@ DEFAULTS = {
     "fields": {
         "datetime_ambiguity": "legacy",   # [미합의] legacy: 기존 규칙대로 선택 / null_if_ambiguous: 근거 없이 후보가 여럿이면 null
         "date_validation": "legacy",      # [미합의] legacy: 월 1~12·일 1~31 / calendar: 실제 달력 날짜만 (2/30 제외)
+        "date_lookalike_fix": "legacy",   # [실험 11/04] legacy: 운영과 같음 / fallback: 날짜를 못 찾았을 때만 날짜 모양 안의
+                                          #   혼동 문자(O·o·C·c·D→0, I·l·|→1)를 숫자로 바꿔 한 번 더 찾는다 (fields.py)
     },
     "address": {
         "return_level": "road",           # [확정 v3]
@@ -64,6 +66,7 @@ CHOICES = {
     "decode.exif_mode": ("opencv", "explicit", "ignore"),
     "fields.datetime_ambiguity": ("legacy", "null_if_ambiguous"),
     "fields.date_validation": ("legacy", "calendar"),
+    "fields.date_lookalike_fix": ("legacy", "fallback"),
     "address.return_level": ("road", "building"),
     "address.sido_style": ("as_printed", "full"),
 }

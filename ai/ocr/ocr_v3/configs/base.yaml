@@ -20,6 +20,7 @@ ocr:
 fields:
   datetime_ambiguity: legacy   # [미합의] legacy | null_if_ambiguous
   date_validation: legacy      # [미합의] legacy | calendar
+  date_lookalike_fix: legacy   # [실험] legacy(운영과 같음) | fallback(날짜를 못 찾았을 때만 날짜 자리 O·C→0, I·l→1 보정)
 address:
   return_level: road           # [확정 v3] 도로명까지
   sido_style: as_printed       # [미합의] as_printed | full

@@ -75,6 +75,15 @@ venv/bin/python classify_errors.py --results results_v3/dev2_raw --out results_v
 - 상호명·날짜·시간은 `results_v3/dev2_error_causes/`, 주소는 `results_v3/dev2_raw/address_error_causes.csv` (판정만, 원문 없음)
 - `raw/` 와 `per_receipt.csv` 에는 OCR 원문·정답이 들어 있으니 서버 밖으로 옮기지 않는다
 
+## 4-1. 후처리 규칙만 바꿔 다시 채점 (OCR·GPU 안 씀)
+
+`--save-raw` 로 평가한 폴더의 OCR 결과로 필드 추출만 다시 한다. 먼저 바꾸기 전 채점이 그 폴더의 `rows.csv`·`metrics.json` 과 같은지 확인하고, 다르면 멈춘다.
+```
+venv/bin/python ocr_v3/rescore_raw.py --labels real_new/dev2_labels.csv --runs results_v3/dev2_1280_raw results_v3/dev2_1280_rec_ft2_raw --set fields.date_lookalike_fix=fallback --out results_v3/rescore_datefix_20261104
+```
+- `fields.date_lookalike_fix=fallback` (실험, 기본 `legacy` = 운영과 같음): 날짜를 못 찾았을 때만 날짜 모양 안의 O·o·C·c·D→0, I·l·|→1 로 바꿔 한 번 더 찾는다. 이미 찾은 날짜는 바꾸지 않는다
+- 출력·`rescore.json` 에는 정답 수와 판정 변화만 있다 (OCR 원문·추출값 없음). holdout 경로는 거부한다
+
 ## 5. 전처리·방향 설정 비교 (dev2, 모드마다 한 요소만 바꿈)
 
 ```
