@@ -1,4 +1,5 @@
 import type { ImageSource } from "expo-image";
+import type { SocialProvider } from "@/features/auth/model";
 
 export const TIP_CATEGORIES = ["포토", "맛집", "카페", "꿀팁", "TMI"] as const;
 
@@ -22,7 +23,7 @@ export type MyFootprint = {
   body: string;
 };
 
-export const mockProfile = { name: "지윤", provider: "카카오" };
+export const mockProfile: { name: string; provider: SocialProvider } = { name: "지윤", provider: "kakao" };
 
 export const mockTips: MyTip[] = [
   { id: "photo", category: "포토", registeredAt: "2026.11.04", body: "해 질 무렵 바다 쪽으로 찍으면 노을이 예뻐요. 산책로 끝 벤치 주변은 비교적 한적해요.", photo: require("@/assets/images/my/tip-photo.png") },

@@ -15,7 +15,7 @@ import { useMyMock } from "../mocks/my-provider";
 import { MyLoading, MyUnavailable } from "./my-page";
 
 export function MyScreen() {
-  const { tips, footprints } = useMyMock();
+  const { tips, footprints, loginProvider } = useMyMock();
   const [logoutOpen, setLogoutOpen] = useState(false);
   const { preview } = useLocalSearchParams<{ preview?: string }>();
 
@@ -31,7 +31,7 @@ export function MyScreen() {
           <>
             <View className="flex-row items-center gap-4 px-5 pb-6">
               <View className="h-14 w-14 items-center justify-center rounded-full bg-brand-muted"><Text className="text-h3 text-primary">{mockProfile.name.slice(0, 1)}</Text></View>
-              <View className="gap-1"><Text className="text-h3">{mockProfile.name}</Text><Text className="text-caption text-foreground-secondary">{mockProfile.provider}로 로그인</Text></View>
+              <View className="gap-1"><Text className="text-h3">{mockProfile.name}</Text><Text className="text-caption text-foreground-secondary">{loginProvider ? `${loginProvider === "kakao" ? "카카오" : "구글"}로 로그인` : "로그인 정보 확인 필요"}</Text></View>
             </View>
             <View className="gap-3 px-5 pb-6">
               <View className="flex-row items-center justify-between">

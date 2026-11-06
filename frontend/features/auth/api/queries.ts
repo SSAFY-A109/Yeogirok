@@ -2,11 +2,28 @@ import { mutationOptions, queryOptions, useMutation, useQuery, useQueryClient } 
 
 import { performSocialLogin } from "../sign-in";
 import { signOutThisDevice } from "../sign-out";
-import { getTokens } from "../token-store";
+import { getLoginProvider, getTokens } from "../token-store";
 
 export const authKeys = {
   session: ["auth", "session"] as const,
+  loginProvider: ["auth", "login-provider"] as const,
 };
+
+const loginProviderOptions = queryOptions({
+  queryKey: authKeys.loginProvider,
+
+  queryFn: async () => {
+    const [provider, tokens] = await Promise.all([getLoginProvider(), getTokens()]);
+    return { provider, hasSession: Boolean(tokens) };
+  },
+
+  staleTime: Infinity,
+  retry: false,
+});
+
+export function useLoginProvider() {
+  return useQuery(loginProviderOptions);
+}
 
 export const sessionOptions = queryOptions({
   queryKey: authKeys.session,
@@ -36,6 +53,7 @@ export function useSocialLogin() {
 
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: authKeys.session });
+      await queryClient.invalidateQueries({ queryKey: authKeys.loginProvider });
     },
   });
 }
