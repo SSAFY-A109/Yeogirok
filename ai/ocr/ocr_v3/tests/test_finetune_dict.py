@@ -120,3 +120,22 @@ def test_broken_pretrained_reported_not_crash():
         else:
             sys.modules["paddle"] = old
     assert not r["ok"] and any("읽지 못함" in p and "EOFError" in p for p in r["problems"])
+
+
+def test_learning_rate_without_exponent():
+    """-111: 0.00005 가 '5e-05' 로 넘어가면 PaddleOCR(PyYAML)가 글자로 읽어 학습이 멈춘다 → 지수 표기 없이 넘긴다"""
+    d = tempfile.mkdtemp()
+    _repo(os.path.join(d, "repo"))
+    for v, want in ((0.00005, "0.00005"), ("5e-5", "0.00005"), (5e-05, "0.00005"), (0.0002, "0.0002"), (0.001, "0.001")):
+        s = finetune.load_settings(_settings(d, learning_rate=v))
+        o = [x for x in finetune.overrides(s, "train") if x.startswith("Optimizer.lr.learning_rate=")]
+        assert o == [f"Optimizer.lr.learning_rate={want}"], (v, o)
+        got = yaml.safe_load(o[0].split("=", 1)[1])
+        assert isinstance(got, float) and abs(got - float(v)) < 1e-12, (v, got)
+    assert isinstance(yaml.safe_load("5e-05"), str)      # 고치기 전 값은 글자로 읽힘 (버그 재현)
+    for bad in ("abc", float("nan")):
+        try:
+            finetune.plain_number(bad)
+            raise AssertionError(bad)
+        except (ValueError, finetune.SetupError):
+            pass

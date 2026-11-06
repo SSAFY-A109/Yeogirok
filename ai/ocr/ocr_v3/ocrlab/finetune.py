@@ -118,6 +118,17 @@ def check(s: dict, for_action: str = "train") -> dict:
     return rep
 
 
+def plain_number(v) -> str:
+    """지수 표기 없이 숫자를 글자로 바꾼다 (0.00005 → '0.00005').
+    PaddleOCR 는 -o 값을 PyYAML 로 읽는데, '5e-05' 처럼 소수점 없는 지수 표기는 숫자가 아니라 글자로 읽혀
+    학습 시작 전에 TypeError 가 난다 (Jira S15P31A109-111)."""
+    from decimal import Decimal
+    x = float(v)
+    if x != x or x in (float("inf"), float("-inf")):
+        raise SetupError(f"숫자가 아님: {v}")
+    return format(Decimal(repr(x)), "f")
+
+
 def _list(v):
     return "[" + ",".join(json.dumps(x, ensure_ascii=False) for x in v) + "]"
 
@@ -132,7 +143,7 @@ def overrides(s: dict, action: str, checkpoint: str | None = None) -> list[str]:
         o = [f"Global.pretrained_model={_abs(s['pretrained_model'])}",
              f"Global.save_model_dir={_abs(s['save_model_dir'])}",
              f"Global.epoch_num={int(s['epochs'])}",
-             f"Optimizer.lr.learning_rate={float(s['learning_rate'])}",
+             f"Optimizer.lr.learning_rate={plain_number(s['learning_rate'])}",
              f"Train.dataset.data_dir={data}",
              f"Train.dataset.label_file_list={_list(os.path.join(ldir, f) for f in s['train_list'])}",
              f"Train.loader.batch_size_per_card={int(s['batch_size'])}"] + o
