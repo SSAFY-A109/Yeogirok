@@ -207,6 +207,47 @@ type VisitStatisticsResponseDto = {
 
 - 최소 집계 수 미만 지역을 숨기는 일(DEC-07)과 기간 선택(DEC-02)은 서버가 정한다고 보고, 클라이언트는 받은 값을 그대로 그린다.
 
+### 3-3. 발자취 저장 API-041 — 백엔드 코드 대조 (2026-11-06)
+
+Swagger(`https://k15a109.p.ssafy.io/v3/api-docs`)가 502로 응답하지 않아, 같은 저장소 `origin/backend/dev`(90aaede, PR #46 머지)의 `FootprintController`·`FootprintCreateRequest`·`FootprintCreateResponse`·`FootprintCreateService`·`ExceptionType`을 읽어 옮겼다. 타입은 `features/footprint/model.ts`, 목은 `api/mocks/handlers/footprint.ts`에 있다. Swagger가 살아나면 다시 대조한다.
+
+```ts
+// POST /footprints — 201
+// 헤더 Idempotency-Key(필수, 비면 400 C001). 같은 키 + 같은 내용 → 처음 저장한 결과, 다른 내용 → 409 C005, 처리 중 → 409 C018
+type CreateFootprintRequest = {
+  location: { latitude: number; longitude: number; capturedAt: string }; // 없거나 null → 422 C008, 타입·형식 오류 → 400 C002
+  body?: string | null;    // 줄바꿈을 LF로 맞춘 뒤 코드 포인트 200자 초과 → 400 C003. 공백만이면 null로 저장
+  categoryCodes: string[]; // 공통 카테고리 1~3개, 중복 없음. 없으면 400 C001, 어긋나면 400 C003
+};
+type CreateFootprintResponse = {
+  id: number; latitude: number; longitude: number; body: string | null; categoryCodes: string[];
+  visitedAt: string; createdAt: string; statisticsStatus: "PENDING" | "APPLIED" | "UNCHANGED"; // 지금은 항상 APPLIED
+};
+// capturedAt·visitedAt·createdAt 형식: "yyyy-MM-dd HH:mm:ss+09"
+// 400 C011 위경도 범위, 422 C009 측정 시각이 서버 기준(max-age·max-future-skew 설정값, DEC-01) 밖
+// 409 F003 오늘(Asia/Seoul 04:00 기준) 반경 안(설정 same-day-radius-meters, 오류 문구상 500m)에 이미 남긴 발자취가 있음
+```
+
+- 위치 증거에 정확도 필드가 없다. 규칙 80의 "정확도(m)와 측정 시각을 보낸다"와 다르므로, 클라이언트는 정확도를 화면에만 보여 주고 보내지 않는다. 규칙 80을 고칠지 백엔드에 필드를 요청할지 팀 확인이 필요하다(TBD).
+- 저장되는 장소 이름은 서버가 역지오코딩으로 정한다. 화면의 "○○ 부근"은 기기 지오코더의 참고 값이다.
+
+**공통 오류 code가 §3-0과 다르다.** 백엔드 `ExceptionType`(2026-11-06)의 실제 번호는 다음과 같다.
+
+| code | HTTP | 실제 뜻 |
+| --- | --- | --- |
+| C001·C002·C003 | 400 | 필수 누락·형식 오류·허용하지 않는 값 (§3-0과 같음) |
+| C004 | 409 | 자원 버전 불일치 |
+| C005 | 409 | 같은 멱등키로 다른 내용 |
+| C006·C007 | 400 | 커서 무효·페이지 크기 범위 |
+| C008·C009 | 422 | 위치 증거 없음·위치 증거 유효 시각 지남 |
+| C011·C012·C013 | 400 | 위경도 범위·날짜 범위·지도 조회 영역 |
+| C014·C015·C016·C017 | 500·404·405·415 | 서버 오류·경로 없음·메서드·Content-Type |
+| C018 | 409 | 같은 요청 처리 중 |
+| A001·A002·A003·A004 | 401·401·401·403 | 액세스 토큰 없음·만료·무효, 권한 부족 |
+
+- 영향: `api/errors.ts`의 `COMMON_ERROR_MESSAGES`와 `api/client.ts`의 토큰 갱신 조건(`code === "C005"`, 서버의 만료 code는 `A002`)이 예전 번호를 쓴다. 이번 작업에서는 고치지 않았고, 발자취 화면만 `features/footprint/errors.ts`에서 서버 번호로 먼저 찾는다. §3-0과 공통 처리를 고치는 일은 팀 확인 뒤 따로 한다(TBD).
+- API-046 실제 계약도 §3-2 가정과 다르다: `GET /visit-statistics?bbox=west,south,east,north&zoom&category&from&to&metric` → `{ metric, period, aggregation: { unit, version, precision, minCount }, cells: [{ cellId, center: { latitude, longitude }, count, categoryCounts }], updatedAt }`. 지역 이름과 인원·방문 수 구분이 없다. W15·W15-A를 실제 계약에 맞추는 작업은 따로 한다(TBD).
+
 ## 4. 열거형과 기준 데이터
 
 클라이언트 타입은 아래 값의 유니온으로 두고, 모르는 값은 `UNKNOWN`으로 흡수한다(규칙 90).

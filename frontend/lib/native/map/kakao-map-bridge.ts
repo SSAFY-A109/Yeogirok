@@ -70,6 +70,33 @@ export type MapFootprintStyle = {
   selectionFill: string;
 };
 
+/**
+ * 내 위치 표시(Figma W15 `Current location`, W16 `Accuracy`). 정확도(m)가 있으면 반경 원을 함께 그린다.
+ * `showDot`이 false면 점 없이 원만 그린다(그 자리에 발바닥 마커를 따로 그릴 때).
+ */
+export type MapCurrentLocation = {
+  lat: number;
+  lng: number;
+  accuracyMeters: number | null;
+  showDot: boolean;
+};
+
+/** 내 위치 색. className이 닿지 않으므로 `lib/theme.ts` 값을 넘긴다. */
+export type MapCurrentLocationStyle = {
+  dot: string;
+  dotBorder: string;
+  halo: string;
+  accuracy: string;
+};
+
+/** 지도 가운데를 옮겨 달라는 요청. id가 바뀔 때마다 한 번 옮기고, level보다 멀리 보고 있으면 level까지 당긴다. */
+export type MapFocusRequest = {
+  id: number;
+  lat: number;
+  lng: number;
+  level: number;
+};
+
 export type KakaoMapFailure = "sdk-load" | "map-init" | "timeout" | "network" | "no-response";
 
 export type MapInteractionKind = "drag" | "zoom";
@@ -134,6 +161,8 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   var routeLine = null;
   var routeOverlays = [];
   var footprintOverlays = [];
+  var currentLocationOverlay = null;
+  var accuracyCircle = null;
   var overlayPressedAt = 0;
   var anchor = null;
 
@@ -345,6 +374,60 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
     });
   };
 
+  function currentLocationElement(style) {
+    var wrapper = document.createElement("div");
+    wrapper.setAttribute("aria-hidden", "true");
+    wrapper.style.cssText = "position:relative;width:44px;height:44px;pointer-events:none;";
+    var halo = document.createElement("div");
+    halo.style.cssText = "position:absolute;left:0;top:0;width:44px;height:44px;border-radius:22px;opacity:0.3;background:" + style.halo + ";";
+    var dot = document.createElement("div");
+    dot.style.cssText = "position:absolute;left:12px;top:12px;width:20px;height:20px;box-sizing:border-box;border-radius:10px;" +
+      "border:3px solid " + style.dotBorder + ";background:" + style.dot + ";";
+    wrapper.appendChild(halo);
+    wrapper.appendChild(dot);
+    return wrapper;
+  }
+
+  window.yeogirokMap.setCurrentLocation = function (location, style) {
+    if (!map) return;
+    if (currentLocationOverlay) currentLocationOverlay.setMap(null);
+    if (accuracyCircle) accuracyCircle.setMap(null);
+    currentLocationOverlay = null;
+    accuracyCircle = null;
+    if (!location) return;
+    var position = new kakao.maps.LatLng(location.lat, location.lng);
+    if (location.accuracyMeters !== null && location.accuracyMeters > 0) {
+      accuracyCircle = new kakao.maps.Circle({
+        center: position,
+        radius: location.accuracyMeters,
+        strokeWeight: 1,
+        strokeColor: style.accuracy,
+        strokeOpacity: 0.5,
+        fillColor: style.accuracy,
+        fillOpacity: 0.15
+      });
+      accuracyCircle.setMap(map);
+    }
+    if (location.showDot) {
+      currentLocationOverlay = new kakao.maps.CustomOverlay({
+        position: position,
+        content: currentLocationElement(style),
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 2000
+      });
+      currentLocationOverlay.setMap(map);
+    }
+  };
+
+  window.yeogirokMap.focus = function (target) {
+    if (!map) return;
+    var position = new kakao.maps.LatLng(target.lat, target.lng);
+    if (map.getLevel() > target.level) map.setLevel(target.level);
+    anchor = position;
+    map.panTo(position);
+  };
+
   function watchRegionAndTaps() {
     kakao.maps.event.addListener(map, "idle", function () {
       post({ type: "region-changed", region: currentRegion() });
@@ -450,6 +533,21 @@ export function buildSetFootprintsScript(footprints: readonly MapFootprint[], st
   });
 
   return `window.yeogirokMap && window.yeogirokMap.setFootprints && window.yeogirokMap.setFootprints(${toScriptLiteral(points)}, ${toScriptLiteral(style)}); true;`;
+}
+
+export function buildSetCurrentLocationScript(location: MapCurrentLocation | null, style: MapCurrentLocationStyle): string {
+  const point = location === null ? null : {
+    lat: location.lat,
+    lng: location.lng,
+    accuracyMeters: location.accuracyMeters,
+    showDot: location.showDot,
+  };
+
+  return `window.yeogirokMap && window.yeogirokMap.setCurrentLocation && window.yeogirokMap.setCurrentLocation(${toScriptLiteral(point)}, ${toScriptLiteral(style)}); true;`;
+}
+
+export function buildFocusScript({ lat, lng, level }: MapFocusRequest): string {
+  return `window.yeogirokMap && window.yeogirokMap.focus && window.yeogirokMap.focus(${toScriptLiteral({ lat, lng, level })}); true;`;
 }
 
 function isPageFailureReason(value: unknown): value is KakaoMapFailure {

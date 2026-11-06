@@ -9,6 +9,9 @@ import {
   footprintPinImage,
   KakaoMapView,
   type MapCamera,
+  type MapCurrentLocation,
+  type MapCurrentLocationStyle,
+  type MapFocusRequest,
   type MapFootprint,
   type MapFootprintStyle,
   type MapRegion,
@@ -39,6 +42,20 @@ function createFootprintStyle(): MapFootprintStyle {
 
 const FOOTPRINT_STYLE = createFootprintStyle();
 
+function createCurrentLocationStyle(): MapCurrentLocationStyle {
+  const colors = getColors("light");
+
+  return {
+    dot: colors["map-pin"],
+    dotBorder: colors.card,
+    halo: colors["map-route"],
+    accuracy: colors["map-route"],
+  };
+}
+
+/** 내 위치 점(Figma W15 `Current location`). 발자취 핀과 구분되는 파란 점이다. */
+const CURRENT_LOCATION_STYLE = createCurrentLocationStyle();
+
 function toFootprintScale(visitorCount: number, maxVisitorCount: number) {
   const ratio = maxVisitorCount > 0 ? visitorCount / maxVisitorCount : 0;
   return Math.round((MIN_FOOTPRINT_SCALE + FOOTPRINT_SCALE_RANGE * ratio) * 100) / 100;
@@ -65,6 +82,9 @@ function toFootprints(areas: readonly VisitArea[], selectedAreaId: string | null
 type VisitDistributionMapProps = {
   areas: readonly VisitArea[];
   selectedAreaId: string | null;
+  /** 잰 내 위치. 권한이 없거나 아직 못 쟀으면 `null`. */
+  currentLocation: MapCurrentLocation | null;
+  focusRequest: MapFocusRequest | null;
   onPressArea: (areaId: string) => void;
   onPressMap: () => void;
   onRegionChange: (region: MapRegion) => void;
@@ -89,6 +109,8 @@ function VisitDistributionMapView({
   javascriptKey,
   areas,
   selectedAreaId,
+  currentLocation,
+  focusRequest,
   onPressArea,
   onPressMap,
   onRegionChange,
@@ -130,6 +152,9 @@ function VisitDistributionMapView({
         initialCamera={INITIAL_CAMERA}
         footprints={footprints}
         footprintStyle={FOOTPRINT_STYLE}
+        currentLocation={currentLocation}
+        currentLocationStyle={CURRENT_LOCATION_STYLE}
+        focusRequest={focusRequest}
         onPressPoint={onPressArea}
         onPressMap={onPressMap}
         onRegionChange={onRegionChange}

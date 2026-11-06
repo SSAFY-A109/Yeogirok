@@ -179,7 +179,7 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 | `BottomCta` | `components/ui/bottom-cta.tsx` | Figma `Bottom CTA`. `px-5 pt-3 gap-3` + 아래 안전 영역(최소 12) |
 | `ConfirmDialog` | `components/ui/confirm-dialog.tsx` | Figma `Dialog`(모서리 20 `rounded-xl`, `px-5 py-6 gap-4`, 제목 `text-h3`, 본문 `text-body-sm`). 취소 Secondary + 확인 Primary, 되돌릴 수 없는 동작은 `bg-destructive` |
 | `MediaPhoto` | `components/ui/media-photo.tsx` | Figma `Media / Photo`. 사진이 없으면 `bg-brand-muted`만 보인다 |
-| `PermissionGate` | `components/ui/permission-gate.tsx` | 위치·카메라·사진 권한 사전 안내와 거부 상태(규칙 80, `yeogirok-ui-patterns`) |
+| `PermissionGate` | `components/ui/permission-gate.tsx` | 위치·카메라·사진 권한 사전 안내와 거부 상태(규칙 80, `yeogirok-ui-patterns`). Figma W15-P `Permission card`: `bg-card border-border rounded-lg p-4 gap-4`, 아이콘 칸 40 `bg-brand-muted rounded-md`, 제목 `text-label`, 설명 `text-caption`, Primary Large 버튼 + "나중에" 글자 버튼 |
 
 컴포넌트가 코드에 없으면 위 이름과 variant로 만든다. 이름을 바꾸면 Pencil과 이 표, `design-map.json`을 함께 고친다.
 

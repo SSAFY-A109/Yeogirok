@@ -1,0 +1,416 @@
+import { randomUUID } from "expo-crypto";
+import { router } from "expo-router";
+import { Lock, MapPin } from "lucide-react-native";
+import { useRef, useState } from "react";
+import { Pressable, ScrollView, View } from "react-native";
+import Animated from "react-native-reanimated";
+
+import { BottomCta } from "@/components/ui/bottom-cta";
+import { Button } from "@/components/ui/button";
+import { FilterChip } from "@/components/ui/filter-chip";
+import { Icon } from "@/components/ui/icon";
+import { Screen } from "@/components/ui/screen";
+import { ScreenHeader } from "@/components/ui/screen-header";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Text } from "@/components/ui/text";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
+import { useCategories } from "@/features/common/api/queries";
+import { useCreateFootprint } from "@/features/footprint/api/queries";
+import { FootprintLocationMap, LocationMapPlaceholder } from "@/features/footprint/components/footprint-location-map";
+import { LocationPermissionCard } from "@/features/footprint/components/location-permission-card";
+import { PreciseLocationNotice } from "@/features/footprint/components/precise-location-notice";
+import { useKeyboardFollowingScroll } from "@/features/footprint/components/use-keyboard-following-scroll";
+import { getFootprintErrorMessage, getLocationFailureMessage, isLocationEvidenceError } from "@/features/footprint/errors";
+import {
+  countFootprintBody,
+  FOOTPRINT_BODY_MAX_LENGTH,
+  FOOTPRINT_CATEGORY_MAX_COUNT,
+  FOOTPRINT_CATEGORY_MIN_COUNT,
+  formatLocationEvidence,
+  toCreateFootprintRequest,
+  type CreateFootprintRequestDto,
+} from "@/features/footprint/model";
+import { useCurrentLocation, type CurrentLocation } from "@/hooks/use-current-location";
+import { cn } from "@/lib/utils";
+
+const CATEGORY_SKELETON_COUNT = 4;
+
+type PendingSubmission = { fingerprint: string; idempotencyKey: string };
+
+/**
+ * 같은 내용을 다시 보낼 때 같은 멱등키를 쓰게 한다(규칙 90). 위치를 다시 재거나 입력을 바꿔 내용이 달라지면 새 키를 만든다.
+ * 저장에 성공하면 비운다.
+ */
+function useIdempotencyKey() {
+  const pending = useRef<PendingSubmission | null>(null);
+
+  const keyFor = (request: CreateFootprintRequestDto) => {
+    const fingerprint = JSON.stringify(request);
+
+    if (pending.current?.fingerprint !== fingerprint) {
+      pending.current = { fingerprint, idempotencyKey: randomUUID() };
+    }
+
+    return pending.current.idempotencyKey;
+  };
+
+  const clear = () => {
+    pending.current = null;
+  };
+
+  return { keyFor, clear };
+}
+
+function leaveToMap() {
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+
+  router.replace("/map");
+}
+
+/**
+ * 발자취 남기기(Figma W16, FPT-02·03). 들어오면 현재 위치를 다시 재서 위치 증거로 쓰고,
+ * 카테고리 1~3개(필수)와 나만 보는 방명록(선택)을 함께 저장한다(API-041). 저장 실패·위치 재측정 뒤에도 입력은 그대로 둔다.
+ */
+export function NewFootprintScreen() {
+  const location = useCurrentLocation();
+  const createFootprint = useCreateFootprint();
+  const idempotency = useIdempotencyKey();
+  const toast = useToast();
+  const [categoryCodes, setCategoryCodes] = useState<string[]>([]);
+  const [body, setBody] = useState("");
+  const [isCategoryLimitShown, setIsCategoryLimitShown] = useState(false);
+  const keyboard = useKeyboardFollowingScroll();
+
+  const request = location.position === null ? null : toCreateFootprintRequest({ position: location.position, categoryCodes, body });
+  const saveError = createFootprint.error;
+  const isSaving = createFootprint.isPending;
+
+  const clearSaveError = () => {
+    if (createFootprint.error !== null) {
+      createFootprint.reset();
+    }
+  };
+
+  const toggleCategory = (code: string) => {
+    clearSaveError();
+
+    if (categoryCodes.includes(code)) {
+      setCategoryCodes(categoryCodes.filter((selected) => {
+        return selected !== code;
+      }));
+
+      setIsCategoryLimitShown(false);
+      return;
+    }
+
+    if (categoryCodes.length >= FOOTPRINT_CATEGORY_MAX_COUNT) {
+      setIsCategoryLimitShown(true);
+      return;
+    }
+
+    setCategoryCodes([...categoryCodes, code]);
+  };
+
+  const remeasure = async () => {
+    const next = await location.measure();
+
+    if (next !== null) {
+      clearSaveError();
+    }
+  };
+
+  const submit = () => {
+    if (request === null || isSaving || location.isMeasuring) {
+      return;
+    }
+
+    createFootprint.mutate(
+      { request, idempotencyKey: idempotency.keyFor(request) },
+      {
+        onSuccess: () => {
+          idempotency.clear();
+          toast.show({ message: "발자취를 남겼어요. 방명록은 나만 볼 수 있어요." });
+          leaveToMap();
+        },
+      },
+    );
+  };
+
+  return (
+    <Screen>
+      <ScreenHeader title="발자취 남기기" testID="footprint.header" />
+      <View className="flex-1">
+        <ScrollView
+          {...keyboard.scrollViewProps}
+          className="flex-1"
+          contentContainerClassName="pb-6"
+          keyboardShouldPersistTaps="handled"
+        >
+          <LocationSection location={location} onRemeasure={remeasure} />
+          <View className="gap-6 px-5 pt-4">
+            <CategoryField
+              selectedCodes={categoryCodes}
+              isLimitShown={isCategoryLimitShown}
+              disabled={isSaving}
+              onToggle={toggleCategory}
+            />
+            <GuestbookField
+              value={body}
+              editable={!isSaving}
+              onChangeText={(value) => {
+                setBody(value);
+                clearSaveError();
+              }}
+              onFocus={keyboard.followInput}
+              onBlur={keyboard.stopFollowing}
+            />
+          </View>
+        </ScrollView>
+        <BottomCta>
+          {saveError !== null ? (
+            <View className="w-full flex-row items-center gap-3" testID="footprint.error">
+              <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="flex-1 text-caption text-destructive">
+                {getFootprintErrorMessage(saveError)}
+              </Text>
+              {isLocationEvidenceError(saveError) ? (
+                <Button
+                  variant="outline"
+                  loading={location.isMeasuring}
+                  loadingLabel="확인 중"
+                  onPress={() => {
+                    void remeasure();
+                  }}
+                  testID="footprint.remeasure"
+                >
+                  <Text>위치 다시 확인</Text>
+                </Button>
+              ) : null}
+            </View>
+          ) : null}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={request === null || location.isMeasuring}
+            loading={isSaving}
+            loadingLabel="남기는 중"
+            onPress={submit}
+            testID="footprint.submit"
+          >
+            <Text>발자취 남기기</Text>
+          </Button>
+        </BottomCta>
+        <Animated.View style={keyboard.keyboardSpacerStyle} />
+      </View>
+    </Screen>
+  );
+}
+
+// --- 위치
+
+type LocationSectionProps = {
+  location: CurrentLocation;
+  onRemeasure: () => Promise<void>;
+};
+
+/** 발자취를 남길 곳(Figma W16 `Location map`·`Location`). 권한·측정 상태에 따라 안내를 바꾼다. */
+function LocationSection({ location, onRemeasure }: LocationSectionProps) {
+  const remeasure = () => {
+    void onRemeasure();
+  };
+
+  if (location.permission === null) {
+    return (
+      <LocationMapPlaceholder testID="footprint.location-checking">
+        <Spinner tone="brand" accessible={false} />
+        <Text className="text-caption text-foreground-secondary">위치 권한을 확인하고 있어요</Text>
+      </LocationMapPlaceholder>
+    );
+  }
+
+  if (location.permission !== "granted") {
+    return (
+      <View className="px-5 pt-4">
+        <LocationPermissionCard
+          permission={location.permission}
+          isRequesting={location.isRequestingPermission}
+          onRequest={() => {
+            void location.requestPermission();
+          }}
+          testID="footprint.location-permission"
+        />
+      </View>
+    );
+  }
+
+  if (location.position === null) {
+    return location.failure !== null && !location.isMeasuring ? (
+      <LocationMapPlaceholder testID="footprint.location-error">
+        <Text accessibilityRole="alert" className="text-center text-caption text-foreground-secondary">
+          {getLocationFailureMessage(location.failure)}
+        </Text>
+        <Button variant="outline" className="h-9 px-3" onPress={remeasure} testID="footprint.location-retry">
+          <Text>다시 확인</Text>
+        </Button>
+      </LocationMapPlaceholder>
+    ) : (
+      <LocationMapPlaceholder testID="footprint.location-measuring">
+        <Spinner tone="brand" accessible={false} />
+        <Text accessibilityLiveRegion="polite" className="text-caption text-foreground-secondary">지금 있는 곳을 확인하고 있어요</Text>
+      </LocationMapPlaceholder>
+    );
+  }
+
+  return (
+    <View>
+      <FootprintLocationMap position={location.position} />
+      <View className="flex-row items-start gap-2 px-5 pt-4" testID="footprint.location">
+        <Icon as={MapPin} size={20} className="text-icon" />
+        <View className="flex-1 gap-1">
+          <Text className="text-label text-foreground">
+            {location.placeLabel === null ? "지금 있는 곳" : `${location.placeLabel} 부근`}
+          </Text>
+          <Text className="text-caption text-foreground-secondary">{formatLocationEvidence(location.position)}</Text>
+          {location.failure !== null ? (
+            <Text accessibilityRole="alert" className="text-caption text-destructive">{getLocationFailureMessage(location.failure)}</Text>
+          ) : null}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="위치 다시 확인"
+          accessibilityState={{ disabled: location.isMeasuring, busy: location.isMeasuring }}
+          className="-mt-3 min-h-touch justify-center px-1"
+          disabled={location.isMeasuring}
+          onPress={remeasure}
+          testID="footprint.location-recheck"
+        >
+          <Text className={cn("text-label", location.isMeasuring ? "text-muted-foreground" : "text-primary")}>
+            {location.isMeasuring ? "확인 중" : "다시 확인"}
+          </Text>
+        </Pressable>
+      </View>
+      {location.isApproximate ? (
+        <View className="px-5 pt-3">
+          <PreciseLocationNotice location={location} testID="footprint.precise-location" />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// --- 카테고리
+
+type CategoryFieldProps = {
+  selectedCodes: readonly string[];
+  isLimitShown: boolean;
+  disabled: boolean;
+  onToggle: (code: string) => void;
+};
+
+/** 카테고리 1~3개(Figma W16 `Category (필수)`). 목록은 서버 기준 데이터(API-079)다. */
+function CategoryField({ selectedCodes, isLimitShown, disabled, onToggle }: CategoryFieldProps) {
+  const categories = useCategories();
+
+  return (
+    <View className="gap-3" testID="footprint.categories">
+      <View className="flex-row items-center gap-1">
+        <Text className="text-label text-foreground">카테고리</Text>
+        <Text className="text-caption text-highlight">{`${FOOTPRINT_CATEGORY_MIN_COUNT}~${FOOTPRINT_CATEGORY_MAX_COUNT}개`}</Text>
+      </View>
+      {categories.isPending ? (
+        <View className="flex-row flex-wrap gap-2" accessibilityLabel="카테고리 불러오는 중">
+          {Array.from({ length: CATEGORY_SKELETON_COUNT }, (_, index) => {
+            return <Skeleton key={index} className="h-chip-md w-20 rounded-sm" />;
+          })}
+        </View>
+      ) : null}
+      {categories.isError ? (
+        <View className="flex-row items-center gap-3">
+          <Text className="flex-1 text-caption text-foreground-secondary">카테고리를 불러오지 못했어요.</Text>
+          <Button
+            variant="outline"
+            onPress={() => {
+              void categories.refetch();
+            }}
+            testID="footprint.categories-retry"
+          >
+            <Text>다시 시도</Text>
+          </Button>
+        </View>
+      ) : null}
+      {categories.data ? (
+        <View className="flex-row flex-wrap gap-2">
+          {categories.data.map((category) => {
+            return (
+              <FilterChip
+                key={category.code}
+                size="md"
+                selected={selectedCodes.includes(category.code)}
+                disabled={disabled}
+                onPress={() => {
+                  onToggle(category.code);
+                }}
+                testID={`footprint.category-${category.code}`}
+              >
+                {category.name}
+              </FilterChip>
+            );
+          })}
+        </View>
+      ) : null}
+      <Text
+        accessibilityLiveRegion="polite"
+        className={cn("text-caption", isLimitShown ? "text-highlight" : "text-muted-foreground")}
+      >
+        {isLimitShown ? `카테고리는 ${FOOTPRINT_CATEGORY_MAX_COUNT}개까지 고를 수 있어요` : "카테고리는 지도 분포에 함께 집계돼요"}
+      </Text>
+    </View>
+  );
+}
+
+// --- 방명록
+
+type GuestbookFieldProps = {
+  value: string;
+  editable: boolean;
+  onChangeText: (value: string) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+};
+
+/** 나만 보는 방명록(Figma W16 `Guestbook (선택 나만 봄)`). 글자 수는 서버와 같은 기준으로 센다. */
+function GuestbookField({ value, editable, onChangeText, onFocus, onBlur }: GuestbookFieldProps) {
+  const length = countFootprintBody(value);
+  const isTooLong = length > FOOTPRINT_BODY_MAX_LENGTH;
+
+  return (
+    <View className="gap-3" testID="footprint.guestbook">
+      <View className="flex-row items-center gap-2">
+        <Text className="text-label text-foreground">방명록</Text>
+        <View className="flex-row items-center gap-1 rounded-full bg-muted px-2 py-1">
+          <Icon as={Lock} size={12} className="text-foreground-secondary" />
+          <Text className="text-micro text-foreground-secondary">나만 볼 수 있어요</Text>
+        </View>
+        <Text className="text-caption text-muted-foreground">선택</Text>
+      </View>
+      <Textarea
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        editable={editable}
+        placeholder="여행에 대한 메모를 남겨 주세요."
+        accessibilityLabel="방명록, 나만 볼 수 있어요"
+        error={isTooLong ? `방명록은 ${FOOTPRINT_BODY_MAX_LENGTH}자까지 쓸 수 있어요.` : undefined}
+        testID="footprint.body"
+      />
+      <Text className={cn("text-right text-caption tabular-nums", isTooLong ? "text-destructive" : "text-muted-foreground")}>
+        {`${length} / ${FOOTPRINT_BODY_MAX_LENGTH}`}
+      </Text>
+    </View>
+  );
+}

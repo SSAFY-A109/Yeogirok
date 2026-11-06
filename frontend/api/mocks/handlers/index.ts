@@ -3,6 +3,7 @@ import type { RequestHandler } from "msw";
 import { authHandlers } from "./auth";
 import { commonHandlers } from "./common";
 import { courseHandlers } from "./course";
+import { footprintHandlers } from "./footprint";
 import { placeHandlers } from "./place";
 import { recommendationHandlers } from "./recommendation";
 import { roomHandlers } from "./room";
@@ -13,6 +14,7 @@ export const handlers: RequestHandler[] = [
   ...authHandlers,
   ...commonHandlers,
   ...courseHandlers,
+  ...footprintHandlers,
   ...placeHandlers,
   ...recommendationHandlers,
   ...roomHandlers,

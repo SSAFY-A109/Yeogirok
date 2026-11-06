@@ -2,7 +2,9 @@ import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import {
+  buildFocusScript,
   buildKakaoMapHtml,
+  buildSetCurrentLocationScript,
   buildSetFootprintsScript,
   buildSetMarkersScript,
   buildSetRouteScript,
@@ -10,6 +12,9 @@ import {
   parseKakaoMapMessage,
   type KakaoMapFailure,
   type MapCamera,
+  type MapCurrentLocation,
+  type MapCurrentLocationStyle,
+  type MapFocusRequest,
   type MapFootprint,
   type MapFootprintStyle,
   type MapMarker,
@@ -23,6 +28,9 @@ export {
   KAKAO_JS_SDK_DOMAIN,
   type KakaoMapFailure,
   type MapCamera,
+  type MapCurrentLocation,
+  type MapCurrentLocationStyle,
+  type MapFocusRequest,
   type MapFootprint,
   type MapFootprintStyle,
   type MapMarker,
@@ -47,6 +55,9 @@ type KakaoMapViewProps = {
   route?: MapRoute;
   footprints?: readonly MapFootprint[];
   footprintStyle?: MapFootprintStyle;
+  currentLocation?: MapCurrentLocation | null;
+  currentLocationStyle?: MapCurrentLocationStyle;
+  focusRequest?: MapFocusRequest | null;
   onPressPoint?: (id: string) => void;
   onPressMap?: () => void;
   onRegionChange?: (region: MapRegion) => void;
@@ -64,6 +75,9 @@ export function KakaoMapView({
   route,
   footprints,
   footprintStyle,
+  currentLocation,
+  currentLocationStyle,
+  focusRequest,
   onPressPoint,
   onPressMap,
   onRegionChange,
@@ -84,6 +98,7 @@ export function KakaoMapView({
   const isMapReady = useRef(false);
   const markersSentAt = useRef(0);
   const routeSignature = useRef("");
+  const appliedFocusId = useRef<number | null>(null);
 
   const reportNoResponse = useEffectEvent(() => {
     if (!hasResponded.current) {
@@ -135,6 +150,31 @@ export function KakaoMapView({
     }
   }, [footprints, footprintStyle]);
 
+  function sendCurrentLocation(location: MapCurrentLocation | null, style: MapCurrentLocationStyle) {
+    webViewRef.current?.injectJavaScript(buildSetCurrentLocationScript(location, style));
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && currentLocationStyle && currentLocation !== undefined) {
+      sendCurrentLocation(currentLocation, currentLocationStyle);
+    }
+  }, [currentLocation, currentLocationStyle]);
+
+  function sendFocus(request: MapFocusRequest) {
+    if (appliedFocusId.current === request.id) {
+      return;
+    }
+
+    appliedFocusId.current = request.id;
+    webViewRef.current?.injectJavaScript(buildFocusScript(request));
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && focusRequest) {
+      sendFocus(focusRequest);
+    }
+  }, [focusRequest]);
+
   function handleMessage(event: WebViewMessageEvent) {
     const message = parseKakaoMapMessage(event.nativeEvent.data);
 
@@ -157,6 +197,14 @@ export function KakaoMapView({
 
       if (footprints && footprintStyle) {
         sendFootprints(footprints, footprintStyle);
+      }
+
+      if (currentLocation && currentLocationStyle) {
+        sendCurrentLocation(currentLocation, currentLocationStyle);
+      }
+
+      if (focusRequest) {
+        sendFocus(focusRequest);
       }
 
       onReady();

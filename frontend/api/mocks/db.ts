@@ -1,13 +1,20 @@
+import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
 
+/** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
+type MockIdempotencyRecord = { requestHash: string; footprintId: number };
+
 type MockDb = {
   rooms: Map<number, MockRoom>;
   preferences: Map<number, RecommendationPreferenceDto>;
+  footprints: CreateFootprintResponseDto[];
+  footprintRequests: Map<string, MockIdempotencyRecord>;
   nextRoomId: number;
   nextRoomPlaceId: number;
   nextRecommendationRequestId: number;
+  nextFootprintId: number;
 };
 
 function createDb(): MockDb {
@@ -19,9 +26,12 @@ function createDb(): MockDb {
     })),
 
     preferences: new Map(),
+    footprints: [],
+    footprintRequests: new Map(),
     nextRoomId: 100,
     nextRoomPlaceId: 9000,
     nextRecommendationRequestId: 1,
+    nextFootprintId: 1,
   };
 }
 

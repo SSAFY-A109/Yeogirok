@@ -1,6 +1,6 @@
-import { Footprints } from "lucide-react-native";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ScrollView, View } from "react-native";
+import { Footprints, LocateFixed } from "lucide-react-native";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
@@ -9,28 +9,52 @@ import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useCategories } from "@/features/common/api/queries";
+import { FootprintEntryCard } from "@/features/footprint/components/footprint-entry-card";
 import { toVisitQueryArea, useVisitStatistics } from "@/features/statistics/api/queries";
 import { getStatisticsErrorMessage } from "@/features/statistics/errors";
 import type { VisitArea, VisitMapArea } from "@/features/statistics/model";
-import type { MapRegion } from "@/lib/native/map";
+import { useCurrentLocation, type CurrentLocation } from "@/hooks/use-current-location";
+import type { MeasuredPosition } from "@/lib/native/location";
+import type { MapCurrentLocation, MapFocusRequest, MapRegion } from "@/lib/native/map";
 import { getColors } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import { VisitAreaCard } from "./visit-area-card";
 import { VisitDistributionMap } from "./visit-distribution-map";
 
 /** 지도가 멈춘 뒤 이만큼 더 움직이지 않으면 그 영역을 조회한다(규칙 20 디바운스). */
 const MAP_SETTLE_MS = 400;
+/** 내 위치 버튼을 누르면 이 확대 단계까지 당긴다(카카오 지도 level, 작을수록 가깝다). */
+const LOCATE_ME_LEVEL = 5;
 /** 상태바와 지도 필터 사이 간격(Figma `Map filters` y=58, 상태바 54). */
 const MAP_FILTERS_TOP_GAP = 4;
 const NO_AREAS: readonly VisitArea[] = [];
 const legendIconColor = getColors("light")["map-footprint"];
 
-/** 지도 탭(Figma W15·W15-A). 서버가 집계한 방문 분포를 발바닥 크기로 보여 주고, 발바닥을 누르면 그 일대 집계를 보여 준다. */
+/**
+ * 지도 탭(Figma W15·W15-A·W15-P). 서버가 집계한 방문 분포를 발바닥 크기로 보여 주고, 발바닥을 누르면 그 일대 집계를 보여 준다.
+ * 아래 카드에서 위치 권한을 안내하고(W15-P), 권한이 있으면 지금 있는 곳에 발자취를 남기러 간다(W15 `Bottom card`).
+ */
 export function VisitMapScreen() {
   const [categoryCode, setCategoryCode] = useState<string | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const { area, handleRegionChange } = useSettledMapArea();
   const statistics = useVisitStatistics(area, categoryCode);
   const areas = statistics.data?.areas ?? NO_AREAS;
+  const location = useCurrentLocation();
+  const { focusRequest, locateMe } = useLocateMe(location);
+  const [isPermissionCardHidden, setIsPermissionCardHidden] = useState(false);
+  const isPermissionPromptHidden = location.permission !== "granted" && isPermissionCardHidden;
+
+  const measuredPosition = location.position;
+
+  const currentLocation = useMemo<MapCurrentLocation | null>(() => {
+    return measuredPosition === null ? null : {
+      lat: measuredPosition.latitude,
+      lng: measuredPosition.longitude,
+      accuracyMeters: measuredPosition.accuracyMeters,
+      showDot: true,
+    };
+  }, [measuredPosition]);
 
   const selectedArea = areas.find((visitArea) => {
     return visitArea.id === selectedAreaId;
@@ -50,6 +74,8 @@ export function VisitMapScreen() {
       <VisitDistributionMap
         areas={areas}
         selectedAreaId={selectedArea?.id ?? null}
+        currentLocation={currentLocation}
+        focusRequest={focusRequest}
         onPressArea={setSelectedAreaId}
         onPressMap={closeArea}
         onRegionChange={handleRegionChange}
@@ -60,21 +86,100 @@ export function VisitMapScreen() {
         periodDays={statistics.data?.periodDays ?? null}
         isFetching={statistics.isFetching}
       />
-      <View pointerEvents="box-none" className="absolute bottom-3 left-4 right-4">
+      <View pointerEvents="box-none" className="absolute bottom-3 left-4 right-4 gap-3">
+        {Platform.OS === "web" ? null : (
+          <View pointerEvents="box-none" className="items-end">
+            <LocateMeButton
+              isAvailable={location.permission === "granted"}
+              isMeasuring={location.isMeasuring}
+              onPress={() => {
+                if (location.permission !== "granted") {
+                  setIsPermissionCardHidden(false);
+                  return;
+                }
+
+                void locateMe();
+              }}
+            />
+          </View>
+        )}
         {selectedArea && statistics.data ? (
           <VisitAreaCard area={selectedArea} periodDays={statistics.data.periodDays} onClose={closeArea} />
         ) : (
-          <StatisticsStatus
-            errorMessage={statistics.isError ? getStatisticsErrorMessage(statistics.error) : null}
-            isEmpty={statistics.isSuccess && !statistics.isPlaceholderData && areas.length === 0}
-            isFetching={statistics.isFetching}
-            onRetry={() => {
-              void statistics.refetch();
-            }}
-          />
+          <>
+            <StatisticsStatus
+              errorMessage={statistics.isError ? getStatisticsErrorMessage(statistics.error) : null}
+              isEmpty={statistics.isSuccess && !statistics.isPlaceholderData && areas.length === 0}
+              isFetching={statistics.isFetching}
+              onRetry={() => {
+                void statistics.refetch();
+              }}
+            />
+            {isPermissionPromptHidden ? null : (
+              <FootprintEntryCard
+                location={location}
+                onLater={() => {
+                  setIsPermissionCardHidden(true);
+                }}
+              />
+            )}
+          </>
         )}
       </View>
     </View>
+  );
+}
+
+// --- 내 위치
+
+/**
+ * 내 위치 버튼. 이미 잰 위치로 먼저 옮기고, 다시 재서 새 위치로 한 번 더 옮긴다.
+ * 지도를 옮기면 그 영역의 분포를 다시 조회한다(디바운스 그대로).
+ */
+function useLocateMe(location: CurrentLocation) {
+  const [focusRequest, setFocusRequest] = useState<MapFocusRequest | null>(null);
+
+  const focusOn = (position: MeasuredPosition) => {
+    setFocusRequest((previous) => {
+      return { id: (previous?.id ?? 0) + 1, lat: position.latitude, lng: position.longitude, level: LOCATE_ME_LEVEL };
+    });
+  };
+
+  const locateMe = async () => {
+    if (location.position !== null) {
+      focusOn(location.position);
+    }
+
+    const next = await location.measure();
+
+    if (next !== null) {
+      focusOn(next);
+    }
+  };
+
+  return { focusRequest, locateMe };
+}
+
+type LocateMeButtonProps = {
+  /** 위치 권한이 있는지. 없으면 흐리게 그리고, 누르면 권한 안내 카드를 다시 연다(Figma W15-P `Locate me`). */
+  isAvailable: boolean;
+  isMeasuring: boolean;
+  onPress: () => void;
+};
+
+function LocateMeButton({ isAvailable, isMeasuring, onPress }: LocateMeButtonProps) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="내 위치로 이동"
+      accessibilityHint={isAvailable ? undefined : "위치 권한 안내를 다시 열어요"}
+      accessibilityState={{ busy: isMeasuring }}
+      className={cn("h-touch w-touch items-center justify-center rounded-full border border-border bg-card active:bg-accent", !isAvailable && "opacity-40")}
+      onPress={onPress}
+      testID="visit-map.locate-me"
+    >
+      {isMeasuring ? <Spinner tone="brand" accessible={false} /> : <Icon as={LocateFixed} size={20} className="text-icon" />}
+    </Pressable>
   );
 }
 

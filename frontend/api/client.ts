@@ -28,6 +28,17 @@ export const TIMEOUT_MUTATION_MS = 30_000;
 /** 파일 업로드 요청에서 `config.timeout`으로 지정할 제한 시간(밀리초). */
 export const TIMEOUT_UPLOAD_MS = 60_000;
 
+/** 계약의 멱등키 헤더 이름(backend `IdempotencyService`, 발자취 저장 API-041 등). */
+const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+/**
+ * 중복되면 안 되는 생성 요청의 요청 설정. 멱등키 헤더 이름은 이 파일에서만 정한다(규칙 90).
+ * 키는 사용자가 제출을 시작할 때 한 번 만들고, 같은 내용을 다시 보낼 때 그대로 쓴다.
+ */
+export function idempotentRequestConfig(idempotencyKey: string) {
+  return { headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey }, timeout: TIMEOUT_MUTATION_MS };
+}
+
 /**
  * 도메인 API 함수에서 사용하는 공통 axios 클라이언트.
  *
