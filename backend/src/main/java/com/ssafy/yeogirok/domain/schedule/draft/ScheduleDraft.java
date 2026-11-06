@@ -23,6 +23,7 @@ import com.ssafy.yeogirok.domain.schedule.travel.TravelLeg;
  *   <li>draftVersion: 처음 계산을 마치면 1, 084 가 성공할 때마다 1 씩 오른다. 계산 전에는 0.</li>
  * </ul>
  *
+ * @param jobId         마지막으로 이 초안을 계산한(하는) 비동기 작업
  * @param baseVersion   계산의 기준이 된 여행방 version
  * @param transportMode 계산에 쓴 이동 수단(여행방 값)
  * @param days          일차별 시작·종료 시각(여행방의 모든 날짜)
@@ -31,10 +32,10 @@ import com.ssafy.yeogirok.domain.schedule.travel.TravelLeg;
  * @param error         처음 만들기에 실패했을 때만
  * @param deadline      RUNNING 이 이 시각을 넘기면 서버가 처리 도중 재시작된 것으로 본다
  */
-public record ScheduleDraft(String draftKey, Long roomId, Long requesterId, JobStatus status, int baseVersion,
-	int draftVersion, TransportMode transportMode, List<DayOption> days, NamedPoint startPoint, NamedPoint endPoint,
-	List<DraftItem> items, TravelLeg endLeg, JobError error, Instant createdAt, Instant updatedAt,
-	Instant deadline) {
+public record ScheduleDraft(String draftKey, String jobId, Long roomId, Long requesterId, JobStatus status,
+	int baseVersion, int draftVersion, TransportMode transportMode, List<DayOption> days, NamedPoint startPoint,
+	NamedPoint endPoint, List<DraftItem> items, TravelLeg endLeg, JobError error, Instant createdAt,
+	Instant updatedAt, Instant deadline) {
 
 	public ScheduleDraft {
 		Objects.requireNonNull(draftKey, "draftKey");
@@ -44,34 +45,35 @@ public record ScheduleDraft(String draftKey, Long roomId, Long requesterId, JobS
 		items = items == null ? List.of() : List.copyOf(items);
 	}
 
-	/** 계산 전 초안. 조건만 담는다. */
-	public static ScheduleDraft start(String draftKey, Long roomId, Long requesterId, int baseVersion,
+	/** 계산 전 초안. 조건과 미배치 항목만 담는다. */
+	public static ScheduleDraft start(String draftKey, String jobId, Long roomId, Long requesterId, int baseVersion,
 		TransportMode transportMode, List<DayOption> days, NamedPoint startPoint, NamedPoint endPoint,
 		List<DraftItem> items, Instant now, Duration runTimeout) {
-		return new ScheduleDraft(draftKey, roomId, requesterId, JobStatus.RUNNING, baseVersion, 0, transportMode, days,
-			startPoint, endPoint, items, null, null, now, now, now.plus(runTimeout));
+		return new ScheduleDraft(draftKey, jobId, roomId, requesterId, JobStatus.RUNNING, baseVersion, 0,
+			transportMode, days, startPoint, endPoint, items, null, null, now, now, now.plus(runTimeout));
 	}
 
 	/** 계산을 마친 새 내용. draftVersion 이 1 오른다. */
 	public ScheduleDraft computed(List<DayOption> newDays, NamedPoint newStart, NamedPoint newEnd,
 		List<DraftItem> newItems, TravelLeg newEndLeg, Instant now) {
-		return new ScheduleDraft(draftKey, roomId, requesterId, JobStatus.SUCCEEDED, baseVersion, draftVersion + 1,
-			transportMode, newDays, newStart, newEnd, newItems, newEndLeg, null, createdAt, now, null);
+		return new ScheduleDraft(draftKey, jobId, roomId, requesterId, JobStatus.SUCCEEDED, baseVersion,
+			draftVersion + 1, transportMode, newDays, newStart, newEnd, newItems, newEndLeg, null, createdAt, now, null);
 	}
 
 	/** 다시 계산을 시작한다(API-084). 내용은 마지막 성공 그대로 둔다. */
-	public ScheduleDraft recalculating(Instant now, Duration runTimeout) {
-		return withStatus(JobStatus.RUNNING, null, now, now.plus(runTimeout));
+	public ScheduleDraft recalculating(String newJobId, Instant now, Duration runTimeout) {
+		return new ScheduleDraft(draftKey, newJobId, roomId, requesterId, JobStatus.RUNNING, baseVersion, draftVersion,
+			transportMode, days, startPoint, endPoint, items, endLeg, null, createdAt, now, now.plus(runTimeout));
 	}
 
 	/** 처음 만들기에 실패했다. */
 	public ScheduleDraft failed(JobError failure, Instant now) {
-		return withStatus(JobStatus.FAILED, failure, now, null);
+		return withStatus(JobStatus.FAILED, failure, now);
 	}
 
 	/** 다시 계산이 실패했다. 마지막 성공 내용으로 돌아간다. */
 	public ScheduleDraft recalculationFailed(Instant now) {
-		return withStatus(JobStatus.SUCCEEDED, null, now, null);
+		return withStatus(JobStatus.SUCCEEDED, null, now);
 	}
 
 	/**
@@ -85,8 +87,8 @@ public record ScheduleDraft(String draftKey, Long roomId, Long requesterId, JobS
 		return draftVersion == 0 ? failed(Job.TIMED_OUT, updatedAt) : recalculationFailed(updatedAt);
 	}
 
-	private ScheduleDraft withStatus(JobStatus newStatus, JobError newError, Instant now, Instant newDeadline) {
-		return new ScheduleDraft(draftKey, roomId, requesterId, newStatus, baseVersion, draftVersion, transportMode,
-			days, startPoint, endPoint, items, endLeg, newError, createdAt, now, newDeadline);
+	private ScheduleDraft withStatus(JobStatus newStatus, JobError newError, Instant now) {
+		return new ScheduleDraft(draftKey, jobId, roomId, requesterId, newStatus, baseVersion, draftVersion,
+			transportMode, days, startPoint, endPoint, items, endLeg, newError, createdAt, now, null);
 	}
 }

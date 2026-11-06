@@ -51,7 +51,7 @@ class ScheduleDraftStoreTest {
 	}
 
 	private static ScheduleDraft started() {
-		return ScheduleDraft.start(KEY, 7L, 1L, 3, TransportMode.TRANSIT,
+		return ScheduleDraft.start(KEY, "550e8400-e29b-41d4-a716-446655440000", 7L, 1L, 3, TransportMode.TRANSIT,
 			List.of(new DayOption(DAY, LocalTime.of(9, 0), LocalTime.of(18, 0))),
 			new NamedPoint("강릉역", new BigDecimal("37.7640000"), new BigDecimal("128.8990000")), null,
 			List.of(DraftItem.unassigned(1, 401L, 60, false), DraftItem.unassigned(2, 401L, 30, true)), NOW,
@@ -110,7 +110,7 @@ class ScheduleDraftStoreTest {
 	@Test
 	void 다시_계산이_기한을_넘기면_마지막_성공으로_보인다() {
 		ScheduleDraft done = computed(started());
-		store.save(done.recalculating(NOW, RUN_TIMEOUT));
+		store.save(done.recalculating("550e8400-e29b-41d4-a716-446655440002", NOW, RUN_TIMEOUT));
 		assertThat(store.get(7L, KEY).status()).isEqualTo(JobStatus.RUNNING);
 
 		clock.advance(RUN_TIMEOUT.plusSeconds(1));
