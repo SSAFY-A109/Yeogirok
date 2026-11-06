@@ -1,6 +1,5 @@
 package com.ssafy.yeogirok.domain.schedule.dto;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -19,10 +18,9 @@ public record ScheduleUpdateCommand(int version, List<ItemEdit> items, List<Long
 
 	/**
 	 * @param id        기존 항목이면 ID, 새 항목이면 null
-	 * @param arrivalAt 사용자가 정한 도착 시각. 없으면 계산한다
 	 * @param fixed     생략하면 null(기존 항목은 그대로, 새 항목은 false)
 	 */
-	public record ItemEdit(Long id, Long roomPlaceId, LocalDate visitDate, int order, Instant arrivalAt,
-		int stayMinutes, Boolean fixed) {
+	public record ItemEdit(Long id, Long roomPlaceId, LocalDate visitDate, int order, int stayMinutes,
+		Boolean fixed) {
 	}
 }

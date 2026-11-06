@@ -105,7 +105,16 @@ class ScheduleServiceTest {
 	}
 
 	private static ItemEdit newItem(Long placeId, LocalDate date, int order, int stay) {
-		return new ItemEdit(null, placeId, date, order, null, stay, null);
+		return new ItemEdit(null, placeId, date, order, stay, null);
+	}
+
+	/** DAY1 을 10:00~18:00 으로 둔다. 일차 조건은 초안 저장(API-039)이 채운다. 그 API 전이라 직접 넣는다. */
+	private void startDay1At10() {
+		TravelRoom room = em.find(TravelRoom.class, roomId);
+		room.updateScheduleOptions(new ScheduleOptions(List.of(
+			new ScheduleOptions.DayOption(DAY1, LocalTime.of(10, 0), LocalTime.of(18, 0))), null, null, null,
+			List.of()).toMap(), NOW);
+		em.flush();
 	}
 
 	private static List<ScheduleView.Item> items(ScheduleView schedule, LocalDate date) {
@@ -137,14 +146,16 @@ class ScheduleServiceTest {
 	/* ── API-040 편집 ───────────────────────────────────────── */
 
 	@Test
-	void 새_항목은_날짜마다_1부터_순서를_매기고_정한_도착_시각부터_이동_시간을_더해_계산한다() {
+	void 새_항목은_날짜마다_1부터_순서를_매기고_일차_시작_시각부터_이동_시간을_더해_계산한다() {
+		startDay1At10();
+		int version = version();
 		ScheduleUpdateResponse response = update(
-			new ItemEdit(null, placeA, DAY1, 5, DAY1_10AM, 60, true),
+			new ItemEdit(null, placeA, DAY1, 5, 60, true),
 			newItem(placeB, DAY1, 9, 30));
 		em.clear();
 
 		ScheduleView schedule = response.schedule();
-		assertThat(response.version()).isEqualTo(5);
+		assertThat(response.version()).isEqualTo(version + 1);
 		assertThat(schedule.startPoint()).isNull();
 		assertThat(schedule.endPoint()).isNull();
 		assertThat(items(schedule, DAY1))
@@ -225,10 +236,11 @@ class ScheduleServiceTest {
 
 	@Test
 	void 이동_시간을_모르면_다음_도착_시각은_null이고_경고한다() {
+		startDay1At10();
 		travelTimeProvider.willReturn(null);
 
 		ScheduleView schedule = update(
-			new ItemEdit(null, placeA, DAY1, 1, DAY1_10AM, 60, null),
+			newItem(placeA, DAY1, 1, 60),
 			newItem(placeB, DAY1, 2, 30)).schedule();
 
 		assertThat(items(schedule, DAY1)).extracting(ScheduleView.Item::arrivalAt)
@@ -245,7 +257,7 @@ class ScheduleServiceTest {
 			newItem(placeC, DAY2, 1, 60)).schedule();
 		Long movedId = items(before, DAY1).get(0).id();
 
-		ScheduleView after = update(new ItemEdit(movedId, placeA, DAY2, 2, null, 90, null)).schedule();
+		ScheduleView after = update(new ItemEdit(movedId, placeA, DAY2, 2, 90, null)).schedule();
 
 		assertThat(items(after, DAY1)).extracting(ScheduleView.Item::roomPlaceId, ScheduleView.Item::order)
 			.containsExactly(tuple(placeB, 1));
@@ -304,7 +316,8 @@ class ScheduleServiceTest {
 			.extracting(ScheduleView.Item::stayMinutes).isEqualTo(720);
 		assertError(() -> update(newItem(placeA, DAY1, 0, 60)), ExceptionType.NOT_ALLOWED_VALUE);
 
-		ScheduleView schedule = update(new ItemEdit(null, placeA, DAY1, 1, DAY1_10AM, 47, null)).schedule();
+		startDay1At10();
+		ScheduleView schedule = update(newItem(placeA, DAY1, 1, 47)).schedule();
 
 		assertThat(items(schedule, DAY1)).singleElement().satisfies(item -> {
 			assertThat(item.stayMinutes()).isEqualTo(47);
@@ -313,10 +326,20 @@ class ScheduleServiceTest {
 	}
 
 	@Test
-	void 여행_날짜_밖이거나_도착_시각이_다른_날이면_C012() {
+	void 여행_날짜_밖이면_C012() {
 		assertError(() -> update(newItem(placeA, DAY2.plusDays(1), 1, 60)), ExceptionType.INVALID_DATE_RANGE);
-		assertError(() -> update(new ItemEdit(null, placeA, DAY2, 1, DAY1_10AM, 60, null)),
-			ExceptionType.INVALID_DATE_RANGE);
+	}
+
+	@Test
+	void 앞_장소_체류_시간을_늘리면_뒤_장소_시각이_그만큼_밀린다() {
+		startDay1At10();
+		ScheduleView before = update(newItem(placeA, DAY1, 1, 60), newItem(placeB, DAY1, 2, 60)).schedule();
+		Long first = items(before, DAY1).get(0).id();
+
+		ScheduleView after = update(new ItemEdit(first, placeA, DAY1, 1, 120, null)).schedule();
+
+		assertThat(items(after, DAY1)).extracting(ScheduleView.Item::arrivalAt)
+			.containsExactly(DAY1_10AM, DAY1_10AM.plusSeconds((120 + TRAVEL_MINUTES) * 60));
 	}
 
 	@Test
@@ -325,7 +348,7 @@ class ScheduleServiceTest {
 		roomPlaceService.remove(OWNER, roomId, placeA, version());
 
 		assertError(() -> update(newItem(placeA, DAY1, 2, 60)), ExceptionType.NOT_ALLOWED_VALUE);
-		ScheduleView schedule = update(new ItemEdit(itemId, placeA, DAY1, 1, null, 120, null)).schedule();
+		ScheduleView schedule = update(new ItemEdit(itemId, placeA, DAY1, 1, 120, null)).schedule();
 
 		assertThat(items(schedule, DAY1)).singleElement()
 			.extracting(ScheduleView.Item::roomPlaceId, ScheduleView.Item::stayMinutes)
@@ -342,7 +365,7 @@ class ScheduleServiceTest {
 			List.of(newItem(otherPlace, DAY1, 1, 60)), List.of())).schedule(), DAY1).getFirst().id();
 
 		assertError(() -> update(newItem(otherPlace, DAY1, 1, 60)), ExceptionType.ROOM_PLACE_NOT_FOUND);
-		assertError(() -> update(new ItemEdit(otherItem, placeA, DAY1, 1, null, 60, null)),
+		assertError(() -> update(new ItemEdit(otherItem, placeA, DAY1, 1, 60, null)),
 			ExceptionType.NOT_ALLOWED_VALUE);
 		assertError(() -> scheduleService.update(OWNER, roomId,
 			new ScheduleUpdateCommand(version(), List.of(), List.of(otherItem))), ExceptionType.NOT_ALLOWED_VALUE);
@@ -411,7 +434,8 @@ class ScheduleServiceTest {
 
 	@Test
 	void 이동_수단을_바꾸면_남은_일정을_새_이동_수단으로_다시_계산한다() {
-		update(new ItemEdit(null, placeA, DAY1, 1, DAY1_10AM, 60, null), newItem(placeB, DAY1, 2, 60));
+		startDay1At10();
+		update(newItem(placeA, DAY1, 1, 60), newItem(placeB, DAY1, 2, 60));
 		travelTimeProvider.willReturn(45);
 
 		RoomUpdateResponse response = roomService.update(OWNER, roomId,
@@ -423,7 +447,7 @@ class ScheduleServiceTest {
 			assertThat(leg.transportMode()).isEqualTo(TransportMode.TRANSIT);
 			assertThat(leg.travelMinutes()).isEqualTo(45);
 		});
-		// 일차 시작 시각이 없으면 지금 첫 도착 시각을 기준으로 다시 계산한다.
+		// 일차 시작 시각부터 새 이동 시간으로 다시 계산한다.
 		assertThat(day.items()).extracting(ScheduleView.Item::arrivalAt)
 			.containsExactly(DAY1_10AM, DAY1_10AM.plusSeconds((60 + 45) * 60));
 	}

@@ -1,7 +1,6 @@
 package com.ssafy.yeogirok.domain.schedule.service;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,7 +35,6 @@ import com.ssafy.yeogirok.domain.schedule.service.ScheduleWriter.Placement;
 import com.ssafy.yeogirok.domain.schedule.travel.TravelTimeProvider;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
-import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 import jakarta.persistence.EntityManager;
 
@@ -90,7 +88,7 @@ public class ScheduleService {
 	public ScheduleUpdateResponse update(Long userId, Long roomId, ScheduleUpdateCommand command) {
 		EditPlan plan = readOnlyTransactionTemplate.execute(status -> plan(userId, roomId, command));
 		ScheduleCalculator.Result result = ScheduleCalculator.calculate(plan.plannedItems(), plan.options(),
-			plan.startDate(), plan.endDate(), plan.fallbackStarts(), plan.transportMode(), travelTimeProvider);
+			plan.startDate(), plan.endDate(), plan.transportMode(), travelTimeProvider);
 		return transactionTemplate.execute(status -> apply(userId, roomId, command, plan, result));
 	}
 
@@ -167,13 +165,10 @@ public class ScheduleService {
 		List<PlannedItem> planned = entries.stream().map(entry -> {
 			RoomPlace place = places.get(entry.roomPlaceId());
 			return new PlannedItem(entry.visitDate(), entry.order(), entry.stayMinutes(),
-				entry.edit() == null ? null : entry.edit().arrivalAt(),
 				ScheduleReader.location(place));
 		}).toList();
 		return new EditPlan(room.getTransportMode(), room.getStartDate(), room.getEndDate(),
-			ScheduleOptions.fromMap(room.getScheduleOptions()),
-			ScheduleCalculator.firstArrivals(List.copyOf(existing.values())), Set.copyOf(changedDates), entries,
-			planned);
+			ScheduleOptions.fromMap(room.getScheduleOptions()), Set.copyOf(changedDates), entries, planned);
 	}
 
 	private ScheduleUpdateResponse apply(Long userId, Long roomId, ScheduleUpdateCommand command, EditPlan plan,
@@ -235,11 +230,6 @@ public class ScheduleService {
 			|| edit.visitDate().isAfter(room.getEndDate())) {
 			throw new BusinessException(ExceptionType.INVALID_DATE_RANGE, "items[].visitDate: 여행 날짜 밖입니다.");
 		}
-		if (edit.arrivalAt() != null
-			&& !LocalDate.ofInstant(edit.arrivalAt(), ApiDateTime.ZONE).equals(edit.visitDate())) {
-			throw new BusinessException(ExceptionType.INVALID_DATE_RANGE,
-				"items[].arrivalAt: visitDate 와 같은 날(Asia/Seoul)이어야 합니다.");
-		}
 	}
 
 	/** 새로 배치할 후보는 이 방의 지금 후보여야 한다. 뺀 후보는 먼저 복원하거나 다시 담아야 한다. */
@@ -274,13 +264,10 @@ public class ScheduleService {
 	}
 
 	/**
-	 * @param fallbackStarts 편집 전 날짜별 첫 도착 시각(일차 시작 시각이 없는 날의 기준 시각)
-	 * @param entries        날짜·순서로 놓은 바뀐 날짜의 항목
-	 * @param plannedItems   entries 와 같은 순서의 계산 입력
+	 * @param entries      날짜·순서로 놓은 바뀐 날짜의 항목
+	 * @param plannedItems entries 와 같은 순서의 계산 입력
 	 */
 	private record EditPlan(TransportMode transportMode, LocalDate startDate, LocalDate endDate,
-		ScheduleOptions options,
-		Map<LocalDate, Instant> fallbackStarts, Set<LocalDate> changedDates, List<Entry> entries,
-		List<PlannedItem> plannedItems) {
+		ScheduleOptions options, Set<LocalDate> changedDates, List<Entry> entries, List<PlannedItem> plannedItems) {
 	}
 }

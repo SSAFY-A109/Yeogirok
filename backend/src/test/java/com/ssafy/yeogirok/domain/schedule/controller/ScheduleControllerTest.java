@@ -122,7 +122,7 @@ class ScheduleControllerTest {
 		patchJson("""
 			{"version": 1, "items": [
 			  {"id": 1, "roomPlaceId": 401, "visitDate": "2026-10-23", "order": 1,
-			   "arrivalAt": "2026-10-23 09:00:00+09", "stayMinutes": 60, "fixed": true},
+			   "stayMinutes": 60, "fixed": true},
 			  {"roomPlaceId": 402, "visitDate": "2026-10-23", "order": 2, "stayMinutes": 30}],
 			 "removeItemIds": [3]}
 			""")
@@ -132,8 +132,8 @@ class ScheduleControllerTest {
 			.andExpect(jsonPath("$.data.schedule.startPoint.name").value("강릉역"));
 
 		verify(scheduleService).update(USER_ID, 7L, new ScheduleUpdateCommand(1, List.of(
-			new ItemEdit(1L, 401L, DAY, 1, Instant.parse("2026-10-23T00:00:00Z"), 60, true),
-			new ItemEdit(null, 402L, DAY, 2, null, 30, null)), List.of(3L)));
+			new ItemEdit(1L, 401L, DAY, 1, 60, true),
+			new ItemEdit(null, 402L, DAY, 2, 30, null)), List.of(3L)));
 	}
 
 	@Test
@@ -154,7 +154,6 @@ class ScheduleControllerTest {
 		"{\"version\": 1, \"items\": [{\"roomPlaceId\": null, \"visitDate\": \"2026-10-23\", \"order\": 1, \"stayMinutes\": 60}]} | C002",
 		"{\"version\": 1, \"items\": [{\"roomPlaceId\": 1, \"visitDate\": \"10/23\", \"order\": 1, \"stayMinutes\": 60}]} | C002",
 		"{\"version\": 1, \"items\": [{\"roomPlaceId\": 1, \"visitDate\": \"2026-10-23\", \"stayMinutes\": 60}]} | C001",
-		"{\"version\": 1, \"items\": [{\"roomPlaceId\": 1, \"visitDate\": \"2026-10-23\", \"order\": 1, \"stayMinutes\": 60, \"arrivalAt\": \"2026-10-23T09:00\"}]} | C002",
 		"{\"version\": 1, \"items\": [{\"roomPlaceId\": 1, \"visitDate\": \"2026-10-23\", \"order\": 1, \"stayMinutes\": 60, \"fixed\": \"Y\"}]} | C002",
 		"{\"version\": 1, \"items\": [], \"removeItemIds\": [\"a\"]}                        | C002",
 	})

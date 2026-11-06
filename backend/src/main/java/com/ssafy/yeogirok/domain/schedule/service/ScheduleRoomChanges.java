@@ -1,6 +1,5 @@
 package com.ssafy.yeogirok.domain.schedule.service;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -89,18 +88,17 @@ public class ScheduleRoomChanges {
 				.toList();
 			List<PlannedItem> planned = kept.stream().map(item -> {
 				RoomPlace place = places.get(item.getRoomPlaceId());
-				return new PlannedItem(item.getVisitDate(), item.getPosition(), item.getStayMinutes(), null,
+				return new PlannedItem(item.getVisitDate(), item.getPosition(), item.getStayMinutes(),
 					ScheduleReader.location(place));
 			}).toList();
 			return new Snapshot(room.getVersion(), kept.stream().map(ScheduleItem::getId).toList(), planned,
-				ScheduleOptions.fromMap(room.getScheduleOptions()).within(start, end),
-				ScheduleCalculator.firstArrivals(kept));
+				ScheduleOptions.fromMap(room.getScheduleOptions()).within(start, end));
 		});
 		if (snapshot.itemIds().isEmpty()) {
 			return null;
 		}
 		ScheduleCalculator.Result result = ScheduleCalculator.calculate(snapshot.planned(), snapshot.options(), start,
-			end, snapshot.firstArrivals(), mode, travelTimeProvider);
+			end, mode, travelTimeProvider);
 		return new Recalculation(snapshot.version(), snapshot.itemIds(), result);
 	}
 
@@ -156,7 +154,6 @@ public class ScheduleRoomChanges {
 	public record Recalculation(int version, List<Long> itemIds, ScheduleCalculator.Result result) {
 	}
 
-	private record Snapshot(int version, List<Long> itemIds, List<PlannedItem> planned, ScheduleOptions options,
-		Map<LocalDate, Instant> firstArrivals) {
+	private record Snapshot(int version, List<Long> itemIds, List<PlannedItem> planned, ScheduleOptions options) {
 	}
 }

@@ -37,7 +37,7 @@ class ScheduleCalculatorTest {
 	final FakeTravelTimeProvider travel = new FakeTravelTimeProvider(20);
 
 	private static PlannedItem item(LocalDate date, int order, int stay) {
-		return new PlannedItem(date, order, stay, null, SPOT);
+		return new PlannedItem(date, order, stay, SPOT);
 	}
 
 	private static DayOption nineToSix(LocalDate date) {
@@ -49,7 +49,7 @@ class ScheduleCalculatorTest {
 	}
 
 	private Result calculate(List<PlannedItem> items, ScheduleOptions options, LocalDate first, LocalDate last) {
-		return ScheduleCalculator.calculate(items, options, first, last, Map.of(), TransportMode.CAR, travel);
+		return ScheduleCalculator.calculate(items, options, first, last, TransportMode.CAR, travel);
 	}
 
 	@Test
@@ -94,26 +94,22 @@ class ScheduleCalculatorTest {
 	}
 
 	@Test
-	void 일차_조건이_없으면_지금_첫_도착_시각을_기준으로_쓰고_그것도_없으면_null() {
-		Result withFallback = ScheduleCalculator.calculate(List.of(item(DAY, 1, 60)), ScheduleOptions.EMPTY, DAY, DAY,
-			Map.of(DAY, NINE), TransportMode.CAR, travel);
-		Result without = calculate(List.of(item(DAY, 1, 60)), ScheduleOptions.EMPTY, DAY, DAY);
+	void 일차_시작_시각이_없으면_도착_시각을_만들지_않는다() {
+		Result result = calculate(List.of(item(DAY, 1, 60), item(DAY, 2, 60)), ScheduleOptions.EMPTY, DAY, DAY);
 
-		assertThat(withFallback.timings().getFirst().arrivalAt()).isEqualTo(NINE);
-		assertThat(without.timings().getFirst().arrivalAt()).isNull();
+		assertThat(result.timings()).extracting(ScheduleCalculator.Timing::arrivalAt).containsOnlyNulls();
+		assertThat(result.timings()).extracting(ScheduleCalculator.Timing::departureAt).containsOnlyNulls();
 	}
 
 	@Test
-	void 이동_시간을_모르면_다음_정한_도착_시각_전까지_null이다() {
+	void 이동_시간을_모르면_그날_그_뒤_도착_시각은_모두_null이다() {
 		travel.willReturn(null);
-		Instant noon = NINE.plusSeconds(3 * 3600);
 
-		Result result = calculate(List.of(
-			new PlannedItem(DAY, 1, 60, NINE, SPOT), item(DAY, 2, 60), new PlannedItem(DAY, 3, 60, noon, SPOT),
-			item(DAY, 4, 60)), ScheduleOptions.EMPTY, DAY, DAY);
+		Result result = calculate(List.of(item(DAY, 1, 60), item(DAY, 2, 60), item(DAY, 3, 60)),
+			options(null, null, nineToSix(DAY)), DAY, DAY);
 
 		assertThat(result.timings()).extracting(ScheduleCalculator.Timing::arrivalAt)
-			.containsExactly(NINE, null, noon, null);
+			.containsExactly(NINE, null, null);
 		assertThat(result.timings().get(1).legFromPrevious().unavailableReason()).isEqualTo("FAKE_UNAVAILABLE");
 	}
 

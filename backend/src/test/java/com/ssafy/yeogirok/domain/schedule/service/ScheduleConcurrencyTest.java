@@ -110,7 +110,7 @@ class ScheduleConcurrencyTest {
 	}
 
 	private static ItemEdit item(Long placeId, int order) {
-		return new ItemEdit(null, placeId, DAY, order, null, 60, null);
+		return new ItemEdit(null, placeId, DAY, order, 60, null);
 	}
 
 	/** 두 항목을 넣는 편집을 시작하고, 둘째 항목의 이동 시간을 계산하는 중에 멈춰 둔다. */

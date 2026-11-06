@@ -5,16 +5,12 @@ import static com.ssafy.yeogirok.global.request.JsonFields.isAbsent;
 import static com.ssafy.yeogirok.global.request.JsonFields.missing;
 import static com.ssafy.yeogirok.global.request.JsonFields.requiredInt;
 
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 import tools.jackson.databind.JsonNode;
 
@@ -22,14 +18,13 @@ import tools.jackson.databind.JsonNode;
  * API-040 요청. 생략 C001, null·타입·형식 오류 C002.
  * <ul>
  *   <li>version·items 필수. items 는 빈 배열이어도 된다</li>
- *   <li>items[]: roomPlaceId·visitDate(YYYY-MM-DD)·order·stayMinutes 필수, id·arrivalAt(YYYY-MM-DD HH:mm:ss+09)·
- *   fixed 선택(생략·null 허용)</li>
+ *   <li>items[]: roomPlaceId·visitDate(YYYY-MM-DD)·order·stayMinutes 필수, id·fixed 선택(생략·null
+ *   허용)</li>
+ *   <li>도착·출발 시각은 받지 않는다. 항상 체류 시간과 이동 시간으로 계산한다</li>
  *   <li>removeItemIds 선택. 생략·null 은 빈 배열</li>
  * </ul>
  */
 public class ScheduleUpdateRequest {
-
-	private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern(ApiDateTime.PATTERN);
 
 	@JsonProperty("version")
 	private JsonNode version;
@@ -70,7 +65,6 @@ public class ScheduleUpdateRequest {
 			throw invalidFormat(path, "객체여야 합니다.");
 		}
 		JsonNode idNode = node.get("id");
-		JsonNode arrivalNode = node.get("arrivalAt");
 		JsonNode fixedNode = node.get("fixed");
 		Boolean fixed = null;
 		if (!isAbsent(fixedNode)) {
@@ -84,7 +78,6 @@ public class ScheduleUpdateRequest {
 			id(required(node, "roomPlaceId", path), path + ".roomPlaceId"),
 			date(required(node, "visitDate", path), path + ".visitDate"),
 			requiredInt(node.get("order"), path + ".order"),
-			isAbsent(arrivalNode) ? null : dateTime(arrivalNode, path + ".arrivalAt"),
 			requiredInt(node.get("stayMinutes"), path + ".stayMinutes"),
 			fixed);
 	}
@@ -114,16 +107,5 @@ public class ScheduleUpdateRequest {
 			}
 		}
 		throw invalidFormat(field, "형식은 YYYY-MM-DD 입니다.");
-	}
-
-	private static Instant dateTime(JsonNode value, String field) {
-		if (value.isString()) {
-			try {
-				return OffsetDateTime.parse(value.stringValue(), DATE_TIME_FORMAT).toInstant();
-			} catch (DateTimeParseException ignored) {
-				// 아래에서 형식 오류로 알린다
-			}
-		}
-		throw invalidFormat(field, "형식은 YYYY-MM-DD HH:mm:ss+09 입니다.");
 	}
 }
