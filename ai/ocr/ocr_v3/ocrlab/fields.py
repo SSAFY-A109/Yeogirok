@@ -86,6 +86,90 @@ def lookalike_fallback(lines):
     return date, time_, changed
 
 
+# ---------- 상호명 선택 v2 (실험 옵션 fields.name_rule=v2, 기본 legacy = 운영과 같음) ----------
+# 근거: 11/05 dev2(B30) 상호명 오류 진단. 글자는 맞게 읽었는데 줄을 잘못 자르거나 고른 경우
+#   - 상호 뒤에 붙은 'TID:'·'[사업자]'·사업자번호, 줄 앞의 사업자번호·'(--)'·로고 영문 때문에 줄을 버리거나 잘못 자름
+#   - '세븐일레븐 (주)코리아세븐 7-ELEVEN 역삼태광점' 처럼 로고·법인명이 끼어 지점명이 잘림
+#   - '매장 방문시 가능' 같은 안내문의 '매장'을 상호 라벨로 봄
+# 2차(11/05 v2 다시 채점에서 나빠진 6장): 라벨 값의 줄바꿈 이어 붙이기, '(주' → '(주)', 지점명 뒤 꼬리 자르기,
+#   줄 중간 '[매장명]' 라벨, 주소 뒤 '상호/사업자번호', 닫는 괄호만 있는 조각·'내점' 같은 한 글자+점 제외
+# v2 는 v2 가 상호를 찾았을 때만 기존 값을 바꾼다 (못 찾으면 기존 값 유지).
+V2_LABELS = ("상호명", "매장명", "가맹점명", "점포명", "업체명", "상호", "매장", "판매처")
+_V2_LABEL_RE = re.compile(r"(?:^|[\s.,])\[?\s*(" + "|".join(V2_LABELS) + r")\s*(?:\]\s*[:：]?|[:：])\s*(.+)$")
+_V2_CUT_RE = re.compile(r"\s*(\[|\bTID\b|(?<![가-힣])(?:대표|사업자|TEL|Tel|tel|전화|가맹점번호)\b|/?\s*\d{3}-\d{2}-\d{5}).*$")
+_V2_SLASH_BIZ_RE = re.compile(r"^(.*?)\s*/\s*\d{3}-\d{2}-\d{5}")
+_V2_BIZ_HEAD_RE = re.compile(r"^\s*\d{3}-\d{2}-\d{5}\s*")
+_V2_URL_RE = re.compile(r"(https?://\S+|www\.?\S+|\S+\.co\.?kr\S*|\S+\.com\S*)", re.I)
+_V2_HEADER_RE = re.compile(r"상\s*품\s*명|품\s*명|단\s*가|수\s*량|금\s*액")
+_V2_JUNK_TOKEN_RE = re.compile(r"^[\(\[\-–—*=_.,:|]+[\)\]\-–—*=_.,:|]*$")
+_V2_BRANCH_CUT_RE = re.compile(r"^(.{2,25}?점(?:#\d+|\([^)]*\))?)(?=\s|$)")      # 기존 규칙의 '…점' 뒤 꼬리 자르기
+_V2_BRANCH_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}점(?:\b|[#()]|$)")               # '내점' 처럼 한 글자+점은 지점명 아님
+_V2_NOISE = ("영수증", "매출전표", "고객용", "가맹점용", "카드판매", "주문번", "대기번", "진동벨", "테이블")
+
+
+def _v2_clean(text: str) -> str:
+    t = _V2_URL_RE.sub(" ", text)
+    t = _V2_BIZ_HEAD_RE.sub("", t)
+    m = _V2_SLASH_BIZ_RE.search(t)                     # 'OO초밥/123-45-67890/홍길동' (기존 v0r2 ②)
+    if m:
+        head = m.group(1).strip(" ,")
+        t = head if rp._looks_like_name(head) else re.split(r"[\s,()]+", head)[-1]   # 주소 뒤에 붙은 상호는 마지막 단어
+    t = _V2_CUT_RE.sub("", t)
+    t = re.sub(r"[\[\]<>*=]+", " ", t).replace("_", " ")
+    toks = [x for x in t.split() if not _V2_JUNK_TOKEN_RE.match(x)]
+    has_hangul = any(re.search(r"[가-힣]", x) for x in toks)
+    keep = []
+    for i, x in enumerate(toks):
+        if has_hangul and re.fullmatch(r"[A-Za-z0-9\-.&']+", x) and not re.search(r"[가-힣]", x) and i < len(toks) - 1 \
+                and any(re.search(r"[가-힣]", y) for y in toks[i + 1:]):
+            continue                                   # 한글 상호 앞·사이의 로고 영문 (emart, 7-ELEVEN)
+        if i > 0 and re.match(r"^(\(주\)|㈜)", x) and any(re.search(r"[가-힣]", y) for y in keep):
+            continue                                   # 상호 뒤에 끼어든 법인명 '(주)코리아세븐' (맨 앞 법인명은 유지)
+        keep.append(x)
+    t = " ".join(keep).strip(" -|,")
+    m = _V2_BRANCH_CUT_RE.match(t)
+    if m and t[m.end():].strip():
+        t = m.group(1)                                 # '세븐일레븐 역삼태광점#69042 T-ELEVEN' → 지점명까지
+    for k in range(2, len(t)):                         # 'OO제과(OO)(OO제과(O' 반복 꼬리 (기존 v0r2 ④)
+        if t[k] == "(" and len(t) - k - 1 >= 4 and t.startswith(t[k + 1:]):
+            t = t[:k]
+            break
+    return re.sub(r"^\((?:장|추|쥬|주)(?!\))", "(주)", t.strip())   # 기존 parse_receipt 와 같은 '(주' 보정
+
+
+def _v2_ok(t: str) -> bool:
+    if not t or not rp._looks_like_name(t):
+        return False
+    if t.count(")") > t.count("("):                    # '역삼점)' '에들라트)1층' 처럼 앞줄에서 넘어온 조각
+        return False
+    flat = re.sub(r"\s+", "", t)
+    return not any(w in flat for w in _V2_NOISE)
+
+
+def name_v2(lines, limit: int = 12):
+    """(상호 | None, 이유). 라벨('상호:'·'[매장명]' 뒤 값) → 지점명(…점) 줄 → 법인 표기 줄 → 첫 후보."""
+    texts = [t for t, _ in lines]
+    for i, t in enumerate(texts):
+        m = _V2_LABEL_RE.search(t)
+        if m:
+            v = _v2_clean(rp._join_wrapped(m.group(2), lines, i))
+            if _v2_ok(v):
+                return v, "라벨 뒤 값"
+    stop = next((i for i, t in enumerate(texts) if _V2_HEADER_RE.search(t)), len(texts))
+    cands = []
+    for i, t in enumerate(texts[:min(limit, stop)]):
+        v = _v2_clean(rp._join_wrapped(t, lines, i))
+        if _v2_ok(v):
+            cands.append(v)
+    if not cands:
+        return None, "후보 없음"
+    for pat, why in ((_V2_BRANCH_RE, "지점명 줄"), (re.compile(r"\(주\)|㈜"), "법인 표기 줄")):
+        hit = [c for c in cands if pat.search(c)]
+        if hit:
+            return hit[0], why
+    return cands[0], "첫 후보"
+
+
 def calendar_ok(date: str | None) -> bool:
     if date is None:
         return True
@@ -130,6 +214,12 @@ def extract(lines, cfg: dict) -> tuple[dict, dict]:
             "placeName": {"selected": d["placeName"], "candidates": name_candidates(lines)},
             "address": addr.diagnostics(), "policy": {"fields": dict(cfg["fields"]), "address": dict(cfg["address"])}}
     f = cfg["fields"]
+    if f.get("name_rule", "legacy") == "v2":
+        n2, why = name_v2(lines)
+        diag["placeName"]["v2"] = {"value": n2, "reason": why}
+        if n2 and n2 != d["placeName"]:
+            diag["placeName"]["action"] = f"상호명 v2 ({why}) 로 변경"
+            d["placeName"] = n2
     if f.get("date_lookalike_fix", "legacy") == "fallback" and d["date"] is None:   # 이미 찾은 날짜는 바꾸지 않는다
         date2, time2, changed = lookalike_fallback(lines)
         if date2:

@@ -52,8 +52,9 @@ def score(lines_by_file, gold, addr_given, cfg):
         for fld, key in FIELDS:
             row[fld] = judge_field(fld, resp[key], gv[fld])
         rows.append(row)
-        if diag["datetime"]["actions"]:
-            actions[name] = len(diag["datetime"]["actions"])
+        n_act = len(diag["datetime"]["actions"]) + (1 if diag["placeName"].get("action") else 0)
+        if n_act:
+            actions[name] = n_act
     return rows, actions
 
 
