@@ -180,6 +180,48 @@
     }
   },
   "screens": {
+    "my": {
+      "route": "/my",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · My (20:4848) · W25 (20:4849), W25-6 (52:3294)",
+      "features": ["MY-01", "MY-05", "REC-12"],
+      "note": "2026-11-05 사용자 요청으로 mock 데이터 기반 UI만 구현. 하단 My 탭 연결. 기록 전체 보기는 /memo로 이동하며 해당 페이지는 사용자 요청으로 아직 미구현. 기록 편집은 준비 중 안내. 공개 상태 변경은 메모리 상태. 로그아웃은 기존 LoginScreen을 사용한 미리보기이며 실제 인증 상태는 변경하지 않음. Pencil 미대조."
+    },
+    "my/footprints": {
+      "route": "/my/footprints",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-1 (20:4915) · 클러스터는 지도 발자취 (20:4585), 큰 마커 (20:4602) 참고",
+      "features": ["MY-02", "FPT-04"],
+      "note": "나만 보는 발자취 카카오 지도와 기간·카테고리 필터. 기존 KakaoMapView에 공개 장소 부근 mock 좌표와 발바닥 마커를 전달하며 핀 선택은 해당 방명록으로 연결한다. 필터별 표시 영역 맞춤, 로딩·오류·재시도 제공. 동선·위치 권한·방문 API 사용 없음. mock 기준일은 2026-11-10. Pencil 미대조."
+    },
+    "my/footprints/[footprintId]": {
+      "route": "/my/footprints/[footprintId]",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-2 (20:4966)",
+      "features": ["FPT-05", "FPT-08"],
+      "note": "카카오 지도에서 선택한 방문 위치 한 곳을 표시. 방명록 본문만 최대 200자 수정, 변경 없으면 저장 비활성. 위치·시각·카테고리·방문 횟수 유지. 실제 저장 없이 My mock 상태만 변경. Pencil 미대조."
+    },
+    "my/tips": {
+      "route": "/my/tips",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-3 (50:3156), W25-3E (51:3254), W25-5 (52:3271), W25-5A (53:3483)",
+      "features": ["MY-03", "TIP-09", "TIP-10"],
+      "note": "로컬 예시 사진 4개, 최신 등록순 목록·수정 진입·삭제 확인·삭제 완료 토스트·빈 상태. 삭제는 메모리 상태에만 반영. Pencil 미대조."
+    },
+    "my/tips/[tipId]": {
+      "route": "/my/tips/[tipId]",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-4 (50:3241)",
+      "features": ["TIP-09"],
+      "note": "종류·사진 필수, 내용 선택 120자. 예시 사진 선택만 지원하며 카메라·사진 보관함에 접근하지 않음. 저장 시 등록일 유지. Pencil 미대조."
+    },
+    "my/withdrawal": {
+      "route": "/my/withdrawal",
+      "pencil": "없음",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-7 (52:3366), W25-7A (54:3528), W25-8 (52:3409), W25-9 (52:3441)",
+      "features": ["MY-06"],
+      "note": "안내·동의·본인 확인 미리보기·최종 확인·완료 UI. 로그인 제공자에 따라 카카오·구글 안내와 기존 소셜 버튼을 표시한다. 제공자가 없는 기존 세션에서는 본인 확인 비활성. 실제 소셜 재인증·계정 삭제·토큰 변경 없음. Pencil 미대조."
+    },
     "login": {
       "route": "/login",
       "pencil": "없음",
@@ -199,7 +241,7 @@
     "ar-tip": {
       "route": "/ar-tip",
       "pencil": "없음",
-      "figma": "gzYo8vG6h2LrKGOa22UCFP · AR 팁 (2:4438) · W17 (2:4439), W17-A (4:2630), W18 (2:4493), W19 (2:4525), W19-1 (2:4561)",
+      "figma": "gzYo8vG6h2LrKGOa22UCFP · AR 팁 (20:4436) · W17 (20:4437), W17-A (20:4799), W18 (20:4467), W19 (20:4499), W19-1 (20:4545)",
       "features": [
         "TIP-01",
         "TIP-02",
@@ -212,7 +254,7 @@
         "TIP-09",
         "TIP-10"
       ],
-      "note": "2026-11-02 사용자 지정 Figma 직접 대조. 로컬 PoC: 사진 선택/본문 필수 2,000자, + 즉시 위치 저장 유지, 서버 공개 연동 없음. Pencil 미대조."
+      "note": "2026-11-05 S15P31A109-122: 사용자 요청으로 화면·AR 흐름 우선 구현. 탭 → 네이티브 AR 탐색(최초 권한 안내) → + → 별도 위치 배치 → 여기에 놓기 → 작성. 종류·사진 필수, 본문 선택 120자. 실패 시 입력·사진·공간 정보 유지 및 재시도. API 계약 미확인으로 공개 게시 없이 기기 임시 저장만 제공. 기존 로컬 팁 읽기 유지. Pencil 미대조, 실기기 시각 검증 미실행."
     },
     "map": {
       "route": "/map",
@@ -307,6 +349,25 @@
         "PLN-03"
       ],
       "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
+    "rooms/[roomId]/schedule/new": {
+      "route": "/rooms/[roomId]/schedule/new",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › 여행방 일정 만들기. 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:8346) · W13 (1:8347)",
+      "features": [
+        "TRP-08"
+      ],
+      "note": "Pencil 미대조. 처리 중 화면은 섹션에 시안이 없어 W10-1 패턴을 따른다. API는 가정 DTO + MSW(docs/api-contract.md §3-1)."
+    },
+    "rooms/[roomId]/schedule/draft": {
+      "route": "/rooms/[roomId]/schedule/draft",
+      "pencil": "없음",
+      "figma": "Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:8346) · W14 (1:8394), W14-L (1:8679), W14-L2 (1:8842), W14-M (1:9035), W14-T (1:9227)",
+      "features": [
+        "TRP-08",
+        "TRP-09"
+      ],
+      "note": "2026-11-05 W14·W14-M·W14-T 스크린샷 대조. Pencil 미대조. draftId가 있으면 AI 초안 검토, 없으면 저장된 일정 조정(\"일정 조정하기\"). 순서 바꾸기는 드래그 대신 위·아래 버튼. 웹에서는 BottomSheet 높이 애니메이션이 styleq 경고로 적용되지 않아 시트 배경이 비친다(기존 문제)."
     },
     "home": {
       "route": "/",

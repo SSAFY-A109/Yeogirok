@@ -33,7 +33,7 @@ function createFootprintStyle(): MapFootprintStyle {
   const colors = getColors("light");
 
   return {
-    image: footprintPinImage,
+    image: footprintPinImage.uri,
     badgeBackground: colors["highlight-muted"],
     badgeBorder: colors.card,
     badgeText: colors.highlight,

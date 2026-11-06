@@ -16,6 +16,7 @@ data class PinProjection(
     /** Clockwise screen rotation that keeps the pin aligned with world up (gravity), not the phone. */
     val tiltDegrees: Float = 0f,
     val bounds: PinBounds? = null,
+    val occluded: Boolean = false,
 ) {
     val visible: Boolean get() = x != null && y != null
 }
@@ -24,7 +25,32 @@ data class PinProjection(
 private const val PIN_HEIGHT_METERS = 0.48f
 private const val PIN_WIDTH_METERS = PIN_HEIGHT_METERS * 34f / 40f
 
-internal fun projectPin(clip: FloatArray, width: Int, height: Int, focalX: Float, focalY: Float): PinProjection {
+internal const val TIP_TAG_SCALE = 2.5f
+internal const val TIP_TAG_HEIGHT_METERS = 0.06f * TIP_TAG_SCALE
+private const val TIP_TAG_GAP_METERS = 0.01f * TIP_TAG_SCALE
+
+internal fun tipTagVertices(pinTopMeters: Float, aspectRatio: Float): FloatArray {
+    require(pinTopMeters.isFinite() && aspectRatio.isFinite() && aspectRatio > 0f)
+    val halfWidth = TIP_TAG_HEIGHT_METERS * aspectRatio / 2f
+    val bottom = pinTopMeters + TIP_TAG_GAP_METERS
+    val top = bottom + TIP_TAG_HEIGHT_METERS
+    return floatArrayOf(
+        -halfWidth, top, 0f, 0f, 0f, 1f,
+        -halfWidth, bottom, 0f, 0f, 1f, 1f,
+        halfWidth, bottom, 0f, 1f, 1f, 1f,
+        -halfWidth, top, 0f, 0f, 0f, 1f,
+        halfWidth, bottom, 0f, 1f, 1f, 1f,
+        halfWidth, top, 0f, 1f, 0f, 1f,
+    )
+}
+
+internal fun pinBoundsOnScreen(bounds: PinBounds, width: Int, height: Int): Boolean =
+    width > 0 && height > 0 && listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all { it.isFinite() } &&
+        bounds.left < bounds.right && bounds.top < bounds.bottom &&
+        bounds.right > 0 && bounds.bottom > 0 && bounds.left < width && bounds.top < height
+
+internal fun projectPin(clip: FloatArray, width: Int, height: Int, focalX: Float, focalY: Float,
+                        allowOutsideViewport: Boolean = false): PinProjection {
     if (clip.size != 4 || clip.any { !it.isFinite() } || width <= 0 || height <= 0 ||
         !focalX.isFinite() || !focalY.isFinite() || focalX <= 0f || focalY <= 0f) {
         return PinProjection(guidance = "핀 투영 대기 중")
@@ -40,7 +66,7 @@ internal fun projectPin(clip: FloatArray, width: Int, height: Int, focalX: Float
     val widthPx = PIN_WIDTH_METERS * focalX * width / (2f * clip[3])
     val heightPx = PIN_HEIGHT_METERS * focalY * height / (2f * clip[3])
     if (!widthPx.isFinite() || !heightPx.isFinite()) return PinProjection(guidance = "핀 투영 대기 중")
-    if (x in -1f..1f && y in -1f..1f) {
+    if (allowOutsideViewport || x in -1f..1f && y in -1f..1f) {
         return PinProjection((x + 1f) * width / 2f, (1f - y) * height / 2f, "핀: 화면 안", widthPx, heightPx, clip[3])
     }
     val directions = mutableListOf<String>()

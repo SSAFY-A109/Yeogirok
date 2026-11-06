@@ -26,7 +26,8 @@ MAESTRO_APP_ID=<번들 id> maestro test .maestro/flows/00-app-launch.yaml   # �
 | 파일 | 흐름 | 기능 ID | 상태 |
 | --- | --- | --- | --- |
 | `00-app-launch.yaml` | 앱 실행 → 로그인 화면·소셜 버튼 → MSW 로그인 → 메인·탭 | COM-01 | 작성 완료. 사용자 요청으로 브라우저·실기기 미실행 |
-| `20-ar-tip-entry.yaml` | AR 팁 진입 → 권한 용도 안내 | TIP-01 | 작성 완료, CLI 미설치로 실행 미확인. Metro 연결 개발 앱 필요. 저장 데이터 유지 |
+| `20-ar-tip-entry.yaml` | 하단 AR 팁 탭 → 최초 권한 안내 → 카메라 거부 안내 → 닫기 → 탐색 재진입·다른 탭 | TIP-01 | 2026-11-05 변경. Android 개발 빌드 대상. CLI 미설치·연결 기기 없음으로 미실행. 저장 데이터 유지 |
+| `30-my-ui.yaml` | My → 팁 수정·필수 사진·삭제 취소/확인 → 방명록 수정 → 로그아웃 취소 → 탈퇴 동의·취소 | MY-01·02·03·05·06 | UI mock 전용. Maestro CLI 미설치로 flow 자체는 미실행. 동일한 주요 동작은 연결된 Android 기기에서 ADB UI 조작으로 확인 |
 
 ## 결정 필요
 

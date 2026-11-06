@@ -2,6 +2,9 @@ package com.yeogirokarpoc.geo
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.opengl.GLES20.*
 import android.opengl.GLUtils
 import android.opengl.Matrix
@@ -9,6 +12,7 @@ import com.google.ar.core.Pose
 import com.google.ar.core.examples.java.common.rendering.ShaderUtil
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -19,6 +23,10 @@ internal class TipPinRenderer(context: Context) {
     private val mvp = FloatArray(16)
     private val model = FloatArray(16)
     private val vertices = mutableListOf<FloatArray>()
+    private val theme = ArTheme(context)
+    private val tagTextureScale = TIP_TAG_SCALE * context.resources.displayMetrics.density
+    private data class Tag(val texture: Int, val buffer: FloatBuffer)
+    private val tags = mutableMapOf<String, Tag>()
     private val buffer = run {
         val uvs = mutableListOf<FloatArray>()
         val data = ArrayList<Float>()
@@ -75,7 +83,8 @@ internal class TipPinRenderer(context: Context) {
         ShaderUtil.checkGLError("TipPin", "upload")
     }
 
-    fun draw(vp: FloatArray, pose: Pose, selected: Boolean, width: Int, height: Int): PinBounds {
+    fun draw(vp: FloatArray, pose: Pose, selected: Boolean, width: Int, height: Int, tipType: String? = null,
+             shouldDraw: (PinBounds) -> Boolean = { true }): PinBounds {
         // Keep the anchor's heading as the viewer walks around it, but always stand upright.
         val forward = pose.zAxis
         val yaw = if (forward[0]*forward[0] + forward[2]*forward[2] > 0.001f)
@@ -86,20 +95,6 @@ internal class TipPinRenderer(context: Context) {
         Matrix.rotateM(model, 0, Math.toDegrees(yaw.toDouble()).toFloat(), 0f, 1f, 0f)
         if (selected) Matrix.scaleM(model, 0, 1.4f, 1.4f, 1.4f)
         Matrix.multiplyMM(mvp, 0, vp, 0, model, 0)
-
-        glUseProgram(program)
-        glUniformMatrix4fv(matrixLocation, 1, false, mvp, 0)
-        glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, texture[0])
-        buffer.position(0)
-        glVertexAttribPointer(position, 3, GL_FLOAT, false, 24, buffer)
-        buffer.position(3)
-        glVertexAttribPointer(surface, 3, GL_FLOAT, false, 24, buffer)
-        glEnableVertexAttribArray(position)
-        glEnableVertexAttribArray(surface)
-        glDrawArrays(GL_TRIANGLES, 0, buffer.capacity() / 6)
-        glDisableVertexAttribArray(position)
-        glDisableVertexAttribArray(surface)
 
         var left = Float.POSITIVE_INFINITY
         var right = Float.NEGATIVE_INFINITY
@@ -115,7 +110,58 @@ internal class TipPinRenderer(context: Context) {
             top = minOf(top, py)
             bottom = maxOf(bottom, py)
         }
-        return PinBounds(left, top, right, bottom)
+        val bounds = PinBounds(left, top, right, bottom)
+        if (shouldDraw(bounds)) {
+            drawMesh(texture[0], buffer)
+            if (tipType != null && tipType in listOf("포토", "맛집", "카페", "꿀팁", "TMI")) {
+                val tag = tags.getOrPut(tipType) { createTag(tipType) }
+                drawMesh(tag.texture, tag.buffer)
+            }
+        }
+        return bounds
+    }
+
+    private fun drawMesh(textureId: Int, mesh: FloatBuffer) {
+        glUseProgram(program)
+        glUniformMatrix4fv(matrixLocation, 1, false, mvp, 0)
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, textureId)
+        mesh.position(0)
+        glVertexAttribPointer(position, 3, GL_FLOAT, false, 24, mesh)
+        mesh.position(3)
+        glVertexAttribPointer(surface, 3, GL_FLOAT, false, 24, mesh)
+        glEnableVertexAttribArray(position)
+        glEnableVertexAttribArray(surface)
+        glDrawArrays(GL_TRIANGLES, 0, mesh.capacity() / 6)
+        glDisableVertexAttribArray(position)
+        glDisableVertexAttribArray(surface)
+    }
+
+    private fun createTag(type: String): Tag {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = theme.medium; textSize = 12f * tagTextureScale
+        }
+        val height = (24f * tagTextureScale).toInt()
+        val width = kotlin.math.ceil(paint.measureText(type) + 16f * tagTextureScale).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        paint.color = theme.card
+        canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 6f * tagTextureScale, 6f * tagTextureScale, paint)
+        paint.color = theme.secondary; paint.textAlign = Paint.Align.CENTER
+        canvas.drawText(type, width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
+        val id = IntArray(1)
+        glGenTextures(1, id, 0)
+        glBindTexture(GL_TEXTURE_2D, id[0])
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        try { GLUtils.texImage2D(GL_TEXTURE_2D, 0, bitmap, 0) } finally { bitmap.recycle() }
+        val data = tipTagVertices(vertices.maxOf { it[1] }, width.toFloat() / height)
+        val mesh = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+            put(data); position(0)
+        }
+        return Tag(id[0], mesh)
     }
 }
 

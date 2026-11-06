@@ -34,7 +34,7 @@ export const canShowLocationMap = Platform.OS !== "web" && KAKAO_JAVASCRIPT_KEY 
 const colors = getColors("light");
 
 const FOOTPRINT_STYLE: MapFootprintStyle = {
-  image: footprintPinImage,
+  image: footprintPinImage.uri,
   badgeBackground: colors["highlight-muted"],
   badgeBorder: colors.card,
   badgeText: colors.highlight,

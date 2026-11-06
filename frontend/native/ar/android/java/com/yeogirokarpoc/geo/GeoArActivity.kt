@@ -32,6 +32,8 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
+private const val PLACEMENT_TARGET_HEIGHT_FRACTION = 0.64f
+
 /** Owns exactly one session: hit test, anchor pose and Earth conversion all use it. */
 class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private lateinit var surface: GLSurfaceView
@@ -43,6 +45,12 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private var placementActions: View? = null
     private var explorerControls: View? = null
     private var placementHeader: View? = null
+    private var placementPanel: View? = null
+    private var placementConfirm: Button? = null
+    private var placementLocation: TextView? = null
+    private var productTabs: View? = null
+    @Volatile private var placingTip = false
+    private val placementCommitted = AtomicBoolean(false)
     private data class CenterHit(val hit: HitResult, val atMs: Long)
     private val centerHit = AtomicReference<CenterHit?>(null)
     private val placementRequested = AtomicReference<CenterHit?>(null)
@@ -62,7 +70,9 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     @Volatile private var exploring = false
     private val explorerTips = mutableListOf<JSONObject>()
     @Volatile private var localTip: JSONObject? = null
-    private var detailDialog: android.app.Dialog? = null
+    private var detailOpen = false
+    private var resumeFromDetail = false
+    private val detailRequestCode = 9120
     private val detailRequested = AtomicBoolean(false)
     private val tapTarget = AtomicReference<PinTapTarget?>(null)
     private data class TipTap(val tip: JSONObject, val target: PinTapTarget, val distanceMeters: Double?)
@@ -97,6 +107,12 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private var height = 1
     private var glReady = false
     private var lastUiTime = 0L
+    private val occlusionGates = mutableMapOf<String, DepthOcclusionGate>()
+    private var renderedPins = 0
+    private var occludedPins = 0
+    private var outsidePins = 0
+    private var lastVisibility = ""
+    private var lastVisibilityAt = 0L
     private var placementMessage = "바닥을 터치하고 핀을 끌어 위치를 조정하세요."
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,6 +137,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         localTip = try { intent.getStringExtra("localTip")?.let { LocalTipStore.validate(this, it) } }
             catch (_: Exception) { finish(); return }
         productMode = cloudMode && (localTip != null || intent.getBooleanExtra("productMode", false))
+        placingTip = productMode && !exploring && localTip == null
         navigationMode = cloudMode && intent.getBooleanExtra("navigationMode", false)
         restore = try { intent.getStringExtra("restoreRecord")?.let {
             if (cloudMode) CloudRecord.parse(it, forResolve = true) else GeoRecord.parse(it)
@@ -165,7 +182,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
         overlay = PinOverlay().apply {
             measurementMode = restore != null
-            showCenterTarget = productMode
+            showCenterTarget = placingTip
             inputEnabled = !productMode
             onPoint = { x, y -> touch.set(PointF(x, y)) }
         }
@@ -245,7 +262,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 addView(ArIcon(this@GeoArActivity, "d8eae.svg"), LinearLayout.LayoutParams(dp(8), dp(8)))
                 addView(TextView(this@GeoArActivity).apply {
                     val count = if (explorerTips.isNotEmpty()) explorerTips.size else if (localTip != null) 1 else 0
-                    text = if (exploring || localTip != null) "이 기기의 팁 " + count + "개" else "팁 남길 자리"
+                    text = if (exploring || localTip != null) "저장한 팁 " + count + "개" else "팁 남길 자리"
                     textSize = 12f; typeface = theme.medium; setTextColor(theme.foreground); includeFontPadding = false
                 }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(4) })
                 contentDescription = "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
@@ -273,7 +290,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 }, FrameLayout.LayoutParams(-2, dp(40), Gravity.CENTER))
                 addView(FrameLayout(this@GeoArActivity).apply {
                     background = theme.background(theme.card, dp(22).toFloat())
-                    contentDescription = "팁 위치 배치 닫기"; isClickable = true; setOnClickListener { finish() }
+                    contentDescription = "팁 위치 배치 닫기"; isClickable = true; setOnClickListener { cancelPlacement() }
                     addView(ArIcon(this@GeoArActivity, "af273.svg"), FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
                 }, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
             }
@@ -282,18 +299,16 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             root.addView(header, FrameLayout.LayoutParams(-1, dp(44), Gravity.TOP).apply { topMargin = dp(8) })
             addTip = Button(this).apply {
                 text = ""; contentDescription = "화면 중앙에 AR 팁 남기기"
-                isEnabled = false; alpha = 0.4f; stateListAnimator = null; elevation = 0f
+                isEnabled = true; stateListAnimator = null; elevation = 0f
                 minWidth = 0; minHeight = 0; setPadding(0, 0, 0, 0)
                 val circle = theme.background(theme.primary, dp(28).toFloat()).apply { setStroke(dp(3), theme.card) }
                 background = android.graphics.drawable.LayerDrawable(arrayOf(circle, ArSvg(this@GeoArActivity, "11619.svg"))).apply {
                     setLayerInset(1, dp(15), dp(15), dp(15), dp(15))
                 }
                 setOnClickListener {
-                    val selected = centerHit.getAndSet(null)
-                    if (selected != null && ArExperimentPolicy.freshPlacementHit(SystemClock.elapsedRealtime() - selected.atMs)) {
-                        placementRequested.compareAndSet(null, selected)
-                    }
-                    isEnabled = false; alpha = 0.4f
+                    placementCommitted.set(false)
+                    placingTip = true
+                    showPlacementControls()
                 }
             }
             root.addView(addTip, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.BOTTOM or Gravity.END).apply {
@@ -303,26 +318,27 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 orientation = LinearLayout.HORIZONTAL; setPadding(dp(8), dp(8), dp(8), 0)
                 setBackgroundColor(theme.card)
             }
-            val labels = listOf("메인", "여행방", "AR 팁", "기록", "지도")
-            val icons = listOf("97200.svg", "8add0.svg", "dc787.svg", "ef890.svg", "b4e02.svg")
+            val labels = listOf("여행방", "AR 팁", "메인", "My", "지도")
+            val icons = listOf("8add0.svg", "dc787.svg", "97200.svg", "ef890.svg", "b4e02.svg")
             labels.forEachIndexed { index, name ->
                 val tab = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isSelected = index == 2
-                    isEnabled = index in listOf(0, 2); alpha = if (isEnabled) 1f else 0.5f
-                    contentDescription = name + if (index == 2) " 선택됨" else ""
-                    addView(ArIcon(this@GeoArActivity, icons[index]), LinearLayout.LayoutParams(dp(24), dp(24)))
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isSelected = index == 1
+                    isEnabled = index in 0..2; alpha = if (isEnabled) 1f else 0.5f
+                    contentDescription = name + if (index == 1) " 선택됨" else ""
+                    addView(ArIcon(this@GeoArActivity, icons[index], if (index == 1) theme.primary else theme.secondary), LinearLayout.LayoutParams(dp(24), dp(24)))
                     addView(TextView(this@GeoArActivity).apply {
-                        text = name; textSize = if (index == 2) 12f else 11f; typeface = theme.medium
-                        includeFontPadding = false; setTextColor(if (index == 2) theme.primary else theme.secondary)
+                        text = name; textSize = if (index == 1) 12f else 11f; typeface = theme.medium
+                        includeFontPadding = false; setTextColor(if (index == 1) theme.primary else theme.secondary)
                     }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
-                    if (index == 0) setOnClickListener {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("yeogirokfe:///"))); finish()
+                    if (index == 0 || index == 2) setOnClickListener {
+                        val path = if (index == 0) "rooms" else ""
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("yeogirokfe:///$path"))); finish()
                     }
-                    if (index == 2) setOnClickListener { detailDialog?.dismiss() }
                 }
                 tabs.addView(tab, LinearLayout.LayoutParams(0, dp(48), 1f))
             }
             root.addView(tabs, FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM))
+            productTabs = tabs
             layout.removeView(actions)
             placementActions = actions
             actions.visibility = if (exploring || localTip != null) View.GONE else View.VISIBLE
@@ -333,7 +349,47 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 button.background = theme.background(if (button === confirm) theme.primary else theme.muted, dp(8).toFloat())
                 button.setTextColor(if (button === confirm) theme.card else theme.foreground)
             }
-            root.addView(actions, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            actions.visibility = View.GONE
+            val panel = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = theme.background(theme.card, dp(20).toFloat())
+                setPadding(dp(20), dp(16), dp(20), dp(16))
+                addView(LinearLayout(this@GeoArActivity).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(ArIcon(this@GeoArActivity, "aa40c.svg"), LinearLayout.LayoutParams(dp(18), dp(18)))
+                    placementLocation = TextView(this@GeoArActivity).apply {
+                        text = "현재 장소 · 위치 확인 중"; textSize = 14f; typeface = theme.medium; setTextColor(theme.foreground)
+                    }
+                    addView(placementLocation, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
+                })
+                placementConfirm = Button(this@GeoArActivity).apply {
+                    text = "여기에 놓기"; contentDescription = "인식된 표면에 팁 위치 확정"
+                    isEnabled = false; textSize = 15f; typeface = theme.medium; isAllCaps = false
+                    setTextColor(theme.card); background = theme.background(theme.primary, dp(8).toFloat())
+                    stateListAnimator = null; elevation = 0f
+                    setOnClickListener {
+                        if (placementCommitted.get()) confirmRequested.set(true)
+                        else {
+                            val selected = centerHit.getAndSet(null)
+                            if (selected != null && ArExperimentPolicy.freshPlacementHit(SystemClock.elapsedRealtime() - selected.atMs)) {
+                                placementRequested.compareAndSet(null, selected)
+                            }
+                        }
+                        isEnabled = false
+                    }
+                }
+                addView(placementConfirm, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(16) })
+                addView(Button(this@GeoArActivity).apply {
+                    text = "다시 놓기"; contentDescription = "선택한 팁 위치 초기화"
+                    textSize = 14f; typeface = theme.medium; isAllCaps = false
+                    setTextColor(theme.primary); background = theme.background(theme.card, dp(8).toFloat())
+                    setOnClickListener { placementCommitted.set(false); resetRequested.set(true) }
+                    visibility = View.GONE
+                }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+            }
+            placementPanel = panel
+            root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            showPlacementControls()
             androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
                 val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 (status.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(64) }.also { status.layoutParams = it }
@@ -342,7 +398,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 tabs.setPadding(dp(8), dp(8), dp(8), bars.bottom)
                 tabs.layoutParams = FrameLayout.LayoutParams(-1, dp(56) + bars.bottom, Gravity.BOTTOM)
                 (addTip!!.layoutParams as FrameLayout.LayoutParams).apply { bottomMargin = bars.bottom + dp(72) }.also { addTip!!.layoutParams = it }
-                actions.setPadding(dp(12), dp(16), dp(12), dp(16) + bars.bottom)
+                panel.setPadding(dp(20), dp(16), dp(20), dp(16) + bars.bottom)
                 navigation?.setInsets(bars.top, bars.bottom + dp(56))
                 insets
             }
@@ -351,9 +407,9 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val consentKey = if (cloudMode) "cloudConsent" else "geoConsent"
         consent = getSharedPreferences(GeoRecord.CONSENT_PREFS, 0).getBoolean(consentKey, false)
         if (!consent) {
-            AlertDialog.Builder(this).setTitle(if (cloudMode) "Cloud Anchor 사용 안내" else "지리 좌표 기능 사용 안내")
+            AlertDialog.Builder(this).setTitle(if (productMode) "AR 팁 이용 안내" else if (cloudMode) "Cloud Anchor 사용 안내" else "지리 좌표 기능 사용 안내")
                 .setMessage(if (cloudMode)
-                    "Cloud Anchor는 Google Play Services for AR를 사용합니다. 공간 복원을 위해 카메라 영상에서 얻은 주변 공간 정보가 Google에 전송됩니다. 새 앵커는 Keyless 인증으로 ${ArExperimentPolicy.CLOUD_TTL_DAYS}일 수명을 요청합니다. 미니맵 탐색에서는 위치 권한과 방향 센서를 추가로 사용하며, 위치 권한 없이도 현장에서 Cloud 복원을 시도할 수 있습니다. Google 개인정보처리방침을 확인하고 동의하면 진행하세요."
+                    "주변 팁을 찾고 팁을 놓을 자리를 인식하기 위해 카메라를 사용해요. 미니맵에는 앱 사용 중의 현재 위치와 방향을 표시해요. 공간을 다시 찾기 위해 카메라에서 얻은 주변 공간 정보가 Google에 전송돼요. Google 개인정보처리방침을 확인하고 동의하면 시작해요."
                     else "이 기능은 Google Play Services for AR를 사용합니다. 카메라·위치·센서 데이터가 Google에 전송되어 실제 공간의 위치를 추정하는 데 사용됩니다. Google 개인정보처리방침을 확인하고 동의하면 진행하세요.")
                 .setPositiveButton("동의하고 시작") { _, _ ->
                     consent = true
@@ -369,8 +425,32 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
     }
 
+    private fun showPlacementControls() {
+        placementHeader?.visibility = if (placingTip) View.VISIBLE else View.GONE
+        placementPanel?.visibility = if (placingTip) View.VISIBLE else View.GONE
+        explorerControls?.visibility = if (placingTip) View.GONE else View.VISIBLE
+        productTabs?.visibility = if (placingTip) View.GONE else View.VISIBLE
+        addTip?.visibility = if (placingTip) View.GONE else View.VISIBLE
+        if (placingTip) {
+            navigation?.startPlacement()
+            val theme = ArTheme(this)
+            status.setTextColor(theme.card)
+            status.background = theme.background(theme.foreground, 16 * resources.displayMetrics.density).apply { alpha = 217 }
+        }
+    }
+
+    private fun cancelPlacement() {
+        if (intent.getBooleanExtra("explorerMode", false)) recreate() else finish()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (productMode && placingTip) cancelPlacement() else super.onBackPressed()
+    }
+
     override fun onResume() {
         super.onResume(); resumed = true
+        addTip?.isEnabled = true; addTip?.alpha = 1f
         ensureSession()
     }
 
@@ -423,7 +503,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             }
             session!!.resume()
             sessionResumed = true
-            resetRequested.set(true)
+            if (!resumeFromDetail) resetRequested.set(true)
+            resumeFromDetail = false
             // Keep imported coordinates for the initial restoration attempt.
             surface.onResume()
             navigation?.resume()
@@ -450,9 +531,16 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != detailRequestCode) return
+        detailOpen = false
+        overlay.markerSelected = false; overlay.selectedTipId = null
+        overlay.postInvalidateOnAnimation()
+    }
+
     override fun onPause() {
         resumed = false
-        detailDialog?.dismiss(); detailDialog = null
         tapTarget.set(null); detailRequested.set(false)
         navigation?.pause()
         if (!::surface.isInitialized) { super.onPause(); return }
@@ -461,8 +549,9 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         addTip?.isEnabled = false; addTip?.alpha = 0.4f
         overlay.screenPoint = null; overlay.referencePoint = null; overlay.guidance = null; overlay.invalidate()
         surface.onPause() // Stop Session.update() before pausing the session.
-        nearbyAnchors?.clear(); tipTargets.set(emptyList()); requestedTipId.set(null); overlay.otherPins = emptyList()
-        cloud.reset() // No render thread access after onPause() returns.
+        occlusionGates.clear()
+        if (!detailOpen) { nearbyAnchors?.clear(); cloud.reset() }
+        tipTargets.set(emptyList()); requestedTipId.set(null); overlay.otherPins = emptyList()
         placementRequested.set(null); publishCenterHit(null)
         tapTarget.set(null); detailRequested.set(false); overlay.cancelPinTap()
         if (sessionResumed) { session?.pause(); sessionResumed = false }
@@ -470,7 +559,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     }
 
     override fun onDestroy() {
-        detailDialog?.dismiss(); detailDialog = null
+        nearbyAnchors?.clear(); cloud.reset()
         navigation?.destroy(); navigation = null
         session?.close(); session = null
         super.onDestroy()
@@ -494,6 +583,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     // Manual restoration retry replaces only the orange geospatial anchor.
     // The green reference anchor remains in the same live AR session.
     private fun resetRestoredAnchor() {
+        occlusionGates.clear()
         nearbyAnchors?.clear(); tipTargets.set(emptyList()); requestedTipId.set(null); overlay.otherPins = emptyList()
         placementRequested.set(null); publishCenterHit(null)
         tapTarget.set(null); detailRequested.set(false)
@@ -527,7 +617,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     else "바닥을 터치하고 핀을 끌어 위치를 조정하세요."
                 if (cloudMode) placementMessage = if (restore != null) "Cloud ID로 공간 복원을 요청합니다."
                     else "터치로 배치한 뒤 핀을 끌어 조정하세요. GOOD 품질을 유지하면 저장할 수 있습니다."
-                if (productMode && restore == null) runOnUiThread { addTip?.visibility = View.VISIBLE }
+                if (productMode && restore == null) runOnUiThread { showPlacementControls() }
             }
             if (restoreRetryRequested.getAndSet(false) && restore != null) {
                 resetRestoredAnchor()
@@ -733,9 +823,9 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private fun hitType(hit: HitResult) = if (hit.trackable is DepthPoint) "DEPTH" else "PLANE"
 
     private fun productTrackingHint(frame: Frame): String = when (frame.camera.trackingFailureReason.name) {
-        "INSUFFICIENT_LIGHT" -> "조명이 어두워요. 밝은 바닥이나 벽을 비춰 주세요."
+        "INSUFFICIENT_LIGHT" -> "조명이 어두워요. 밝은 곳에서 주변 벽과 사물을 비춰 주세요."
         "EXCESSIVE_MOTION" -> "카메라를 조금 천천히 움직여 주세요."
-        "INSUFFICIENT_FEATURES" -> "무늬가 있는 바닥이나 벽을 비춰 주세요."
+        "INSUFFICIENT_FEATURES" -> "바닥만 보지 말고 주변 벽과 사물을 천천히 비춰 주세요."
         "CAMERA_UNAVAILABLE" -> "카메라를 사용할 수 없어요. 다른 카메라 앱을 닫아 주세요."
         else -> "주변 공간을 인식하고 있어요. 잠시 기다려 주세요."
     }
@@ -745,8 +835,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         overlay.centerTargetReady = next != null
         if ((previous != null) != (next != null)) runOnUiThread {
             val ready = resumed && centerHit.get() != null
-            addTip?.isEnabled = ready
-            addTip?.alpha = if (ready) 1f else 0.4f
+            if (placingTip) {
+                placementConfirm?.isEnabled = ready
+                placementConfirm?.alpha = if (ready) 1f else 0.4f
+            }
         }
     }
 
@@ -761,10 +853,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val next = hit.createAnchor()
         resetAnchor()
         anchor = next; validPlacement = true; placementHitType = hitType(hit)
+        placementCommitted.set(true)
         exploring = false; localTip = null; restore = null; navigationMode = false
         overlay.measurementMode = false; overlay.showCenterTarget = false
         runOnUiThread {
-            detailDialog?.dismiss(); detailDialog = null
             navigation?.startPlacement()
             retry.text = "다시 배치"
             explorerControls?.visibility = View.GONE
@@ -772,17 +864,19 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             val theme = ArTheme(this)
             status.setTextColor(theme.card)
             status.background = theme.background(theme.foreground, 16 * resources.displayMetrics.density).apply { alpha = 217 }
-            placementActions?.visibility = View.VISIBLE
+            placementActions?.visibility = View.GONE
             addTip?.visibility = View.GONE
         }
     }
 
     private fun drawCloudFrame(current: Session, frame: Frame, depth: DepthOcclusion?) {
+        renderedPins = 0; occludedPins = 0; outsidePins = 0
         val cameraTracking = frame.camera.trackingState == TrackingState.TRACKING
         if (productMode) placeAtCenter(frame)
         if (anchor?.trackingState == TrackingState.STOPPED) {
             anchor?.detach(); anchor = null; validPlacement = false
-            if (restore == null) cloud.reset() else cloud.placementChanged()
+            placementCommitted.set(false)
+            cloud.reset()
             placementMessage = "앵커 추적이 종료됐습니다. 다시 배치하거나 복원 재시도를 눌러 주세요."
         }
         if (measurementAnchor?.trackingState == TrackingState.STOPPED) {
@@ -793,13 +887,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             cloud.startResolve(current, restore!!.getString("anchorId"))
         cloud.update(current, frame, if (validPlacement) anchor else null, overlay.dragging, hosting = restore == null)
         cloud.takeResolvedAnchor()?.let { anchor?.detach(); anchor = it; validPlacement = true }
-        val choosingCenter = productMode && (exploring || localTip != null || anchor == null)
-        if (choosingCenter != overlay.showCenterTarget) runOnUiThread {
-            addTip?.visibility = if (choosingCenter) View.VISIBLE else View.GONE
-        }
+        val choosingCenter = productMode && placingTip && (exploring || localTip != null || anchor == null)
         overlay.showCenterTarget = choosingCenter
         val center = if (choosingCenter && cameraTracking && placementRequested.get() == null)
-            selectHit(frame, PointF(width / 2f, height / 2f), useDepth = false) else null
+            selectHit(frame, PointF(width / 2f, height * PLACEMENT_TARGET_HEIGHT_FRACTION), useDepth = false) else null
         publishCenterHit(center?.let { CenterHit(it, SystemClock.elapsedRealtime()) })
         val editable = !productMode && !exploring && localTip == null && !navigationMode && cameraTracking && !cloud.busy && !cloud.failed && cloud.hostedId == null
         overlay.inputEnabled = editable
@@ -828,24 +919,44 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             lastCloudTracking = trackingSummary
             Log.i("YeogirokCloud", "TRACKING $trackingSummary")
         }
-        if (productMode && restore == null && cameraTracking && validPlacement &&
+        if (productMode && placingTip && restore == null && cameraTracking && validPlacement &&
             point?.trackingState == TrackingState.TRACKING && cloud.canRequestHost(false, onPlacement = true)) {
             cloud.startHost(current, point, diagnostic = false, onPlacement = true)
         }
-        val visible = cameraTracking && validPlacement && !cloud.failed && point?.trackingState == TrackingState.TRACKING
+        val visible = cameraTracking && validPlacement && !cloud.failed && point?.trackingState == TrackingState.TRACKING && !(placingTip && exploring)
         val reference = measurementAnchor
         val referenceVisible = cameraTracking && reference?.trackingState == TrackingState.TRACKING
-        val projection = if (visible) renderPin(point!!.pose, overlay.markerSelected, depth) else null
+        val projection = if (visible) renderPin(point!!.pose, overlay.markerSelected, depth,
+            localTip?.optString("tipType"), localTip?.optString("id")) else null
         overlay.screenPoint = projection?.takeIf { it.visible }
         tapTarget.set(if (localTip != null && projection?.visible == true)
             PinTapTarget(projection, SystemClock.elapsedRealtime()) else null)
         val sheetLocal = if (visible) frame.camera.displayOrientedPose.inverse().transformPoint(point!!.pose.translation) else null
         val sheetDistance = sheetLocal?.let { kotlin.math.sqrt(it.sumOf { value -> value.toDouble() * value }) }
-        val otherPins = if (exploring && restore != null && (!navigationMode || navigation?.canStartResolve == true))
-            nearbyAnchors?.update(current, frame) { pose, id ->
-                renderPin(pose, overlay.selectedTipId == id, depth)
+        val otherPins = if (exploring && !placingTip && restore != null && (!navigationMode || navigation?.canStartResolve == true))
+            nearbyAnchors?.update(current, frame) { pose, tip ->
+                renderPin(pose, overlay.selectedTipId == tip.getString("id"), depth, tip.optString("tipType"), tip.getString("id"))
             } ?: emptyList() else emptyList()
         overlay.otherPins = otherPins
+        val frameRendered = renderedPins
+        val frameOccluded = occludedPins
+        val frameOutside = outsidePins
+        val primaryPaused = point?.trackingState == TrackingState.PAUSED
+        val visibilityCode = when {
+            !cameraTracking -> "CAMERA_${frame.camera.trackingFailureReason}"
+            frameRendered > 0 -> "VISIBLE"
+            cloud.busy -> "RESTORING"
+            cloud.failed -> "RESTORE_FAILED"
+            primaryPaused -> "ANCHOR_PAUSED"
+            frameOccluded > 0 -> "OCCLUDED"
+            frameOutside > 0 -> "OUTSIDE_VIEW"
+            else -> "WAITING"
+        }
+        val visibilityAt = SystemClock.elapsedRealtime()
+        if (visibilityCode != lastVisibility || visibilityAt - lastVisibilityAt >= 5_000L) {
+            lastVisibility = visibilityCode; lastVisibilityAt = visibilityAt
+            Log.i("YeogirokCloud", "VISIBILITY reason=$visibilityCode rendered=$frameRendered occluded=$frameOccluded outside=$frameOutside depthAvailable=${depth != null}")
+        }
         val now = SystemClock.elapsedRealtime()
         val targets = mutableListOf<TipTap>()
         if (localTip != null && projection?.visible == true) targets.add(TipTap(localTip!!, PinTapTarget(projection, now), sheetDistance))
@@ -854,11 +965,19 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val selectedId = if (detailRequested.getAndSet(false)) requestedTipId.getAndSet(null) else null
         val selected = targets.firstOrNull { it.tip.getString("id") == selectedId }
         if (selected != null) runOnUiThread {
-            if (resumed && !isFinishing && tipTargets.get().any { it.tip.getString("id") == selected.tip.getString("id") && SystemClock.elapsedRealtime() - it.target.atMs in 0..500 } && detailDialog?.isShowing != true) {
+            if (resumed && !isFinishing && tipTargets.get().any { it.tip.getString("id") == selected.tip.getString("id") && SystemClock.elapsedRealtime() - it.target.atMs in 0..500 } && !detailOpen) {
                 overlay.markerSelected = selected.tip.getString("id") == localTip?.getString("id")
                 overlay.selectedTipId = selected.tip.getString("id")
-                detailDialog = TipDetailSheet.show(this, selected.tip, selected.distanceMeters) {
-                    overlay.markerSelected = false; overlay.selectedTipId = null; overlay.postInvalidateOnAnimation()
+                detailOpen = true; resumeFromDetail = true
+                try {
+                    startActivityForResult(Intent(this, TipDetailSheet::class.java).apply {
+                        putExtra("tipId", selected.tip.getString("id"))
+                        selected.distanceMeters?.let { putExtra("distanceMeters", it) }
+                    }, detailRequestCode)
+                } catch (_: Exception) {
+                    detailOpen = false; resumeFromDetail = false
+                    overlay.markerSelected = false; overlay.selectedTipId = null
+                    Toast.makeText(this, "팁 상세를 열지 못했어요. 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -909,8 +1028,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             navigation?.visitLocation?.let { record.put("visitLocation", JSONObject(it)) }
             returnCloudRecord(record)
         }
-        val enabled = if (productMode && restore == null)
-            cloud.failed && cameraTracking && validPlacement && point?.trackingState == TrackingState.TRACKING
+        val enabled = if (productMode && placingTip)
+            if (choosingCenter) center != null else cloud.failed && cameraTracking && validPlacement && point?.trackingState == TrackingState.TRACKING
         else visible && !overlay.dragging && !cloud.busy &&
             (if (restore == null) cloud.canRequestHost(diagnosticHost) else estimate != null || navigationMode)
         val gateCode = when {
@@ -982,14 +1101,34 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 val centerHint = if (!cameraTracking) productTrackingHint(frame)
                     else if (center != null) "중앙 표면에 팁을 남길 수 있어요. ＋를 눌러 주세요."
                     else "화면 중앙으로 바닥이나 벽을 비춰 주세요 · 표면 인식 중"
-                val nextStatus = if (!productMode) message else if (localTip != null) {
-                    if (visible && projection?.visible == true || otherPins.isNotEmpty()) "마커를 눌러 팁을 확인하세요" + if ((nearbyAnchors?.failedCount ?: 0) > 0) "\n일부 위치를 복원하지 못했어요" else "" else if (visible) "${direction ?: "주변을 둘러보세요"} · 마커를 찾아보세요" else trackingMessage
-                } else if (exploring) centerHint else if (choosingCenter) centerHint else productSaveHint
+                val nextStatus = if (!productMode) message else if (placingTip) {
+                    if (choosingCenter) "바닥이나 벽을 1–3m 안에서 비춰 주세요" else productSaveHint
+                } else if (localTip != null) {
+                    when {
+                        frameRendered > 0 -> "마커를 눌러 팁을 확인하세요" + if ((nearbyAnchors?.failedCount ?: 0) > 0) "\n일부 위치를 복원하지 못했어요" else ""
+                        !cameraTracking -> productTrackingHint(frame)
+                        cloud.busy -> "저장한 공간을 찾고 있어요. 주변 벽과 사물을 천천히 비춰 주세요."
+                        frameOccluded > 0 -> "팁이 앞의 물체에 가려져 있어요. 옆으로 움직여 확인해 주세요."
+                        frameOutside > 0 -> "${direction ?: "주변을 둘러보세요"} · 팁이 화면 밖에 있어요."
+                        primaryPaused -> "저장한 위치를 다시 찾고 있어요. 주변 공간을 천천히 비춰 주세요."
+                        else -> trackingMessage
+                    }
+                } else if (exploring && explorerTips.isEmpty()) "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
+                else if (exploring) centerHint else productSaveHint
                 if (status.text.toString() != nextStatus) status.text = nextStatus
                 confirm.isEnabled = enabled
                 if (productMode && restore == null) confirm.visibility = if (cloud.failed) View.VISIBLE else View.GONE
                 if (productMode) confirm.alpha = if (enabled) 1f else 0.4f
                 confirm.text = if (productMode && restore == null) "저장 다시 시도" else if (productMode) "이 위치에 저장" else if (navigationMode) "복원 결과 기록" else if (restore != null) "비교 기록" else if (diagnosticHost) "시험 저장" else "Cloud 저장"
+                if (placingTip) {
+                    placementConfirm?.isEnabled = enabled
+                    placementConfirm?.alpha = if (enabled) 1f else 0.4f
+                    placementConfirm?.text = if (choosingCenter) "여기에 놓기" else if (cloud.failed) "저장 다시 시도" else "공간 저장 중"
+                    (placementPanel as? LinearLayout)?.getChildAt(2)?.visibility = if (cloud.failed) View.VISIBLE else View.GONE
+                    placementLocation?.text = navigation?.visitLocation?.let {
+                        "현재 장소 · 정확도 " + kotlin.math.round(JSONObject(it).getDouble("accuracyMeters")).toInt() + "m"
+                    } ?: "현재 장소 · 위치를 확인하지 못했어요"
+                }
             } }
         }
     }
@@ -1008,16 +1147,33 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         return if (p.visible) PointF(p.x!!, p.y!!) else null
     }
 
-    private fun renderPin(pose: Pose, selected: Boolean, depth: DepthOcclusion? = null): PinProjection {
-        val pin = projectWithGuidance(pose).let { depth?.apply(it) ?: it }
-        if (!pin.visible) return pin
-        return pin.copy(bounds = pinRenderer.draw(viewProjection, pose, selected, width, height))
+    private fun renderPin(pose: Pose, selected: Boolean, depth: DepthOcclusion? = null,
+                          tipType: String? = null, tipId: String? = null): PinProjection {
+        val pin = projectWithGuidance(pose, allowOutsideViewport = true)
+        if (!pin.visible) { outsidePins++; return pin }
+        var result = pin
+        val bounds = pinRenderer.draw(viewProjection, pose, selected, width, height, tipType) { projected ->
+            val candidate = pin.copy(bounds = projected)
+            if (!pinBoundsOnScreen(projected, width, height)) {
+                result = candidate.copy(x = null, y = null, guidance = "팁이 화면 밖에 있어요.")
+                outsidePins++
+                false
+            } else {
+                val measured = depth?.apply(candidate) ?: candidate
+                val gate = occlusionGates.getOrPut(tipId ?: "placement") { DepthOcclusionGate() }
+                val hidden = gate.hidden(measured.occluded, SystemClock.elapsedRealtime())
+                result = if (hidden) measured else candidate
+                if (hidden) occludedPins++ else renderedPins++
+                !hidden
+            }
+        }
+        return result.copy(bounds = bounds)
     }
 
-    private fun projectWithGuidance(pose: Pose): PinProjection {
+    private fun projectWithGuidance(pose: Pose, allowOutsideViewport: Boolean = false): PinProjection {
         val result = FloatArray(4)
         Matrix.multiplyMV(result, 0, viewProjection, 0, floatArrayOf(pose.tx(), pose.ty(), pose.tz(), 1f), 0)
-        val pin = projectPin(result, width, height, projectionMatrix[0], projectionMatrix[5])
+        val pin = projectPin(result, width, height, projectionMatrix[0], projectionMatrix[5], allowOutsideViewport)
         if (!pin.visible) return pin
         // ARCore world +Y is gravity-up: rotate the pin to follow it instead of the phone's roll.
         val top = FloatArray(4)
@@ -1050,7 +1206,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         fun cancelPinTap() { pinTap.cancel() }
         override fun onDraw(canvas: Canvas) {
             if (showCenterTarget) {
-                val x = width / 2f; val y = height / 2f
+                val x = width / 2f; val y = height * PLACEMENT_TARGET_HEIGHT_FRACTION
                 placementReticle.setBounds((x - 75 * density).toInt(), (y - 24 * density).toInt(), (x + 75 * density).toInt(), (y + 24 * density).toInt())
                 placementReticle.draw(canvas)
                 placementCenter.setBounds((x - 5 * density).toInt(), (y - 5 * density).toInt(), (x + 5 * density).toInt(), (y + 5 * density).toInt())
@@ -1099,11 +1255,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             canvas.restore()
         }
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (productMode && detailDialog?.isShowing == true) {
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) detailDialog?.dismiss()
-                return true
-            }
-            if (localTip != null) {
+            if (localTip != null && !placingTip) {
                 if (event.pointerCount != 1) { pinTap.cancel(); return true }
                 val now = SystemClock.elapsedRealtime()
                 val target = tipTargets.get().firstOrNull { it.tip.getString("id") == pressedTipId }

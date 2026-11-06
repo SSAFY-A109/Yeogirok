@@ -147,6 +147,13 @@ export function formatMonthDay(value: LocalDate, { weekday = true, month = true 
   return `${monthText}${parts.day}일${weekdayText}`;
 }
 
+/** `11/8 (일)` 형식. `parens: false`면 `11/8 일`(일차 칩처럼 좁은 자리). */
+export function formatShortMonthDay(value: LocalDate, { parens = true }: { parens?: boolean } = {}): string {
+  const parts = toParts(value);
+  const weekday = weekdayOf(value);
+  return parens ? `${parts.month}/${parts.day} (${weekday})` : `${parts.month}/${parts.day} ${weekday}`;
+}
+
 type DateRangeOptions = {
   /** 요일을 붙인다. 기본값 true. */
   weekday?: boolean;

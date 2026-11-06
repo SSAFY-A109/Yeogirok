@@ -29,6 +29,14 @@ fun main() {
     check(!projectPin(floatArrayOf(0f, 0f, -2f, 1f), 1080, 1920, 2f, 2f).visible)
     check(!projectPin(floatArrayOf(0f, 0f, 2f, 1f), 1080, 1920, 2f, 2f).visible)
     check(!projectPin(floatArrayOf(3f, 0f, 0f, 1f), 1080, 1920, 2f, 2f).visible)
+    val belowViewport = projectPin(floatArrayOf(0f, -1.1f, 0f, 1f), 1080, 1920, 2f, 2f, allowOutsideViewport = true)
+    check(belowViewport.visible && belowViewport.y!! > 1920f)
+    check(pinBoundsOnScreen(PinBounds(400f, 1400f, 700f, 2100f), 1080, 1920))
+    check(!pinBoundsOnScreen(PinBounds(400f, 2000f, 700f, 2100f), 1080, 1920))
+    check(!pinBoundsOnScreen(PinBounds(1100f, 400f, 1200f, 600f), 1080, 1920))
+    check(!pinBoundsOnScreen(PinBounds(Float.NaN, 400f, 700f, 600f), 1080, 1920))
+    check(!pinBoundsOnScreen(PinBounds(700f, 400f, 400f, 600f), 1080, 1920))
+    check(!projectPin(floatArrayOf(0f, 0f, 0f, -1f), 1080, 1920, 2f, 2f, allowOutsideViewport = true).visible)
 
     val nearTarget = PinTapTarget(near, 1000L)
     val farTarget = PinTapTarget(far, 1000L)
@@ -61,5 +69,26 @@ fun main() {
     check(edgeOn.contains(526f, 700f, 1f, 1100L)) // A thin side retains a 48 dp target.
     check(!edgeOn.contains(550f, 700f, 1f, 1100L))
     check(!edgeOn.contains(506f, 700f, 1f, 1501L))
+
+    val tag = tipTagVertices(0.48f, 5f / 3f).toList().chunked(6)
+    close(TIP_TAG_SCALE, 2.5f)
+    close(tag.maxOf { it[1] } - tag.minOf { it[1] }, 0.15f)
+    close(tag.maxOf { it[0] } - tag.minOf { it[0] }, 0.25f)
+    close(tag.minOf { it[1] }, 0.505f)
+    check(tag.all { it[2] == 0f }) // Same local plane and heading as the marker.
+    fun tagPoint(depth: Float, rolled: Boolean): PinProjection {
+        val y = tag.minOf { it[1] }
+        return projectPin(if (rolled) floatArrayOf(-y, 0f, 0f, depth) else floatArrayOf(0f, y, 0f, depth),
+            1080, 1080, 1f, 1f)
+    }
+    val uprightTag = tagPoint(2f, false)
+    val rolledTag = tagPoint(2f, true)
+    close(uprightTag.x!!, 540f)
+    close(rolledTag.y!!, 540f)
+    close(540f - rolledTag.x!!, 540f - uprightTag.y!!) // Roll rotates the world offset around the anchor.
+    close(540f - tagPoint(4f, false).y!!, (540f - uprightTag.y!!) / 2f)
+    check(runCatching { tipTagVertices(0.48f, Float.NaN) }.isFailure)
+    check(runCatching { tipTagVertices(0.48f, 0f) }.isFailure)
     println("AR pin perspective and touch checks passed")
+    println("AR tag world placement, camera roll, perspective and 2.5x size checks passed")
 }

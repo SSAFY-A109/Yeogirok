@@ -48,6 +48,31 @@ class TipExperienceModule(private val context: ReactApplicationContext) : ReactC
         }
     }
 
+    @ReactMethod fun getTipDetail(id: String, promise: Promise) {
+        worker.execute {
+            try {
+                val tip = LocalTipStore.find(context, id)
+                tip.put("reaction", LocalTipStore.reaction(context, id) ?: JSONObject.NULL)
+                promise.resolve(tip.toString())
+            } catch (_: Exception) { promise.reject("TIP_UNAVAILABLE", "팁을 불러오지 못했어요.") }
+        }
+    }
+
+    @ReactMethod fun toggleTipReaction(id: String, reaction: String, promise: Promise) {
+        worker.execute {
+            try {
+                LocalTipStore.find(context, id)
+                promise.resolve(LocalTipStore.toggleReaction(context, id, reaction))
+            } catch (_: Exception) { promise.reject("REACTION_FAILED", "반응을 저장하지 못했어요.") }
+        }
+    }
+
+    @ReactMethod fun closeTipDetail(promise: Promise) {
+        val activity = context.currentActivity as? TipDetailSheet
+        if (activity == null) { promise.reject("NO_ACTIVITY", "상세 화면을 다시 열어 주세요."); return }
+        activity.runOnUiThread { activity.finish(); promise.resolve(null) }
+    }
+
     @ReactMethod fun saveTip(raw: String, promise: Promise) {
         worker.execute {
             try { promise.resolve(LocalTipStore.save(context, raw).toString()) }
