@@ -17,15 +17,3 @@
 | uvicorn | 0.54.0 | BSD-3-Clause |
 | python-multipart | 0.0.32 | Apache-2.0 |
 | mlflow | 3.17.2 | Apache Software License |
-
-## YOLO 검출 (venv_yolo)
-
-| 패키지 | 버전 | 라이선스 |
-|---|---|---|
-| ultralytics | 8.4.192 | AGPL-3.0 |
-| torch | 2.11.0+cu128 | BSD-3-Clause |
-| torchvision | 0.26.0+cu128 | BSD |
-
-## 학습한 모델
-
-- `models/receipt_det_yolo11n_seg.pt`: Ultralytics YOLO11n-seg 파생 가중치, AGPL-3.0 (`models/README.md`, `models/LICENSE`)
