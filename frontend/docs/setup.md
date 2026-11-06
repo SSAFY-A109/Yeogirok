@@ -64,4 +64,5 @@ pnpm typecheck && pnpm lint && pnpm tokens:check && pnpm harness:check
 ## 결정 전이라 아직 설치하지 않는 것
 
 - 지도 SDK, AR 라이브러리(규칙 85, 명세 DEC-08·14)
-- 위치·카메라 모듈(`expo-location`, `expo-camera`, `expo-image-picker`)은 해당 화면을 만들 때 승인 후 설치한다
+- 카메라 모듈(`expo-camera`, `expo-image-picker`)은 해당 화면을 만들 때 승인 후 설치한다
+- `expo-location`은 발자취 남기기(W15-P·W16)를 만들며 승인 후 설치했다(2026-11-06, `~58.0.20`). `app.json`의 config plugin으로 앱 사용 중 권한 문구만 한국어로 넣고, 항상 허용·백그라운드 권한은 끈다. 개발 빌드는 다시 만들어야 한다
