@@ -6,17 +6,17 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.client.ResponseActions;
@@ -24,6 +24,7 @@ import org.springframework.web.client.RestClient;
 
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.global.geo.KakaoLocalProperties;
+import com.ssafy.yeogirok.support.MutableClock;
 
 /**
  * 카카오 길찾기 응답을 해석하는 규칙. 실제 카카오를 부르지 않고 응답을 흉내 낸다(응답 모양은 카카오모빌리티 자동차
@@ -44,6 +45,7 @@ class KakaoTravelTimeProviderTest {
 
 	MockRestServiceServer localServer;
 	MockRestServiceServer mobilityServer;
+	final MutableClock clock = new MutableClock(NOW);
 
 	private KakaoTravelTimeProvider provider(String key) {
 		RestClient.Builder local = RestClient.builder().baseUrl("https://dapi.kakao.com");
@@ -52,7 +54,7 @@ class KakaoTravelTimeProviderTest {
 		mobilityServer = MockRestServiceServer.bindTo(mobility).build();
 		return new KakaoTravelTimeProvider(local.build(), mobility.build(),
 			new KakaoLocalProperties(key, "https://dapi.kakao.com", Duration.ofSeconds(2), Duration.ofSeconds(3)),
-			Clock.fixed(NOW, ZoneOffset.UTC));
+			clock);
 	}
 
 	private static ResponseActions expect(MockRestServiceServer server, String url) {
@@ -160,6 +162,49 @@ class KakaoTravelTimeProviderTest {
 
 		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR))
 			.isEqualTo(TravelLeg.unavailable("KAKAO_CAR", KakaoTravelTimeProvider.REASON_CALL_FAILED, NOW));
+	}
+
+	@Test
+	void 키가_거부되면_그_제품만_잠시_부르지_않는다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withStatus(HttpStatus.FORBIDDEN));
+		provider.estimate(FROM, FAR, TransportMode.CAR);
+
+		// 자동차는 쉬고(호출 없음), 대중교통(카카오맵)은 따로라 부른다.
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR))
+			.isEqualTo(TravelLeg.unavailable("KAKAO_CAR", KakaoTravelTimeProvider.REASON_SUSPENDED, NOW));
+		expect(localServer, TRANSIT_URL).andRespond(withSuccess("{\"status\":\"EQUAL_POINTS\"}",
+			MediaType.APPLICATION_JSON));
+		assertThat(provider.estimate(FROM, FROM, TransportMode.TRANSIT).travelMinutes()).isZero();
+		mobilityServer.verify();
+		localServer.verify();
+
+		// 쉬는 시간이 지나면 다시 부른다.
+		clock.advance(KakaoTravelTimeProvider.KEY_REJECTED_PAUSE);
+		mobilityServer.reset();
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(0), MediaType.APPLICATION_JSON));
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR).travelMinutes()).isEqualTo(21);
+		mobilityServer.verify();
+	}
+
+	@Test
+	void 실패가_이어지면_잠시_부르지_않고_성공하면_횟수를_되돌린다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withServerError());
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(0), MediaType.APPLICATION_JSON));
+		for (int i = 0; i < KakaoTravelTimeProvider.FAILURE_THRESHOLD; i++) {
+			expect(mobilityServer, CAR_URL).andRespond(withServerError());
+		}
+		provider.estimate(FROM, FAR, TransportMode.CAR);
+		// 성공으로 실패 횟수가 0 이 되어, 그 뒤 연속 실패 3번째에서 쉰다.
+		provider.estimate(FROM, FAR, TransportMode.CAR);
+		for (int i = 0; i < KakaoTravelTimeProvider.FAILURE_THRESHOLD; i++) {
+			provider.estimate(FROM, FAR, TransportMode.CAR);
+		}
+
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR).unavailableReason())
+			.isEqualTo(KakaoTravelTimeProvider.REASON_SUSPENDED);
+		mobilityServer.verify();
 	}
 
 	@Test
