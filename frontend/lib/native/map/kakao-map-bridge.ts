@@ -18,6 +18,12 @@ export type MapMarkerImage = {
   offset?: { x: number; y: number };
 };
 
+export type MapClusterBadge = {
+  background: string;
+  foreground: string;
+  border: string;
+};
+
 /** 코스 경로의 한 지점. order는 코스 안 순서(1부터)이고, selected는 핀 강조 여부다. */
 export type MapRoutePoint = {
   id: string;
@@ -99,6 +105,8 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   var settled = false;
   var map = null;
   var clusterer = null;
+  var clusterImage = null;
+  var clusterBadge = null;
   var routeLine = null;
   var routeOverlays = [];
   var anchor = null;
@@ -171,8 +179,10 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   }
 
   window.yeogirokMap = {
-    setMarkers: function (points, image, fit) {
+    setMarkers: function (points, image, fit, badge) {
       if (!clusterer) return;
+      clusterImage = image;
+      clusterBadge = badge;
       var startedAt = performance.now();
       var markerImage = image
         ? new kakao.maps.MarkerImage(image.uri, new kakao.maps.Size(image.width, image.height), { offset: new kakao.maps.Point(image.offset ? image.offset.x : image.width / 2, image.offset ? image.offset.y : image.height) })
@@ -194,13 +204,48 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
       } else if (fit && points.length > 1) {
         var bounds = new kakao.maps.LatLngBounds();
         points.forEach(function (point) { bounds.extend(new kakao.maps.LatLng(point.lat, point.lng)); });
-        map.setBounds(bounds, 32, 32, 32, 32);
+        var padding = badge ? 48 : 32;
+        map.setBounds(bounds, padding, padding, padding, padding);
       }
       afterNextPaint(function () {
         post({ type: "markers-rendered", count: points.length, renderMs: Math.round(performance.now() - startedAt) });
       });
     }
   };
+
+  function styleFootprintClusters(clusters) {
+    if (!clusterImage || !clusterBadge) return;
+    clusters.forEach(function (cluster) {
+      var count = cluster.getSize();
+      if (count < 2) return;
+      var marker = cluster.getClusterMarker();
+      var content = marker.getContent();
+      content.style.cssText = "position:relative;width:70px;height:80px;box-sizing:border-box;background:transparent;cursor:pointer;";
+      content.setAttribute("role", "button");
+      content.setAttribute("aria-label", "발자취 " + count + "개 확대");
+      content.tabIndex = 0;
+      content.onkeydown = function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          content.click();
+        }
+      };
+      var paw = document.createElement("img");
+      paw.src = clusterImage.uri;
+      paw.alt = "";
+      paw.style.cssText = "position:absolute;left:7.5px;top:1.25px;width:55px;height:55px;object-fit:contain;pointer-events:none;";
+      var badge = document.createElement("span");
+      badge.textContent = count > 999 ? "999+" : String(count);
+      badge.style.cssText = "position:absolute;left:7.5px;top:50px;width:55px;height:27.5px;box-sizing:border-box;" +
+        "display:flex;align-items:center;justify-content:center;border:2px solid " + clusterBadge.border +
+        ";border-radius:9999px;background:" + clusterBadge.background + ";color:" + clusterBadge.foreground +
+        ";font:500 12px/16px 'Noto Sans KR',sans-serif;pointer-events:none;";
+      content.textContent = "";
+      content.appendChild(paw);
+      content.appendChild(badge);
+      marker.setContent(content);
+    });
+  }
 
   function pinElement(point, colors) {
     var wrapper = document.createElement("div");
@@ -292,6 +337,7 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
       anchor = new kakao.maps.LatLng(camera.lat, camera.lng);
       map = new kakao.maps.Map(container, { center: anchor, level: camera.level });
       clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: ${CLUSTER_MIN_LEVEL} });
+      kakao.maps.event.addListener(clusterer, "clustered", styleFootprintClusters);
       kakao.maps.event.addListener(map, "tilesloaded", function () {
         if (!settled) recenterOnAnchor();
         settle({ type: "ready" });
@@ -330,12 +376,12 @@ export function buildSetRouteScript(route: MapRoute, fit: boolean): string {
   return `window.yeogirokMap && window.yeogirokMap.setRoute(${toScriptLiteral({ points, colors: route.colors })}, ${fit ? "true" : "false"}); true;`;
 }
 
-export function buildSetMarkersScript(markers: readonly MapMarker[], image?: MapMarkerImage, fit = false): string {
+export function buildSetMarkersScript(markers: readonly MapMarker[], image?: MapMarkerImage, fit = false, clusterBadge?: MapClusterBadge): string {
   const points = markers.map(({ id, lat, lng }) => {
     return { id, lat, lng };
   });
 
-  return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}, ${toScriptLiteral(image ?? null)}, ${fit ? "true" : "false"}); true;`;
+  return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}, ${toScriptLiteral(image ?? null)}, ${fit ? "true" : "false"}, ${toScriptLiteral(clusterBadge ?? null)}); true;`;
 }
 
 function isPageFailureReason(value: unknown): value is KakaoMapFailure {

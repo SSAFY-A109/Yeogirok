@@ -26,7 +26,7 @@ function load(relative) {
 const { buildKakaoMapHtml, buildSetMarkersScript, parseKakaoMapMessage } = load("../lib/native/map/kakao-map-bridge.ts");
 const { footprintPinImage } = load("../lib/native/map/footprint-pin.ts");
 const { mockFootprints } = load("../features/user/mocks/my-data.ts");
-const state = { messages: [], markers: [], bounds: [], center: null };
+const state = { messages: [], markers: [], bounds: [], center: null, clusterer: null, boundsPadding: null, clusterContent: null };
 let sdkScript;
 
 class Position {
@@ -41,8 +41,9 @@ class MapStub {
     this.events = {};
   }
 
-  setBounds(bounds) {
+  setBounds(bounds, ...padding) {
     state.bounds.push(bounds.points);
+    state.boundsPadding = padding;
   }
 
   setCenter(center) {
@@ -54,6 +55,33 @@ class MarkerStub {
   constructor(options) {
     this.options = options;
     this.events = {};
+  }
+}
+
+class ElementStub {
+  style = {};
+  attributes = {};
+  children = [];
+
+  set textContent(value) {
+    this.text = value;
+    this.children = [];
+  }
+
+  get textContent() {
+    return this.text;
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = value;
+  }
+
+  appendChild(child) {
+    this.children.push(child);
+  }
+
+  click() {
+    this.onclick?.();
   }
 }
 
@@ -69,6 +97,11 @@ const maps = {
     }
   },
   MarkerClusterer: class {
+    constructor() {
+      this.events = {};
+      state.clusterer = this;
+    }
+
     clear() {
       state.markers = [];
     }
@@ -110,7 +143,7 @@ const context = vm.createContext({
   },
 
   createElement: () => {
-    return {};
+    return new ElementStub();
   },
 
   head: { appendChild: (script) => {
@@ -150,6 +183,7 @@ assert.equal(new Set(points.map(({ id }) => {
 vm.runInContext(buildSetMarkersScript(points.slice(0, 3), footprintPinImage, true), context);
 assert.equal(state.markers.length, 3);
 assert.equal(state.bounds[0].length, 3);
+assert.equal(state.boundsPadding.join(","), "32,32,32,32");
 assert.equal(state.markers[0].options.image.offset.y, footprintPinImage.height / 2);
 state.markers[1].events.click();
 assert.deepEqual(state.messages.at(-1), { type: "point-pressed", id: "anmok" });
@@ -167,4 +201,57 @@ assert.equal(state.bounds.length, 1);
 assert.equal(state.markers[0].options.image.offset.y, 42);
 assert.equal(state.markers[0].events.click, undefined);
 assert.ok(!buildSetMarkersScript([{ id: "</script>", lat: 37.5, lng: 127 }]).includes("</script>"));
-console.log("발자취 지도 검사 통과: 좌표·핀 선택·필터 갱신·단일 위치·빈 목록·기존 마커 호환");
+
+const clusterContent = new ElementStub();
+let zoomClicks = 0;
+let clusterCount = 2;
+
+clusterContent.onclick = () => {
+  zoomClicks += 1;
+};
+
+const clusters = [{ getSize: () => {
+  return clusterCount;
+},
+
+getClusterMarker: () => {
+  return { getContent: () => {
+    return clusterContent;
+  },
+
+  setContent: (content) => {
+    state.clusterContent = content;
+  } };
+} }];
+
+state.clusterer.events.clustered(clusters);
+assert.equal(clusterContent.children.length, 0);
+const clusterBadge = { background: "badge-background", foreground: "badge-text", border: "badge-border" };
+vm.runInContext(buildSetMarkersScript(points.slice(0, 3), footprintPinImage, true, clusterBadge), context);
+assert.equal(state.boundsPadding.join(","), "48,48,48,48");
+state.clusterer.events.clustered(clusters);
+assert.equal(state.clusterContent, clusterContent);
+assert.equal(clusterContent.children.length, 2);
+assert.equal(clusterContent.children[0].src, footprintPinImage.uri);
+assert.ok(clusterContent.style.cssText.includes("width:70px;height:80px"));
+assert.ok(clusterContent.children[0].style.cssText.includes("width:55px;height:55px"));
+assert.ok(clusterContent.children[1].style.cssText.includes("top:50px"));
+assert.equal(clusterContent.children[1].textContent, "2");
+assert.equal(clusterContent.attributes["aria-label"], "발자취 2개 확대");
+clusterContent.click();
+assert.equal(zoomClicks, 1);
+let keyboardPrevented = false;
+
+clusterContent.onkeydown({ key: "Enter",
+
+  preventDefault: () => {
+    keyboardPrevented = true;
+  } });
+assert.equal(keyboardPrevented, true);
+assert.equal(zoomClicks, 2);
+clusterCount = 1000;
+state.clusterer.events.clustered(clusters);
+assert.equal(clusterContent.children.length, 2);
+assert.equal(clusterContent.children[1].textContent, "999+");
+assert.equal(clusterContent.attributes["aria-label"], "발자취 1000개 확대");
+console.log("발자취 지도 검사 통과: 핀 선택·필터 갱신·기존 호환·클러스터 모양·개수·확대 클릭 유지");

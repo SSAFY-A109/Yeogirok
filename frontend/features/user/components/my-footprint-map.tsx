@@ -4,12 +4,17 @@ import { Platform, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
-import { KakaoMapView, type MapCamera, type MapMarker } from "@/lib/native/map";
+import { KakaoMapView, type MapCamera, type MapClusterBadge, type MapMarker } from "@/lib/native/map";
 import { footprintPinImage } from "@/lib/native/map/footprint-pin";
+import { getColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { MyFootprint } from "../mocks/my-data";
 
 const javascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
+const colors = getColors("light");
+const clusterBadge: MapClusterBadge = { background: colors["highlight-muted"], foreground: colors.highlight, border: colors.card };
+const MAP_HEIGHT = 176 * 1.3;
+const GUESTBOOK_MAP_HEIGHT = 144 * 1.5;
 
 type MyFootprintMapProps = { footprints: MyFootprint[]; selected?: boolean; onSelect?: (id: string) => void };
 
@@ -21,7 +26,7 @@ export function MyFootprintMap({ footprints, selected = false, onSelect }: MyFoo
   }).join(",");
 
   return (
-    <View className={cn("relative overflow-hidden bg-muted", selected ? "h-36" : "h-44 rounded-md")} testID="my-footprints.map">
+    <View className={cn("relative overflow-hidden bg-muted", !selected && "rounded-md")} style={{ height: selected ? GUESTBOOK_MAP_HEIGHT : MAP_HEIGHT }} testID="my-footprints.map">
       {first ? <FootprintMapContent key={mapKey} center={first} footprints={footprints} onSelect={onSelect} /> : <View className="flex-1 items-center justify-center"><Text className="text-caption text-muted-foreground">표시할 발자취가 없어요</Text></View>}
     </View>
   );
@@ -46,7 +51,7 @@ function FootprintMapContent({ center, footprints, onSelect }: MyFootprintMapPro
     <View className="flex-1">
       {canLoad && javascriptKey && phase !== "error" ? (
         <>
-          <KakaoMapView key={attempt} javascriptKey={javascriptKey} initialCamera={camera} markers={markers} markerImage={footprintPinImage} fitToMarkers accessibilityLabel={`내 발자취 ${footprints.length}곳 카카오 지도`} onReady={() => {
+          <KakaoMapView key={attempt} javascriptKey={javascriptKey} initialCamera={camera} markers={markers} markerImage={footprintPinImage} clusterBadge={clusterBadge} fitToMarkers accessibilityLabel={`내 발자취 ${footprints.length}곳 카카오 지도`} onReady={() => {
             setPhase("ready");
           }} onError={() => {
             setPhase("error");

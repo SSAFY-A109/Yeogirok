@@ -9,6 +9,7 @@ import {
   parseKakaoMapMessage,
   type KakaoMapFailure,
   type MapCamera,
+  type MapClusterBadge,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
@@ -19,6 +20,7 @@ export {
   KAKAO_JS_SDK_DOMAIN,
   type KakaoMapFailure,
   type MapCamera,
+  type MapClusterBadge,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
@@ -36,6 +38,7 @@ type KakaoMapViewProps = {
   initialCamera: MapCamera;
   markers?: readonly MapMarker[];
   markerImage?: MapMarkerImage;
+  clusterBadge?: MapClusterBadge;
   fitToMarkers?: boolean;
   route?: MapRoute;
   onPressPoint?: (id: string) => void;
@@ -50,6 +53,7 @@ export function KakaoMapView({
   initialCamera,
   markers,
   markerImage,
+  clusterBadge,
   fitToMarkers = false,
   route,
   onPressPoint,
@@ -89,9 +93,9 @@ export function KakaoMapView({
   const sendMarkers = useCallback((nextMarkers: readonly MapMarker[], image: MapMarkerImage | undefined) => {
     const signature = JSON.stringify(nextMarkers);
     markersSentAt.current = Date.now();
-    webViewRef.current?.injectJavaScript(buildSetMarkersScript(nextMarkers, image, fitToMarkers && signature !== markersSignature.current));
+    webViewRef.current?.injectJavaScript(buildSetMarkersScript(nextMarkers, image, fitToMarkers && signature !== markersSignature.current, clusterBadge));
     markersSignature.current = signature;
-  }, [fitToMarkers]);
+  }, [fitToMarkers, clusterBadge]);
 
   useEffect(() => {
     if (isMapReady.current && markers) {
