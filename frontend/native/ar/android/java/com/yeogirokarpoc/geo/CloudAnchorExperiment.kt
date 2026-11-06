@@ -17,6 +17,7 @@ class CloudAnchorExperiment {
     var busy = false; private set
     var failed = false; private set
     var authorizationFailed = false; private set
+    var datasetFailed = false; private set
     var quality = "아직 측정하지 않음"; private set
     var qualityFresh = false; private set
     var qualityErrorType: String? = null; private set
@@ -49,7 +50,7 @@ class CloudAnchorExperiment {
         }
         resolve = null
         resolved?.detach(); resolved = null
-        busy = false; failed = false; authorizationFailed = false; attempted = false
+        busy = false; failed = false; authorizationFailed = false; datasetFailed = false; attempted = false
         hostedId = null; hostedAt = null; durationMs = 0L
         hostQuality = ""; hostQualityPolicy = "GOOD_STABLE"
         quality = "아직 측정하지 않음"
@@ -126,7 +127,8 @@ class CloudAnchorExperiment {
                 Log.i("YeogirokCloud", "HOST_SUCCESS durationMs=$durationMs")
                 message = "Cloud 저장 완료. 현재 추적이 안정되면 기록을 반환합니다."
             } else fail("Cloud 저장 실패: ${it.resultCloudAnchorState}. 다시 배치해 주세요.",
-                it.resultCloudAnchorState == Anchor.CloudAnchorState.ERROR_NOT_AUTHORIZED)
+                it.resultCloudAnchorState == Anchor.CloudAnchorState.ERROR_NOT_AUTHORIZED,
+                it.resultCloudAnchorState == Anchor.CloudAnchorState.ERROR_HOSTING_DATASET_PROCESSING_FAILED)
         }
         resolve?.takeIf { it.state == FutureState.DONE }?.let {
             resolve = null; busy = false; durationMs = now - startedAt
@@ -140,8 +142,9 @@ class CloudAnchorExperiment {
     }
 
     fun takeResolvedAnchor(): Anchor? = resolved.also { resolved = null }
-    private fun fail(reason: String, authorization: Boolean = false) {
+    private fun fail(reason: String, authorization: Boolean = false, dataset: Boolean = false) {
         authorizationFailed = authorization
+        datasetFailed = dataset
         failed = true; busy = false; canHost = false; gate.reset(); message = reason
         durationMs = SystemClock.elapsedRealtime() - startedAt
         // reason is built only from fixed text, enum names, or exception class names.

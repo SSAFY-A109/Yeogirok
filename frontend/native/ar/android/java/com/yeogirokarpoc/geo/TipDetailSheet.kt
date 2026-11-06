@@ -25,6 +25,7 @@ class TipDetailSheet : ReactActivity() {
         object : DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled) {
             override fun getLaunchOptions() = Bundle().apply {
                 putString("tipId", intent.getStringExtra("tipId"))
+                putBoolean("publicTip", intent.getBooleanExtra("publicTip", false))
                 if (intent.hasExtra("distanceMeters")) putDouble("distanceMeters", intent.getDoubleExtra("distanceMeters", 0.0))
             }
         }

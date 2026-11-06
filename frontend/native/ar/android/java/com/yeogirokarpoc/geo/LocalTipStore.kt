@@ -29,7 +29,6 @@ object LocalTipStore {
         if (tip.optBoolean("draft")) {
             require(tip.getString("tipType") in tipTypes)
             require(tip.getString("body").length <= 120)
-            require(!tip.isNull("photoName"))
         } else require(tip.getString("body").trim().length in 1..MAX_BODY)
         val cloud = CloudRecord.parse(tip.getJSONObject("cloudRecord").toString())
         tip.put("cloudRecord", cloud)
@@ -57,8 +56,8 @@ object LocalTipStore {
         val isDraft = draft.optBoolean("draft")
         if (isDraft) {
             require(draft.getString("tipType") in tipTypes) { "팁 종류를 선택해 주세요." }
+            require(body.isNotEmpty()) { "팁 내용을 입력해 주세요." }
             require(body.length <= 120) { "팁 내용은 120자까지 입력할 수 있어요." }
-            require(!draft.isNull("photoName")) { "팁 사진을 첨부해 주세요." }
         } else require(body.length in 1..MAX_BODY) { "팁 내용을 1~2,000자로 입력해 주세요." }
         val title = draft.optString("title").trim().ifEmpty { body.lineSequence().first().take(40) }
         require(title.length <= 60) { "제목은 60자까지 입력할 수 있어요." }

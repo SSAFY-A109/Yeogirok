@@ -21,6 +21,7 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
     private var destroyed = false
     private var ready = false
     private var latestPosition: String? = null
+    private var latestPoints = points.toString()
     private val timeout = Runnable { if (!ready && !destroyed) showError() }
     private val html: String
 
@@ -33,7 +34,12 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
         val pinColor = String.format("#%06X", 0xFFFFFF and theme.primary)
         html = """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
           <style>html,body,#map{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><div id="map"></div><script>
-          var map,me,selected,pending;
+          var map,me,selected,pending,markers=[];
+          window.setPoints=function(points){
+            if(!map)return;
+            markers.forEach(function(marker){marker.setMap(null);});
+            markers=points.map(function(p){return new kakao.maps.Marker({map:map,position:new kakao.maps.LatLng(p.latitude,p.longitude)});});
+          };
           window.setCurrent=function(lat,lng,heading){
             if(!map){pending=[lat,lng,heading];return;}
             var p=new kakao.maps.LatLng(lat,lng);
@@ -48,7 +54,7 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
             try{kakao.maps.load(function(){
               map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng($latitude,$longitude),level:3});
               map.setDraggable(${onSelect != null});map.setZoomable(${onSelect != null});
-              var points=${points.toString().replace("<", "\\u003c")};points.forEach(function(p){new kakao.maps.Marker({map:map,position:new kakao.maps.LatLng(p.latitude,p.longitude)});});
+              window.setPoints(${points.toString().replace("<", "\\u003c")});
               ${if (onSelect != null) "kakao.maps.event.addListener(map,'click',function(e){if(selected)selected.setMap(null);selected=new kakao.maps.Marker({map:map,position:e.latLng});ArMap.selected(e.latLng.getLat(),e.latLng.getLng());});" else ""}
               kakao.maps.event.addListener(map,'tilesloaded',function(){ArMap.ready();});
               if(pending)window.setCurrent.apply(null,pending);
@@ -63,7 +69,11 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
         }
         web.addJavascriptInterface(object {
             @JavascriptInterface fun ready() { post {
-                if (!destroyed && !ready) { ready = true; status.visibility = GONE; removeCallbacks(timeout); latestPosition?.let { web.evaluateJavascript(it, null) } }
+                if (!destroyed && !ready) {
+                    ready = true; status.visibility = GONE; removeCallbacks(timeout)
+                    web.evaluateJavascript("window.setPoints($latestPoints);", null)
+                    latestPosition?.let { web.evaluateJavascript(it, null) }
+                }
             } }
             @JavascriptInterface fun failed() { post { if (!destroyed) showError() } }
             @JavascriptInterface fun selected(lat: Double, lng: Double) { post {
@@ -87,6 +97,12 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
         if (ready) web.evaluateJavascript(latestPosition!!, null)
     }
     fun hideLocation() { latestPosition = null; if (!destroyed && ready) web.evaluateJavascript("window.hideCurrent && window.hideCurrent();", null) }
+    fun updatePoints(points: JSONArray) {
+        val raw = points.toString().replace("<", "\\u003c")
+        if (destroyed || raw == latestPoints) return
+        latestPoints = raw
+        if (ready) web.evaluateJavascript("window.setPoints($raw);", null)
+    }
     fun resume() { if (!destroyed) web.onResume() }
     fun pause() { if (!destroyed) { hideLocation(); web.onPause() } }
     fun destroy() { destroyed = true; removeCallbacks(timeout); web.removeJavascriptInterface("ArMap"); web.stopLoading(); web.destroy() }
