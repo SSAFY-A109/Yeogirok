@@ -460,7 +460,31 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 ```
 
 - `JWT_SECRET`을 바꾸면 이미 발급된 액세스 토큰이 모두 무효가 됩니다. 한 번 만든 뒤에는 바꾸지 않습니다.
-- **앞으로**: 백엔드가 prod 프로필에 기본값 없는 값을 추가하면, 그 값을 compose와 서버 `.env`에 먼저 넣은 뒤 백엔드 PR을 머지합니다. 순서가 바뀌면 머지 즉시 자동 배포가 돌아 백엔드가 멈춥니다.
+- **앞으로**: 백엔드가 prod 프로필이나 공통 `application.yaml`에 기본값 없는 값(`${KEY}`)을 추가하면, 그 값을 compose와 서버 `.env`에 먼저 넣은 뒤 백엔드 PR을 머지합니다. 순서가 바뀌면 머지 즉시 자동 배포가 돌아 백엔드가 멈춥니다.
+
+**여행방 초대 값 (2026-11-07)**
+- 11/6 백엔드 여행방 API(#55)가 공통 `application.yaml`에 기본값 없는 값 2개를 추가했습니다. 서버 compose가 넘기지 않아 그날 자동 배포부터 백엔드가 뜨지 못했고(`https://<도메인>` 502), 이제 `docker-compose.yml`이 넘깁니다.
+
+  | 값 | 넣는 곳 | 비고 |
+  | --- | --- | --- |
+  | `ROOM_INVITE_TOKEN_KEY` | 서버 `.env` | `openssl rand 64 \| base64 -w0`(88자 한 줄). 서버에서만 만들고, 한 번 만든 뒤에는 바꾸지 않는다. 백엔드 설명의 `openssl rand -base64 -A 64`는 `-A` 옵션이 없어 실패하고 빈 값이 들어간다 |
+  | `ROOM_INVITE_URL_BASE` | `docker-compose.yml` | 비밀 값이 아니다. TBD: 앱 딥링크 주소가 정해지기 전이라 `https://<도메인>/invite`를 임시로 넣었다 |
+
+- **순서**: 이 변경을 `infra/dev`에 머지 → 서버에서 infra 코드를 받고 빠진 값을 확인 → `.env`에 채우기 → 백엔드 다시 배포. `docker compose config`는 `.env`에 **없는** 값을 `not set` 경고로 알려 주고, `KEY=`처럼 **비어 있는** 값은 알려 주지 않아서 `grep`으로 따로 봅니다.
+
+```bash
+cd ~/yeogirok/infra-src && git pull
+cd infra
+docker compose config -q 2>&1 | grep 'not set'    # .env 에 없는 값 목록
+grep -E '^[A-Z0-9_]+=$' .env                      # 값이 비어 있는 키 목록
+KEY=$(openssl rand 64 | base64 -w0)
+echo ${#KEY}                                      # 88 이어야 한다
+printf '\nROOM_INVITE_TOKEN_KEY=%s\n' "$KEY" >> .env
+docker compose config -q 2>&1 | grep 'not set'    # 남은 값이 있으면 9단계 각 항목대로 채운다
+bash scripts/deploy-backend.sh                    # 마지막에 "[deploy] 성공" 이 보이면 끝
+```
+
+- 마지막 확인에서 `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`만 남으면 백엔드는 뜹니다. 파일 업로드만 접근 키를 넣은 뒤에 동작합니다.
 
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
@@ -502,6 +526,8 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 | 배포 직후 backend가 `Restarting`을 반복하고 로그에 `For input string: "${REDIS_PORT}"`처럼 `${...}`가 그대로 찍힘 | 서버 infra 코드가 예전 것이라 compose가 백엔드에 Redis 값을 넘기지 않음 | `git -C ~/yeogirok/infra-src pull` 후 `git -C ~/yeogirok/infra-src log --oneline -1`로 받았는지 확인, 9단계 Redis대로 Redis를 켜고 `docker compose up -d backend` |
 | 백엔드 로그에 `JWT_SECRET 환경 변수가 필요합니다` 또는 `허용 audience 가 비어 있습니다` | 서버 `.env`에 로그인 값이 없음 | 9단계 "로그인·방문 분포·위치 증거 값"대로 넣고 `docker compose up -d backend` |
 | 백엔드 로그에 `JWT_SECRET 은 Base64 형식이어야 합니다` | 서버 infra 코드가 예전 것이라 값이 넘어가지 않았거나, 값을 잘못 붙여 넣음 | `git -C ~/yeogirok/infra-src log --oneline -1`로 최신인지 확인, `openssl rand -base64 48`로 다시 만듦 |
+| 백엔드 로그에 `Could not resolve placeholder 'ROOM_INVITE_TOKEN_KEY'`처럼 `Could not resolve placeholder '<값 이름>'` | 백엔드가 새 필수 값을 추가했는데 서버 compose나 `.env`에 없음 | infra 코드를 받고 `docker compose config -q 2>&1 \| grep 'not set'`으로 빠진 값을 확인해 채움. compose에도 없으면 9단계 "외부 키 추가하는 법" |
+| 백엔드 로그에 `yeogirok.file.region 값이 필요합니다`(또는 `photo-bucket`·`receipt-bucket`) | 서버 `.env`에 S3 리전·버킷 값이 없음 | `.env.example`의 `AWS_REGION`·`S3_PHOTO_BUCKET`·`S3_RECEIPT_BUCKET` 값을 서버 `.env`에 넣고 `docker compose up -d backend` |
 | 백엔드 오류에 `OOM command not allowed` | Redis 메모리 256MB가 다 참(`noeviction`이라 쓰기 거부) | `info memory`로 확인하고 `docker-compose.yml`의 `--maxmemory`를 늘림 |
 | Flyway `non-empty schema ... without schema history table` | `update`로 만든 테이블이 남음 | 7단계 DB 비우기 |
 | Flyway `checksum mismatch` | 이미 적용된 V 파일을 수정함 | 원래대로 되돌리고 새 번호 파일로 수정 |
