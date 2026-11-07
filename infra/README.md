@@ -1,6 +1,6 @@
 # 여기록 인프라
 
-서버 한 대(EC2)에 Docker Compose로 DB와 백엔드(이후 AI 서버)를 띄우고, Nginx로 HTTPS를 붙이고, `backend/dev`에 머지되면 GitHub Actions가 자동으로 배포하는 구성입니다. 인프라를 처음 맡는 사람이 위에서부터 순서대로 따라 하면 되도록 썼습니다.
+서버 한 대(EC2)에 Docker Compose로 DB와 백엔드(이후 AI 서버)를 띄우고, Nginx로 HTTPS를 붙이고, `backend/dev`에 머지되면 GitHub Actions가 자동으로 배포하는 구성입니다(10단계에서 Jenkins로 옮기는 중). 인프라를 처음 맡는 사람이 위에서부터 순서대로 따라 하면 되도록 썼습니다.
 
 ## 한눈에 보기
 
@@ -29,8 +29,11 @@ flowchart LR
 | `infra/docker-compose.yml` | 서버의 DB·Redis·백엔드(·AI) 구성 | 서버 |
 | `infra/.env.example` | 서버 비밀값 목록 (값은 비워 둠) | 서버에서 `.env`로 복사 |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
-| `infra/scripts/deploy-backend.sh` | 최신 코드로 백엔드 다시 띄우고 확인 | 서버 (Actions가 실행) |
+| `infra/nginx/jenkins.conf` | `https://<도메인>/jenkins/`를 Jenkins로 연결 | 서버 `/etc/nginx/snippets` |
+| `infra/scripts/deploy-backend.sh` | 최신 코드(또는 넘겨받은 커밋)로 백엔드 다시 띄우고 확인 | 서버 (Actions·Jenkins가 실행) |
 | `infra/scripts/backup-db.sh` | DB 백업, 오래된 백업 정리 | 서버 (cron) |
+| `infra/jenkins/docker-compose.yml` | Jenkins 컨테이너 (앱과 따로 켜고 끔) | 서버 |
+| `infra/jenkins/backend.Jenkinsfile` | 백엔드 테스트 → 배포 → 알림 파이프라인 | Jenkins job `yeogirok-backend` |
 
 다른 파트 폴더에 들어가야 하는 파일이 있습니다. 직접 커밋하지 말고 **`backend/dev`로 PR을 보내 백엔드 리뷰를 받습니다.**
 
@@ -54,6 +57,7 @@ flowchart LR
 | 7 | Flyway 도입 | 30분 | V1이 나오는 날 | `flyway_schema_history`에 V1 기록 |
 | 8 | 백업 | 15분 | 11/2(월) | 매일 백업 파일 생성 |
 | 9 | AI 서버·파일 저장소·Redis·외부 키 | — | 11/2~4 | 영수증 1장 업로드 → OCR 결과, Redis `(healthy)` |
+| 10 | Jenkins CI/CD (선택) | 2~3시간 | — | `backend/dev` 머지 → Jenkins 빌드 성공 → Mattermost 알림 |
 
 ## 먼저 알아둘 말 6개
 
@@ -469,6 +473,209 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 
 ---
 
+## 10단계. Jenkins로 CI/CD (선택, 2~3시간)
+
+**왜**: 6단계의 GitHub Actions도 잘 돌고 있습니다. Jenkins는 회사에서 가장 많이 쓰는 CI/CD 도구라 직접 설치하고 운영해 보려고 붙입니다. Actions는 GitHub가 빌려주는 컴퓨터에서 돌지만, Jenkins는 **우리 서버에 직접 설치한 프로그램**이라 설치·보안·업데이트까지 우리가 맡습니다.
+
+**먼저**: 백엔드가 정상(`https://<도메인>/v3/api-docs`가 200)인 상태에서 시작합니다. 10-5의 첫 실행이 실제로 서버에 배포까지 하기 때문입니다.
+
+### Jenkins 말 8개
+
+| 말 | 뜻 | Actions에서는 |
+| --- | --- | --- |
+| Jenkins | 서버에 떠 있는 자동 작업 실행기. 신호가 오면 정해진 순서대로 명령을 실행하고 기록을 남긴다 | GitHub Actions |
+| Job | 할 일 하나. 여기서는 `yeogirok-backend` | 워크플로 |
+| 빌드(Build) | Job을 한 번 실행한 것. `#1`, `#2`처럼 번호가 붙는다 | 워크플로 실행(run) |
+| 파이프라인, Jenkinsfile | 할 일을 단계별로 코드로 적은 것, 그리고 그 파일 | `.github/workflows/*.yml` |
+| Stage | 파이프라인 안의 한 단계. 여기서는 체크아웃·테스트·배포 | job·step |
+| 플러그인 | Jenkins에 기능을 더하는 확장. 화면에서 앱처럼 설치한다 | `uses:`로 가져오는 액션 |
+| Credentials | 비밀값 금고. 파이프라인에서 ID로 꺼내 쓰고, 로그에는 `****`로 가려진다 | Secrets |
+| 웹훅 | GitHub가 "push가 생겼다"고 Jenkins 주소로 보내는 알림 | `on: push` |
+
+### 구성
+
+```mermaid
+flowchart LR
+  GH["GitHub<br/>backend/dev 머지"] -->|웹훅| NG
+  subgraph EC2["EC2 서버"]
+    NG["Nginx 443<br/>/jenkins/"] --> JK["jenkins 컨테이너<br/>127.0.0.1:9090<br/>① 체크아웃 ② 테스트"]
+    JK -->|"③ SSH"| SH["deploy-backend.sh"]
+    SH --> BE["backend 컨테이너"]
+  end
+  JK -->|"④ 알림"| MM["Mattermost"]
+```
+
+- Jenkins는 앱과 **다른 compose 파일**(`infra/jenkins/docker-compose.yml`)로 띄웁니다. 앱을 다시 띄워도 Jenkins는 그대로이고, 반대도 마찬가지입니다.
+- 도메인이 하나라 `https://<도메인>/jenkins/` 경로로 엽니다. 새 포트는 열지 않습니다.
+- 배포는 Jenkins가 SSH로 서버에 들어가 `deploy-backend.sh`를 실행합니다. Actions와 같은 방식이라 손으로 배포할 때와 결과가 같습니다. 이때 **방금 테스트한 커밋**을 `DEPLOY_SHA`로 넘겨서, 그사이 새 커밋이 들어와도 테스트하지 않은 코드가 나가지 않습니다. 다른 배포(Actions나 수동 배포)가 돌고 있으면 끝날 때까지 기다렸다가 배포합니다.
+- 파이프라인 파일은 `infra/dev`에 둡니다(`infra/jenkins/backend.Jenkinsfile`). Actions 워크플로처럼 `backend/dev`에 넣지 않아도 되어서, 인프라가 백엔드 PR 없이 고칠 수 있습니다.
+
+### 10-1. Jenkins 켜기 (서버, 15분)
+
+이 변경이 `infra/dev`에 머지된 뒤 서버에서 실행합니다. `git pull`은 앱 compose 변경도 함께 받으니, 9단계에서 안내한 `.env` 값이 다 들어 있는지 먼저 확인합니다.
+
+```bash
+cd ~/yeogirok/infra-src && git pull
+cd infra/jenkins
+echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" > .env
+cat .env                    # DOCKER_GID=숫자 한 줄이면 정상
+docker compose up -d
+docker compose logs -f      # "Jenkins is fully up and running" 이 보이면 Ctrl+C
+```
+
+- `DOCKER_GID`는 서버 docker 그룹 번호입니다. 백엔드 테스트가 Redis 컨테이너를 띄울 때 Jenkins가 서버 Docker를 써야 해서 넣습니다.
+- 처음에는 이미지를 받느라 1~2분 걸립니다. Jenkins와 테스트는 메모리를 최대 4GB까지 씁니다.
+
+### 10-2. Nginx에 /jenkins/ 연결 (서버, 10분)
+
+certbot이 고친 서버 Nginx 파일은 덮어쓰지 않고, Jenkins 설정 조각을 따로 복사한 뒤 `include` 한 줄만 넣습니다.
+
+```bash
+CONF=/etc/nginx/sites-available/yeogirok
+sudo cp $CONF ~/nginx-yeogirok.bak
+SNIP=/etc/nginx/snippets/yeogirok-jenkins.conf
+sudo cp ~/yeogirok/infra-src/infra/nginx/jenkins.conf $SNIP
+grep -c 'location / {' $CONF        # 1 이어야 한다
+sudo sed -i '/location \/ {/i include snippets/yeogirok-jenkins.conf;' $CONF
+grep -n 'include snippets' $CONF    # 한 줄 보이면 정상
+sudo nginx -t                       # "syntax is ok"
+sudo systemctl reload nginx
+```
+
+브라우저에서 `https://<도메인>/jenkins/`를 열어 **Unlock Jenkins** 화면이 나오면 성공입니다. `nginx -t`가 실패하면 백업으로 되돌립니다: `sudo cp ~/nginx-yeogirok.bak $CONF`
+
+### 10-3. 처음 설정 (브라우저, 20분)
+
+1. 잠금 해제 비밀번호를 서버에서 확인해 붙여 넣습니다.
+   ```bash
+   cd ~/yeogirok/infra-src/infra/jenkins
+   docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+   ```
+2. **Install suggested plugins**를 누릅니다. 5분쯤 걸리고, 실패한 플러그인이 있으면 **Retry**를 누릅니다.
+3. **Create First Admin User**에서 관리자 계정을 만듭니다. 화면이 인터넷에 열려 있으니 비밀번호는 길게 만듭니다(`openssl rand -base64 18`).
+4. **Instance Configuration**의 Jenkins URL에 `https://<도메인>/jenkins/`를 넣습니다. 알림에 붙는 빌드 링크가 이 주소로 만들어집니다.
+5. **Manage Jenkins → Plugins → Available plugins**에서 `Generic Webhook Trigger`를 찾아 설치합니다. 웹훅 내용을 읽어 `backend/dev`일 때만 빌드하는 데 씁니다.
+6. **Manage Jenkins → Security**에서 두 가지를 확인합니다.
+   - Security Realm: Jenkins' own user database, **Allow users to sign up이 꺼짐**
+   - Authorization: Logged-in users can do anything, **Allow anonymous read access가 꺼짐**
+
+Jenkins 관리자는 Docker를 통해 서버 전체를 다룰 수 있습니다. 계정은 꼭 필요한 사람에게만 만듭니다.
+
+### 10-4. 비밀값 넣기 (Credentials, 20분)
+
+**Manage Jenkins → Credentials → System → Global credentials (unrestricted) → Add Credentials**에서 세 개를 넣습니다.
+
+**① 서버 SSH 키 (`server-ssh`)**: Jenkins가 배포할 때 서버에 들어가는 열쇠입니다. 6단계 Actions 키와 따로 만듭니다.
+
+```bash
+ssh-keygen -t ed25519 -C yeogirok-jenkins -f ~/jenkins_key -N ""
+cat ~/jenkins_key.pub >> ~/.ssh/authorized_keys
+cat ~/jenkins_key           # 출력 전체를 복사한다
+```
+
+| 칸 | 값 |
+| --- | --- |
+| Kind | SSH Username with private key |
+| ID | `server-ssh` |
+| Username | `ubuntu` |
+| Private Key | Enter directly → Add → `-----BEGIN`부터 `END-----`까지 붙여 넣기 |
+
+저장한 뒤 서버의 키 파일은 지웁니다: `rm ~/jenkins_key ~/jenkins_key.pub`
+
+**② Mattermost 알림 주소 (`mattermost-webhook`)**
+1. Mattermost 왼쪽 위 팀 메뉴 → **통합(Integrations)** → **Incoming Webhooks** → **추가**
+2. 알림 받을 채널을 고르고 저장한 뒤, 나온 주소(`https://.../hooks/...`)를 복사합니다.
+3. Jenkins에 Kind **Secret text**, ID `mattermost-webhook`, Secret에 그 주소를 넣습니다.
+
+메뉴 이름은 Mattermost 버전과 언어에 따라 조금 다릅니다. 통합 메뉴가 안 보이면 팀 관리자 권한이 필요할 수 있습니다.
+
+**③ 웹훅 토큰 (`github-webhook-token`)**: 아무나 웹훅 주소를 불러 빌드를 돌리지 못하게 주소 끝에 붙이는 비밀 문자열입니다. 저장소가 공개라 Jenkinsfile에는 쓰지 않습니다.
+
+```bash
+openssl rand -hex 20
+```
+
+Kind **Secret text**, ID `github-webhook-token`, Secret에 위 값을 넣습니다. Jenkins에 넣은 값은 다시 볼 수 없으니 10-6을 마칠 때까지 터미널을 닫지 않습니다.
+
+### 10-5. 파이프라인 만들고 첫 실행 (20분)
+
+**연습 (선택, 5분)**: **New Item** → 이름 `hello` → **Pipeline** → OK → 맨 아래 Script 칸에 붙여 넣고 Save → **Build Now**. 단계가 화면에 어떻게 보이는지, ①의 SSH 키가 맞는지 확인하고 지워도 됩니다.
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage('인사') {
+            steps { echo '안녕, Jenkins' }
+        }
+        stage('서버 접속 확인') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'server-ssh', keyFileVariable: 'KEY', usernameVariable: 'SSH_USER')]) {
+                    sh 'ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER@host.docker.internal" hostname'
+                }
+            }
+        }
+    }
+}
+```
+
+**진짜 job**: **New Item** → 이름 `yeogirok-backend` → **Pipeline** → OK → 맨 아래 **Pipeline** 칸을 이렇게 채우고 Save → **Build Now**.
+
+| 칸 | 값 |
+| --- | --- |
+| Definition | Pipeline script from SCM |
+| SCM | Git |
+| Repository URL | `https://github.com/SSAFY-A109/Yeogirok.git` |
+| Credentials | - none - (공개 저장소) |
+| Branch Specifier | `*/infra/dev` |
+| Script Path | `infra/jenkins/backend.Jenkinsfile` |
+| Lightweight checkout | 체크 |
+
+- 빌드 번호(`#1`) → **Console Output**에서 진행을 봅니다. 첫 빌드는 Gradle이 의존성을 받느라 5~10분 걸리고, 다음부터는 캐시 덕분에 빨라집니다.
+- 끝났다는 기준: 로그 끝에 `[deploy] 성공`과 `Finished: SUCCESS`, Mattermost에 `✅ 백엔드 배포 성공`, 빌드 화면에 **Test Result**.
+- 같은 커밋으로 다시 빌드하면 Gradle이 이미 통과한 테스트를 건너뛰어(`UP-TO-DATE`) 테스트 단계가 몇 초 만에 끝납니다. 정상입니다.
+- 첫 실행이 끝나야 Jenkinsfile의 웹훅 설정(`triggers`)이 Jenkins에 등록됩니다. 10-6은 그다음에 합니다.
+- Jenkins는 빌드할 때마다 `infra/dev`에서 Jenkinsfile을 새로 읽습니다. 파이프라인을 고치려면 `infra/dev`로 PR을 머지하면 다음 빌드부터 적용됩니다.
+
+### 10-6. GitHub 웹훅 연결 (10분)
+
+저장소 **Settings → Webhooks → Add webhook**. Settings 탭은 저장소 관리자(admin)에게만 보입니다. 안 보이면 관리자에게 아래 값으로 등록을 부탁하고, 토큰은 개인 메시지로 전합니다.
+
+| 칸 | 값 |
+| --- | --- |
+| Payload URL | `https://<도메인>/jenkins/generic-webhook-trigger/invoke?token=<10-4 ③ 토큰>` |
+| Content type | **`application/json`** (기본값 form이면 Jenkins가 내용을 읽지 못한다) |
+| Secret | 비움 |
+| SSL verification | Enable |
+| Which events | Just the push event |
+| Active | 체크 |
+
+- 저장하면 GitHub가 시험 신호(ping)를 보냅니다. 웹훅 화면 **Recent Deliveries**에 초록 체크가 보이면 연결된 것입니다.
+- 이후 `backend/dev`에 머지되면 Jenkins에 빌드가 저절로 생깁니다. 다른 브랜치의 push도 웹훅은 오지만(응답 200) 빌드는 생기지 않습니다. 정상입니다.
+
+### 10-7. GitHub Actions 배포 끄기
+
+Jenkins가 실제 머지로 배포에 한 번 이상 성공하면 Actions를 끕니다. 둘 다 켜 두면 머지할 때마다 테스트와 배포가 두 번 돌고, 연달아 머지하면 잠깐 이전 커밋이 다시 배포될 수 있습니다.
+
+1. `backend/dev`로 PR을 보내 `.github/workflows/deploy-backend.yml`을 지웁니다(백엔드 리뷰).
+2. 저장소 Settings → Secrets에서 `SSH_HOST`·`SSH_USER`·`SSH_KEY`를 지웁니다.
+3. 서버에서 Actions용 키를 지웁니다. 지금 SSH 창은 닫지 말고, 새 창으로 다시 접속되는지 확인합니다.
+
+```bash
+grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 1 이어야 한다
+sed -i '/yeogirok-deploy$/d' ~/.ssh/authorized_keys
+grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
+```
+
+### 다음에 붙일 것
+
+- **배포 전 환경 변수 점검**: prod 프로필에 필요한 값이 compose와 `.env`에 다 있는지 배포 전에 확인합니다. 11/4 Redis 장애처럼 값이 빠져 백엔드가 멈추는 일을 막습니다.
+- **자동 롤백**: 응답 확인이 실패하면 이전 이미지로 되돌립니다.
+- **AI 서버**: `ai/Dockerfile`이 나오면 `backend.Jenkinsfile`을 복사해 AI용 job을 만듭니다.
+- **Jenkins 업데이트**: 한 달에 한 번 `infra/jenkins`에서 `docker compose pull && docker compose up -d`, 화면에서 Manage Jenkins → Plugins → Updates.
+
+---
+
 ## 자주 쓰는 명령
 
 모두 서버의 `~/yeogirok/infra-src/infra`에서 실행합니다.
@@ -487,6 +694,8 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 | 디스크·Docker 용량 | `df -h /` · `docker system df` |
 | 안 쓰는 이미지 정리 | `docker image prune -f` |
 | 인증서 만료일 | `sudo certbot certificates` |
+| Jenkins 상태·로그 | `docker compose -f jenkins/docker-compose.yml ps` · `docker compose -f jenkins/docker-compose.yml logs --tail 50` |
+| Jenkins 재시작 | `docker compose -f jenkins/docker-compose.yml restart` |
 
 ## 문제가 생기면
 
@@ -508,6 +717,14 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 | Actions의 SSH 단계가 `i/o timeout` | 22번이 GitHub에서 막힘 | 6-5 플랜 B |
 | certbot 실패 (Timeout during connect) | 80번이 막혔거나 도메인이 다른 IP를 가리킴 | 보안 그룹 80번, `nslookup <도메인>` 확인 |
 | `address already in use` (8080·5432) | 다른 프로그램이 포트 사용 중 | `sudo ss -ltnp \| grep -E '8080\|5432'` |
+| `https://<도메인>/jenkins/`에 백엔드 404 화면이 나옴 | Nginx에 `include` 줄이 안 들어감 | 10-2의 `grep -n 'include snippets'`, `sudo nginx -t` |
+| `https://<도메인>/jenkins/`가 502 | Jenkins가 꺼졌거나 켜지는 중 | `infra/jenkins`에서 `docker compose ps`, `docker compose logs --tail 50` |
+| Jenkins 화면에 "reverse proxy setup is broken" | Jenkins URL이 실제 주소와 다름 | Manage Jenkins → System → Jenkins URL을 `https://<도메인>/jenkins/`로 |
+| Jenkins 테스트 단계에 `Could not find a valid Docker environment` | Jenkins가 docker.sock을 쓸 권한이 없음 | `jenkins/.env`의 `DOCKER_GID`와 `getent group docker` 번호 비교, 고친 뒤 `docker compose up -d` |
+| 노트북(Windows Docker Desktop)에 Jenkins를 띄우면 테스트가 `Could not connect to Ryuk`로 실패 | Docker Desktop은 Testcontainers가 여는 포트를 Windows 쪽에 열어서 Jenkins 컨테이너 안에서 닿지 않음. 서버(리눅스 Docker)에서는 생기지 않음(11/7 확인) | 노트북에서는 연습 job만 돌리고, 백엔드 파이프라인은 서버에서 돌림 |
+| Jenkins 배포 단계에 `Permission denied (publickey)` | 서버에 공개키가 없거나 Credentials의 키가 잘림 | 10-4 ①을 새 키로 다시 |
+| 웹훅 Recent Deliveries가 404 | 토큰이 다르거나 job을 한 번도 실행하지 않음 | 10-5 Build Now 후 토큰 확인 |
+| 웹훅은 200인데 `backend/dev` 머지 후 빌드가 안 생김 | 웹훅 Content type이 form | 웹훅을 `application/json`으로 수정 |
 
 ## 시연 전 점검 (11/6)
 
@@ -518,4 +735,4 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 - [ ] 인증서 만료일이 시연일 이후 (`sudo certbot certificates`)
 - [ ] 디스크 여유 20% 이상 (`df -h /`)
 - [ ] 시연 데이터를 넣고 백업 한 번 더
-- [ ] 시연 전 배포 동결: Actions → deploy-backend → **Disable workflow** (cron을 썼다면 `crontab -e`에서 주석 처리)
+- [ ] 시연 전 배포 동결: Actions → deploy-backend → **Disable workflow** (cron을 썼다면 `crontab -e`에서 주석 처리, Jenkins를 쓰면 job 화면 → **Disable Project**)
