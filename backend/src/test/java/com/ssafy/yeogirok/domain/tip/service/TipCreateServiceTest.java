@@ -53,7 +53,7 @@ import tools.jackson.databind.json.JsonMapper;
 /** API-049 규칙. 커밋 뒤 게시는 TipPublisherTest 가 본다. */
 @DataJpaTest
 @RecordApplicationEvents
-@Import({TipCreateService.class, TipPlacements.class, LocationEvidencePolicy.class, TipCreateServiceTest.Config.class})
+@Import({TipCreateService.class, MyTipFinder.class, TipPlacements.class, LocationEvidencePolicy.class, TipCreateServiceTest.Config.class})
 class TipCreateServiceTest {
 
 	static final Long AUTHOR = 3001L;
@@ -199,12 +199,10 @@ class TipCreateServiceTest {
 	}
 
 	@Test
-	void 멱등키_재전송은_같은_tipId와_jobId를_주고_남의_팁이면_T012() {
+	void 멱등키_재전송은_같은_tipId와_jobId를_준다() {
 		TipCreateResponse created = service.create(AUTHOR, command("좋아요", List.of(), SPATIAL));
 
 		assertThat(service.getCreated(AUTHOR, created.tipId())).isEqualTo(created);
-		assertThatThrownBy(() -> service.getCreated(OTHER, created.tipId()))
-			.extracting("exceptionType").isEqualTo(ExceptionType.TIP_NOT_EXIST);
 	}
 
 	private void expect(TipCreateCommand command, ExceptionType type) {

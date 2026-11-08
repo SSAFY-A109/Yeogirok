@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,13 +40,16 @@ import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest.TipReactionCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
+import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
+import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -73,6 +77,9 @@ class TipControllerTest {
 
 	@MockitoBean
 	IdempotencyService idempotencyService;
+
+	@MockitoBean
+	TipStatusService tipStatusService;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
@@ -257,6 +264,46 @@ class TipControllerTest {
 			String body = VALID.replace(from, to == null ? "" : to);
 			expectError(perform(post("/api/v1/tips").header("Idempotency-Key", "key-1"), body), status, code);
 			verifyNoInteractions(tipCreateService);
+		}
+	}
+
+	@Nested
+	class API_050_상태 {
+
+		@Test
+		void 앱이_검사하는_응답_모양을_돌려준다() throws Exception {
+			TipPublishState state = TipPublishState.queued("550e8400-e29b-41d4-a716-446655440000", false).running()
+				.succeeded();
+			given(tipStatusService.getStatus(USER_ID, 10L)).willReturn(new TipStatusResponse(10L, TipStatus.PUBLISHED,
+				state.jobId(), state.steps(), null, false, state.operation(), state.operationStatus(), 2));
+
+			mockMvc.perform(get("/api/v1/tips/10/status").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.tipId").value(10))
+				.andExpect(jsonPath("$.data.status").value("PUBLISHED"))
+				.andExpect(jsonPath("$.data.jobId").value("550e8400-e29b-41d4-a716-446655440000"))
+				.andExpect(jsonPath("$.data.steps.media").value("SKIPPED"))
+				.andExpect(jsonPath("$.data.steps.spatial").value("SUCCEEDED"))
+				.andExpect(jsonPath("$.data.steps.content").value("SUCCEEDED"))
+				.andExpect(jsonPath("$.data.error").hasJsonPath())
+				.andExpect(jsonPath("$.data.error").isEmpty())
+				.andExpect(jsonPath("$.data.retryable").value(false))
+				.andExpect(jsonPath("$.data.operation").value("CREATE"))
+				.andExpect(jsonPath("$.data.operationStatus").value("SUCCEEDED"))
+				.andExpect(jsonPath("$.data.version").value(2));
+		}
+
+		@Test
+		void 작업_정보가_없으면_필드는_null로_남긴다() throws Exception {
+			given(tipStatusService.getStatus(USER_ID, 10L)).willReturn(new TipStatusResponse(10L, TipStatus.REGISTERING,
+				null, new TipPublishState.Steps(null, null, null), null, false, null, null, 1));
+
+			mockMvc.perform(get("/api/v1/tips/10/status").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.operationStatus").hasJsonPath())
+				.andExpect(jsonPath("$.data.operationStatus").isEmpty())
+				.andExpect(jsonPath("$.data.steps.media").hasJsonPath())
+				.andExpect(jsonPath("$.data.jobId").isEmpty());
 		}
 	}
 }

@@ -41,6 +41,7 @@ import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 public class TipCreateService {
 
 	private final ArTipRepository arTipRepository;
+	private final MyTipFinder myTipFinder;
 	private final ArTipImageRepository arTipImageRepository;
 	private final UploadSessionStore uploadSessionStore;
 	private final TipPublishStore publishStore;
@@ -50,11 +51,13 @@ public class TipCreateService {
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
-	public TipCreateService(ArTipRepository arTipRepository, ArTipImageRepository arTipImageRepository,
+	public TipCreateService(ArTipRepository arTipRepository, MyTipFinder myTipFinder,
+		ArTipImageRepository arTipImageRepository,
 		UploadSessionStore uploadSessionStore, TipPublishStore publishStore, TipPlacements tipPlacements,
 		LocationEvidencePolicy locationEvidencePolicy, ApplicationEventPublisher events,
 		PlatformTransactionManager transactionManager, Clock clock) {
 		this.arTipRepository = arTipRepository;
+		this.myTipFinder = myTipFinder;
 		this.arTipImageRepository = arTipImageRepository;
 		this.uploadSessionStore = uploadSessionStore;
 		this.publishStore = publishStore;
@@ -86,12 +89,10 @@ public class TipCreateService {
 		return new TipCreateResponse(tipId, jobId, TipStatus.REGISTERING);
 	}
 
-	/** 같은 멱등키로 다시 보낸 요청. 그사이 없어졌으면 T012. */
+	/** 같은 멱등키로 다시 보낸 요청. 그사이 삭제했으면 T012. */
 	@Transactional(readOnly = true)
 	public TipCreateResponse getCreated(Long userId, Long tipId) {
-		ArTip tip = arTipRepository.findById(tipId)
-			.filter(found -> found.getAuthorId().equals(userId))
-			.orElseThrow(() -> new BusinessException(ExceptionType.TIP_NOT_EXIST));
+		ArTip tip = myTipFinder.getOwn(tipId, userId);
 		String jobId = publishStore.find(tipId).map(TipPublishState::jobId).orElse(null);
 		return new TipCreateResponse(tipId, jobId, tip.getStatus());
 	}

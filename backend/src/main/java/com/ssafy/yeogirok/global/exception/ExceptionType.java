@@ -89,10 +89,11 @@ public enum ExceptionType {
 
 	/** 없거나, 게시 전·실패·삭제된 팁. 공개 조회(047·048·052)에서는 구분하지 않는다. */
 	TIP_NOT_FOUND(NOT_FOUND, "T001", "공개 조회 가능한 팁이 없습니다."),
+	TIP_NOT_OWNER(FORBIDDEN, "T002", "팁 작성자 본인이 아닙니다."),
 	TIP_OUT_OF_RANGE(UNPROCESSABLE_CONTENT, "T004", "팁 이용을 위한 현장 방문 조건을 충족하지 않습니다."),
 	TIP_SPATIAL_INVALID(UNPROCESSABLE_CONTENT, "T007", "AR 공간 참조 또는 배치 정보 검증에 실패했습니다."),
 	TIP_SELF_REACTION(CONFLICT, "T009", "본인이 작성한 팁에는 반응할 수 없습니다."),
-	/** 작성자 본인 조회(049 재전송·050)에서 없거나 남의 팁. */
+	/** 작성자 본인 조회(049 재전송·050)에서 없거나 삭제된 팁. */
 	TIP_NOT_EXIST(NOT_FOUND, "T012", "팁을 찾을 수 없습니다."),
 
 	/* ── 파일 M (M009·M010 은 쓰는 곳이 없어 넣지 않는다) ──────── */
