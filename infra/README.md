@@ -28,6 +28,7 @@ flowchart LR
 | `infra/docker-compose.local.yml` | 로컬 개발용 DB·Redis | 팀원 노트북 |
 | `infra/docker-compose.yml` | 서버의 DB·Redis·백엔드(·AI) 구성 | 서버 |
 | `infra/.env.example` | 서버 비밀값 목록 (값은 비워 둠) | 서버에서 `.env`로 복사 |
+| `infra/scripts/restore-db.sh` | 백업 파일로 DB 되돌리기 | 서버 (필요할 때 손으로) |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
 | `infra/scripts/deploy-backend.sh` | 최신 코드로 백엔드 다시 띄우고 확인 | 서버 (Actions가 실행) |
 | `infra/scripts/backup-db.sh` | DB 백업, 오래된 백업 정리 | 서버 (cron) |
@@ -356,7 +357,7 @@ Flyway 규칙(백엔드 공유): 파일 이름은 `V{번호}__{설명}.sql`, 한
 ## 8단계. 백업 (15분)
 
 ```bash
-bash ~/yeogirok/infra-src/infra/scripts/backup-db.sh    # 지금 한 번
+bash ~/yeogirok/infra-src/infra/scripts/backup-db.sh    # 지금 한 번. "[backup] ... (크기)" 가 나오면 성공
 ls -lh ~/yeogirok/backups
 
 crontab -e
@@ -364,12 +365,22 @@ crontab -e
 0 4 * * * bash $HOME/yeogirok/infra-src/infra/scripts/backup-db.sh >> $HOME/yeogirok/backup.log 2>&1
 ```
 
-복구:
+- 다음 날 `tail ~/yeogirok/backup.log`로 새벽 4시 기록을 확인합니다. `실패:` 줄이 있으면 그날 백업은 없습니다.
+- 백업이 실패하면(DB가 꺼져 있는 등) 파일을 남기지 않습니다. 빈 파일이 정상 백업처럼 쌓이고 오래된 정상 백업만 지워지는 일을 막기 위해서입니다. 오래된 백업은 새 백업이 성공했을 때만 지웁니다.
+- 파일 이름에 초까지 들어가 같은 분에 두 번 돌려도 앞 백업을 덮어쓰지 않습니다.
+
+**복구**: `restore-db.sh`를 씁니다. 지금 DB 내용이 모두 백업 시점으로 바뀌고, 그동안(보통 1분 안) 백엔드가 멈춥니다.
 
 ```bash
 cd ~/yeogirok/infra-src/infra
-gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+ls -lh ~/yeogirok/backups                                   # 되돌릴 파일 고르기
+bash scripts/restore-db.sh ~/yeogirok/backups/<파일>.sql.gz  # restore 를 입력하면 시작
 ```
+
+- 스크립트 순서: 지금 상태를 먼저 백업 → 백엔드 멈춤 → DB를 지우고 새로 만듦 → 백업 붓기 → 백엔드 켜고 응답 확인.
+- 백업 파일을 지금 DB에 그냥 부으면 안 됩니다. 테이블이 이미 있어 `already exists` 오류만 나고 데이터는 돌아오지 않습니다(11/9 시험에서 오류 44줄, 데이터 그대로).
+- 붓다가 오류가 나면 바로 멈추고 백엔드는 멈춘 채로 둡니다. 화면에 나온 명령(1단계에서 만든 백업으로 다시 실행)을 그대로 치면 복구 전 상태로 돌아갑니다.
+- 시연 전에 한 번 연습해 둡니다. 지금 백업을 만들고 바로 그 파일로 복구하면 내용은 그대로이고 절차만 확인됩니다.
 
 ---
 
@@ -515,6 +526,7 @@ bash scripts/deploy-backend.sh     # 마지막에 "[deploy] 성공" 이 보이�
 - [ ] 서버 재부팅 후에도 자동으로 다시 뜸 (`sudo reboot` → 2분 뒤 확인)
 - [ ] `docker compose ps`에서 db·redis가 `(healthy)`
 - [ ] `~/yeogirok/backups`에 매일 백업이 생김
+- [ ] 복구 연습: 방금 만든 백업으로 `bash scripts/restore-db.sh <파일>` 한 번 (8단계)
 - [ ] 인증서 만료일이 시연일 이후 (`sudo certbot certificates`)
 - [ ] 디스크 여유 20% 이상 (`df -h /`)
 - [ ] 시연 데이터를 넣고 백업 한 번 더
