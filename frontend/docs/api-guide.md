@@ -211,6 +211,10 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | 뮤테이션 | 무효화(invalidate) | 즉시 반영(setQueryData) |
 | --- | --- | --- |
 | `POST /footprints` (API-041) | `footprintKeys.all`, `statisticsKeys.all` | — |
+| `PATCH /footprints/{id}` (API-044) | `footprintKeys.lists`, `footprintKeys.detail(id)` | — |
+| `DELETE /footprints/{id}` (API-045) | `footprintKeys.lists`, `userKeys.me()` | 상세 캐시 제거 |
+| `PATCH /tips/{id}` (API-054) | 접수 시 `tipKeys.status(id)`. 상태 조회에서 작업 성공 확인 후 `tipKeys.lists`, `tipKeys.detail(id)` | — |
+| `DELETE /tips/{id}` | `tipKeys.mine`, `userKeys.me()` | 상세·상태 캐시 제거 |
 | `PUT /tips/{id}/reaction` (API-052) | 완료 후 `tipKeys.detail(id)` | 낙관적 반영 → 실패 시 롤백 |
 | `POST /rooms` (API-021) | `roomKeys.list()` | 응답 상세 → `roomKeys.detail(id)` |
 | `PATCH /rooms/{id}` (API-023) | `roomKeys.list()`, `roomKeys.places(roomId)`, `scheduleKeys.room(roomId)` | 응답 상세 → `roomKeys.detail(roomId)` |
