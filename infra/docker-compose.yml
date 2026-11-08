@@ -111,6 +111,9 @@ services:
       LOCATION_EVIDENCE_MAX_AGE: 2m
       LOCATION_EVIDENCE_MAX_FUTURE_SKEW: 30s
       LOCATION_POLICY_VERSION: location-v1
+      # AR 팁 위치 정확도 기준(미터, 백엔드 #64 AR 팁 API). TBD: 백엔드 로컬 제안값(11/8)을 임시로 넣었다.
+      # #64 가 머지되기 전에 서버에 있어야 한다. 그 전에는 백엔드가 이 값을 읽지 않아 넣어 둬도 영향이 없다.
+      LOCATION_EVIDENCE_MAX_ACCURACY_METERS: "30"
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
       # TOUR_API_KEY: ${TOUR_API_KEY}
     ports:

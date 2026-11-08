@@ -485,6 +485,7 @@ bash scripts/deploy-backend.sh                    # 마지막에 "[deploy] 성�
 ```
 
 - 마지막 확인에서 `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`만 남으면 백엔드는 뜹니다. 파일 업로드만 접근 키를 넣은 뒤에 동작합니다.
+- 같은 변경에 `LOCATION_EVIDENCE_MAX_ACCURACY_METERS`(AR 팁 위치 정확도, `30`)도 넣었습니다. 11/8 백엔드 AR 팁 PR(#64)이 prod 프로필에 기본값 없이 추가하는 값이라, #64가 머지되기 전에 서버에 있어야 합니다. 비밀 값이 아니라 compose에 바로 적었고(TBD: 백엔드 로컬 제안값), `.env`에는 넣을 것이 없습니다.
 
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
