@@ -11,7 +11,7 @@ import com.ssafy.yeogirok.global.geo.Coordinates;
 
 import lombok.RequiredArgsConstructor;
 
-/** 현재 위치 증거 검사(API-041·047·048·049·052 공통). 좌표 범위 C011, 측정 시각 유효 범위 C009. */
+/** 현재 위치 증거 검사(API-041·047·048·049·052 공통). 좌표 범위 C011, 정확도 C010, 측정 시각 유효 범위 C009. */
 @Component
 @RequiredArgsConstructor
 public class LocationEvidencePolicy {
@@ -29,6 +29,15 @@ public class LocationEvidencePolicy {
 			|| capturedAt.isAfter(now.plus(properties.maxFutureSkew()))) {
 			throw new BusinessException(ExceptionType.LOCATION_EVIDENCE_EXPIRED);
 		}
+	}
+
+	/** 정확도까지 받는 API(AR 팁)용. 좌표 C011 → 정확도 C010 → 유효 시각 C009 순서로 본다. */
+	public void verify(LocationEvidence evidence, Instant now) {
+		checkCoordinates(evidence.latitude(), evidence.longitude());
+		if (evidence.accuracyMeters().compareTo(properties.maxAccuracyMeters()) > 0) {
+			throw new BusinessException(ExceptionType.LOCATION_ACCURACY_INSUFFICIENT);
+		}
+		checkFresh(evidence.capturedAt(), now);
 	}
 
 	public String policyVersion() {

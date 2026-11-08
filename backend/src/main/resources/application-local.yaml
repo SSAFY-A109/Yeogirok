@@ -24,9 +24,12 @@ yeogirok:
   # 현재 위치 증거(DEC-01). 로컬 실행용 제안값이다(11/4). 실제 값은 팀이 정해 prod 환경 변수로 넣는다.
   # 기준을 바꾸면 policy-version 도 바꾼다(footprints.location_policy_version 에 저장된다).
   location-evidence:
-    max-age: 2m
+    # 11/6: 프론트 W16 이 핀 조정·글쓰기 뒤 등록해 2분은 빠듯했다(11/8 local 만 5분).
+    max-age: 5m
     max-future-skew: 30s
     policy-version: location-v1
+    # AR 팁(047·048·049·052) 위치 정확도 기준(11/8 제안 30m).
+    max-accuracy-meters: 30
   idempotency:
     # 멱등키 보관 기간(11/3 결정, 요청 종류와 상관없이 같다)과 처리 중 표시 수명(제안값).
     retention: ${IDEMPOTENCY_RETENTION:24h}

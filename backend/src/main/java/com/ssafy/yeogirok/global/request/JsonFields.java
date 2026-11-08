@@ -1,7 +1,13 @@
 package com.ssafy.yeogirok.global.request;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 import tools.jackson.databind.JsonNode;
 
@@ -10,6 +16,8 @@ import tools.jackson.databind.JsonNode;
  * 둘을 구분할 수 있다(Jackson 기본 바인딩은 구분하지 못하고 숫자·문자열을 서로 바꿔 받아 준다).
  */
 public final class JsonFields {
+
+	private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern(ApiDateTime.PATTERN);
 
 	private JsonFields() {
 	}
@@ -61,6 +69,18 @@ public final class JsonFields {
 			throw invalidFormat(field, "정수여야 합니다.");
 		}
 		return value.longValue();
+	}
+
+	/** 값이 있다고 확인한 뒤 부른다. 문자열이 아니거나 {@code YYYY-MM-DD HH:mm:ss+09} 형식이 아니면 C002. */
+	public static Instant dateTime(JsonNode value, String field) {
+		try {
+			if (value.isString()) {
+				return OffsetDateTime.parse(value.stringValue(), DATE_TIME_FORMAT).toInstant();
+			}
+		} catch (DateTimeParseException ignored) {
+			// 아래에서 형식 오류로 알린다
+		}
+		throw invalidFormat(field, "형식은 YYYY-MM-DD HH:mm:ss+09 입니다.");
 	}
 
 	public static BusinessException missing(String field) {

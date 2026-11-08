@@ -19,6 +19,13 @@ yeogirok:
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
+  tip:
+    # AR 팁 거리·개수(11/6 확정): 주변 탐색 50m, 상세·반응 5m(경계 포함), 탐색 결과 가까운 순 최대 10개.
+    search-radius-meters: 50
+    interaction-radius-meters: 5
+    max-search-results: 10
+    # placement JSON 최대 크기(11/8 결정 8KB). 앱은 3개 필드만 보낸다.
+    placement-max-bytes: 8192
   room:
     invite:
       # 초대 토큰 암호화 키(AES-SIV). Base64, 디코드했을 때 64바이트. 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
