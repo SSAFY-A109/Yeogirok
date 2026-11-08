@@ -32,4 +32,12 @@ public class ArTipImage {
 
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
+
+	public static ArTipImage of(Long tipId, String imagePath, Instant now) {
+		ArTipImage image = new ArTipImage();
+		image.tipId = tipId;
+		image.imagePath = imagePath;
+		image.createdAt = now;
+		return image;
+	}
 }

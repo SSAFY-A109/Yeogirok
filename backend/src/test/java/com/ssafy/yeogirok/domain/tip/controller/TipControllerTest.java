@@ -16,7 +16,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,6 +33,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.ssafy.yeogirok.domain.tip.dto.TipCreateRequest.TipCreateCommand;
+import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest.TipReactionCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
@@ -38,8 +42,12 @@ import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
+import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
+import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
+import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
+import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
 
 /** AR 팁 HTTP 계약(요청 형식 오류 코드, 응답 모양). 값 규칙은 각 서비스 테스트가 본다. */
@@ -59,6 +67,19 @@ class TipControllerTest {
 
 	@MockitoBean
 	TipReactionService tipReactionService;
+
+	@MockitoBean
+	TipCreateService tipCreateService;
+
+	@MockitoBean
+	IdempotencyService idempotencyService;
+
+	@BeforeEach
+	@SuppressWarnings("unchecked")
+	void runActionThroughIdempotency() {
+		given(idempotencyService.execute(any(), any(), any(), any(), any()))
+			.willAnswer(invocation -> ((Supplier<Object>)invocation.getArgument(2)).get());
+	}
 
 	ResultActions perform(MockHttpServletRequestBuilder request, String body) throws Exception {
 		return mockMvc.perform(request.with(asUser(USER_ID)).contentType(MediaType.APPLICATION_JSON)
@@ -175,6 +196,67 @@ class TipControllerTest {
 		void 요청_형식_오류(String body, int status, String code) throws Exception {
 			expectError(perform(put("/api/v1/tips/7/reaction"), body), status, code);
 			verifyNoInteractions(tipReactionService);
+		}
+	}
+
+	@Nested
+	class API_049_등록 {
+
+		static final String VALID = """
+			{"category":"PHOTO","body":"노을 명당","uploadIds":["550e8400-e29b-41d4-a716-446655440010"],
+			 "location":LOC,
+			 "spatialReference":{"provider":"ARCORE_CLOUD_ANCHOR","referenceId":"anchor-1","expiresAt":"2026-11-09 12:00:00+09"},
+			 "placement":{"schemaVersion":1}}
+			""";
+
+		@Test
+		void 등록하면_202와_tipId_jobId_REGISTERING을_돌려준다() throws Exception {
+			given(tipCreateService.create(eq(USER_ID), any())).willReturn(new TipCreateResponse(10L,
+				"550e8400-e29b-41d4-a716-446655440000", TipStatus.REGISTERING));
+
+			perform(post("/api/v1/tips").header("Idempotency-Key", "key-1"), VALID)
+				.andExpect(status().isAccepted())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.tipId").value(10))
+				.andExpect(jsonPath("$.data.jobId").value("550e8400-e29b-41d4-a716-446655440000"))
+				.andExpect(jsonPath("$.data.status").value("REGISTERING"));
+
+			ArgumentCaptor<TipCreateCommand> command = ArgumentCaptor.forClass(TipCreateCommand.class);
+			verify(idempotencyService).execute(eq(new IdempotencyKey(USER_ID, "tip-create", "-", "key-1")),
+				command.capture(), any(), any(), any());
+			assertThat(command.getValue().uploadIds()).containsExactly("550e8400-e29b-41d4-a716-446655440010");
+			assertThat(command.getValue().category()).isEqualTo("PHOTO");
+		}
+
+		@Test
+		void uploadIds를_생략하면_빈_목록이다() throws Exception {
+			given(tipCreateService.create(eq(USER_ID), any())).willReturn(new TipCreateResponse(10L, "j",
+				TipStatus.REGISTERING));
+
+			perform(post("/api/v1/tips").header("Idempotency-Key", "key-1"),
+				VALID.replace("\"uploadIds\":[\"550e8400-e29b-41d4-a716-446655440010\"],", ""))
+				.andExpect(status().isAccepted());
+
+			ArgumentCaptor<TipCreateCommand> command = ArgumentCaptor.forClass(TipCreateCommand.class);
+			verify(tipCreateService).create(eq(USER_ID), command.capture());
+			assertThat(command.getValue().uploadIds()).isEmpty();
+		}
+
+		@ParameterizedTest(name = "{0} → {1}")
+		@CsvSource(delimiter = '|', textBlock = """
+			"category":"PHOTO",            |                      | 400 | C001
+			"category":"PHOTO",            | "category":null,     | 400 | C001
+			"category":"PHOTO",            | "category":["PHOTO"],| 400 | C002
+			"body":"노을 명당",            |                      | 400 | C001
+			"body":"노을 명당",            | "body":3,            | 400 | C002
+			"550e8400-e29b-41d4-a716-446655440010" | "not-a-uuid" | 400 | C002
+			["550e8400-e29b-41d4-a716-446655440010"] | "550e8400-e29b-41d4-a716-446655440010" | 400 | C002
+			"location":LOC,                |                      | 422 | C008
+			""")
+		void 요청_형식_오류(String from, String to, int status, String code) throws Exception {
+			String body = VALID.replace(from, to == null ? "" : to);
+			expectError(perform(post("/api/v1/tips").header("Idempotency-Key", "key-1"), body), status, code);
+			verifyNoInteractions(tipCreateService);
 		}
 	}
 }

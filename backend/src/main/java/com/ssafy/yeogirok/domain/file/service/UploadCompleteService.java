@@ -54,14 +54,14 @@ public class UploadCompleteService {
 
 	/** 이미 READY 면 만료와 상관없이 처음 결과를 돌려준다. */
 	public UploadCompleteResponse complete(Long userId, String uploadId) {
-		UploadSession session = findOwned(userId, uploadId);
+		UploadSession session = sessionStore.findOwned(uploadId, userId);
 		if (session.status() == UploadStatus.READY) {
 			return UploadCompleteResponse.of(session);
 		}
 		String lockToken = uploadLock.acquire(uploadId);
 		try {
 			// 잠금을 기다리는 동안 다른 요청이 끝냈을 수 있다.
-			session = findOwned(userId, uploadId);
+			session = sessionStore.findOwned(uploadId, userId);
 			if (session.status() == UploadStatus.READY) {
 				return UploadCompleteResponse.of(session);
 			}
@@ -138,15 +138,5 @@ public class UploadCompleteService {
 		}
 		// TIP_PHOTO 는 팁에 연결할 때 ar_tip_images 에 저장한다(AR 팁 API).
 		return session.ready(confirmedKey, sizeBytes, null, null);
-	}
-
-	/** 세션이 없으면 M004, 다른 사람 세션이면 M005. */
-	private UploadSession findOwned(Long userId, String uploadId) {
-		UploadSession session = sessionStore.find(uploadId)
-			.orElseThrow(() -> new BusinessException(ExceptionType.FILE_NOT_FOUND));
-		if (!session.uploadedBy().equals(userId)) {
-			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED);
-		}
-		return session;
 	}
 }

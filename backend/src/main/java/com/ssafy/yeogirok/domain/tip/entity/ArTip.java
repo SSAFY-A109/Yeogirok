@@ -136,6 +136,12 @@ public class ArTip {
 		this.updatedAt = now;
 	}
 
+	/** 최초 게시 실패. 공개하지 않는다. */
+	public void fail(Instant now) {
+		this.status = TipStatus.FAILED;
+		this.updatedAt = now;
+	}
+
 	public SpatialReference spatialReference() {
 		return new SpatialReference(spatialProvider, spatialReferenceId, spatialExpiresAt);
 	}

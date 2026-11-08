@@ -92,8 +92,10 @@ public enum ExceptionType {
 	TIP_OUT_OF_RANGE(UNPROCESSABLE_CONTENT, "T004", "팁 이용을 위한 현장 방문 조건을 충족하지 않습니다."),
 	TIP_SPATIAL_INVALID(UNPROCESSABLE_CONTENT, "T007", "AR 공간 참조 또는 배치 정보 검증에 실패했습니다."),
 	TIP_SELF_REACTION(CONFLICT, "T009", "본인이 작성한 팁에는 반응할 수 없습니다."),
+	/** 작성자 본인 조회(049 재전송·050)에서 없거나 남의 팁. */
+	TIP_NOT_EXIST(NOT_FOUND, "T012", "팁을 찾을 수 없습니다."),
 
-	/* ── 파일 M (M007·M009·M010 은 쓰는 곳이 없어 넣지 않는다) ──────── */
+	/* ── 파일 M (M009·M010 은 쓰는 곳이 없어 넣지 않는다) ──────── */
 
 	FILE_TOO_LARGE(CONTENT_TOO_LARGE, "M001", "업로드 파일 크기가 허용 범위를 넘었습니다."),
 	FILE_TYPE_NOT_SUPPORTED(UNSUPPORTED_MEDIA_TYPE, "M002", "지원하지 않는 파일 형식입니다. JPEG·PNG·WEBP 만 올릴 수 있습니다."),
@@ -103,6 +105,7 @@ public enum ExceptionType {
 	FILE_ACCESS_DENIED(FORBIDDEN, "M005", "파일을 열람하거나 사용할 권한이 없습니다."),
 	/** S3 에 객체가 아직 없다. 같은 uploadId 로 다시 시도할 수 있다. */
 	FILE_NOT_UPLOADED(UNPROCESSABLE_CONTENT, "M006", "파일 업로드·검증이 끝나지 않았습니다."),
+	FILE_PURPOSE_MISMATCH(UNPROCESSABLE_CONTENT, "M007", "파일 사용 용도가 일치하지 않습니다."),
 	UPLOAD_TARGET_ACCESS_DENIED(FORBIDDEN, "M008", "파일 업로드 대상 여행방·기록에 접근할 권한이 없습니다."),
 	UPLOAD_SESSION_EXPIRED(GONE, "M011", "업로드 세션 유효기간이 지났습니다. 새로 업로드해 주세요."),
 	/** 같은 요청으로 다시 시도할 수 있다. */
