@@ -21,14 +21,19 @@ public class PublicTipFinder {
 	private final ArTipRepository arTipRepository;
 	private final TipProperties properties;
 
-	/** 위치 증거 값 검사({@code LocationEvidencePolicy#verify})는 부르는 쪽이 먼저 한다. 탐색 결과와 상관없이 매번 거리를 본다. */
 	@Transactional(readOnly = true)
-	public ArTip getInteractable(Long tipId, LocationEvidence location) {
-		ArTip tip = arTipRepository.findByIdAndStatusAndDeletedAtIsNull(tipId, TipStatus.PUBLISHED)
+	public ArTip getPublished(Long tipId) {
+		return arTipRepository.findByIdAndStatusAndDeletedAtIsNull(tipId, TipStatus.PUBLISHED)
 			.orElseThrow(() -> new BusinessException(ExceptionType.TIP_NOT_FOUND));
+	}
+
+	/**
+	 * 탐색 결과(canInteract)와 상관없이 매번 거리를 본다. 위치 증거 값 검사({@code LocationEvidencePolicy#verify})는
+	 * 부르는 쪽이 먼저 한다.
+	 */
+	public void checkInteractable(ArTip tip, LocationEvidence location) {
 		if (!properties.canInteract(tip.distanceMetersFrom(location.latitude(), location.longitude()))) {
 			throw new BusinessException(ExceptionType.TIP_OUT_OF_RANGE);
 		}
-		return tip;
 	}
 }

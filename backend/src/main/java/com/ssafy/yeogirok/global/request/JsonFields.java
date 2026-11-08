@@ -49,6 +49,14 @@ public final class JsonFields {
 		return value.stringValue();
 	}
 
+	/** 생략·null C001, 문자열 아님 C002(null 을 생략과 같게 보는 필드용). */
+	public static String nonNullString(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			throw missing(field);
+		}
+		return requiredString(value, field);
+	}
+
 	/** 생략·null 이면 null, 문자열 아님 C002. */
 	public static String optionalString(JsonNode value, String field) {
 		if (isAbsent(value)) {

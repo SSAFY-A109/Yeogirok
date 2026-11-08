@@ -35,4 +35,21 @@ public class ArTipReaction {
 
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
+
+	public static ArTipReaction of(Long tipId, Long userId, TipReaction reaction, Instant now) {
+		ArTipReaction tipReaction = new ArTipReaction();
+		tipReaction.tipId = tipId;
+		tipReaction.userId = userId;
+		tipReaction.reaction = reaction;
+		tipReaction.updatedAt = now;
+		return tipReaction;
+	}
+
+	/** 같은 값이면 바꾸지 않는다(재전송은 유지). */
+	public void change(TipReaction reaction, Instant now) {
+		if (this.reaction != reaction) {
+			this.reaction = reaction;
+			this.updatedAt = now;
+		}
+	}
 }
