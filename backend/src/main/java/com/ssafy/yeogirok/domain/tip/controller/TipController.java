@@ -20,10 +20,13 @@ import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipViewRequest;
+import com.ssafy.yeogirok.domain.tip.dto.TipViewResponse;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
+import com.ssafy.yeogirok.domain.tip.service.TipViewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
@@ -45,6 +48,7 @@ public class TipController {
 	private final TipSearchService tipSearchService;
 	private final TipReactionService tipReactionService;
 	private final TipStatusService tipStatusService;
+	private final TipViewService tipViewService;
 	private final IdempotencyService idempotencyService;
 
 	/** 형식 검사는 멱등키 처리 전, 값 검사는 처리 안에서 한다. 재요청은 유효 시각이 지나도 처음 결과를 준다. */
@@ -86,5 +90,13 @@ public class TipController {
 	public ResponseEntity<ApiResponseBody<TipStatusResponse>> getStatus(
 		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(tipStatusService.getStatus(user.userId(), tipId)));
+	}
+
+	@Operation(summary = "API-048 현장 팁 상세·공간 복원 정보 조회")
+	@PostMapping("/{tipId}/view")
+	public ResponseEntity<ApiResponseBody<TipViewResponse>> view(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId, @RequestBody TipViewRequest request) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			tipViewService.view(user.userId(), tipId, request.toLocation())));
 	}
 }

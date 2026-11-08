@@ -13,6 +13,7 @@ import com.ssafy.yeogirok.domain.tip.entity.ArTipReaction;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipReactionId;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
 import com.ssafy.yeogirok.domain.tip.repository.ArTipReactionRepository;
+import com.ssafy.yeogirok.domain.tip.repository.ArTipReactionRepository.ReactionCounts;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
@@ -62,8 +63,7 @@ public class TipReactionService {
 				}
 			});
 		reactionRepository.flush();
-		return new TipReactionResponse(tipId, reaction,
-			reactionRepository.countByTipIdAndReaction(tipId, TipReaction.LIKE),
-			reactionRepository.countByTipIdAndReaction(tipId, TipReaction.DISLIKE));
+		ReactionCounts counts = reactionRepository.countReactions(tipId);
+		return new TipReactionResponse(tipId, reaction, counts.likes(), counts.dislikes());
 	}
 }

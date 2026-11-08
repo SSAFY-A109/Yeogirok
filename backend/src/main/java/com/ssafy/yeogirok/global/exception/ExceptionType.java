@@ -91,6 +91,8 @@ public enum ExceptionType {
 	TIP_NOT_FOUND(NOT_FOUND, "T001", "공개 조회 가능한 팁이 없습니다."),
 	TIP_NOT_OWNER(FORBIDDEN, "T002", "팁 작성자 본인이 아닙니다."),
 	TIP_OUT_OF_RANGE(UNPROCESSABLE_CONTENT, "T004", "팁 이용을 위한 현장 방문 조건을 충족하지 않습니다."),
+	/** spatial_expires_at 이 지났다. 팁 없음(T001)과 구분한다. */
+	TIP_SPATIAL_EXPIRED(GONE, "T005", "AR 공간 참조가 만료되었습니다."),
 	TIP_SPATIAL_INVALID(UNPROCESSABLE_CONTENT, "T007", "AR 공간 참조 또는 배치 정보 검증에 실패했습니다."),
 	TIP_SELF_REACTION(CONFLICT, "T009", "본인이 작성한 팁에는 반응할 수 없습니다."),
 	/** 작성자 본인 조회(049 재전송·050)에서 없거나 삭제된 팁. */

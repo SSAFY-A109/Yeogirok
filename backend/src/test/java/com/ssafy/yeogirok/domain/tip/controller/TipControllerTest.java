@@ -41,6 +41,7 @@ import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipViewResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
@@ -50,6 +51,7 @@ import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
+import com.ssafy.yeogirok.domain.tip.service.TipViewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -80,6 +82,9 @@ class TipControllerTest {
 
 	@MockitoBean
 	TipStatusService tipStatusService;
+
+	@MockitoBean
+	TipViewService tipViewService;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
@@ -304,6 +309,47 @@ class TipControllerTest {
 				.andExpect(jsonPath("$.data.operationStatus").isEmpty())
 				.andExpect(jsonPath("$.data.steps.media").hasJsonPath())
 				.andExpect(jsonPath("$.data.jobId").isEmpty());
+		}
+	}
+
+	@Nested
+	class API_048_상세 {
+
+		@Test
+		void 앱이_검사하는_응답_모양을_돌려준다() throws Exception {
+			given(tipViewService.view(eq(USER_ID), eq(7L), any())).willReturn(new TipViewResponse(7L, ArTipCategory.CAFE,
+				"창가 자리가 좋아요", Instant.parse("2026-11-08T03:00:00Z"), Instant.parse("2026-11-08T03:00:05Z"),
+				List.of(new TipViewResponse.Photo(801L, "https://signed/abc", null)),
+				TipViewResponse.Author.withdrawn(),
+				new TipViewResponse.Location(new BigDecimal("37.5012345"), new BigDecimal("127.0398765")),
+				new SpatialReference(SpatialReference.PROVIDER, "anchor-1", Instant.parse("2026-11-09T03:00:00Z")),
+				Map.of("schemaVersion", 1), new TipViewResponse.Reactions(2, 0, null)));
+
+			perform(post("/api/v1/tips/7/view"), "{\"location\":LOC}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.id").value(7))
+				.andExpect(jsonPath("$.data.category").value("CAFE"))
+				.andExpect(jsonPath("$.data.body").value("창가 자리가 좋아요"))
+				.andExpect(jsonPath("$.data.createdAt").value("2026-11-08 12:00:00+09"))
+				.andExpect(jsonPath("$.data.publishedAt").value("2026-11-08 12:00:05+09"))
+				.andExpect(jsonPath("$.data.photos[0].imageId").value(801))
+				.andExpect(jsonPath("$.data.photos[0].url").value("https://signed/abc"))
+				.andExpect(jsonPath("$.data.photos[0].attribution").hasJsonPath())
+				.andExpect(jsonPath("$.data.author.id").hasJsonPath())
+				.andExpect(jsonPath("$.data.author.id").isEmpty())
+				.andExpect(jsonPath("$.data.author.nickname").value("탈퇴한 사용자"))
+				.andExpect(jsonPath("$.data.location.latitude").value(37.5012345))
+				.andExpect(jsonPath("$.data.spatialReference.expiresAt").value("2026-11-09 12:00:00+09"))
+				.andExpect(jsonPath("$.data.placement.schemaVersion").value(1))
+				.andExpect(jsonPath("$.data.reactions.likes").value(2))
+				.andExpect(jsonPath("$.data.reactions.myReaction").hasJsonPath())
+				.andExpect(jsonPath("$.data.reactions.myReaction").isEmpty());
+		}
+
+		@Test
+		void 위치_증거가_없으면_C008() throws Exception {
+			expectError(perform(post("/api/v1/tips/7/view"), "{}"), 422, "C008");
+			verifyNoInteractions(tipViewService);
 		}
 	}
 }
