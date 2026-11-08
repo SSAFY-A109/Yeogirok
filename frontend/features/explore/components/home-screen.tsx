@@ -25,6 +25,8 @@ import { RoomSelectSheet } from "./room-select-sheet";
 const RANKING_THUMBNAIL_SIZE = 64;
 
 export function HomeScreen() {
+  const [category, setCategory] = useState<string | null>(null);
+
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background" testID="home.screen">
       <View className="flex-row items-center gap-3 px-5 pb-4 pt-2">
@@ -45,11 +47,11 @@ export function HomeScreen() {
         </Pressable>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="pb-4" keyboardShouldPersistTaps="handled">
-        <FeaturedSection />
+        <FeaturedSection key={category ?? "all"} category={category} />
         <View className="gap-4 pb-4">
           <View className="h-2 bg-muted" />
           <Text accessibilityRole="header" className="px-5 pt-4 text-h3 text-foreground">어떤 곳을 찾으세요?</Text>
-          <CategoryRankingSection />
+          <CategoryRankingSection picked={category} onSelect={setCategory} />
         </View>
         {__DEV__ && (
           <Pressable
@@ -71,8 +73,8 @@ export function HomeScreen() {
 
 // #region 추천 코스
 
-function FeaturedSection() {
-  const recommendations = useCourseRecommendations();
+function FeaturedSection({ category }: { category: string | null }) {
+  const recommendations = useCourseRecommendations(category);
 
   if (recommendations.isPending) {
     return (
@@ -83,7 +85,7 @@ function FeaturedSection() {
     );
   }
 
-  if (recommendations.isError) {
+  if (!recommendations.data) {
     return (
       <View className="px-5 pb-8 pt-4">
         <InlineMessage
@@ -99,7 +101,11 @@ function FeaturedSection() {
     );
   }
 
-  if (recommendations.data.length === 0) {
+  const courses = recommendations.data.pages.flatMap((page) => {
+    return page.courses;
+  });
+
+  if (courses.length === 0) {
     return (
       <View className="px-5 pb-8 pt-4">
         <InlineMessage title="아직 추천할 코스가 없어요" description="검색에서 다른 사람의 코스를 찾아보세요." testID="home.featured.empty" />
@@ -107,16 +113,33 @@ function FeaturedSection() {
     );
   }
 
-  return <FeaturedCarousel courses={recommendations.data} />;
+  function loadMore() {
+    void recommendations.fetchNextPage({ cancelRefetch: false });
+  }
+
+  const canLoadMore = recommendations.hasNextPage && !recommendations.isFetching && !recommendations.isFetchNextPageError;
+
+  return (
+    <>
+      <FeaturedCarousel courses={courses} onEndReached={canLoadMore ? loadMore : undefined} />
+      {recommendations.isFetchingNextPage && (
+        <Text accessibilityLiveRegion="polite" className="px-5 pb-4 text-caption text-muted-foreground">추천 코스를 더 불러오는 중이에요</Text>
+      )}
+      {recommendations.isFetchNextPageError && (
+        <View className="px-5 pb-4">
+          <InlineMessage title="추천 코스를 더 불러오지 못했어요" description={getCourseErrorMessage(recommendations.error)} actionLabel="다시 시도" onAction={loadMore} />
+        </View>
+      )}
+    </>
+  );
 }
 
 // #endregion
 
 // #region 카테고리·인기 장소
 
-function CategoryRankingSection() {
+function CategoryRankingSection({ picked, onSelect }: { picked: string | null; onSelect: (code: string) => void }) {
   const categories = useCategories();
-  const [picked, setPicked] = useState<string>();
 
   if (categories.isPending) {
     return (
@@ -140,7 +163,7 @@ function CategoryRankingSection() {
 
   return (
     <>
-      <CategoryGrid categories={categories.data} selected={category} onSelect={setPicked} />
+      <CategoryGrid categories={categories.data} selected={category} onSelect={onSelect} />
       <RankingSection category={category} />
     </>
   );

@@ -47,7 +47,7 @@ export function CourseDetailScreen({ courseId }: { courseId: number | null }) {
           }} testID="course-detail.error" />
         </View>
       )}
-      {course.data && <PlacePicker course={course.data} />}
+      {course.isSuccess && <PlacePicker course={course.data} />}
     </SafeAreaView>
   );
 }

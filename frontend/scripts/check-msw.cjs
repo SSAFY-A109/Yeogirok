@@ -4,6 +4,53 @@ const { once } = require("node:events");
 const { http, HttpResponse } = require("msw");
 const { onUnhandledRequest } = require("../.expo/msw-check/api/mocks/on-unhandled-request");
 
+async function checkCourseHandlers(origin) {
+  const paths = ["/courses", "/courses/recommendations", "/courses/501", "/main/popular-places"];
+  const headers = { Authorization: "Bearer mock-access-token" };
+
+  async function get(path) {
+    const response = await fetch(`${origin}/api/v1${path}`, { headers });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.success, true);
+    return body.data;
+  }
+
+  await Promise.all(paths.map(async (path) => {
+    const response = await fetch(`${origin}/api/v1${path}`);
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).code, "A001");
+  }));
+
+  const [search, recommendations, detail, popular] = await Promise.all([
+    get("/courses?regionCode=51&duration=DAY_TRIP&transportMode=TRANSIT"),
+    get("/courses/recommendations?regionCode=51&limit=1"),
+    get("/courses/501"),
+    get("/main/popular-places?category=NATURE"),
+  ]);
+
+  assert.deepEqual(search.items.map((course) => {
+    return course.id;
+  }), [502]);
+
+  assert.equal(search.totalCount, 1);
+  assert.equal(search.nextCursor, null);
+  assert.equal(detail.authors.length, 3);
+  assert.equal(detail.days[0].items[0].visitId, 701);
+  assert.ok(popular.items.length > 0 && popular.items.length <= 5);
+
+  assert.ok(popular.items.every((item) => {
+    return item.place.categoryCode === "NATURE";
+  }));
+
+  assert.equal(recommendations.items[0].id, 504);
+  assert.ok(recommendations.nextCursor);
+  const next = await get(`/courses/recommendations?regionCode=51&limit=1&cursor=${encodeURIComponent(recommendations.nextCursor)}`);
+  assert.equal(next.items[0].id, 501);
+  assert.deepEqual(next.basis, recommendations.basis);
+  console.info("코스 MSW: 네 조회 API의 인증, 검색 필터·개수, 추천 커서, 작성자·방문 ID, 인기 장소 필터 확인");
+}
+
 async function check() {
   let networkRequests = 0;
 
@@ -57,6 +104,11 @@ async function check() {
         }
 
         assert.equal(networkRequests, 0, "미등록 서비스 API는 네트워크로 나가면 안 됩니다.");
+
+        if (name === "server") {
+          await checkCourseHandlers(origin);
+          assert.equal(networkRequests, 0);
+        }
 
         for (const path of ["/asset.svg", "/api/v10/resource"]) {
           assert.equal(await (await fetch(`${origin}${path}`)).text(), "external resource");

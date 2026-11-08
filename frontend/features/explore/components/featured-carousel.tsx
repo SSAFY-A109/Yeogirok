@@ -15,10 +15,11 @@ const HIGHLIGHT_OVERLAP = 53;
 const THUMBNAIL_SIZE = 102;
 
 // 손가락으로 한 장씩 넘기는 추천 코스 슬라이드(EXP-04). 아래 화살표와 같은 인덱스를 공유한다.
-export function FeaturedCarousel({ courses }: { courses: FeaturedCourse[] }) {
+export function FeaturedCarousel({ courses, onEndReached }: { courses: FeaturedCourse[]; onEndReached?: () => void }) {
   const listRef = useRef<FlatList<FeaturedCourse>>(null);
   const [width, setWidth] = useState(0);
-  const [index, setIndex] = useState(0);
+  const [scrollIndex, setIndex] = useState(0);
+  const index = Math.min(scrollIndex, courses.length - 1);
   const first = index === 0;
   const last = index === courses.length - 1;
 
@@ -55,6 +56,8 @@ export function FeaturedCarousel({ courses }: { courses: FeaturedCourse[] }) {
               return { length: width, offset: width * itemIndex, index: itemIndex };
             }}
             onMomentumScrollEnd={syncIndex}
+            onEndReached={onEndReached}
+            onEndReachedThreshold={0.5}
             renderItem={({ item }) => {
               return (
                 <View style={{ width }}>
@@ -74,8 +77,12 @@ export function FeaturedCarousel({ courses }: { courses: FeaturedCourse[] }) {
           <Text className="text-h3 text-foreground tabular-nums">{index + 1}</Text>
           <Text className="text-body text-muted-foreground tabular-nums">{`/ ${courses.length}`}</Text>
         </View>
-        <PagerButton label="다음 추천 코스" disabled={last} onPress={() => {
-          return moveTo(index + 1);
+        <PagerButton label="다음 추천 코스" disabled={last && !onEndReached} onPress={() => {
+          if (last) {
+            onEndReached?.();
+          } else {
+            moveTo(index + 1);
+          }
         }} testID="home.featured.next" icon={ChevronRight} />
       </View>
     </View>
@@ -85,7 +92,11 @@ export function FeaturedCarousel({ courses }: { courses: FeaturedCourse[] }) {
 function HeroCourseCard({ course }: { course: FeaturedCourse }) {
   return (
     <View className="overflow-hidden rounded-lg border border-border bg-card">
-      <View className="gap-4 bg-primary-pressed p-5" style={{ minHeight: COVER_HEIGHT }}>
+      <View className="relative gap-4 bg-primary-pressed p-5" style={{ minHeight: COVER_HEIGHT }}>
+        <View pointerEvents="none" className="absolute inset-0">
+          <MediaPhoto uri={course.thumbnailUrl} className="size-full rounded-none bg-primary-pressed" />
+          <View className="absolute inset-0 bg-black/50" />
+        </View>
         <Text className="text-h1 text-primary-foreground">{course.title}</Text>
         <Pressable
           accessibilityRole="button"
@@ -121,7 +132,7 @@ function HeroCourseCard({ course }: { course: FeaturedCourse }) {
       </View>
       <View className="flex-row items-center gap-2 px-2 pb-2 pt-2">
         <AuthorAvatars authors={course.authors} size={20} overlap={4} />
-        <Text className="text-caption text-foreground">{formatCourseFacts(course)}</Text>
+        <Text className="shrink text-caption text-foreground">{`${course.regionName} · ${formatCourseFacts(course)}`}</Text>
       </View>
     </View>
   );
