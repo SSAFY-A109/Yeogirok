@@ -208,8 +208,10 @@ api.interceptors.response.use(
       throw apiError;
     }
 
-    // 액세스 토큰 만료(C005)만 갱신한다. 재요청도 401이면 세션을 종료한다.
-    if (config.authRetried || apiError.code !== "C005") {
+    // 401의 A002(현행)와 C005(이전 계약)는 액세스 토큰 만료다.
+    const tokenExpired = apiError.code === "A002" || apiError.code === "C005";
+
+    if (config.authRetried || !tokenExpired) {
       await invalidateSession();
       throw apiError;
     }
