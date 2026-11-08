@@ -95,10 +95,17 @@ pipeline {
                 // 서버에 SSH 로 들어가, 사람이 손으로 치던 배포 스크립트를 대신 실행한다.
                 // 방금 테스트한 커밋을 DEPLOY_SHA 로 넘겨, 그사이 새 커밋이 들어와도 테스트하지 않은 코드가 나가지 않게 한다.
                 withCredentials([sshUserPrivateKey(credentialsId: 'server-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-                    sh '''
-                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SERVER" \
-                          "DEPLOY_SHA=$COMMIT bash ~/yeogirok/infra-src/infra/scripts/deploy-backend.sh"
-                    '''
+                    script {
+                        // 배포 스크립트의 끝나는 코드로 어떤 실패인지 구분해 알림 문구를 고른다 (deploy-backend.sh 맨 위 설명).
+                        def code = sh(returnStatus: true, script: '''
+                            ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER@$SERVER" \
+                              "DEPLOY_SHA=$COMMIT bash ~/yeogirok/infra-src/infra/scripts/deploy-backend.sh"
+                        ''')
+                        env.DEPLOY_CODE = "${code}"
+                        if (code != 0) {
+                            error("배포 스크립트가 실패했습니다 (끝나는 코드 ${code})")
+                        }
+                    }
                 }
             }
         }
@@ -109,8 +116,25 @@ pipeline {
             script { notifyMattermost('✅ 백엔드 배포 성공', '#2EB67D') }   // 초록
         }
         failure {
-            script { notifyMattermost('❌ 백엔드 배포 실패', '#E01E5A') }   // 빨강
+            script { notifyMattermost(failureTitle(), failureColor()) }
         }
+    }
+}
+
+// 실패 알림 문구와 색. 배포 단계까지 가지 못했으면(테스트 실패 등) DEPLOY_CODE 가 없다.
+def failureTitle() {
+    switch (env.DEPLOY_CODE) {
+        case '2': return '⛔ 백엔드 배포 중단: 서버에 필요한 값이 없음 (서버는 그대로)'
+        case '3': return '⚠️ 백엔드 새 버전이 뜨지 않아 이전 버전으로 되돌림'
+        default:  return '❌ 백엔드 배포 실패'
+    }
+}
+
+def failureColor() {
+    switch (env.DEPLOY_CODE) {
+        case '2': return '#ECB22E'   // 노랑: 서버는 그대로
+        case '3': return '#F2994A'   // 주황: 이전 버전으로 살아 있음
+        default:  return '#E01E5A'   // 빨강
     }
 }
 
