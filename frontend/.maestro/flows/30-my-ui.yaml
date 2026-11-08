@@ -1,5 +1,5 @@
 appId: ${MAESTRO_APP_ID}
-name: My에서 mock 팁과 방명록을 고치고 계정 동작을 취소한다
+name: My에서 팁과 방명록을 수정하고 계정 동작을 취소한다
 ---
 - launchApp:
     clearState: false
@@ -18,49 +18,46 @@ name: My에서 mock 팁과 방명록을 고치고 계정 동작을 취소한다
     id: "my.screen"
 - tapOn:
     id: "my.tips"
-- assertVisible: "내가 남긴 AR 팁 4개"
+- assertVisible: "내가 남긴 AR 팁"
 - tapOn:
-    id: "my-tips.edit-photo"
+    id: "my-tips.edit-1"
 - assertVisible:
     id: "my-tip-edit.body"
 - tapOn:
     id: "my-tip-edit.category-TMI"
 - tapOn:
-    id: "my-tip-edit.remove-photo"
-- assertVisible: "사진을 1장 선택해 주세요."
-- tapOn:
-    id: "my-tip-edit.add-photo"
-- tapOn:
-    id: "my-tip-edit.photo-cafe"
-- tapOn:
     id: "my-tip-edit.save"
-- assertVisible: "TMI · 2026.11.04 등록"
+- extendedWaitUntil:
+    visible: "팁 수정을 완료했어요"
+    timeout: 10000
 - tapOn:
-    id: "my-tips.delete-photo"
+    id: "my-tip-edit.publication-close"
+- assertVisible: "TMI · 공개 중"
+- tapOn:
+    id: "my-tips.delete-1"
 - tapOn:
     id: "my-tips.delete-dialog.cancel"
 - assertVisible:
-    id: "my-tips.card-photo"
+    id: "my-tips.card-1"
 - tapOn:
-    id: "my-tips.delete-photo"
+    id: "my-tips.delete-1"
 - tapOn:
     id: "my-tips.delete-dialog.confirm"
-- assertVisible: "내가 남긴 AR 팁 3개"
 - assertNotVisible:
-    id: "my-tips.card-photo"
+    id: "my-tips.card-1"
 - back
 - tapOn:
     id: "my.footprints"
 - tapOn:
-    id: "my-footprints.row-anmok"
+    id: "my-footprints.row-1"
 - tapOn:
     id: "my-guestbook.body"
 - eraseText
-- inputText: "My page mock note"
+- inputText: "My page guestbook note"
 - hideKeyboard
 - tapOn:
     id: "my-guestbook.save"
-- assertVisible: "My page mock note"
+- assertVisible: "My page guestbook note"
 - back
 - scrollUntilVisible:
     element:

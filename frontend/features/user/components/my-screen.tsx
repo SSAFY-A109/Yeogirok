@@ -10,12 +10,14 @@ import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { useMe } from "@/features/user/api/queries";
 import { mockProfile, mockRecords } from "../mocks/my-data";
 import { useMyMock } from "../mocks/my-provider";
 import { MyLoading, MyUnavailable } from "./my-page";
 
 export function MyScreen() {
-  const { tips, footprints, loginProvider } = useMyMock();
+  const { loginProvider } = useMyMock();
+  const { data: me } = useMe();
   const [logoutOpen, setLogoutOpen] = useState(false);
   const { preview } = useLocalSearchParams<{ preview?: string }>();
 
@@ -45,10 +47,10 @@ export function MyScreen() {
             <View className="gap-3 px-5 pb-6">
               <Text accessibilityRole="header" className="text-h3">내 활동</Text>
               <View className="overflow-hidden rounded-md border border-border">
-                <MenuRow icon={Footprints} label="내 발자취" count={`${footprints.length}곳`} coral divider testID="my.footprints" onPress={() => {
+                <MenuRow icon={Footprints} label="내 발자취" count={me ? `${me.activityCounts.footprints}곳` : undefined} coral divider chevron testID="my.footprints" onPress={() => {
                   router.push("/my/footprints");
                 }} />
-                <MenuRow icon={ScanEye} label="내 팁" count={`${tips.length}개`} testID="my.tips" onPress={() => {
+                <MenuRow icon={ScanEye} label="내 팁" count={me ? `${me.activityCounts.tips}개` : undefined} chevron testID="my.tips" onPress={() => {
                   router.push("/my/tips");
                 }} />
               </View>
@@ -120,12 +122,13 @@ function SmallAction({ label, onPress, testID }: { label: string; onPress: () =>
   return <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={{ top: 6, bottom: 6 }} className="h-8 justify-center rounded-sm border border-border px-3 active:bg-muted" onPress={onPress} testID={testID}><Text className="text-label-sm">{label}</Text></Pressable>;
 }
 
-function MenuRow({ icon, label, count, coral, destructive, divider, onPress, testID }: { icon: LucideIcon; label: string; count?: string; coral?: boolean; destructive?: boolean; divider?: boolean; onPress: () => void; testID: string }) {
+function MenuRow({ icon, label, count, coral, destructive, divider, chevron, onPress, testID }: { icon: LucideIcon; label: string; count?: string; coral?: boolean; destructive?: boolean; divider?: boolean; chevron?: boolean; onPress: () => void; testID: string }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${label}${count ? ` ${count}` : ""}`} className={cn("min-h-button-lg flex-row items-center gap-3 p-4 active:bg-muted", divider && "border-b border-border")} onPress={onPress} testID={testID}>
       <Icon as={icon} size={20} className={destructive ? "text-destructive" : coral ? "text-map-footprint" : "text-icon"} />
       <Text className={cn("flex-1 text-label", destructive && "text-destructive")}>{label}</Text>
-      {count && <><Text className="text-caption text-foreground-secondary">{count}</Text><Icon as={ChevronRight} size={18} className="text-icon" /></>}
+      {count && <Text className="text-caption text-foreground-secondary">{count}</Text>}
+      {chevron && <Icon as={ChevronRight} size={18} className="text-icon" />}
     </Pressable>
   );
 }

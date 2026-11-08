@@ -41,6 +41,20 @@ class TipExperienceModule(private val context: ReactApplicationContext) : ReactC
     init { context.addActivityEventListener(listener) }
     override fun getName() = "TipExperience"
 
+    @ReactMethod fun readPhoto(name: String, promise: Promise) {
+        worker.execute {
+            try {
+                val file = LocalTipStore.photoFile(context, name)
+                val size = file.length()
+                require(file.isFile && size in 1L..(20L * 1024 * 1024))
+                promise.resolve(JSONObject().put("sizeBytes", size)
+                    .put("base64", android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)).toString())
+            } catch (_: Exception) {
+                promise.reject("PHOTO_FAILED", "사진을 읽지 못했어요. 다시 선택해 주세요.")
+            }
+        }
+    }
+
     @ReactMethod fun listTips(promise: Promise) {
         worker.execute {
             try { promise.resolve(LocalTipStore.list(context).toString()) }

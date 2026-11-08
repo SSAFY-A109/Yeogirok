@@ -1,5 +1,6 @@
 import { http, HttpResponse } from "msw";
 
+import { mockDb } from "../db";
 import { failedRefreshTokensFixture, googleServerAuthCodeFixture, meFixture, serviceTokensFixture, socialCredentialsFixture } from "../fixtures/auth";
 
 /** 탈퇴(API-009)는 로그인 후 이 시간 안에 발급된 액세스 토큰만 받는다. */
@@ -119,7 +120,15 @@ export const authHandlers = [
     const accessToken = readBearer(request);
     const provider = (accessToken && issuedAccessTokens.get(accessToken)?.provider) ?? "google";
 
-    return HttpResponse.json({ success: true, data: { id: MOCK_USER_ID, ...meFixture, loginProviders: [provider] } });
+    const footprints = [...mockDb.footprints.values()].filter((item) => {
+      return item.ownerId === MOCK_USER_ID;
+    }).length;
+
+    const tips = [...mockDb.myTips.values()].filter((item) => {
+      return item.ownerId === MOCK_USER_ID && item.detail.status !== "DELETED";
+    }).length;
+
+    return HttpResponse.json({ success: true, data: { id: MOCK_USER_ID, ...meFixture, loginProviders: [provider], activityCounts: { footprints, tips } } });
   }),
   http.delete("*/api/v1/users/me", async ({ request }) => {
     const accessToken = readBearer(request);

@@ -25,7 +25,7 @@ function load(relative) {
 
 const { buildKakaoMapHtml, buildSetMarkersScript, parseKakaoMapMessage } = load("../lib/native/map/kakao-map-bridge.ts");
 const { footprintPinImage } = load("../lib/native/map/footprint-pin.ts");
-const { mockFootprints } = load("../features/user/mocks/my-data.ts");
+const { createFootprintFixtures } = load("../api/mocks/fixtures/footprint.ts");
 const state = { messages: [], markers: [], bounds: [], center: null, clusterer: null, boundsPadding: null, clusterContent: null };
 let sdkScript;
 
@@ -169,11 +169,13 @@ const html = buildKakaoMapHtml("test-public-key", { lat: 37.7794, lng: 128.8784,
 vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
 sdkScript.onload();
 
-const points = mockFootprints.map(({ id, lat, lng }) => {
+const points = createFootprintFixtures().filter(({ ownerId }) => {
+  return ownerId === 1;
+}).map(({ id, latitude: lat, longitude: lng }) => {
   assert.ok(Number.isFinite(lat) && lat >= -90 && lat <= 90);
   assert.ok(Number.isFinite(lng) && lng >= -180 && lng <= 180);
 
-  return { id, lat, lng };
+  return { id: String(id), lat, lng };
 });
 
 assert.equal(new Set(points.map(({ id }) => {
@@ -186,8 +188,8 @@ assert.equal(state.bounds[0].length, 3);
 assert.equal(state.boundsPadding.join(","), "32,32,32,32");
 assert.equal(state.markers[0].options.image.offset.y, footprintPinImage.height / 2);
 state.markers[1].events.click();
-assert.deepEqual(state.messages.at(-1), { type: "point-pressed", id: "anmok" });
-assert.deepEqual(parseKakaoMapMessage(JSON.stringify(state.messages.at(-1))), { type: "point-pressed", id: "anmok" });
+assert.deepEqual(state.messages.at(-1), { type: "point-pressed", id: points[1].id });
+assert.deepEqual(parseKakaoMapMessage(JSON.stringify(state.messages.at(-1))), { type: "point-pressed", id: points[1].id });
 
 vm.runInContext(buildSetMarkersScript([points[1]], footprintPinImage, true), context);
 assert.equal(state.markers.length, 1);

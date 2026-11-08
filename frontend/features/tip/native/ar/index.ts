@@ -1,5 +1,7 @@
 import { NativeModules, Platform } from "react-native";
 
+import type { UploadFile } from "@/features/media/upload";
+import { ContractMismatchError } from "@/lib/contract";
 import { isObject, isPlacementExpired, isTipType, parseLocalTip, parseLocalTips, parsePlacement, parsePhoto, parseTipDetail, parseTipReaction, type CloudPlacement, type TipPhoto, type TipType } from "./contracts";
 
 type GeoBridge = {
@@ -14,6 +16,7 @@ type TipBridge = {
   openTipAR: (id: string) => Promise<unknown>;
   pickPhoto: () => Promise<unknown>;
   capturePhoto: () => Promise<unknown>;
+  readPhoto?: (name: string) => Promise<string>;
   getTipDetail?: (id: string) => Promise<unknown>;
   toggleTipReaction?: (id: string, reaction: string) => Promise<unknown>;
   closeTipDetail?: () => Promise<unknown>;
@@ -155,6 +158,48 @@ export async function addTipPhoto(source: "camera" | "library"): Promise<TipPhot
 
   const result = await action.call(tips);
   return result === null ? null : parsePhoto(result);
+}
+
+export async function prepareTipPhotoUpload(photo: TipPhoto): Promise<UploadFile> {
+  const { tips } = bridges();
+
+  if (!tips.readPhoto) {
+    throw new Error("NATIVE_MODULE_MISSING");
+  }
+
+  const { base64, sizeBytes } = JSON.parse(await tips.readPhoto(photo.photoName));
+
+  if (typeof base64 !== "string" || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > 20 * 1024 * 1024) {
+    throw new ContractMismatchError("photo");
+  }
+
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const bytes = new Uint8Array(sizeBytes);
+  let bits = 0;
+  let buffer = 0;
+  let offset = 0;
+
+  for (const char of base64.replace(/=+$/, "")) {
+    const value = alphabet.indexOf(char);
+
+    if (value < 0) {
+      throw new ContractMismatchError("photo");
+    }
+
+    buffer = (buffer << 6) | value;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[offset++] = (buffer >>> bits) & 255;
+    }
+  }
+
+  if (offset !== sizeBytes) {
+    throw new ContractMismatchError("photo.sizeBytes");
+  }
+
+  return { metadata: { purpose: "TIP_PHOTO", fileName: photo.photoName, contentType: "image/jpeg", sizeBytes }, body: bytes };
 }
 
 export async function saveLocalTip(body: string, placement: CloudPlacement, photo?: TipPhoto | null) {
