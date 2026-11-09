@@ -535,6 +535,22 @@ docker compose exec redis redis-cli config get maxmemory-policy
   | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다 |
 
 - 구글·카카오 키가 아직 없으면 임시 문자열을 넣습니다. 백엔드는 뜨고 그 제공자 로그인만 실패합니다.
+- 선택 키 3개는 비어 있어도 백엔드가 뜹니다. 값을 받으면 서버 `.env`에 넣고 `docker compose up -d backend`로 백엔드만 다시 켭니다(다시 빌드하지 않음).
+
+  | 값 | 없으면 |
+  | --- | --- |
+  | `GOOGLE_WEB_CLIENT_SECRET` (구글 웹 클라이언트 secret) | 구글 회원은 탈퇴할 수 없다 |
+  | `KAKAO_ADMIN_KEY` (카카오 어드민 키) | 카카오 회원 탈퇴 때 연결을 끊지 않고 재시도 대상으로만 남긴다 |
+  | `KAKAO_REST_API_KEY` (카카오 REST API 키) | 발자취 주소와 후보 장소 법정동이 비어 저장된다 |
+
+- 백엔드 팀원의 로컬 `backend/.env`를 그대로 옮기지 않습니다. `JWT_SECRET`, `ROOM_INVITE_TOKEN_KEY`, DB·Redis 값은 로컬 개발용이고, 서버는 서버에서 만든 값을 씁니다. 옮길 것은 구글 웹 클라이언트 ID, 카카오 네이티브 앱 키, 위 선택 키 3개뿐입니다.
+- 비밀 값은 명령 기록에 남지 않게 `read -rs`로 입력합니다.
+
+```bash
+setenv() { sed -i "/^$1=/d" .env; printf '\n%s=%s\n' "$1" "$2" >> .env; }   # 같은 키가 두 번 들어가지 않게 지우고 새로 쓴다
+read -rsp 'GOOGLE_WEB_CLIENT_SECRET: ' v && setenv GOOGLE_WEB_CLIENT_SECRET "$v"; echo
+docker compose up -d backend
+```
 - **순서**: 이 변경을 `infra/dev`에 머지 → 서버에서 infra 코드를 받고 `.env`에 세 값을 넣기 → 백엔드 다시 배포. 위의 Redis를 아직 반영하지 않았다면 그것부터 합니다.
 
 ```bash
