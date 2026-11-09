@@ -21,7 +21,7 @@ public record TipPublishState(
 
 	public enum OperationStatus { QUEUED, RUNNING, SUCCEEDED, FAILED }
 
-	public enum StepStatus { PENDING, SUCCEEDED, FAILED, SKIPPED }
+	public enum StepStatus { QUEUED, SUCCEEDED, FAILED, SKIPPED }
 
 	/** 사진 연결(media)·공간 참조(spatial)·본문(content). spatial·content 는 049 요청 안에서 검증을 마친다. */
 	public record Steps(StepStatus media, StepStatus spatial, StepStatus content) {
@@ -33,7 +33,7 @@ public record TipPublishState(
 	/** @param imagePath 사진이 없으면 null 이고 media 는 SKIPPED */
 	public static TipPublishState queued(String jobId, String imagePath) {
 		return new TipPublishState(jobId, Operation.CREATE, OperationStatus.QUEUED,
-			new Steps(imagePath != null ? StepStatus.PENDING : StepStatus.SKIPPED, StepStatus.SUCCEEDED,
+			new Steps(imagePath != null ? StepStatus.QUEUED : StepStatus.SKIPPED, StepStatus.SUCCEEDED,
 				StepStatus.SUCCEEDED),
 			null, false, imagePath);
 	}
@@ -43,7 +43,7 @@ public record TipPublishState(
 	 */
 	public static TipPublishState queuedUpdate(String jobId, boolean photoChanged, boolean relocated) {
 		return new TipPublishState(jobId, Operation.UPDATE, OperationStatus.QUEUED,
-			new Steps(photoChanged ? StepStatus.PENDING : StepStatus.SKIPPED,
+			new Steps(photoChanged ? StepStatus.QUEUED : StepStatus.SKIPPED,
 				relocated ? StepStatus.SUCCEEDED : StepStatus.SKIPPED, StepStatus.SUCCEEDED),
 			null, false, null);
 	}
@@ -63,8 +63,8 @@ public record TipPublishState(
 			new Error(code, message), retryable, imagePath);
 	}
 
-	/** 아직 끝나지 않은(PENDING) media 단계만 바꾼다. */
+	/** 아직 끝나지 않은(QUEUED) media 단계만 바꾼다. */
 	private Steps media(StepStatus status) {
-		return steps.media() == StepStatus.PENDING ? new Steps(status, steps.spatial(), steps.content()) : steps;
+		return steps.media() == StepStatus.QUEUED ? new Steps(status, steps.spatial(), steps.content()) : steps;
 	}
 }

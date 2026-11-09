@@ -131,7 +131,7 @@ class TipCreateServiceTest {
 
 		TipCreateResponse response = service.create(AUTHOR, command("좋아요", List.of(UPLOAD_ID), SPATIAL));
 
-		assertThat(STATES.states.get(response.tipId()).steps().media()).isEqualTo(TipPublishState.StepStatus.PENDING);
+		assertThat(STATES.states.get(response.tipId()).steps().media()).isEqualTo(TipPublishState.StepStatus.QUEUED);
 		assertThat(events.stream(TipPublishRequested.class))
 			.containsExactly(new TipPublishRequested(response.tipId(), response.jobId(), "tip-photo/" + UPLOAD_ID));
 	}
