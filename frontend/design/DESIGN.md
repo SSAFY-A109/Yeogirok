@@ -157,7 +157,7 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 | `Search / TextField` (418:454) | `components/ui/text-field.tsx` (`Input` 별칭) | `bg-card border-input`, `rounded-sm`, 높이 `h-input`, 좌우 패딩 16, 글자 `text-body-sm`. State Focused → `border-2 border-ring`, Error → `border-destructive` + 필드 아래 오류 문구 |
 | `Search / Textarea` (489:413) | RNR `Textarea` 또는 `Input multiline` | TextField와 같은 테두리·상태·`rounded-sm`. 높이 144, 패딩 16 |
 | `Selection / Dropdown` (489:443) | `components/ui/dropdown.tsx` | State Default·Focused·Open·Disabled. 트리거 높이 52, 글자 `text-label`, 열린 목록의 선택 항목에 체크 아이콘 |
-| `Selection / FilterChip` (418:471) | `components/ui/filter-chip.tsx` | Size Small `h-chip-sm` · Medium `h-chip-md`, 글자는 두 크기 모두 `text-label`, `rounded-sm`. Default `bg-card border-border-strong text-foreground-secondary` · Selected `bg-chip-selected border-ring text-primary-hover`(현재 Figma 원본에는 체크 아이콘 없음) · Disabled `bg-muted text-muted-foreground`(테두리 없음). 터치 영역은 `hitSlop`으로 44 확보 |
+| `Selection / FilterChip` (418:471) | `components/ui/filter-chip.tsx` | Size Small `h-chip-sm` · Medium `h-chip-md`, 글자는 두 크기 모두 `text-label`, `rounded-sm`. Default `bg-card border-border-strong text-foreground-secondary` · Selected `bg-chip-selected border-ring text-primary-hover`(현재 Figma 원본에는 체크 아이콘 없음) · Disabled `bg-muted text-muted-foreground`(테두리 없음). 터치 영역은 `hitSlop`으로 44 확보. 코드 전용 선택 속성: `icon`(글자 앞·세로 배치면 위, 20px `icon-sm`, 평소 `icon` 선만, 선택 시 선 `primary-pressed` + 안쪽 면 `accent` 채움. 면은 선 아래에 따로 깔아 선이 가려지지 않게 한다 — 사용자 요청 2026-11-06), `textClassName`(격자 칸에서 가운데 정렬). W16 카테고리 격자에서 쓴다. **토큰 누락(2026-11-06 확인)**: `primary-hover`·`chip-selected`·`chip-sm`·`chip-md`가 `tokens.json`·`tailwind.config.js`에 생성되지 않아 해당 클래스가 적용되지 않는다. 선택 글자·아이콘은 같은 값(#145C83)인 `primary-pressed`로 대신했고, 선택 배경(`bg-chip-selected`)과 칩 높이(`h-chip-*`)는 Pencil 변수 추가 후 동기화가 필요하다 `TBD` |
 | `Selection / DayChip` (616:1502) | `components/ui/day-chip.tsx` | 68×52, `rounded-md`. Default `bg-card border-border` 요일 `text-label text-foreground` + 날짜 `text-caption text-foreground-secondary` · Selected `bg-primary` + `text-primary-foreground`. Alert On/Off(알림 점) |
 | `Selection / Checkbox` (578:711) | `components/ui/checkbox.tsx` (RNR) | 24×24, `rounded-xs`. Off `bg-card border-input`(1.5) · On `bg-primary` + 체크 아이콘. 터치 영역 44 |
 | `Selection / Radio` (578:712) | `components/ui/radio-group.tsx` (RNR) | 22×22 원형. Off `bg-card border-input`(1.5) · On `border-2 border-primary` + 안쪽 점. 터치 영역 44 |
@@ -179,7 +179,7 @@ Figma Semantic Colors 29개와 `여기록 · Layout` 컬렉션의 색 변수 2�
 | `BottomCta` | `components/ui/bottom-cta.tsx` | Figma `Bottom CTA`. `px-5 pt-3 gap-3` + 아래 안전 영역(최소 12) |
 | `ConfirmDialog` | `components/ui/confirm-dialog.tsx` | Figma `Dialog`(모서리 20 `rounded-xl`, `px-5 py-6 gap-4`, 제목 `text-h3`, 본문 `text-body-sm`). 취소 Secondary + 확인 Primary, 되돌릴 수 없는 동작은 `bg-destructive` |
 | `MediaPhoto` | `components/ui/media-photo.tsx` | Figma `Media / Photo`. 사진이 없으면 `bg-brand-muted`만 보인다 |
-| `PermissionGate` | `components/ui/permission-gate.tsx` | 위치·카메라·사진 권한 사전 안내와 거부 상태(규칙 80, `yeogirok-ui-patterns`) |
+| `PermissionGate` | `components/ui/permission-gate.tsx` | 위치·카메라·사진 권한 사전 안내와 거부 상태(규칙 80, `yeogirok-ui-patterns`). Figma W15-P `Permission card`: `bg-card border-border rounded-lg p-4 gap-4`, 아이콘 칸 40 `bg-brand-muted rounded-md`, 제목 `text-label`, 설명 `text-caption`, Primary Large 버튼 + "나중에" 글자 버튼 |
 
 컴포넌트가 코드에 없으면 위 이름과 variant로 만든다. 이름을 바꾸면 Pencil과 이 표, `design-map.json`을 함께 고친다.
 

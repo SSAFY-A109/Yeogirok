@@ -11,6 +11,9 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ResultReceiver
 import android.os.Build
 import java.time.Instant
 import kotlin.math.hypot
@@ -44,6 +47,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private var addTip: Button? = null
     private var placementActions: View? = null
     private var explorerControls: View? = null
+    private var nearbyLabel: TextView? = null
     private var placementHeader: View? = null
     private var placementPanel: View? = null
     private var placementConfirm: Button? = null
@@ -67,8 +71,22 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private var cloudMode = false
     @Volatile private var navigationMode = false
     private var productMode = false
+    private var publicTips = false
     @Volatile private var exploring = false
-    private val explorerTips = mutableListOf<JSONObject>()
+    @Volatile private var explorerTips: List<JSONObject> = emptyList()
+    private val updatedPublicTips = AtomicReference<List<JSONObject>?>(null)
+    private var searchLocation: JSONObject? = null
+    private var requestedLocation: JSONObject? = null
+    private var refreshRequestId: String? = null
+    private var refreshRetryAt = 0L
+    private var publicEvents: ResultReceiver? = null
+    private val publicReply = object : ResultReceiver(Handler(Looper.getMainLooper())) {
+        override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+            val requestId = resultData?.getString("requestId") ?: return
+            val tips = resultData.getString("tips")?.let { JSONArray(it) }
+            updatePublicTips(requestId, tips, resultData.getString("error"))
+        }
+    }
     @Volatile private var localTip: JSONObject? = null
     private var detailOpen = false
     private var resumeFromDetail = false
@@ -77,6 +95,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private val tapTarget = AtomicReference<PinTapTarget?>(null)
     private data class TipTap(val tip: JSONObject, val target: PinTapTarget, val distanceMeters: Double?)
     private val tipTargets = AtomicReference<List<TipTap>>(emptyList())
+    private val restoredTipDistances = AtomicReference<Map<String, Double>>(emptyMap())
     private val requestedTipId = AtomicReference<String?>(null)
     private var nearbyAnchors: NearbyTipAnchors? = null
     private var navigation: CloudNavigation? = null
@@ -120,21 +139,30 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         cloudMode = intent.getBooleanExtra("cloudMode", false)
         exploring = intent.getBooleanExtra("explorerMode", false)
+        publicTips = intent.getBooleanExtra("publicTips", false)
+        if (publicTips) {
+            @Suppress("DEPRECATION")
+            publicEvents = intent.getParcelableExtra("publicEvents")
+            searchLocation = intent.getStringExtra("searchLocation")?.let { JSONObject(it) }
+        }
         if (exploring) {
             val tips = JSONArray(intent.getStringExtra("tips") ?: "[]")
+            val validTips = mutableListOf<JSONObject>()
             for (i in 0 until tips.length()) {
                 val tip = tips.getJSONObject(i)
-                try { CloudRecord.parse(tip.getJSONObject("cloudRecord").toString(), forResolve = true); explorerTips.add(tip) }
+                try { CloudRecord.parse(tip.getJSONObject("cloudRecord").toString(), forResolve = true); validTips.add(tip) }
                 catch (_: Exception) { /* Expired anchors remain in the RN local list. */ }
             }
+            explorerTips = validTips
+            intent.removeExtra("localTip"); intent.removeExtra("restoreRecord")
             val selected = explorerTips.firstOrNull { it.getString("id") == intent.getStringExtra("selectedTipId") } ?: explorerTips.firstOrNull()
             if (selected != null) {
                 intent.putExtra("localTip", selected.toString())
                 intent.putExtra("restoreRecord", selected.getJSONObject("cloudRecord").toString())
-                intent.putExtra("navigationMode", selected.getJSONObject("cloudRecord").has("discoveryLocation"))
+                intent.putExtra("navigationMode", !publicTips && selected.getJSONObject("cloudRecord").has("discoveryLocation"))
             }
         }
-        localTip = try { intent.getStringExtra("localTip")?.let { LocalTipStore.validate(this, it) } }
+        localTip = try { intent.getStringExtra("localTip")?.let { if (publicTips) JSONObject(it) else LocalTipStore.validate(this, it) } }
             catch (_: Exception) { finish(); return }
         productMode = cloudMode && (localTip != null || intent.getBooleanExtra("productMode", false))
         placingTip = productMode && !exploring && localTip == null
@@ -193,7 +221,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             points = JSONArray().also { points ->
                 explorerTips.forEach { tip -> tip.getJSONObject("cloudRecord").optJSONObject("discoveryLocation")?.let { points.put(it) } }
                 if (points.length() == 0) restore?.optJSONObject("discoveryLocation")?.let { points.put(it) }
-            })
+            }, publicTips = publicTips, onLocation = if (publicTips) { location -> refreshPublicTips(location) } else null)
         layout.addView(viewport, LinearLayout.LayoutParams(-1, 0, 1f))
         val actions = LinearLayout(this)
         confirm = Button(this).apply {
@@ -261,15 +289,21 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 background = theme.background(theme.card, dp(24).toFloat())
                 addView(ArIcon(this@GeoArActivity, "d8eae.svg"), LinearLayout.LayoutParams(dp(8), dp(8)))
                 addView(TextView(this@GeoArActivity).apply {
+                    nearbyLabel = this
                     val count = if (explorerTips.isNotEmpty()) explorerTips.size else if (localTip != null) 1 else 0
-                    text = if (exploring || localTip != null) "저장한 팁 " + count + "개" else "팁 남길 자리"
+                    text = if (publicTips) "주변 공개 팁 ${count}개" else if (exploring || localTip != null) "저장한 팁 " + count + "개" else "팁 남길 자리"
                     textSize = 12f; typeface = theme.medium; setTextColor(theme.foreground); includeFontPadding = false
                 }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(4) })
-                contentDescription = "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
-                if (explorerTips.isNotEmpty()) setOnClickListener {
+                contentDescription = if (publicTips) "지도는 50m 이내 팁 표시. 눌러 5m 이내 팁 선택" else "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
+                setOnClickListener {
+                    val choices = if (publicTips) explorerTips.filter { PublicTipPolicy.inCamera(restoredTipDistances.get()[it.getString("id")]) } else explorerTips
+                    if (choices.isEmpty()) {
+                        Toast.makeText(this@GeoArActivity, if (publicTips) "5m 이내에서 복원된 팁이 없어요. 주변 공간을 비춰 주세요." else "저장한 팁이 없어요.", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
                     AlertDialog.Builder(this@GeoArActivity).setTitle("복원할 팁 선택")
-                        .setItems(explorerTips.map { it.getString("title") }.toTypedArray()) { _, index ->
-                            intent.putExtra("selectedTipId", explorerTips[index].getString("id")); recreate()
+                        .setItems(choices.map { it.getString("title") }.toTypedArray()) { _, index ->
+                            intent.putExtra("selectedTipId", choices[index].getString("id")); recreate()
                         }.show()
                 }
             }
@@ -539,8 +573,54 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         overlay.postInvalidateOnAnimation()
     }
 
+    /** Query from the last successful GPS origin, with one in-flight refresh per visible AR activity. */
+    private fun refreshPublicTips(location: JSONObject) {
+        if (!publicTips || !exploring || placingTip || !resumed || isFinishing || refreshRequestId != null ||
+            SystemClock.elapsedRealtime() < refreshRetryAt) return
+        val origin = searchLocation ?: return
+        if (!PublicTipPolicy.needsRefresh(NavigationPolicy.distance(origin.getDouble("latitude"), origin.getDouble("longitude"),
+                location.getDouble("latitude"), location.getDouble("longitude")))) return
+        val receiver = publicEvents ?: return
+        val requestId = UUID.randomUUID().toString()
+        refreshRequestId = requestId; requestedLocation = location
+        Log.i("YeogirokCloud", "PUBLIC_TIPS_REFRESH_STARTED")
+        receiver.send(0, Bundle().apply {
+            putString("event", JSONObject().put("sessionId", intent.getStringExtra("publicSessionId"))
+                .put("requestId", requestId).put("location", location).toString())
+            putParcelable("reply", publicReply.forIpc())
+        })
+    }
+
+    fun updatePublicTips(requestId: String, tips: JSONArray?, error: String?): Boolean {
+        if (!resumed || isFinishing || refreshRequestId != requestId) return false
+        refreshRequestId = null
+        val origin = requestedLocation
+        requestedLocation = null
+        if (tips == null) {
+            Log.i("YeogirokCloud", "PUBLIC_TIPS_REFRESH_FAILED")
+            refreshRetryAt = SystemClock.elapsedRealtime() + 5_000L
+            nearbyLabel?.text = "주변 팁 갱신 실패"
+            nearbyLabel?.contentDescription = error ?: "잠시 후 다시 확인해요"
+            return true
+        }
+        searchLocation = origin; refreshRetryAt = 0L
+        val next = (0 until tips.length()).map { tips.getJSONObject(it) }
+        Log.i("YeogirokCloud", "PUBLIC_TIPS_REFRESH_SUCCEEDED count=${next.size}")
+        explorerTips = next
+        intent.putExtra("tips", tips.toString()); intent.putExtra("searchLocation", origin?.toString())
+        updatedPublicTips.set(next)
+        navigation?.updatePoints(JSONArray().also { points ->
+            next.forEach { points.put(it.getJSONObject("cloudRecord").getJSONObject("discoveryLocation")) }
+        })
+        nearbyLabel?.text = "주변 공개 팁 ${next.size}개"
+        nearbyLabel?.contentDescription = "지도 50m 이내 팁 ${next.size}개, 카메라 5m 이내 표시"
+        return true
+    }
+
     override fun onPause() {
         resumed = false
+        restoredTipDistances.set(emptyMap())
+        refreshRequestId = null; requestedLocation = null
         tapTarget.set(null); detailRequested.set(false)
         navigation?.pause()
         if (!::surface.isInitialized) { super.onPause(); return }
@@ -559,6 +639,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     }
 
     override fun onDestroy() {
+        publicEvents = null
         nearbyAnchors?.clear(); cloud.reset()
         navigation?.destroy(); navigation = null
         session?.close(); session = null
@@ -870,6 +951,18 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     }
 
     private fun drawCloudFrame(current: Session, frame: Frame, depth: DepthOcclusion?) {
+        if (publicTips && !placingTip) updatedPublicTips.getAndSet(null)?.let { tips ->
+            val previous = localTip
+            val next = tips.firstOrNull { it.getString("id") == previous?.getString("id") } ?: tips.firstOrNull()
+            val sameAnchor = next != null && previous != null && next.getString("id") == previous.getString("id") &&
+                next.getJSONObject("cloudRecord").getString("anchorId") == previous.getJSONObject("cloudRecord").getString("anchorId")
+            if (!sameAnchor) resetAnchor()
+            localTip = next
+            restore = localTip?.getJSONObject("cloudRecord")
+            overlay.measurementMode = restore != null
+            if (nearbyAnchors == null) nearbyAnchors = NearbyTipAnchors(tips, localTip?.getString("id"))
+            else nearbyAnchors?.replaceTips(tips, localTip?.getString("id"))
+        }
         renderedPins = 0; occludedPins = 0; outsidePins = 0
         val cameraTracking = frame.camera.trackingState == TrackingState.TRACKING
         if (productMode) placeAtCenter(frame)
@@ -926,18 +1019,24 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val visible = cameraTracking && validPlacement && !cloud.failed && point?.trackingState == TrackingState.TRACKING && !(placingTip && exploring)
         val reference = measurementAnchor
         val referenceVisible = cameraTracking && reference?.trackingState == TrackingState.TRACKING
-        val projection = if (visible) renderPin(point!!.pose, overlay.markerSelected, depth,
+        val frameDistances = mutableMapOf<String, Double>()
+        val primaryDistance = if (visible) PublicTipPolicy.arDistance(frame.camera.pose.translation, point!!.pose.translation) else null
+        if (localTip != null && primaryDistance != null) frameDistances[localTip!!.getString("id")] = primaryDistance
+        val projection = if (visible && (!publicTips || placingTip || PublicTipPolicy.inCamera(primaryDistance))) renderPin(point!!.pose, overlay.markerSelected, depth,
             localTip?.optString("tipType"), localTip?.optString("id")) else null
         overlay.screenPoint = projection?.takeIf { it.visible }
         tapTarget.set(if (localTip != null && projection?.visible == true)
             PinTapTarget(projection, SystemClock.elapsedRealtime()) else null)
-        val sheetLocal = if (visible) frame.camera.displayOrientedPose.inverse().transformPoint(point!!.pose.translation) else null
-        val sheetDistance = sheetLocal?.let { kotlin.math.sqrt(it.sumOf { value -> value.toDouble() * value }) }
+        val sheetDistance = primaryDistance
         val otherPins = if (exploring && !placingTip && restore != null && (!navigationMode || navigation?.canStartResolve == true))
             nearbyAnchors?.update(current, frame) { pose, tip ->
-                renderPin(pose, overlay.selectedTipId == tip.getString("id"), depth, tip.optString("tipType"), tip.getString("id"))
+                val distance = PublicTipPolicy.arDistance(frame.camera.pose.translation, pose.translation)
+                if (distance != null) frameDistances[tip.getString("id")] = distance
+                if (publicTips && !PublicTipPolicy.inCamera(distance)) PinProjection(guidance = "실제 AR 거리 5m 이내에서 팁 표시")
+                else renderPin(pose, overlay.selectedTipId == tip.getString("id"), depth, tip.optString("tipType"), tip.getString("id"))
             } ?: emptyList() else emptyList()
         overlay.otherPins = otherPins
+        restoredTipDistances.set(frameDistances)
         val frameRendered = renderedPins
         val frameOccluded = occludedPins
         val frameOutside = outsidePins
@@ -956,6 +1055,13 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         if (visibilityCode != lastVisibility || visibilityAt - lastVisibilityAt >= 5_000L) {
             lastVisibility = visibilityCode; lastVisibilityAt = visibilityAt
             Log.i("YeogirokCloud", "VISIBILITY reason=$visibilityCode rendered=$frameRendered occluded=$frameOccluded outside=$frameOutside depthAvailable=${depth != null}")
+            if (publicTips && !placingTip) {
+                val nearest = frameDistances.values.minOrNull()
+                val gate = if (explorerTips.isEmpty()) "NO_TIPS" else if (nearest == null) "AR_NOT_RESTORED"
+                    else if (PublicTipPolicy.inCamera(nearest)) "IN_RANGE" else "AR_OUTSIDE_5M"
+                val accuracy = navigation?.visitLocation?.let { JSONObject(it).optDouble("accuracyMeters") }
+                Log.i("YeogirokCloud", "PUBLIC_TIPS_GATE reason=$gate count=${explorerTips.size} arDistanceMeters=$nearest accuracyMeters=${accuracy?.toInt()}")
+            }
         }
         val now = SystemClock.elapsedRealtime()
         val targets = mutableListOf<TipTap>()
@@ -965,6 +1071,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val selectedId = if (detailRequested.getAndSet(false)) requestedTipId.getAndSet(null) else null
         val selected = targets.firstOrNull { it.tip.getString("id") == selectedId }
         if (selected != null) runOnUiThread {
+            if (publicTips && (selected.distanceMeters == null || selected.distanceMeters > 5)) {
+                Toast.makeText(this, "팁에서 5m 이내로 이동하면 내용을 볼 수 있어요.", Toast.LENGTH_SHORT).show()
+                return@runOnUiThread
+            }
             if (resumed && !isFinishing && tipTargets.get().any { it.tip.getString("id") == selected.tip.getString("id") && SystemClock.elapsedRealtime() - it.target.atMs in 0..500 } && !detailOpen) {
                 overlay.markerSelected = selected.tip.getString("id") == localTip?.getString("id")
                 overlay.selectedTipId = selected.tip.getString("id")
@@ -972,6 +1082,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 try {
                     startActivityForResult(Intent(this, TipDetailSheet::class.java).apply {
                         putExtra("tipId", selected.tip.getString("id"))
+                        putExtra("publicTip", publicTips)
                         selected.distanceMeters?.let { putExtra("distanceMeters", it) }
                     }, detailRequestCode)
                 } catch (_: Exception) {
@@ -991,6 +1102,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
         val trackingMessage = when {
             !cameraTracking -> if (productMode) productTrackingHint(frame) else "카메라 추적 대기: ${frame.camera.trackingFailureReason}"
+            publicTips && !placingTip && primaryDistance != null && !PublicTipPolicy.inCamera(primaryDistance) -> "복원된 팁까지 약 %.1fm예요. 실제 거리 5m 이내에서 표시돼요.".format(primaryDistance)
             productMode && cloud.authorizationFailed -> "Keyless 인증에 실패했어요. Google Cloud의 앱 등록을 확인해 주세요."
             productMode && cloud.failed -> "이 팁의 위치를 복원하지 못했어요. 위에서 팁을 다시 선택해 보세요."
             productMode && cloud.busy -> "저장했던 공간 위치를 찾고 있어요."
@@ -1066,6 +1178,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
         val productSaveHint = when {
             cloud.authorizationFailed -> "Keyless 인증에 실패했어요. Google Cloud의 앱 등록을 확인한 뒤 다시 시도해 주세요."
+            cloud.datasetFailed -> "주변 공간의 특징을 충분히 저장하지 못했어요. 모서리·가구가 함께 보이도록 주변을 비춘 뒤 다시 놓아 주세요."
             cloud.failed -> "위치를 저장하지 못했어요. 네트워크를 확인한 뒤 ‘저장 다시 시도’를 눌러 주세요."
             cloud.busy -> "팁 위치를 저장하고 있어요. 잠시 기다려 주세요."
             !cameraTracking -> productTrackingHint(frame)
@@ -1107,13 +1220,14 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     when {
                         frameRendered > 0 -> "마커를 눌러 팁을 확인하세요" + if ((nearbyAnchors?.failedCount ?: 0) > 0) "\n일부 위치를 복원하지 못했어요" else ""
                         !cameraTracking -> productTrackingHint(frame)
+                        publicTips && !PublicTipPolicy.inCamera(primaryDistance) -> trackingMessage
                         cloud.busy -> "저장한 공간을 찾고 있어요. 주변 벽과 사물을 천천히 비춰 주세요."
                         frameOccluded > 0 -> "팁이 앞의 물체에 가려져 있어요. 옆으로 움직여 확인해 주세요."
                         frameOutside > 0 -> "${direction ?: "주변을 둘러보세요"} · 팁이 화면 밖에 있어요."
                         primaryPaused -> "저장한 위치를 다시 찾고 있어요. 주변 공간을 천천히 비춰 주세요."
                         else -> trackingMessage
                     }
-                } else if (exploring && explorerTips.isEmpty()) "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
+                } else if (exploring && explorerTips.isEmpty()) if (publicTips) "50m 안에 공개된 팁이 없어요. ＋로 첫 팁을 남겨 보세요." else "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
                 else if (exploring) centerHint else productSaveHint
                 if (status.text.toString() != nextStatus) status.text = nextStatus
                 confirm.isEnabled = enabled

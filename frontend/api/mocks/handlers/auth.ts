@@ -124,8 +124,8 @@ export const authHandlers = [
       return item.ownerId === MOCK_USER_ID;
     }).length;
 
-    const tips = [...mockDb.myTips.values()].filter((item) => {
-      return item.ownerId === MOCK_USER_ID && item.detail.status !== "DELETED";
+    const tips = [...mockDb.tips.values()].filter((item) => {
+      return item.detail.author.id === MOCK_USER_ID && item.state.status !== "DELETED";
     }).length;
 
     return HttpResponse.json({ success: true, data: { id: MOCK_USER_ID, ...meFixture, loginProviders: [provider], activityCounts: { footprints, tips } } });

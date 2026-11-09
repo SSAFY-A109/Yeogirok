@@ -210,12 +210,14 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 
 | 뮤테이션 | 무효화(invalidate) | 즉시 반영(setQueryData) |
 | --- | --- | --- |
-| `POST /footprints` (API-041) | `footprintKeys.all`, `statisticsKeys.all` | — |
+| `POST /footprints` (API-041) | `footprintKeys.all`, `statisticsKeys.all`, `userKeys.me()` | — |
 | `PATCH /footprints/{id}` (API-044) | `footprintKeys.lists`, `footprintKeys.detail(id)` | — |
-| `DELETE /footprints/{id}` (API-045) | `footprintKeys.lists`, `userKeys.me()` | 상세 캐시 제거 |
-| `PATCH /tips/{id}` (API-054) | 접수 시 `tipKeys.status(id)`. 상태 조회에서 작업 성공 확인 후 `tipKeys.lists`, `tipKeys.detail(id)` | — |
-| `DELETE /tips/{id}` | `tipKeys.mine`, `userKeys.me()` | 상세·상태 캐시 제거 |
-| `PUT /tips/{id}/reaction` (API-052) | 완료 후 `tipKeys.detail(id)` | 낙관적 반영 → 실패 시 롤백 |
+| `DELETE /footprints/{id}` (API-045) | `footprintKeys.lists`, `statisticsKeys.all`, `userKeys.me()` | 상세 캐시 제거 |
+| `PUT /tips/{id}/reaction` (API-052) | `tipKeys.detail(id)` stale 처리, 이전 위치로 자동 재조회하지 않음 | 선택 반응 낙관적 반영 → 실패 시 롤백, 성공 시 서버 집계 반영 |
+| `POST /tips` (API-049) | `tipKeys.mine()`, `userKeys.me()` | `tipId`로 API-050 진행 확인, 202를 게시 완료로 표시하지 않음 |
+| `PATCH /tips/{id}` · `POST …/retry` (API-054·051) | `tipKeys.status(id)` 초기화 후 새 작업 확인, 수정 시 본인 상세 재조회 | 이전 성공 본문·사진은 작업 성공 전 유지 |
+| API-050에서 `operationStatus=SUCCEEDED` 확인 | `tipKeys.mine()`, 공개 상세·주변 검색 stale 처리 | `useTipPublicationRefresh` 호출 |
+| `DELETE /tips/{id}` (API-055) | 본인 목록, `userKeys.me()`, 주변 검색 stale 처리 | 본인 상세·공개 상세·상태 캐시 제거 |
 | `POST /rooms` (API-021) | `roomKeys.list()` | 응답 상세 → `roomKeys.detail(id)` |
 | `PATCH /rooms/{id}` (API-023) | `roomKeys.list()`, `roomKeys.places(roomId)`, `scheduleKeys.room(roomId)` | 응답 상세 → `roomKeys.detail(roomId)` |
 | `DELETE /rooms/{id}/members/me` (가정, TBD) | `roomKeys.list()` | — (나간 방의 캐시는 닫히는 화면이 다시 요청하지 않도록 바로 지우지 않고 gcTime에 맡긴다) |
@@ -231,6 +233,21 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | `POST /auth/logout`·`DELETE /users/me` (API-007·009) | `queryClient.clear()`, SecureStore 토큰 삭제, 업로드 대기열 비우기 | — |
 
 ## 6. 목록·지도·작업·업로드
+
+### AR 팁 계약 반영 (2026-11-06)
+
+사용자가 이 대화에 제공한 API-047~055·090·012·086 명세를 `features/tip/`, `features/media/`의 API 계층과 MSW에 반영했다. 연결된 Notion은 API-086 페이지를 404로 반환했고, wmux 명령을 사용할 수 없어 Swagger의 서버 반영 여부는 미확인이다. 이 단락은 연결·미확정 사항의 기록이며 계약 복사본은 두지 않는다.
+
+- 탐색·현장 상세의 위치는 POST 본문으로만 보낸다. 새 위치 측정마다 `createTipLocationSession`을 호출한다. 쿼리 키는 무작위 세션 ID와 팁 ID만 사용하고 위치 쿼리의 `gcTime`은 0이다. 화면 이탈·위치 재측정 후 이전 세션을 재사용하지 않는다. `canInteract`는 상세·반응 호출 시 새 위치 검증을 생략하는 근거가 아니다.
+- 본문은 CRLF·CR을 LF로 정규화하고, 앞뒤 공백은 보존하며 공백 포함 120자를 검사한다. 사진은 업로드 UUID 0~1개이고 미첨부의 `media=SKIPPED`는 정상 상태다. 반응 API에는 토글 명령 대신 `LIKE/DISLIKE/NONE` 최종 상태를 보낸다.
+- 업로드는 API-012 → 별도 인증 없는 S3 PUT → API-086 READY 순서다. `useUploadMedia`는 파일별로 사용하며 같은 파일 객체의 재시도는 전송 성공 후 완료 확인만 반복한다. 다른 파일은 새 파일 객체로 전달한다. 만료·파일 검증 실패는 새 세션을 사용한다. MB 바이트 환산이 미정이므로 클라이언트에 새 크기 임계값을 가정하지 않고 서버 검증을 따른다.
+- API-050의 `error`는 상세가 미정이므로 불투명 객체로 유지한다. placement는 앱 v1 형식으로 보내고 조회 시 객체를 보존한다. 작업 상태 `null`·`UNKNOWN`은 성공으로 해석하지 않는다. 처리 상태 조회 실패는 게시 실패와 구분하고 자동 확인은 최대 120초 분량으로 제한한다.
+- 이 명세의 C004(버전)·C005(멱등키)·C008~010(위치)는 기존 도메인의 같은 코드와 의미가 다르다. `getTipErrorMessage`는 팁 요청 문맥에서 해석하며 다른 도메인의 오류 규칙을 바꾸지 않는다. 새 명세의 A001~003과 기존 공통 인증 갱신 코드(C005)의 대응은 공통 인증 계약 확인이 필요하다.
+- AR 작성·주변 탐색·공개 상세·반응과 내 팁 목록·원격 수정/삭제·현장 재배치를 연결했다. 등록·수정 결과를 받으면 사용자 ID별로 미완료 tipId를 기기에 보관하고 재진입 시 API-050을 확인한다. CREATE의 REGISTERING/FAILED 목록도 서버에서 복원하며 공개 중인 UPDATE 작업은 기기 보관 ID로 찾는다. 기기 보관이 실패해도 서버의 접수 성공을 실패로 바꾸지 않는다.
+- 같은 날 사용자 후속 확인으로 공급자는 `ARCORE_CLOUD_ANCHOR`, referenceId는 Cloud Anchor ID(최대 255자), expiresAt은 필수 미래 일시로 확정됐다. UTC ISO 시각을 KST `YYYY-MM-DD HH:mm:ss+09`로 바꾸며 소수 초는 버린다. 팁 종류는 PHOTO/FOOD/CAFE/TIP/TMI이고 등록 필수·수정 선택·탐색/공개 상세/본인 상세 응답에 포함한다. 최종 사용자 확인(2026-11-06)으로 API 종류 필드는 기존 `tipType`을 대체한 `category`다. 화면·기존 로컬 AR 모델의 종류 필드는 API 경계에서 변환한다. 탐색 요청의 category 필터는 계속 없으며 가까운 순 최대 10개를 표시한다.
+- 앱이 보내는 placement v1 필드는 `schemaVersion: 1`, `anchorType: "CLOUD"`, `authorizationMode: "KEYLESS"` 세 가지다. Cloud Anchor 자체가 공간 원점·방향을 복원하므로 localPose·세션·기기명·operation·복원 오차·GPS를 보내지 않는다. 앵커 ID와 만료는 spatialReference에만 둔다. 네이티브는 서버 응답용 공개 복원 기록을 별도 검증하며 로컬 실험 기록의 hostSessionId 등을 요구하지 않는다. 배치 Hit의 기존 0.2~5m 제한과 기기 GPS 증거를 사용하고 지도 선택 위치로 등록하지 않는다. placement 크기 상한은 서버 결정 대기다.
+- 네이티브 사진은 기존 JPEG 재인코딩으로 EXIF 위치를 제거한 후 원본 binary로 PUT한다. S3 전송도 앱의 별도 axios 경로를 사용하므로 개발 MSW와 실서버가 같은 요청 흐름을 사용한다. API-048 사진 URL을 다시 발급해야 하면 새 GPS로 API-048을 다시 호출하고 API-013으로 우회하지 않는다.
+- 검증: `pnpm tip:check`(설치된 도구 직접 실행 시 `node scripts/check-tip-api.cjs`). MSW는 메타데이터·상태 전이·거리 정책을 확인하기 위한 목이며 실제 S3 파일 내용·공간 참조의 공급자 검증을 수행하지 않는다. 서버의 미정인 위치 정확도·유효 시각 기준을 목에 임의로 넣지 않는다.
 
 ### 6-1. 커서 페이지네이션
 

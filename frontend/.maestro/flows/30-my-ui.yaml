@@ -20,7 +20,7 @@ name: My에서 팁과 방명록을 수정하고 계정 동작을 취소한다
     id: "my.tips"
 - assertVisible: "내가 남긴 AR 팁"
 - tapOn:
-    id: "my-tips.edit-1"
+    id: "my-tips.edit-2"
 - assertVisible:
     id: "my-tip-edit.body"
 - tapOn:
@@ -34,17 +34,17 @@ name: My에서 팁과 방명록을 수정하고 계정 동작을 취소한다
     id: "my-tip-edit.publication-close"
 - assertVisible: "TMI · 공개 중"
 - tapOn:
-    id: "my-tips.delete-1"
+    id: "my-tips.delete-2"
 - tapOn:
     id: "my-tips.delete-dialog.cancel"
 - assertVisible:
-    id: "my-tips.card-1"
+    id: "my-tips.card-2"
 - tapOn:
-    id: "my-tips.delete-1"
+    id: "my-tips.delete-2"
 - tapOn:
     id: "my-tips.delete-dialog.confirm"
 - assertNotVisible:
-    id: "my-tips.card-1"
+    id: "my-tips.card-2"
 - back
 - tapOn:
     id: "my.footprints"

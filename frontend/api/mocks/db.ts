@@ -1,10 +1,14 @@
+import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
 import type { ScheduleBodyDto } from "../../features/schedule/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
 import { createFootprintFixtures, type MockFootprint } from "./fixtures/footprint";
-import { createMyTipFixtures, type MockTip, type MockTipUpdate } from "./fixtures/tip";
+import { createTipFixtures, type MockTip } from "./fixtures/tip";
 import type { MockIdempotentResponse, MockUpload } from "./fixtures/media";
+
+/** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
+type MockIdempotencyRecord = { requestHash: string; response: CreateFootprintResponseDto };
 
 /** 목 서버가 들고 있는 일정 초안 작업. `readyAt`이 지나야 완료로 보인다. */
 export type MockScheduleDraft = {
@@ -20,52 +24,57 @@ export type MockScheduleDraft = {
 };
 
 type MockDb = {
+  tips: Map<number, MockTip>;
+  uploads: Map<string, MockUpload>;
+  tipIdempotency: Map<string, MockIdempotentResponse>;
+  uploadIdempotency: Map<string, MockIdempotentResponse>;
+  nextTipId: number;
+  nextUploadId: number;
   rooms: Map<number, MockRoom>;
   preferences: Map<number, RecommendationPreferenceDto>;
+  footprints: Map<number, MockFootprint>;
+  footprintRequests: Map<string, MockIdempotencyRecord>;
   scheduleDrafts: Map<number, MockScheduleDraft>;
   nextRoomId: number;
   nextRoomPlaceId: number;
   nextRecommendationRequestId: number;
+  nextFootprintId: number;
   nextScheduleDraftId: number;
-  footprints: Map<number, MockFootprint>;
-  myTips: Map<number, MockTip>;
-  tipUpdates: Map<string, MockTipUpdate>;
-  uploads: Map<string, MockUpload>;
-  uploadIdempotency: Map<string, MockIdempotentResponse>;
-  nextUploadId: number;
-  nextTipJobId: number;
-  nextTipImageId: number;
 };
 
 function createDb(): MockDb {
   const rooms = createRoomFixtures();
+  const footprints = createFootprintFixtures();
 
   return {
+    tips: createTipFixtures(),
+    uploads: new Map(),
+    tipIdempotency: new Map(),
+    uploadIdempotency: new Map(),
+    nextTipId: 100,
+    nextUploadId: 1,
+
     rooms: new Map(rooms.map((room) => {
       return [room.detail.roomId, room];
     })),
 
     preferences: new Map(),
+
+    footprints: new Map(footprints.map((item) => {
+      return [item.id, item];
+    })),
+
+    footprintRequests: new Map(),
     scheduleDrafts: new Map(),
     nextRoomId: 100,
     nextRoomPlaceId: 9000,
     nextRecommendationRequestId: 1,
+
+    nextFootprintId: Math.max(...footprints.map((item) => {
+      return item.id;
+    })) + 1,
+
     nextScheduleDraftId: 1,
-
-    footprints: new Map(createFootprintFixtures().map((item) => {
-      return [item.id, item];
-    })),
-
-    myTips: new Map(createMyTipFixtures().map((item) => {
-      return [item.detail.tipId, item];
-    })),
-
-    tipUpdates: new Map(),
-    uploads: new Map(),
-    uploadIdempotency: new Map(),
-    nextUploadId: 1,
-    nextTipJobId: 1,
-    nextTipImageId: 800,
   };
 }
 

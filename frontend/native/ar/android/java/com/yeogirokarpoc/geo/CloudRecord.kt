@@ -40,10 +40,23 @@ object CloudRecord {
     fun parse(raw: String, forResolve: Boolean = false): JSONObject {
         require(raw.length <= 65536) { "기록이 너무 큽니다." }
         val r = JSONObject(raw)
+        if (r.optString("kind") == "yeogirok-public-cloud-anchor") {
+            require(r.getInt("schemaVersion") == 1 && r.getString("anchorType") == "CLOUD")
+            val id = r.getString("anchorId")
+            require(id.isNotBlank() && id.length <= 255 && id.none { it.isWhitespace() || it.isISOControl() })
+            val expiry = Instant.parse(r.getString("expiresAtEstimate"))
+            if (forResolve) require(Instant.now().isBefore(expiry))
+            val location = r.getJSONObject("discoveryLocation")
+            require(NavigationPolicy.coordinates(location.getDouble("latitude"), location.getDouble("longitude")))
+            return JSONObject().put("schemaVersion", 1).put("kind", "yeogirok-public-cloud-anchor")
+                .put("anchorType", "CLOUD").put("anchorId", id).put("expiresAtEstimate", expiry.toString())
+                .put("ttlDays", 365).put("discoveryLocation", JSONObject().put("latitude", location.getDouble("latitude"))
+                    .put("longitude", location.getDouble("longitude")))
+        }
         require(r.getInt("schemaVersion") == 1 && r.getString("kind") == KIND &&
             r.getString("anchorType") == "CLOUD") { "Cloud Anchor 검증 JSON이 필요합니다." }
         val id = r.getString("anchorId")
-        require(id.isNotBlank() && id.length <= 512 && id.none { it.isWhitespace() || it.isISOControl() })
+        require(id.isNotBlank() && id.length <= 255 && id.none { it.isWhitespace() || it.isISOControl() })
         require(r.get("ttlDays") is Number)
         val ttlDays = r.getInt("ttlDays")
         require(r.getDouble("ttlDays") == ttlDays.toDouble())

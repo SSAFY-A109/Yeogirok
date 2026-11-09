@@ -2,6 +2,10 @@ package com.yeogirokarpoc.geo
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ResultReceiver
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.*
 import com.facebook.react.uimanager.ViewManager
@@ -15,12 +19,14 @@ class GeoValidationPackage : ReactPackage {
 class GeoValidationModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
     private var pending: Promise? = null
     private var pendingCloud = false
+    private var publicReply: ResultReceiver? = null
     private val requestCode = 9107
     private val listener = object : BaseActivityEventListener() {
         override fun onActivityResult(activity: Activity, request: Int, result: Int, data: Intent?) {
             if (request != requestCode) return
             val promise = pending ?: return
             pending = null
+            publicReply = null
             if (result == Activity.RESULT_OK) {
                 val raw = data?.getStringExtra("record")
                 try {
@@ -71,6 +77,40 @@ class GeoValidationModule(private val context: ReactApplicationContext) : ReactC
         launch(GeoArActivity::class.java, null, "restoreRecord", promise, cloudMode = true, productMode = true, explorerMode = true, selectedTipId = selectedId)
     }
 
+    private fun publicTips(raw: String): org.json.JSONArray {
+        val tips = org.json.JSONArray(raw)
+        require(tips.length() <= 10)
+        for (i in 0 until tips.length()) {
+            val tip = tips.getJSONObject(i)
+            require(tip.getString("id").toLong() > 0 && tip.getBoolean("publicTip"))
+            CloudRecord.parse(tip.getJSONObject("cloudRecord").toString(), forResolve = true)
+        }
+        return tips
+    }
+
+    @ReactMethod fun openPublicTipExplorer(raw: String, location: String, sessionId: String, promise: Promise) {
+        try {
+            val tips = publicTips(raw)
+            val origin = org.json.JSONObject(location)
+            require(NavigationPolicy.coordinates(origin.getDouble("latitude"), origin.getDouble("longitude")))
+            launch(GeoArActivity::class.java, null, "restoreRecord", promise, cloudMode = true,
+                productMode = true, explorerMode = true, publicTips = tips.toString(), searchLocation = location, publicSessionId = sessionId)
+        } catch (_: Exception) { promise.reject("INVALID_RECORD", "공개 팁의 공간 정보를 확인하지 못했어요.") }
+    }
+
+    @ReactMethod fun updatePublicTips(requestId: String, raw: String?, error: String?, promise: Promise) {
+        try {
+            val tips = raw?.let { publicTips(it) }
+            context.runOnUiQueueThread {
+                val receiver = publicReply
+                receiver?.send(0, Bundle().apply {
+                    putString("requestId", requestId); putString("tips", tips?.toString()); putString("error", error)
+                })
+                promise.resolve(receiver != null)
+            }
+        } catch (_: Exception) { promise.reject("INVALID_RECORD", "공개 팁의 갱신 정보를 확인하지 못했어요.") }
+    }
+
     @ReactMethod fun openCloudMap(raw: String, promise: Promise) {
         if (GeoRecord.key(context, "com.yeogirokarpoc.KAKAO_NATIVE_APP_KEY").isBlank()) {
             promise.reject("KAKAO_KEY_MISSING", "카카오 키 설정 후 Android 재빌드가 필요합니다."); return
@@ -107,7 +147,8 @@ class GeoValidationModule(private val context: ReactApplicationContext) : ReactC
     }
 
     private fun launch(target: Class<out Activity>, raw: String?, extra: String, promise: Promise, cloudMode: Boolean = false,
-                       navigationMode: Boolean = false, productMode: Boolean = false, explorerMode: Boolean = false, selectedTipId: String? = null) {
+                       navigationMode: Boolean = false, productMode: Boolean = false, explorerMode: Boolean = false, selectedTipId: String? = null,
+                       publicTips: String? = null, searchLocation: String? = null, publicSessionId: String? = null) {
         val activity = context.currentActivity
         if (activity == null) { promise.reject("NO_ACTIVITY", "앱 화면이 준비되지 않았습니다."); return }
         val validated = try { raw?.let {
@@ -121,6 +162,7 @@ class GeoValidationModule(private val context: ReactApplicationContext) : ReactC
             if (pending != null) { promise.reject("BUSY", "이미 검증 화면이 열려 있습니다."); return@runOnUiThread }
             pending = promise
             pendingCloud = cloudMode
+            publicReply = null
             try {
                 activity.startActivityForResult(Intent(activity, target).apply {
                     validated?.let { putExtra(extra, it) }
@@ -128,11 +170,25 @@ class GeoValidationModule(private val context: ReactApplicationContext) : ReactC
                     putExtra("navigationMode", navigationMode)
                     putExtra("productMode", productMode)
                     putExtra("explorerMode", explorerMode)
-                    if (explorerMode) putExtra("tips", LocalTipStore.list(context).toString())
+                    if (explorerMode) putExtra("tips", publicTips ?: LocalTipStore.list(context).toString())
+                    putExtra("publicTips", publicTips != null)
+                    searchLocation?.let { putExtra("searchLocation", it) }
+                    publicSessionId?.let { putExtra("publicSessionId", it) }
+                    if (publicTips != null) putExtra("publicEvents", object : ResultReceiver(Handler(Looper.getMainLooper())) {
+                        @Suppress("DEPRECATION")
+                        override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                            if (pending !== promise) return
+                            val event = resultData?.getString("event") ?: return
+                            publicReply = resultData.getParcelable("reply") ?: return
+                            // React exists only in the main process; the AR process communicates over Binder.
+                            context.emitDeviceEvent("ArTipNearbyRefresh", event)
+                        }
+                    }.forIpc())
                     selectedTipId?.let { putExtra("selectedTipId", it) }
                 }, requestCode)
             } catch (_: Exception) {
                 pending = null
+                publicReply = null
                 promise.reject("OPEN_FAILED", "검증 화면을 열지 못했습니다.")
             }
         }
@@ -142,6 +198,7 @@ class GeoValidationModule(private val context: ReactApplicationContext) : ReactC
         context.removeActivityEventListener(listener)
         pending?.reject("RELOADED", "앱이 다시 로드되어 검증 요청이 취소됐습니다.")
         pending = null
+        publicReply = null
         super.invalidate()
     }
 }

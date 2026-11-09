@@ -68,6 +68,15 @@ async function main() {
   assert.equal(detailActivities[0].$["android:process"], undefined);
   assert.equal(detailActivities[0].$["android:theme"], "@style/ArTipDetailTheme");
 
+  const arActivities = manifestMod.modResults.manifest.application[0].activity.filter((item) => {
+    return item.$["android:name"] === "com.yeogirokarpoc.geo.GeoArActivity";
+  });
+
+  assert.equal(arActivities[0].$["android:process"], ":geospatial");
+  const isolatedArSource = fs.readFileSync(path.resolve(__dirname, "../native/ar/android/java/com/yeogirokarpoc/geo/GeoArActivity.kt"), "utf8");
+  // The isolated AR process intentionally skips SoLoader/React initialization.
+  assert.doesNotMatch(isolatedArSource, /import com\.facebook\.react\.|\.reactHost\b|emitDeviceEvent/);
+
   const gradleMod = { modResults: { language: "groovy", contents: "\n// BEGIN YEOGIROK AR\nold-api-key-setup\n// END YEOGIROK AR\n" } };
   mods.withAppBuildGradle(gradleMod); mods.withAppBuildGradle(gradleMod);
   assert.equal((gradleMod.modResults.contents.match(/implementation 'com.google.android.gms:play-services-auth:/g) ?? []).length, 1);
@@ -91,6 +100,7 @@ async function main() {
   let failReaction = false;
   let detailCloseCount = 0;
   let photoResult = JSON.stringify({ photoName: "00000000-0000-4000-8000-000000000001.jpg", photoUri: "file:///test/tip-photos/00000000-0000-4000-8000-000000000001.jpg" });
+  let cameraPermission = "granted";
   const geo = {
     getStatus: async () => {
       return { arcoreAuthMode: "KEYLESS", kakaoKeyConfigured: false };
@@ -167,7 +177,11 @@ async function main() {
   const freshAdapter = () => {
     return load("../features/tip/native/ar/index.ts", {
       "./contracts": contracts,
-      "react-native": { Platform: { OS: "android" }, NativeModules: { GeoValidation: geo, TipExperience: tips } },
+      "react-native": { Platform: { OS: "android" }, NativeModules: { GeoValidation: geo, TipExperience: tips }, PermissionsAndroid: { PERMISSIONS: { CAMERA: "camera" }, RESULTS: { GRANTED: "granted" },
+
+        request: async () => {
+          return cameraPermission;
+        } } },
     });
   };
 
@@ -243,6 +257,9 @@ async function main() {
   const photo = await ar.addTipPhoto("library");
   assert.equal(photo.photoName, "00000000-0000-4000-8000-000000000001.jpg");
   assert.deepEqual(await ar.addTipPhoto("camera"), photo);
+  cameraPermission = "denied";
+  await assert.rejects(ar.addTipPhoto("camera"), /CAMERA_PERMISSION/);
+  cameraPermission = "granted";
   photoResult = null;
   assert.equal(await ar.addTipPhoto("library"), null);
 
@@ -273,27 +290,44 @@ async function main() {
   assert.equal(writes.length, writesBeforeDraft);
   await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, null), /TYPE_REQUIRED/);
   await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, "unknown"), /TYPE_REQUIRED/);
-  await assert.rejects(ar.saveTipDraft("", draftPlacement, null, "포토"), /PHOTO_REQUIRED/);
+  await assert.rejects(ar.saveTipDraft("", draftPlacement, null, "포토"), /BODY_REQUIRED/);
+  await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, "포토"), /BODY_REQUIRED/);
+  await assert.rejects(ar.saveTipDraft(" \n\t ", draftPlacement, photo, "포토"), /BODY_REQUIRED/);
   await assert.rejects(ar.saveTipDraft("x".repeat(121), draftPlacement, photo, "포토"), /DRAFT_BODY_TOO_LONG/);
   const expiredDraft = contracts.parsePlacement(record("expired-draft", "2000-01-01T00:00:00Z"));
-  await assert.rejects(ar.saveTipDraft("", expiredDraft, photo, "포토"), /ANCHOR_EXPIRED/);
+  await assert.rejects(ar.saveTipDraft("본문", expiredDraft, null, "포토"), /ANCHOR_EXPIRED/);
   assert.equal(writes.length, writesBeforeDraft);
   failSave = true;
-  await assert.rejects(ar.saveTipDraft("", draftPlacement, photo, "포토"), /SAVE_FAILED/);
+  await assert.rejects(ar.saveTipDraft("본문", draftPlacement, null, "포토"), /SAVE_FAILED/);
   assert.equal(writes.length, writesBeforeDraft);
   failSave = false;
-  const savedDraft = await ar.saveTipDraft("", draftPlacement, photo, "포토");
-  assert.equal(savedDraft.body, "");
+  const savedDraft = await ar.saveTipDraft(" 팁 ", draftPlacement, null, "포토");
+  assert.equal(savedDraft.body, "팁");
+  assert.equal(savedDraft.photo, null);
   assert.equal(savedDraft.tipType, "포토");
   assert.equal(savedDraft.draft, true);
-  assert.equal(writes.at(-1).photoName, photo.photoName);
+  assert.equal(writes.at(-1).photoName, null);
+  assert.equal((await reopened.loadArTips()).tips.at(-1).body, "팁");
+  assert.equal((await reopened.loadArTips()).tips.at(-1).photo, null);
   await ar.saveTipDraft("x".repeat(120), draftPlacement, photo, "TMI");
+  assert.equal(writes.at(-1).photoName, photo.photoName);
   assert.equal(writes.at(-1).body.length, 120);
   assert.equal((await reopened.loadArTips()).tips.at(-1).tipType, "TMI");
   const malformedDraft = { ...stored.at(-1), tipType: "unknown" };
 
   assert.throws(() => {
     return contracts.parseLocalTip(JSON.stringify(malformedDraft));
+  }, /INVALID_RESULT/);
+
+  const withoutPhoto = { ...stored.at(-1) };
+  delete withoutPhoto.photoName;
+  assert.equal(contracts.parseLocalTip(JSON.stringify(withoutPhoto)).photo, null);
+
+  // Drafts saved before content became required must remain readable.
+  assert.equal(contracts.parseLocalTip(JSON.stringify({ ...stored.at(-1), body: "" })).body, "");
+
+  assert.throws(() => {
+    return contracts.parseLocalTip(JSON.stringify({ ...stored.at(-1), photoName: "invalid.jpg" }));
   }, /INVALID_RESULT/);
 
   assert.equal((await ar.loadTipDetail(savedDraft.id)).tip.id, savedDraft.id);
@@ -319,7 +353,7 @@ async function main() {
   console.log("AR compose checks passed: photo selection/capture/cancel, local URI, body limits, location evidence");
   console.log("AR Keyless TTL checks passed: mixed 1/365-day reload, reopen, expiry, invalid lifetimes");
   console.log("AR Keyless config checks passed: stale API key removal, prebuild idempotence, auth dependency");
-  console.log("AR service flow checks passed: no placeholder, required type/photo, optional 120-char body, draft reload, failure/retry");
+  console.log("AR service flow checks passed: no placeholder, required type/body, optional photo, 120-char limit, draft reload, failure/retry");
   console.log("AR shared sheet bridge checks passed: internal host, detail read, persisted reaction toggle/cancel, failure preservation, close");
 }
 

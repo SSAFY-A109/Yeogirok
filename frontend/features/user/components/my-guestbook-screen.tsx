@@ -13,8 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { useCategories } from "@/features/common/api/queries";
 import { useDeleteFootprint, useFootprint, useUpdateGuestbook } from "@/features/footprint/api/queries";
-import { getFootprintErrorMessage, isFootprintConflict, isFootprintUnavailable } from "@/features/footprint/errors";
-import { GUESTBOOK_LIMIT, formatFootprintDate, guestbookLength, normalizeGuestbookBody, type FootprintDetail } from "@/features/footprint/model";
+import { getMyFootprintErrorMessage, isFootprintConflict, isFootprintUnavailable } from "@/features/footprint/errors";
+import { FOOTPRINT_BODY_MAX_LENGTH, formatFootprintDate, countFootprintBody, normalizeGuestbookBody, type FootprintDetail } from "@/features/footprint/model";
 import { MyFootprintMap } from "./my-footprint-map";
 import { MyLoading, MyPage, MyUnavailable } from "./my-page";
 
@@ -32,11 +32,11 @@ function GuestbookDetail({ id }: { id: number }) {
   }
 
   if (isFootprintUnavailable(query.error)) {
-    return <MyUnavailable title={getFootprintErrorMessage(query.error)} />;
+    return <MyUnavailable title={getMyFootprintErrorMessage(query.error)} />;
   }
 
   if (!query.data) {
-    return <MyUnavailable title={getFootprintErrorMessage(query.error)} onRetry={() => {
+    return <MyUnavailable title={getMyFootprintErrorMessage(query.error)} onRetry={() => {
       void query.refetch();
     }} />;
   }
@@ -61,7 +61,7 @@ function GuestbookForm({ footprint, reload }: { footprint: FootprintDetail; relo
   const error = update.error ?? deletion.error;
   const conflicted = isFootprintConflict(error);
   const busy = update.isPending || deletion.isPending || reloading;
-  const length = guestbookLength(body);
+  const length = countFootprintBody(body);
 
   function done(message: string) {
     toast.show({ message });
@@ -88,7 +88,7 @@ function GuestbookForm({ footprint, reload }: { footprint: FootprintDetail; relo
   }
 
   if (isFootprintUnavailable(error)) {
-    return <MyUnavailable title={getFootprintErrorMessage(error)} />;
+    return <MyUnavailable title={getMyFootprintErrorMessage(error)} />;
   }
 
   return (
@@ -106,9 +106,9 @@ function GuestbookForm({ footprint, reload }: { footprint: FootprintDetail; relo
           })}</View></View>
           <View className="gap-3"><View className="flex-row items-center gap-2"><Text className="text-label">방명록</Text><View className="flex-row items-center gap-1 rounded-full bg-muted px-2 py-1"><Icon as={Lock} size={12} className="text-icon" /><Text className="text-label-sm text-foreground-secondary">나만 볼 수 있어요</Text></View></View><Textarea value={body} editable={!busy} onChangeText={(value) => {
             setBody(normalizeGuestbookBody(value));
-          }} placeholder="여행의 순간을 기록해 보세요" accessibilityLabel="나만 보는 방명록, 최대 200자" testID="my-guestbook.body" /><Text className={length > GUESTBOOK_LIMIT ? "text-right text-caption text-destructive tabular-nums" : "text-right text-caption text-muted-foreground tabular-nums"}>{length} / {GUESTBOOK_LIMIT}</Text></View>
+          }} placeholder="여행의 순간을 기록해 보세요" accessibilityLabel="나만 보는 방명록, 최대 200자" testID="my-guestbook.body" /><Text className={length > FOOTPRINT_BODY_MAX_LENGTH ? "text-right text-caption text-destructive tabular-nums" : "text-right text-caption text-muted-foreground tabular-nums"}>{length} / {FOOTPRINT_BODY_MAX_LENGTH}</Text></View>
           <View className="flex-row gap-2"><Icon as={Info} size={16} className="text-muted-foreground" /><Text className="flex-1 text-caption text-muted-foreground">고쳐도 방문 횟수는 늘지 않아요. 위치 방문 시각 카테고리는 바꿀 수 없어요.</Text></View>
-          {error && <Text accessibilityRole="alert" className="text-body-sm text-destructive" testID="my-guestbook.save-error">{getFootprintErrorMessage(error)}</Text>}
+          {error && <Text accessibilityRole="alert" className="text-body-sm text-destructive" testID="my-guestbook.save-error">{getMyFootprintErrorMessage(error)}</Text>}
           {reloadFailed && <Text accessibilityRole="alert" className="text-body-sm text-destructive">최신 내용을 불러오지 못했어요.</Text>}
           {conflicted && <Button variant="outline" loading={reloading} onPress={() => {
             void readLatest();
@@ -120,7 +120,7 @@ function GuestbookForm({ footprint, reload }: { footprint: FootprintDetail; relo
           }}><Text className="text-destructive">발자취 삭제</Text></Button>
         </View>
       </ScrollView>
-      <BottomCta><Button size="lg" className="w-full" loading={update.isPending} disabled={busy || conflicted || length > GUESTBOOK_LIMIT || (body.trim() ? body : null) === base.body} testID="my-guestbook.save" onPress={() => {
+      <BottomCta><Button size="lg" className="w-full" loading={update.isPending} disabled={busy || conflicted || length > FOOTPRINT_BODY_MAX_LENGTH || (body.trim() ? body : null) === base.body} testID="my-guestbook.save" onPress={() => {
         deletion.reset();
         update.mutate({ id: base.id, version: base.version, body: body.trim() ? body : "" }, { onSuccess: () => {
           done("방명록을 저장했어요");

@@ -18,8 +18,9 @@ import type { UpdateTipInput } from "@/features/tip/api/tip.api";
 import { TipPublication } from "@/features/tip/components/tip-publication";
 import { getTipErrorMessage, isTipUnavailable } from "@/features/tip/errors";
 import { normalizeTipBody, TIP_BODY_MAX_LENGTH, TIP_TYPE_LABELS, TIP_TYPE_VALUES, type MyTipDetail, type TipTypeDto } from "@/features/tip/model";
-import { addTipPhoto, arErrorMessage, prepareTipPhotoUpload } from "@/features/tip/native/ar";
+import { addTipPhoto, arErrorMessage } from "@/features/tip/native/ar";
 import type { TipPhoto } from "@/features/tip/native/ar/contracts";
+import { prepareTipPhotoUpload } from "@/features/tip/native/ar/public";
 import { MyLoading, MyPage, MyUnavailable } from "./my-page";
 
 type Photo = { kind: "remote"; url: string; imageId: number } | { kind: "local"; value: TipPhoto } | null;
@@ -66,7 +67,7 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
   const [photo, setPhoto] = useState<Photo>(tip.photos[0] ? { kind: "remote", url: tip.photos[0].url, imageId: tip.photos[0].imageId } : null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const [job, setJob] = useState<{ id?: string } | null>(null);
+  const [job, setJob] = useState<{ id?: string; recoveryStored?: boolean } | null>(null);
   const [uncertain, setUncertain] = useState(false);
 
   const [photoError, setPhotoError] = useState(() => {
@@ -80,7 +81,7 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
   const upload = useUploadMedia();
   const changedPhoto = photo?.kind === "local" || (photo === null && tip.photos.length > 0);
   const changed = body !== tip.body || (tipType !== null && tipType !== tip.tipType) || changedPhoto;
-  const bodyLength = Array.from(body).length;
+  const bodyLength = body.length;
   const disabled = working || uncertain;
   const conflicted = isApiError(update.error) && update.error.status === 409 && update.error.code === "C004";
 
@@ -140,7 +141,7 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
       }
 
       const result = await update.mutateAsync(submission.current);
-      setJob({ id: result.jobId });
+      setJob({ id: result.jobId, recoveryStored: result.recoveryStored });
     } catch (cause) {
       setError(getTipErrorMessage(cause));
       const unknown = !isApiError(cause) || cause.status === 0 || cause.status >= 500;
@@ -161,7 +162,7 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
   }
 
   if (job) {
-    return <TipPublication tipId={tip.tipId} jobId={job.id} onClose={() => {
+    return <TipPublication tipId={tip.tipId} jobId={job.id} recoveryStored={job.recoveryStored} source="my" onClose={() => {
       if (job.id) {
         router.back();
       } else {
@@ -213,6 +214,9 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
     <Button variant="outline" disabled={working} onPress={() => {
       setJob({});
     }}><Text>게시·수정 상태 확인</Text></Button>
+    <Button variant="outline" disabled={disabled || changed} testID="my-tip-edit.reposition" onPress={() => {
+      router.push({ pathname: "/ar-tip", params: { repositionTipId: tip.tipId } });
+    }}><Text>현장에서 AR 위치 다시 놓기</Text></Button>
     {error && <Text accessibilityRole="alert" className="text-body-sm text-destructive">{error}</Text>}
     {conflicted && <Button variant="outline" onPress={() => {
       void reload();

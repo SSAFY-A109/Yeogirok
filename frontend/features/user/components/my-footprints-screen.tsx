@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { useCategories } from "@/features/common/api/queries";
 import { useFootprints } from "@/features/footprint/api/queries";
-import { getFootprintErrorMessage, isFootprintUnavailable } from "@/features/footprint/errors";
+import { getMyFootprintErrorMessage, isFootprintUnavailable } from "@/features/footprint/errors";
 import { footprintPeriod, formatFootprintDate } from "@/features/footprint/model";
 import { MyFootprintMap } from "./my-footprint-map";
 import { MyLoading, MyPage, MyUnavailable } from "./my-page";
@@ -47,7 +47,7 @@ export function MyFootprintsScreen() {
 
   return (
     <MyPage title="내 발자취" testID="my-footprints.screen">
-      {query.isPending ? <MyLoading /> : isFootprintUnavailable(query.error) || query.isError && !query.data ? <MyUnavailable title={getFootprintErrorMessage(query.error)} onRetry={() => {
+      {query.isPending ? <MyLoading /> : isFootprintUnavailable(query.error) || query.isError && !query.data ? <MyUnavailable title={getMyFootprintErrorMessage(query.error)} onRetry={() => {
         void query.refetch();
       }} /> : <FlatList
         data={footprints}

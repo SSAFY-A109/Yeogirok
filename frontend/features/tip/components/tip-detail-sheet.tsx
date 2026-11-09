@@ -3,6 +3,9 @@ import "../../../global.css";
 import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
+import { PublicTipDetail } from "./public-tip-detail";
 import { useFonts } from "expo-font";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -13,11 +16,11 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { arErrorMessage, closeTipDetail, loadTipDetail, toggleTipReaction } from "../native/ar";
 
-type Props = { tipId?: unknown; distanceMeters?: unknown };
+type Props = { tipId?: unknown; distanceMeters?: unknown; publicTip?: unknown };
 type Detail = Awaited<ReturnType<typeof loadTipDetail>>;
 
 export function ArTipDetail(props: Props) {
-  return <SafeAreaProvider><TipDetailSheet {...props} /></SafeAreaProvider>;
+  return <QueryClientProvider client={queryClient}><SafeAreaProvider>{props.publicTip === true && typeof props.tipId === "string" && /^\d+$/.test(props.tipId) ? <PublicTipDetail tipId={Number(props.tipId)} /> : <TipDetailSheet {...props} />}</SafeAreaProvider></QueryClientProvider>;
 }
 
 function TipDetailSheet({ tipId, distanceMeters }: Props) {

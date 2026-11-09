@@ -1,30 +1,44 @@
-import type { MyTipDetailDto, TipOperationResponseDto, TipStatusDto } from "../../../features/tip/model";
-import { mockDateTime } from "./footprint";
+import type { CreateTipRequestDto, TipDetailDto, TipStatusDto, UpdateTipRequestDto } from "../../../features/tip/model";
 
-export type MockTip = {
-  ownerId: number;
-  detail: MyTipDetailDto;
-  lastStatus: TipStatusDto;
-  pending: { readyAt: number; candidate: MyTipDetailDto } | null;
+export const tipFixture: TipDetailDto = {
+  category: "PHOTO",
+  id: 1,
+  body: "입구 오른쪽에서 사진을 찍으면 좋아요.",
+  createdAt: "2026-11-01 09:00:00+09",
+  publishedAt: "2026-11-01 09:00:05+09",
+  photos: [],
+  author: { id: 2, nickname: "여행자" },
+  location: { latitude: 37.5665, longitude: 126.978 },
+  spatialReference: { provider: "ARCORE_CLOUD_ANCHOR", referenceId: "mock-spatial-reference", expiresAt: "2100-01-01 00:00:00+09" },
+  placement: { schemaVersion: 1, anchorType: "CLOUD", authorizationMode: "KEYLESS" },
+  reactions: { likes: 1, dislikes: 0, myReaction: null },
 };
 
-export type MockTipUpdate = { tipId: number; request: string; result: TipOperationResponseDto };
+export type MockTip = {
+  detail: TipDetailDto;
+  updatedAt: string;
+  state: TipStatusDto;
+  pending: CreateTipRequestDto | UpdateTipRequestDto | null;
+  uploadIds: string[];
+  checks: number;
+};
 
-export function createMyTipFixtures(): MockTip[] {
-  const categories = ["PHOTO", "RESTAURANT", "CAFE", "TIP"];
-
-  const tips: MockTip[] = categories.map((category, index) => {
-    const tipId = index + 1;
-    const date = mockDateTime(Date.now() - index * 86_400_000);
-
-    return {
-      ownerId: 1,
-      detail: { tipId, category, body: "한적할 때 들러 보세요.", photos: [], status: "PUBLISHED", version: 1, publishedAt: date, createdAt: date, updatedAt: date },
-      lastStatus: { tipId, status: "PUBLISHED", version: 1, steps: { media: "SKIPPED", spatial: "SUCCEEDED", content: "SUCCEEDED" }, jobId: null, operation: null, operationStatus: null, error: null, retryable: false },
-      pending: null,
+export function createTipFixtures(): Map<number, MockTip> {
+  return new Map(["PHOTO", "PHOTO", "FOOD", "CAFE", "TIP"].map((category, index) => {
+    const id = index + 1;
+    const detail = {
+      ...tipFixture,
+      id,
+      category,
+      author: { id: id === 1 ? 2 : 1, nickname: id === 1 ? "여행자" : "나" },
+      location: id <= 2 ? { ...tipFixture.location } : { latitude: 37.77 + index * 0.01, longitude: 128.94 },
+      reactions: { ...tipFixture.reactions },
     };
-  });
-
-  const first = tips[0];
-  return [...tips, { ...first, ownerId: 2, detail: { ...first.detail, tipId: 99 }, lastStatus: { ...first.lastStatus, tipId: 99 } }];
+    return [id, {
+      detail,
+      updatedAt: detail.createdAt,
+      state: { tipId: id, status: "PUBLISHED", jobId: null, steps: { media: "SKIPPED", spatial: "SUCCEEDED", content: "SUCCEEDED" }, error: null, retryable: false, operation: null, operationStatus: null, version: 1 },
+      pending: null, uploadIds: [], checks: 0,
+    }];
+  }));
 }

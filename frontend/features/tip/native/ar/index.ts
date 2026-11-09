@@ -1,7 +1,5 @@
-import { NativeModules, Platform } from "react-native";
+import { NativeModules, PermissionsAndroid, Platform } from "react-native";
 
-import type { UploadFile } from "@/features/media/upload";
-import { ContractMismatchError } from "@/lib/contract";
 import { isObject, isPlacementExpired, isTipType, parseLocalTip, parseLocalTips, parsePlacement, parsePhoto, parseTipDetail, parseTipReaction, type CloudPlacement, type TipPhoto, type TipType } from "./contracts";
 
 type GeoBridge = {
@@ -16,7 +14,6 @@ type TipBridge = {
   openTipAR: (id: string) => Promise<unknown>;
   pickPhoto: () => Promise<unknown>;
   capturePhoto: () => Promise<unknown>;
-  readPhoto?: (name: string) => Promise<string>;
   getTipDetail?: (id: string) => Promise<unknown>;
   toggleTipReaction?: (id: string, reaction: string) => Promise<unknown>;
   closeTipDetail?: () => Promise<unknown>;
@@ -150,6 +147,17 @@ export async function chooseDiscoveryLocation(placement: CloudPlacement): Promis
 
 export async function addTipPhoto(source: "camera" | "library"): Promise<TipPhoto | null> {
   const { tips } = bridges();
+
+  if (source === "camera" && Platform.OS === "android") {
+    const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
+      title: "팁 사진 촬영", message: "팁에 첨부할 사진을 촬영하는 데 카메라를 사용해요.", buttonPositive: "카메라 허용",
+    });
+
+    if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
+      throw new Error("CAMERA_PERMISSION");
+    }
+  }
+
   const action = source === "camera" ? tips.capturePhoto : tips.pickPhoto;
 
   if (typeof action !== "function") {
@@ -158,48 +166,6 @@ export async function addTipPhoto(source: "camera" | "library"): Promise<TipPhot
 
   const result = await action.call(tips);
   return result === null ? null : parsePhoto(result);
-}
-
-export async function prepareTipPhotoUpload(photo: TipPhoto): Promise<UploadFile> {
-  const { tips } = bridges();
-
-  if (!tips.readPhoto) {
-    throw new Error("NATIVE_MODULE_MISSING");
-  }
-
-  const { base64, sizeBytes } = JSON.parse(await tips.readPhoto(photo.photoName));
-
-  if (typeof base64 !== "string" || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > 20 * 1024 * 1024) {
-    throw new ContractMismatchError("photo");
-  }
-
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const bytes = new Uint8Array(sizeBytes);
-  let bits = 0;
-  let buffer = 0;
-  let offset = 0;
-
-  for (const char of base64.replace(/=+$/, "")) {
-    const value = alphabet.indexOf(char);
-
-    if (value < 0) {
-      throw new ContractMismatchError("photo");
-    }
-
-    buffer = (buffer << 6) | value;
-    bits += 6;
-
-    if (bits >= 8) {
-      bits -= 8;
-      bytes[offset++] = (buffer >>> bits) & 255;
-    }
-  }
-
-  if (offset !== sizeBytes) {
-    throw new ContractMismatchError("photo.sizeBytes");
-  }
-
-  return { metadata: { purpose: "TIP_PHOTO", fileName: photo.photoName, contentType: "image/jpeg", sizeBytes }, body: bytes };
 }
 
 export async function saveLocalTip(body: string, placement: CloudPlacement, photo?: TipPhoto | null) {
@@ -228,8 +194,8 @@ export async function saveTipDraft(body: string, placement: CloudPlacement, phot
     throw new Error("TYPE_REQUIRED");
   }
 
-  if (!photo) {
-    throw new Error("PHOTO_REQUIRED");
+  if (!body.trim()) {
+    throw new Error("BODY_REQUIRED");
   }
 
   if (body.length > 120) {
@@ -241,7 +207,7 @@ export async function saveTipDraft(body: string, placement: CloudPlacement, phot
   }
 
   return parseLocalTip(await bridges().tips.saveTip(JSON.stringify({
-    draft: true, tipType, title: tipType, body: body.trim(), photoName: photo.photoName,
+    draft: true, tipType, title: tipType, body: body.trim(), photoName: photo?.photoName ?? null,
     cloudRecord: JSON.parse(placement.raw),
   })));
 }
@@ -256,12 +222,13 @@ export function arErrorMessage(error: unknown): string {
     case "KAKAO_KEY_MISSING": return "지도 설정이 필요해요. 카카오 JavaScript 키와 웹 플랫폼의 localhost 등록을 확인하고 개발 앱을 다시 빌드해 주세요.";
     case "BODY_REQUIRED": return "팁 내용을 입력해 주세요.";
     case "TYPE_REQUIRED": return "팁 종류를 선택해 주세요.";
-    case "PHOTO_REQUIRED": return "팁 사진을 첨부해 주세요.";
     case "DRAFT_BODY_TOO_LONG": return "팁 내용은 120자까지 입력할 수 있어요.";
     case "BODY_TOO_LONG": return "이번 PoC는 팁 내용을 2,000자까지 저장할 수 있어요.";
     case "PHOTO_FAILED": return "사진을 불러오지 못했어요. 20MB 이하의 다른 사진을 선택해 주세요.";
     case "CAPTURE_FAILED": return "카메라를 열지 못했어요. 사진 선택으로 다시 시도해 주세요.";
     case "LOCATION_REQUIRED": return "지도에 탐색 위치를 먼저 찍어 주세요.";
+    case "LOCATION_PERMISSION": return "현재 위치 권한을 허용한 뒤 다시 시도해 주세요.";
+    case "CAMERA_PERMISSION": return "카메라 권한을 허용하거나 기존 사진을 선택해 주세요.";
     case "ANCHOR_EXPIRED": return "공간 정보의 예상 유효 시간이 지났어요. 현장에서 자리를 다시 저장해 주세요.";
     case "TIP_UNAVAILABLE": return "이 팁을 불러올 수 없어요. 목록을 다시 확인해 주세요.";
     case "INVALID_RESULT":

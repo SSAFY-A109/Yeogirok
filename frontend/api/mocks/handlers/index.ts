@@ -4,22 +4,24 @@ import { authHandlers } from "./auth";
 import { commonHandlers } from "./common";
 import { courseHandlers } from "./course";
 import { footprintHandlers } from "./footprint";
-import { mediaHandlers } from "./media";
 import { placeHandlers } from "./place";
 import { recommendationHandlers } from "./recommendation";
 import { roomHandlers } from "./room";
 import { scheduleHandlers } from "./schedule";
-import { myTipHandlers } from "./tip";
+import { tipHandlers } from "./tip";
+import { mediaHandlers } from "./media";
+import { statisticsHandlers } from "./statistics";
 
 export const handlers: RequestHandler[] = [
   ...authHandlers,
   ...commonHandlers,
   ...courseHandlers,
   ...footprintHandlers,
-  ...mediaHandlers,
   ...placeHandlers,
   ...recommendationHandlers,
   ...roomHandlers,
   ...scheduleHandlers,
-  ...myTipHandlers,
+  ...tipHandlers,
+  ...mediaHandlers,
+  ...statisticsHandlers,
 ];

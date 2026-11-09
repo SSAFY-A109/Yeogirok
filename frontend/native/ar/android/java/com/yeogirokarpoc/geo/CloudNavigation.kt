@@ -16,7 +16,8 @@ import org.json.JSONObject
 
 /** Main-thread location/map lifecycle. The AR render thread reads only immutable/volatile snapshots. */
 class CloudNavigation(private val activity: Activity, viewport: FrameLayout, target: JSONObject?,
-                      private val compact: Boolean = false, points: org.json.JSONArray = org.json.JSONArray()) : SensorEventListener {
+                      private val compact: Boolean = false, private var points: org.json.JSONArray = org.json.JSONArray(),
+                      private val publicTips: Boolean = false, private val onLocation: ((JSONObject) -> Unit)? = null) : SensorEventListener {
     private val latitude = target?.getDouble("latitude")
     private val longitude = target?.getDouble("longitude")
     private val hasTarget = target != null
@@ -115,6 +116,7 @@ class CloudNavigation(private val activity: Activity, viewport: FrameLayout, tar
     }
     fun destroy() { pause(); destroyed = true; mapView?.destroy(); mapView = null }
     fun permissionResult() { if (active) requestLocation(false) }
+    fun updatePoints(next: org.json.JSONArray) { points = next; if (active) tick() }
     fun startScan() { manualResolve = true; if (active) tick() }
     fun setInsets(top: Int, bottom: Int) {
         (mapCard.layoutParams as FrameLayout.LayoutParams).apply { topMargin = top + dp(8) }.also { mapCard.layoutParams = it }
@@ -199,6 +201,16 @@ class CloudNavigation(private val activity: Activity, viewport: FrameLayout, tar
         visitLocation = if (fresh && sample!!.time > 0) JSONObject().put("source", "DEVICE_GPS")
             .put("latitude", sample.latitude).put("longitude", sample.longitude).put("accuracyMeters", sample.accuracy.toDouble())
             .put("capturedAt", java.time.Instant.ofEpochMilli(sample.time).toString()).toString() else null
+        if (publicTips) {
+            val visible = org.json.JSONArray()
+            if (fresh) for (i in 0 until points.length()) {
+                val point = points.getJSONObject(i)
+                if (PublicTipPolicy.inMap(NavigationPolicy.distance(sample!!.latitude, sample.longitude,
+                        point.getDouble("latitude"), point.getDouble("longitude")))) visible.put(point)
+            }
+            mapView?.updatePoints(visible)
+            if (!placing) visitLocation?.let { onLocation?.invoke(JSONObject(it)) }
+        }
         if (placing) return
         val state = ar
         val liveAr = now - state.at in 0..1_000

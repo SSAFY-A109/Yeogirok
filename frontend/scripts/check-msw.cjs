@@ -4,7 +4,8 @@ const { once } = require("node:events");
 const { http, HttpResponse } = require("msw");
 const { onUnhandledRequest } = require("../.expo/msw-check/api/mocks/on-unhandled-request");
 const { resetMockDb } = require("../.expo/msw-check/api/mocks/db");
-const { footprintPeriod, guestbookLength } = require("../.expo/msw-check/features/footprint/model");
+const { footprintPeriod, countFootprintBody } = require("../.expo/msw-check/features/footprint/model");
+const { formatServerDateTime } = require("../.expo/msw-check/lib/date");
 
 async function checkCourseHandlers(origin) {
   const paths = ["/courses", "/courses/recommendations", "/courses/501", "/main/popular-places"];
@@ -73,11 +74,11 @@ async function checkMyHandlers(origin) {
   }
 
   assert.deepEqual(footprintPeriod("month", new Date("2026-03-31T13:00:00Z")), { from: "2026-02-28", to: "2026-03-31" });
-  assert.equal(guestbookLength("가".repeat(198) + "\r\n😀"), 200);
+  assert.equal(countFootprintBody("가".repeat(198) + "\r\n😀"), 200);
   assert.equal(await request("/users/me/footprints", { status: 401, authenticated: false }), "A001");
   assert.equal(await request("/users/me/tips", { status: 401, authenticated: false }), "A001");
   assert.equal(await request("/footprints/99", { status: 403 }), "F002");
-  assert.equal(await request("/users/me/tips/99", { status: 403 }), "T002");
+  assert.equal(await request("/users/me/tips/1", { status: 403 }), "T002");
 
   const first = await request("/users/me/footprints?category=NATURE&limit=1");
   assert.equal(first.items[0].id, 1);
@@ -98,32 +99,55 @@ async function checkMyHandlers(origin) {
   assert.equal((await request(`/footprints/1?version=${cleared.version}`, { method: "DELETE" })).statisticsStatus, "APPLIED");
   assert.equal(await request("/footprints/1", { status: 404 }), "F001");
 
+  const statsPath = "/visit-statistics?bbox=126.97,37.55,126.99,37.57&zoom=16";
+
+  const visits = async () => {
+    return (await request(statsPath)).cells.reduce((sum, cell) => {
+      return sum + cell.count;
+    }, 0);
+  };
+
+  const initialVisits = await visits();
+  const initialActivity = (await request("/users/me")).activityCounts.footprints;
+  const createFootprint = { status: 201, method: "POST", key: "create-my-footprint", body: {
+    location: { latitude: 37.5665, longitude: 126.978, capturedAt: formatServerDateTime(new Date()) },
+    body: "새 방명록", categoryCodes: ["CULTURE"],
+  } };
+  const created = await request("/footprints", createFootprint);
+  const myCreated = await request(`/footprints/${created.id}`);
+  assert.equal(myCreated.body, createFootprint.body.body);
+  assert.equal((await request("/users/me/footprints?limit=1")).items[0].id, created.id);
+  assert.equal((await request("/users/me")).activityCounts.footprints, initialActivity + 1);
+  assert.equal(await visits(), initialVisits + 1);
+  await request(`/footprints/${created.id}`, { method: "PATCH", body: { version: myCreated.version, body: "수정한 방명록" } });
+  assert.deepEqual(await request("/footprints", createFootprint), created);
+  await request(`/footprints/${created.id}?version=${myCreated.version + 1}`, { method: "DELETE" });
+  assert.equal((await request("/users/me")).activityCounts.footprints, initialActivity);
+  assert.equal(await visits(), initialVisits);
+
   const tips = await request("/users/me/tips?status=PUBLISHED&limit=1");
   assert.equal(tips.items[0].category, "PHOTO");
   assert.ok(tips.nextCursor);
   assert.equal("body" in tips.items[0], false);
-  const tip = await request("/users/me/tips/1");
+  const tip = await request("/users/me/tips/2");
   assert.deepEqual(tip.photos, []);
-  const patchTip = { status: 202, method: "PATCH", key: "my-tip-check", body: { version: tip.version, category: "RESTAURANT" } };
-  const accepted = await request("/tips/1", patchTip);
+  const patchTip = { status: 202, method: "PATCH", key: "my-tip-check", body: { version: tip.version, category: "FOOD" } };
+  const accepted = await request("/tips/2", patchTip);
   assert.equal(accepted.version, tip.version);
-  assert.equal((await request("/users/me/tips/1")).category, "PHOTO");
-  assert.equal((await request("/tips/1", patchTip)).jobId, accepted.jobId);
-  assert.equal(await request("/tips/1", { ...patchTip, status: 409, body: { ...patchTip.body, category: "TMI" } }), "C005");
+  assert.equal((await request("/users/me/tips/2")).category, "PHOTO");
+  assert.equal((await request("/tips/2", patchTip)).jobId, accepted.jobId);
+  assert.equal(await request("/tips/2", { ...patchTip, status: 409, body: { ...patchTip.body, category: "TMI" } }), "C005");
 
-  await new Promise((resolve) => {
-    setTimeout(resolve, 1_600);
-  });
-
-  const job = await request("/tips/1/status");
+  assert.equal((await request("/tips/2/status")).operationStatus, "RUNNING");
+  const job = await request("/tips/2/status");
   assert.equal(job.jobId, accepted.jobId);
   assert.equal(job.operationStatus, "SUCCEEDED");
-  assert.equal((await request("/users/me/tips/1")).category, "RESTAURANT");
+  assert.equal((await request("/users/me/tips/2")).category, "FOOD");
   const deletion = { method: "DELETE" };
-  assert.equal(await request(`/tips/1?version=${tip.version}`, { ...deletion, status: 409 }), "C004");
-  assert.equal((await request(`/tips/1?version=${job.version}`, deletion)).status, "DELETED");
-  assert.equal((await request(`/tips/1?version=${job.version}`, deletion)).status, "DELETED");
-  assert.equal(await request("/users/me/tips/1", { status: 404 }), "T012");
+  assert.equal(await request(`/tips/2?version=${tip.version}`, { ...deletion, status: 409 }), "C004");
+  assert.equal((await request(`/tips/2?version=${job.version}`, deletion)).status, "DELETED");
+  assert.equal((await request(`/tips/2?version=${job.version}`, deletion)).status, "DELETED");
+  assert.equal(await request("/users/me/tips/2", { status: 404 }), "T012");
 
   const jpeg = Uint8Array.of(255, 216, 255, 217);
   const upload = await request("/uploads", {
@@ -132,17 +156,13 @@ async function checkMyHandlers(origin) {
   assert.equal((await fetch(upload.uploadUrl, { method: upload.uploadMethod, headers: upload.uploadHeaders, body: jpeg })).status, 200);
   const ready = await request(`/uploads/${upload.uploadId}/complete`, { method: "POST", key: "my-photo-ready" });
   assert.equal(ready.status, "READY");
-  const photoJob = await request("/tips/2", { status: 202, method: "PATCH", key: "my-photo-link", body: { version: 1, uploadIds: [ready.uploadId] } });
-  assert.equal((await request("/tips/2?version=1", deletion)).status, "DELETED");
+  const photoJob = await request("/tips/3", { status: 202, method: "PATCH", key: "my-photo-link", body: { version: 1, uploadIds: [ready.uploadId] } });
+  assert.equal((await request("/tips/3?version=1", deletion)).status, "DELETED");
 
-  await new Promise((resolve) => {
-    setTimeout(resolve, 1_600);
-  });
-
-  const deleted = await request("/tips/2/status");
+  const deleted = await request("/tips/3/status");
   assert.equal(deleted.jobId, photoJob.jobId);
   assert.equal(deleted.status, "DELETED");
-  assert.equal(await request("/users/me/tips/2", { status: 404 }), "T012");
+  assert.equal(await request("/users/me/tips/3", { status: 404 }), "T012");
   console.info("My MSW: 소유권, 필터·커서, 방명록 정규화·삭제, 팁 비동기 수정·멱등성·사진 업로드·삭제 확인");
 }
 
