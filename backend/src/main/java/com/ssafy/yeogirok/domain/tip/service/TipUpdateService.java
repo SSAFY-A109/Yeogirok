@@ -11,7 +11,6 @@ import com.ssafy.yeogirok.domain.tip.dto.TipUpdateRequest.TipUpdateCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipUpdateResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
-import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipBody;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.domain.tip.publish.TipEditDraft;
@@ -24,7 +23,6 @@ import com.ssafy.yeogirok.domain.tip.publish.TipPublishState.OperationStatus;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishStore;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
-import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 
 import lombok.RequiredArgsConstructor;
 
@@ -37,10 +35,8 @@ import lombok.RequiredArgsConstructor;
 public class TipUpdateService {
 
 	private final MyTipFinder myTipFinder;
-	private final PublicTipFinder publicTipFinder;
 	private final TipPhotoUploads tipPhotoUploads;
-	private final TipPlacements tipPlacements;
-	private final LocationEvidencePolicy locationEvidencePolicy;
+	private final TipRelocations tipRelocations;
 	private final TipEditStore editStore;
 	private final TipPublishStore publishStore;
 	private final TipEditor tipEditor;
@@ -107,15 +103,8 @@ public class TipUpdateService {
 		return command.uploadIds() == null ? null : tipPhotoUploads.confirmedPath(userId, command.uploadIds());
 	}
 
-	/** 위치 증거 C008~C011 → 기존 팁에서 5m 밖 T004 → spatialReference·placement T007·C001. */
 	private TipEditDraft.Relocation relocation(ArTip tip, TipUpdateCommand command, Instant now) {
-		if (!command.relocating()) {
-			return null;
-		}
-		locationEvidencePolicy.verify(command.location(), now);
-		publicTipFinder.checkInteractable(tip, command.location());
-		SpatialReference spatialReference = SpatialReference.read(command.spatialReference(), now);
-		return new TipEditDraft.Relocation(command.location(), locationEvidencePolicy.policyVersion(),
-			spatialReference, tipPlacements.toMap(command.placement()));
+		return command.relocating() ? tipRelocations.validate(tip, command.location(), command.spatialReference(),
+			command.placement(), now, true) : null;
 	}
 }

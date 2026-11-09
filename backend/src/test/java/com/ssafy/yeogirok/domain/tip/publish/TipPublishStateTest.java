@@ -16,7 +16,7 @@ class TipPublishStateTest {
 
 	@Test
 	void 사진이_없으면_media는_처음부터_끝까지_SKIPPED() {
-		TipPublishState queued = TipPublishState.queued("job", false);
+		TipPublishState queued = TipPublishState.queued("job", null);
 
 		assertThat(queued.operationStatus()).isEqualTo(QUEUED);
 		assertThat(queued.steps()).isEqualTo(new Steps(SKIPPED, StepStatus.SUCCEEDED, StepStatus.SUCCEEDED));
@@ -26,7 +26,7 @@ class TipPublishStateTest {
 
 	@Test
 	void 사진이_있으면_media는_PENDING에서_결과로_바뀐다() {
-		TipPublishState running = TipPublishState.queued("job", true).running();
+		TipPublishState running = TipPublishState.queued("job", "tip-photo/x").running();
 
 		assertThat(running.steps().media()).isEqualTo(PENDING);
 		assertThat(running.succeeded().operationStatus()).isEqualTo(SUCCEEDED);

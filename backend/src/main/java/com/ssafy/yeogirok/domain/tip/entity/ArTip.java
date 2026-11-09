@@ -164,6 +164,12 @@ public class ArTip {
 		this.placement = placement;
 	}
 
+	/** API-051 최초 게시 재시도. 실패(FAILED)한 팁을 다시 게시 전(REGISTERING)으로 돌린다. */
+	public void retryCreate(Instant now) {
+		this.status = TipStatus.REGISTERING;
+		this.updatedAt = now;
+	}
+
 	/** 최초 게시 실패. 공개하지 않는다. */
 	public void fail(Instant now) {
 		this.status = TipStatus.FAILED;

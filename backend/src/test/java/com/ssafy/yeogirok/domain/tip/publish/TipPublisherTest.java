@@ -84,7 +84,7 @@ class TipPublisherTest {
 		ArTip tip = em.find(ArTip.class, tipId);
 		assertThat(tip.getStatus()).isEqualTo(TipStatus.PUBLISHED);
 		assertThat(tip.getPublishedAt()).isEqualTo(NOW);
-		assertThat(STATES.states.get(tipId)).isEqualTo(TipPublishState.queued("job-1", false).running().succeeded());
+		assertThat(STATES.states.get(tipId)).isEqualTo(TipPublishState.queued("job-1", null).running().succeeded());
 		assertThat(searchService.search(new TipSearchQuery(locationAt(LAT, LNG), null, null, null)).items())
 			.extracting(item -> item.id()).containsExactly(tipId);
 	}

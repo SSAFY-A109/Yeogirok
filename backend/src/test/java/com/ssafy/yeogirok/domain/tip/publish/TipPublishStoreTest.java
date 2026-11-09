@@ -28,7 +28,8 @@ class TipPublishStoreTest {
 
 	@Test
 	void 저장한_상태를_그대로_읽고_멱등키_보관_기간만큼_둔다() {
-		TipPublishState failed = TipPublishState.queued("job-1", true).running().failed("C014", "실패", true);
+		TipPublishState failed = TipPublishState.queued("job-1", "tip-photo/x").running()
+			.failed("C014", "실패", true);
 		store.save(7L, failed);
 
 		assertThat(store.find(7L)).contains(failed);

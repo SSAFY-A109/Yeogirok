@@ -53,7 +53,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @DataJpaTest
 @Import({TipUpdateService.class, TipEditor.class, MyTipFinder.class, PublicTipFinder.class, TipPhotoUploads.class,
-	TipPlacements.class, LocationEvidencePolicy.class, TipUpdateServiceTest.Config.class})
+	TipRelocations.class, TipPlacements.class, LocationEvidencePolicy.class, TipUpdateServiceTest.Config.class})
 class TipUpdateServiceTest {
 
 	static final Long AUTHOR = 11001L;

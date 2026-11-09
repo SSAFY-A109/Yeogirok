@@ -49,7 +49,7 @@ public class TipPublisher {
 	}
 
 	public void publish(TipPublishRequested event) {
-		TipPublishState running = TipPublishState.queued(event.jobId(), event.imagePath() != null).running();
+		TipPublishState running = TipPublishState.queued(event.jobId(), event.imagePath()).running();
 		publishStore.save(event.tipId(), running);
 		try {
 			transactionTemplate.executeWithoutResult(status -> link(event, clock.instant()));

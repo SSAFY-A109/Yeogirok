@@ -42,6 +42,7 @@ import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipDeleteResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest.TipReactionCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipRetryResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
@@ -57,6 +58,7 @@ import com.ssafy.yeogirok.domain.tip.service.TipDeleteService;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUrls;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
+import com.ssafy.yeogirok.domain.tip.service.TipRetryService;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
 import com.ssafy.yeogirok.domain.tip.service.TipUpdateService;
@@ -103,6 +105,9 @@ class TipControllerTest {
 
 	@MockitoBean
 	TipUpdateService tipUpdateService;
+
+	@MockitoBean
+	TipRetryService tipRetryService;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
@@ -295,7 +300,7 @@ class TipControllerTest {
 
 		@Test
 		void 앱이_검사하는_응답_모양을_돌려준다() throws Exception {
-			TipPublishState state = TipPublishState.queued("550e8400-e29b-41d4-a716-446655440000", false).running()
+			TipPublishState state = TipPublishState.queued("550e8400-e29b-41d4-a716-446655440000", null).running()
 				.succeeded();
 			given(tipStatusService.getStatus(USER_ID, 10L)).willReturn(new TipStatusResponse(10L, TipStatus.PUBLISHED,
 				state.jobId(), state.steps(), null, false, state.operation(), state.operationStatus(), 2));
@@ -456,6 +461,51 @@ class TipControllerTest {
 		void 요청_형식_오류(String body, int status, String code) throws Exception {
 			expectError(perform(patch("/api/v1/tips/7").header("Idempotency-Key", "key-1"), body), status, code);
 			verifyNoInteractions(tipUpdateService);
+		}
+	}
+
+	@Nested
+	class API_051_재시도 {
+
+		@Test
+		void 재시도를_접수하면_202와_작업_정보를_돌려준다() throws Exception {
+			given(tipRetryService.retry(eq(USER_ID), eq(7L), any())).willReturn(new TipRetryResponse(7L, "job-1",
+				TipStatus.REGISTERING, TipPublishState.Operation.CREATE, TipPublishState.OperationStatus.QUEUED));
+
+			perform(post("/api/v1/tips/7/retry").header("Idempotency-Key", "key-1"), "{\"replacementUploadIds\":[]}")
+				.andExpect(status().isAccepted())
+				.andExpect(jsonPath("$.data.tipId").value(7))
+				.andExpect(jsonPath("$.data.jobId").value("job-1"))
+				.andExpect(jsonPath("$.data.status").value("REGISTERING"))
+				.andExpect(jsonPath("$.data.operation").value("CREATE"))
+				.andExpect(jsonPath("$.data.operationStatus").value("QUEUED"));
+			verify(idempotencyService).execute(eq(new IdempotencyKey(USER_ID, "tip-retry", "7", "key-1")), any(),
+				any(), any(), any());
+		}
+
+		@Test
+		void 할_일이_없으면_200과_tipId_status만_돌려준다() throws Exception {
+			given(tipRetryService.retry(eq(USER_ID), eq(7L), any()))
+				.willReturn(TipRetryResponse.done(7L, TipStatus.PUBLISHED));
+
+			perform(post("/api/v1/tips/7/retry").header("Idempotency-Key", "key-1"), "{}")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.tipId").value(7))
+				.andExpect(jsonPath("$.data.status").value("PUBLISHED"))
+				.andExpect(jsonPath("$.data.jobId").doesNotExist())
+				.andExpect(jsonPath("$.data.operation").doesNotExist());
+		}
+
+		@ParameterizedTest(name = "{0} → {1}")
+		@CsvSource(delimiter = '|', textBlock = """
+			{"replacementUploadIds":null}                     | 400 | C001
+			{"replacementUploadIds":["not-a-uuid"]}           | 400 | C002
+			{"replacementUploadIds":"x"}                      | 400 | C002
+			{"spatialReference":{},"placement":{}}            | 422 | C008
+			""")
+		void 요청_형식_오류(String body, int status, String code) throws Exception {
+			expectError(perform(post("/api/v1/tips/7/retry").header("Idempotency-Key", "key-1"), body), status, code);
+			verifyNoInteractions(tipRetryService);
 		}
 	}
 }

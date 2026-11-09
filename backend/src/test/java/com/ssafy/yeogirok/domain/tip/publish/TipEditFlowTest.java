@@ -27,6 +27,7 @@ import com.ssafy.yeogirok.domain.tip.service.MyTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.PublicTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUploads;
 import com.ssafy.yeogirok.domain.tip.service.TipPlacements;
+import com.ssafy.yeogirok.domain.tip.service.TipRelocations;
 import com.ssafy.yeogirok.domain.tip.service.TipUpdateService;
 import com.ssafy.yeogirok.global.config.AsyncConfig;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
@@ -41,7 +42,8 @@ import tools.jackson.databind.json.JsonMapper;
 /** 054 요청 → @Async 적용까지 실제 프록시 연결로 확인한다(Redis 는 맵). */
 @DataJpaTest
 @Import({AsyncConfig.class, TipUpdateService.class, TipEditor.class, MyTipFinder.class, PublicTipFinder.class,
-	TipPhotoUploads.class, TipPlacements.class, LocationEvidencePolicy.class, TipEditFlowTest.Config.class})
+	TipPhotoUploads.class, TipRelocations.class, TipPlacements.class, LocationEvidencePolicy.class,
+	TipEditFlowTest.Config.class})
 class TipEditFlowTest {
 
 	static final InMemoryTipPublishStates STATES = new InMemoryTipPublishStates();

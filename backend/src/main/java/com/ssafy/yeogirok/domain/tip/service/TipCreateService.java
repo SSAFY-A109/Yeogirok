@@ -71,7 +71,7 @@ public class TipCreateService {
 			ArTip tip = arTipRepository.save(ArTip.register(userId, category, body, command.location(),
 				locationEvidencePolicy.policyVersion(), spatialReference, placement, now));
 			// Redis 저장이 실패하면 팁도 남기지 않는다. 롤백돼 남은 작업 상태는 050 이 팁을 못 찾아 쓰이지 않는다.
-			publishStore.save(tip.getId(), TipPublishState.queued(jobId, imagePath != null));
+			publishStore.save(tip.getId(), TipPublishState.queued(jobId, imagePath));
 			events.publishEvent(new TipPublishRequested(tip.getId(), jobId, imagePath));
 			return tip.getId();
 		});

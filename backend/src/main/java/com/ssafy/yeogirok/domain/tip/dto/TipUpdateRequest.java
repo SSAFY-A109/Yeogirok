@@ -1,11 +1,8 @@
 package com.ssafy.yeogirok.domain.tip.dto;
 
-import static com.ssafy.yeogirok.global.request.JsonFields.invalidFormat;
-import static com.ssafy.yeogirok.global.request.JsonFields.missing;
 import static com.ssafy.yeogirok.global.request.JsonFields.optionalNonNullString;
 import static com.ssafy.yeogirok.global.request.JsonFields.requiredInt;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -44,26 +41,8 @@ public class TipUpdateRequest {
 	public TipUpdateCommand toCommand() {
 		boolean relocating = location != null || spatialReference != null || placement != null;
 		return new TipUpdateCommand(requiredInt(version, "version"), optionalNonNullString(category, "category"),
-			optionalNonNullString(body, "body"), uploadIds(), relocating ? LocationEvidence.read(location, true) : null,
-			spatialReference, placement);
-	}
-
-	/** @return 생략이면 null(사진 그대로), 빈 목록이면 사진 제거 */
-	private List<String> uploadIds() {
-		if (uploadIds == null) {
-			return null;
-		}
-		if (uploadIds.isNull()) {
-			throw missing("uploadIds");
-		}
-		if (!uploadIds.isArray()) {
-			throw invalidFormat("uploadIds", "UUID 문자열 배열이어야 합니다.");
-		}
-		List<String> ids = new ArrayList<>();
-		for (JsonNode id : uploadIds) {
-			ids.add(Uuids.require(id.isString() ? id.stringValue() : null, "uploadIds"));
-		}
-		return ids;
+			optionalNonNullString(body, "body"), Uuids.optionalNonNullList(uploadIds, "uploadIds"),
+			relocating ? LocationEvidence.read(location, true) : null, spatialReference, placement);
 	}
 
 	/**

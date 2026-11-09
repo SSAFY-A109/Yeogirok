@@ -22,6 +22,9 @@ import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipDeleteResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipRetryRequest;
+import com.ssafy.yeogirok.domain.tip.dto.TipRetryRequest.TipRetryCommand;
+import com.ssafy.yeogirok.domain.tip.dto.TipRetryResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
@@ -34,6 +37,7 @@ import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
 import com.ssafy.yeogirok.domain.tip.service.TipDeleteService;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUrls;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
+import com.ssafy.yeogirok.domain.tip.service.TipRetryService;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
 import com.ssafy.yeogirok.domain.tip.service.TipUpdateService;
@@ -56,6 +60,7 @@ public class TipController {
 	static final String CREATE_SCOPE = "tip-create";
 	/** 멱등키 scope. 대상은 팁 id 다. */
 	static final String UPDATE_SCOPE = "tip-update";
+	static final String RETRY_SCOPE = "tip-retry";
 
 	private final TipCreateService tipCreateService;
 	private final TipSearchService tipSearchService;
@@ -65,6 +70,7 @@ public class TipController {
 	private final TipPhotoUrls tipPhotoUrls;
 	private final TipDeleteService tipDeleteService;
 	private final TipUpdateService tipUpdateService;
+	private final TipRetryService tipRetryService;
 	private final IdempotencyService idempotencyService;
 
 	/** 형식 검사는 멱등키 처리 전, 값 검사는 처리 안에서 한다. 재요청은 유효 시각이 지나도 처음 결과를 준다. */
@@ -146,5 +152,23 @@ public class TipController {
 			TipUpdateResponse::jobId,
 			jobId -> tipUpdateService.getQueued(user.userId(), tipId, jobId));
 		return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	/** 재시도를 접수하면 202, 실패한 작업 없이 이미 끝난 팁이면 200. */
+	@Operation(summary = "API-051 실패한 팁 게시 재시도")
+	@PostMapping("/{tipId}/retry")
+	public ResponseEntity<ApiResponseBody<TipRetryResponse>> retry(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@RequestBody TipRetryRequest request) {
+		TipRetryCommand command = request.toCommand();
+		TipRetryResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), RETRY_SCOPE, String.valueOf(tipId), idempotencyKey),
+			command,
+			() -> tipRetryService.retry(user.userId(), tipId, command),
+			retried -> retried.accepted() ? retried.jobId() : TipRetryService.NOTHING_TO_RETRY,
+			resultId -> tipRetryService.getRetried(user.userId(), tipId, resultId));
+		return ResponseEntity.status(response.accepted() ? HttpStatus.ACCEPTED : HttpStatus.OK)
+			.body(ApiResponseUtil.createSuccessResponse(response));
 	}
 }

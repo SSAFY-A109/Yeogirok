@@ -1,10 +1,8 @@
 package com.ssafy.yeogirok.domain.tip.dto;
 
-import static com.ssafy.yeogirok.global.request.JsonFields.invalidFormat;
 import static com.ssafy.yeogirok.global.request.JsonFields.isAbsent;
 import static com.ssafy.yeogirok.global.request.JsonFields.nonNullString;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -38,22 +36,9 @@ public class TipCreateRequest {
 	private JsonNode placement;
 
 	public TipCreateCommand toCommand() {
-		return new TipCreateCommand(nonNullString(category, "category"), nonNullString(body, "body"), uploadIds(),
+		return new TipCreateCommand(nonNullString(category, "category"), nonNullString(body, "body"),
+			isAbsent(uploadIds) ? List.of() : Uuids.requireList(uploadIds, "uploadIds"),
 			LocationEvidence.read(location, true), spatialReference, placement);
-	}
-
-	private List<String> uploadIds() {
-		if (isAbsent(uploadIds)) {
-			return List.of();
-		}
-		if (!uploadIds.isArray()) {
-			throw invalidFormat("uploadIds", "UUID 문자열 배열이어야 합니다.");
-		}
-		List<String> ids = new ArrayList<>();
-		for (JsonNode id : uploadIds) {
-			ids.add(Uuids.require(id.isString() ? id.stringValue() : null, "uploadIds"));
-		}
-		return ids;
 	}
 
 	/**

@@ -120,7 +120,7 @@ class TipCreateServiceTest {
 		assertThat(tip.getAccuracyMeters()).isEqualByComparingTo("8");
 		assertThat(tip.getPlacement()).containsEntry("anchorType", "CLOUD");
 		assertThat(tip.spatialReference().referenceId()).isEqualTo("anchor-1");
-		assertThat(STATES.states.get(response.tipId())).isEqualTo(TipPublishState.queued(response.jobId(), false));
+		assertThat(STATES.states.get(response.tipId())).isEqualTo(TipPublishState.queued(response.jobId(), null));
 		assertThat(events.stream(TipPublishRequested.class))
 			.containsExactly(new TipPublishRequested(response.tipId(), response.jobId(), null));
 	}

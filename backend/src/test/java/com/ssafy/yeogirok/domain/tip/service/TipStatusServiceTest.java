@@ -70,7 +70,7 @@ class TipStatusServiceTest {
 	@Test
 	void 등록_직후는_진행_중이고_게시_후에는_PUBLISHED와_SUCCEEDED() {
 		Long tipId = em.persistAndGetId(registering(AUTHOR), Long.class);
-		STATES.states.put(tipId, TipPublishState.queued("job-1", false));
+		STATES.states.put(tipId, TipPublishState.queued("job-1", null));
 
 		TipStatusResponse queued = service.getStatus(AUTHOR, tipId);
 		assertThat(queued.status()).isEqualTo(TipStatus.REGISTERING);
@@ -96,7 +96,8 @@ class TipStatusServiceTest {
 		ArTip tip = registering(AUTHOR);
 		tip.fail(NOW);
 		Long tipId = em.persistAndGetId(tip, Long.class);
-		STATES.states.put(tipId, TipPublishState.queued("job-1", true).running().failed("C014", "실패", true));
+		STATES.states.put(tipId, TipPublishState.queued("job-1", "tip-photo/x").running()
+			.failed("C014", "실패", true));
 
 		TipStatusResponse response = service.getStatus(AUTHOR, tipId);
 
