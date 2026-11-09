@@ -50,6 +50,7 @@ import com.ssafy.yeogirok.global.location.LocationEvidence;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.location.LocationEvidenceProperties;
 import com.ssafy.yeogirok.support.InMemoryTipEditStore;
+import com.ssafy.yeogirok.support.InMemoryTipPhotoClaims;
 import com.ssafy.yeogirok.support.InMemoryTipPublishStates;
 import com.ssafy.yeogirok.support.InMemoryUploadSessions;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -72,6 +73,7 @@ class TipRetryServiceTest {
 	static final String UPLOAD_ID = "550e8400-e29b-41d4-a716-446655440010";
 	static final JsonMapper MAPPER = JsonMapper.builder().build();
 	static final InMemoryUploadSessions SESSIONS = new InMemoryUploadSessions();
+	static final InMemoryTipPhotoClaims CLAIMS = new InMemoryTipPhotoClaims();
 	static final InMemoryTipPublishStates STATES = new InMemoryTipPublishStates();
 	static final InMemoryTipEditStore EDITS = new InMemoryTipEditStore();
 	static final String SPATIAL =
@@ -98,6 +100,11 @@ class TipRetryServiceTest {
 		}
 
 		@Bean
+		TipPhotoClaims tipPhotoClaims() {
+			return CLAIMS.store;
+		}
+
+		@Bean
 		TipPublishStore tipPublishStore() {
 			return STATES.store;
 		}
@@ -121,6 +128,7 @@ class TipRetryServiceTest {
 	void clear() {
 		SESSIONS.sessions.clear();
 		STATES.states.clear();
+		CLAIMS.claims.clear();
 		EDITS.clear();
 	}
 

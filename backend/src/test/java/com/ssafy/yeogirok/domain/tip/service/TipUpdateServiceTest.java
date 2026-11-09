@@ -41,6 +41,7 @@ import com.ssafy.yeogirok.global.location.LocationEvidence;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.location.LocationEvidenceProperties;
 import com.ssafy.yeogirok.support.InMemoryTipEditStore;
+import com.ssafy.yeogirok.support.InMemoryTipPhotoClaims;
 import com.ssafy.yeogirok.support.InMemoryTipPublishStates;
 import com.ssafy.yeogirok.support.InMemoryUploadSessions;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -61,6 +62,7 @@ class TipUpdateServiceTest {
 	static final String UPLOAD_ID = "550e8400-e29b-41d4-a716-446655440010";
 	static final JsonMapper MAPPER = JsonMapper.builder().build();
 	static final InMemoryUploadSessions SESSIONS = new InMemoryUploadSessions();
+	static final InMemoryTipPhotoClaims CLAIMS = new InMemoryTipPhotoClaims();
 	static final InMemoryTipPublishStates STATES = new InMemoryTipPublishStates();
 	static final InMemoryTipEditStore EDITS = new InMemoryTipEditStore();
 	static final String SPATIAL =
@@ -83,6 +85,11 @@ class TipUpdateServiceTest {
 		@Bean
 		UploadSessionStore uploadSessionStore() {
 			return SESSIONS.store;
+		}
+
+		@Bean
+		TipPhotoClaims tipPhotoClaims() {
+			return CLAIMS.store;
 		}
 
 		@Bean
@@ -110,6 +117,7 @@ class TipUpdateServiceTest {
 		clock.set(NOW.plusSeconds(60));  // 팁 생성 시각(NOW) 뒤에 수정한다
 		SESSIONS.sessions.clear();
 		STATES.states.clear();
+		CLAIMS.claims.clear();
 		EDITS.clear();
 	}
 
@@ -238,6 +246,19 @@ class TipUpdateServiceTest {
 		em.clear();
 		assertThat(em.find(ArTip.class, saved.getId()).getCategory()).isEqualTo(ArTipCategory.CAFE);
 		assertThat(EDITS.drafts).isEmpty();
+	}
+
+	@Test
+	void 다른_팁이_쓰고_있는_사진으로_바꾸면_M005이고_수정안도_예약도_남기지_않는다() {
+		ArTip saved = em.persistFlushFind(published(AUTHOR));
+		SESSIONS.put(readyPhoto(AUTHOR, FilePurpose.TIP_PHOTO));
+		CLAIMS.claims.put(UPLOAD_ID, 999L);
+
+		expect(() -> service.update(AUTHOR, saved.getId(), command(saved.getVersion(), null, null, List.of(UPLOAD_ID),
+			null)), ExceptionType.FILE_ACCESS_DENIED);
+		assertThat(EDITS.drafts).isEmpty();
+		assertThat(EDITS.locks).isEmpty();
+		assertThat(CLAIMS.claims).containsEntry(UPLOAD_ID, 999L);
 	}
 
 	@Test

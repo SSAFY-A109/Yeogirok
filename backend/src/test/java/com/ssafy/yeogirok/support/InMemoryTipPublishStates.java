@@ -10,7 +10,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishStore;
@@ -20,9 +23,13 @@ public final class InMemoryTipPublishStates {
 
 	public final Map<Long, TipPublishState> states = new ConcurrentHashMap<>();
 	public final TipPublishStore store = mock(TipPublishStore.class);
+	private final AtomicBoolean failNextSave = new AtomicBoolean();
 
 	public InMemoryTipPublishStates() {
 		doAnswer(invocation -> {
+			if (failNextSave.getAndSet(false)) {
+				throw new RedisConnectionFailureException("test");
+			}
 			states.put(invocation.getArgument(0), invocation.getArgument(1));
 			return null;
 		}).when(store).save(anyLong(), any());
@@ -30,5 +37,10 @@ public final class InMemoryTipPublishStates {
 			.map(TipPublishState::imagePath).filter(Objects::nonNull).collect(Collectors.toSet()));
 		given(store.find(anyLong()))
 			.willAnswer(invocation -> Optional.ofNullable(states.get(invocation.<Long>getArgument(0))));
+	}
+
+	/** 다음 save 한 번을 Redis 장애처럼 실패시킨다. */
+	public void failNextSave() {
+		failNextSave.set(true);
 	}
 }

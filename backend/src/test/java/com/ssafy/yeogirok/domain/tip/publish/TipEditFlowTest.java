@@ -23,6 +23,7 @@ import com.ssafy.yeogirok.domain.tip.dto.TipUpdateRequest.TipUpdateCommand;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.repository.ArTipRepository;
+import com.ssafy.yeogirok.domain.tip.service.TipPhotoClaims;
 import com.ssafy.yeogirok.domain.tip.service.MyTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.PublicTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUploads;
@@ -33,6 +34,7 @@ import com.ssafy.yeogirok.global.config.AsyncConfig;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.location.LocationEvidenceProperties;
 import com.ssafy.yeogirok.support.InMemoryTipEditStore;
+import com.ssafy.yeogirok.support.InMemoryTipPhotoClaims;
 import com.ssafy.yeogirok.support.InMemoryTipPublishStates;
 import com.ssafy.yeogirok.support.InMemoryUploadSessions;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -46,6 +48,7 @@ import tools.jackson.databind.json.JsonMapper;
 	TipEditFlowTest.Config.class})
 class TipEditFlowTest {
 
+	static final InMemoryTipPhotoClaims CLAIMS = new InMemoryTipPhotoClaims();
 	static final InMemoryTipPublishStates STATES = new InMemoryTipPublishStates();
 	static final InMemoryTipEditStore EDITS = new InMemoryTipEditStore();
 
@@ -66,6 +69,11 @@ class TipEditFlowTest {
 		@Bean
 		UploadSessionStore uploadSessionStore() {
 			return new InMemoryUploadSessions().store;
+		}
+
+		@Bean
+		TipPhotoClaims tipPhotoClaims() {
+			return CLAIMS.store;
 		}
 
 		@Bean

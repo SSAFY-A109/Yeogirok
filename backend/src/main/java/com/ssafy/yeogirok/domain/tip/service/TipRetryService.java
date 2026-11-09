@@ -43,6 +43,7 @@ public class TipRetryService {
 	private final MyTipFinder myTipFinder;
 	private final ArTipRepository arTipRepository;
 	private final TipPhotoUploads tipPhotoUploads;
+	private final TipPhotoClaims tipPhotoClaims;
 	private final TipRelocations tipRelocations;
 	private final TipPublishStore publishStore;
 	private final TipEditStore editStore;
@@ -52,11 +53,12 @@ public class TipRetryService {
 	private final Clock clock;
 
 	public TipRetryService(MyTipFinder myTipFinder, ArTipRepository arTipRepository, TipPhotoUploads tipPhotoUploads,
-		TipRelocations tipRelocations, TipPublishStore publishStore, TipEditStore editStore, TipEditor tipEditor,
-		ApplicationEventPublisher events, PlatformTransactionManager transactionManager, Clock clock) {
+		TipPhotoClaims tipPhotoClaims, TipRelocations tipRelocations, TipPublishStore publishStore, TipEditStore editStore,
+		TipEditor tipEditor, ApplicationEventPublisher events, PlatformTransactionManager transactionManager, Clock clock) {
 		this.myTipFinder = myTipFinder;
 		this.arTipRepository = arTipRepository;
 		this.tipPhotoUploads = tipPhotoUploads;
+		this.tipPhotoClaims = tipPhotoClaims;
 		this.tipRelocations = tipRelocations;
 		this.publishStore = publishStore;
 		this.editStore = editStore;
@@ -117,7 +119,9 @@ public class TipRetryService {
 		}
 
 		String jobId = UUID.randomUUID().toString();
-		transactionTemplate.executeWithoutResult(status -> {
+		// 사진을 새로 고른 재시도만 표시를 건다. 지난 작업의 사진은 이미 이 팁 것이다.
+		tipPhotoClaims.claimWhile(tip.getId(), command.replacementUploadIds(),
+			() -> transactionTemplate.executeWithoutResult(status -> {
 			// 행을 잠가 다시 읽는다. 동시에 온 다른 재시도가 먼저 바꿨으면 진행 중(T010)이다.
 			ArTip locked = arTipRepository.findForUpdateById(tip.getId())
 				.filter(found -> !found.isDeleted())
@@ -132,7 +136,7 @@ public class TipRetryService {
 			}
 			publishStore.save(tip.getId(), TipPublishState.queued(jobId, imagePath));
 			events.publishEvent(new TipPublishRequested(tip.getId(), jobId, imagePath));
-		});
+		}));
 		return new TipRetryResponse(tip.getId(), jobId, TipStatus.REGISTERING, Operation.CREATE,
 			OperationStatus.QUEUED);
 	}
@@ -169,10 +173,12 @@ public class TipRetryService {
 		String lockToken = editStore.reserve(tip.getId()).orElseThrow(TipRetryService::inProgress);
 		String jobId = UUID.randomUUID().toString();
 		try {
-			editStore.save(tip.getId(), jobId, retried);
-			publishStore.save(tip.getId(), TipPublishState.queuedUpdate(jobId, retried.photoChanged(),
-				relocation != null));
-			editStore.delete(tip.getId(), failed.jobId());
+			tipPhotoClaims.claimWhile(tip.getId(), command.replacementUploadIds(), () -> {
+				editStore.save(tip.getId(), jobId, retried);
+				publishStore.save(tip.getId(), TipPublishState.queuedUpdate(jobId, retried.photoChanged(),
+					retried.relocation() != null));
+				editStore.delete(tip.getId(), failed.jobId());
+			});
 		} catch (RuntimeException e) {
 			editStore.release(tip.getId(), lockToken);
 			throw e;

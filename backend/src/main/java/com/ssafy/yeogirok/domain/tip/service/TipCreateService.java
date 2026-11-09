@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class TipCreateService {
 	private final ArTipRepository arTipRepository;
 	private final MyTipFinder myTipFinder;
 	private final TipPhotoUploads tipPhotoUploads;
+	private final TipPhotoClaims tipPhotoClaims;
 	private final TipPublishStore publishStore;
 	private final TipPlacements tipPlacements;
 	private final LocationEvidencePolicy locationEvidencePolicy;
@@ -43,12 +45,13 @@ public class TipCreateService {
 	private final Clock clock;
 
 	public TipCreateService(ArTipRepository arTipRepository, MyTipFinder myTipFinder,
-		TipPhotoUploads tipPhotoUploads, TipPublishStore publishStore, TipPlacements tipPlacements,
-		LocationEvidencePolicy locationEvidencePolicy, ApplicationEventPublisher events,
+		TipPhotoUploads tipPhotoUploads, TipPhotoClaims tipPhotoClaims, TipPublishStore publishStore,
+		TipPlacements tipPlacements, LocationEvidencePolicy locationEvidencePolicy, ApplicationEventPublisher events,
 		PlatformTransactionManager transactionManager, Clock clock) {
 		this.arTipRepository = arTipRepository;
 		this.myTipFinder = myTipFinder;
 		this.tipPhotoUploads = tipPhotoUploads;
+		this.tipPhotoClaims = tipPhotoClaims;
 		this.publishStore = publishStore;
 		this.tipPlacements = tipPlacements;
 		this.locationEvidencePolicy = locationEvidencePolicy;
@@ -67,15 +70,26 @@ public class TipCreateService {
 		String imagePath = tipPhotoUploads.confirmedPath(userId, command.uploadIds());
 
 		String jobId = UUID.randomUUID().toString();
-		Long tipId = transactionTemplate.execute(status -> {
-			ArTip tip = arTipRepository.save(ArTip.register(userId, category, body, command.location(),
-				locationEvidencePolicy.policyVersion(), spatialReference, placement, now));
-			// Redis 저장이 실패하면 팁도 남기지 않는다. 롤백돼 남은 작업 상태는 050 이 팁을 못 찾아 쓰이지 않는다.
-			publishStore.save(tip.getId(), TipPublishState.queued(jobId, imagePath));
-			events.publishEvent(new TipPublishRequested(tip.getId(), jobId, imagePath));
-			return tip.getId();
-		});
-		return new TipCreateResponse(tipId, jobId, TipStatus.REGISTERING);
+		AtomicReference<Long> claimedBy = new AtomicReference<>();
+		try {
+			Long tipId = transactionTemplate.execute(status -> {
+				ArTip tip = arTipRepository.save(ArTip.register(userId, category, body, command.location(),
+					locationEvidencePolicy.policyVersion(), spatialReference, placement, now));
+				if (tipPhotoClaims.claim(tip.getId(), command.uploadIds())) {
+					claimedBy.set(tip.getId());
+				}
+				// Redis 저장이 실패하면 팁도 남기지 않는다. 롤백돼 남은 작업 상태는 050 이 팁을 못 찾아 쓰이지 않는다.
+				publishStore.save(tip.getId(), TipPublishState.queued(jobId, imagePath));
+				events.publishEvent(new TipPublishRequested(tip.getId(), jobId, imagePath));
+				return tip.getId();
+			});
+			return new TipCreateResponse(tipId, jobId, TipStatus.REGISTERING);
+		} catch (RuntimeException e) {
+			if (claimedBy.get() != null) {
+				tipPhotoClaims.release(claimedBy.get(), command.uploadIds());
+			}
+			throw e;
+		}
 	}
 
 	/** 같은 멱등키로 다시 보낸 요청. 그사이 삭제했으면 T012. */

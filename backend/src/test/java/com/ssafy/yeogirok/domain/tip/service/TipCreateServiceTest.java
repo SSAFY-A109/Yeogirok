@@ -23,6 +23,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 
@@ -43,6 +44,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.location.LocationEvidence;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.location.LocationEvidenceProperties;
+import com.ssafy.yeogirok.support.InMemoryTipPhotoClaims;
 import com.ssafy.yeogirok.support.InMemoryTipPublishStates;
 import com.ssafy.yeogirok.support.InMemoryUploadSessions;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -62,6 +64,7 @@ class TipCreateServiceTest {
 	static final String UPLOAD_ID = "550e8400-e29b-41d4-a716-446655440010";
 	static final JsonMapper MAPPER = JsonMapper.builder().build();
 	static final InMemoryUploadSessions SESSIONS = new InMemoryUploadSessions();
+	static final InMemoryTipPhotoClaims CLAIMS = new InMemoryTipPhotoClaims();
 	static final InMemoryTipPublishStates STATES = new InMemoryTipPublishStates();
 	static final String SPATIAL =
 		"{\"provider\":\"ARCORE_CLOUD_ANCHOR\",\"referenceId\":\"anchor-1\",\"expiresAt\":\"2026-11-09 12:00:00+09\"}";
@@ -87,6 +90,11 @@ class TipCreateServiceTest {
 		}
 
 		@Bean
+		TipPhotoClaims tipPhotoClaims() {
+			return CLAIMS.store;
+		}
+
+		@Bean
 		TipPublishStore tipPublishStore() {
 			return STATES.store;
 		}
@@ -105,6 +113,7 @@ class TipCreateServiceTest {
 	void clear() {
 		SESSIONS.sessions.clear();
 		STATES.states.clear();
+		CLAIMS.claims.clear();
 	}
 
 	@Test
@@ -157,6 +166,26 @@ class TipCreateServiceTest {
 		em.persist(ArTipImage.of(999L, "tip-photo/" + UPLOAD_ID, NOW));
 
 		expect(command("좋아요", List.of(UPLOAD_ID), SPATIAL), ExceptionType.FILE_ACCESS_DENIED);
+	}
+
+	/** 게시 전이라 ar_tip_images 에 행이 없어도 사진 표시로 막는다(PR #64 리뷰). */
+	@Test
+	void 게시_전에_같은_사진으로_다시_등록하면_M005이고_첫_팁의_표시는_그대로다() {
+		SESSIONS.put(readyPhoto(AUTHOR, FilePurpose.TIP_PHOTO));
+		TipCreateResponse first = service.create(AUTHOR, command("좋아요", List.of(UPLOAD_ID), SPATIAL));
+
+		expect(command("다른 팁", List.of(UPLOAD_ID), SPATIAL), ExceptionType.FILE_ACCESS_DENIED);
+		assertThat(CLAIMS.claims).containsExactlyEntriesOf(Map.of(UPLOAD_ID, first.tipId()));
+	}
+
+	@Test
+	void 저장에_실패한_요청은_사진_표시를_남기지_않는다() {
+		SESSIONS.put(readyPhoto(AUTHOR, FilePurpose.TIP_PHOTO));
+		STATES.failNextSave();
+
+		assertThatThrownBy(() -> service.create(AUTHOR, command("좋아요", List.of(UPLOAD_ID), SPATIAL)))
+			.isInstanceOf(RedisConnectionFailureException.class);
+		assertThat(CLAIMS.claims).isEmpty();
 	}
 
 	@Test

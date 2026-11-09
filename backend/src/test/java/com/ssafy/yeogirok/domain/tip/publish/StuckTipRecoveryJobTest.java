@@ -26,6 +26,7 @@ import com.ssafy.yeogirok.domain.tip.dto.TipRetryRequest.TipRetryCommand;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState.OperationStatus;
+import com.ssafy.yeogirok.domain.tip.service.TipPhotoClaims;
 import com.ssafy.yeogirok.domain.tip.service.MyTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.PublicTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUploads;
@@ -35,6 +36,7 @@ import com.ssafy.yeogirok.domain.tip.service.TipRetryService;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 import com.ssafy.yeogirok.global.location.LocationEvidenceProperties;
 import com.ssafy.yeogirok.support.InMemoryTipEditStore;
+import com.ssafy.yeogirok.support.InMemoryTipPhotoClaims;
 import com.ssafy.yeogirok.support.InMemoryTipPublishStates;
 import com.ssafy.yeogirok.support.InMemoryUploadSessions;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -50,6 +52,7 @@ import tools.jackson.databind.json.JsonMapper;
 class StuckTipRecoveryJobTest {
 
 	static final Long AUTHOR = 15001L;
+	static final InMemoryTipPhotoClaims CLAIMS = new InMemoryTipPhotoClaims();
 	static final InMemoryTipPublishStates STATES = new InMemoryTipPublishStates();
 	static final InMemoryTipEditStore EDITS = new InMemoryTipEditStore();
 	static final InMemoryUploadSessions SESSIONS = new InMemoryUploadSessions();
@@ -71,6 +74,11 @@ class StuckTipRecoveryJobTest {
 		@Bean
 		UploadSessionStore uploadSessionStore() {
 			return SESSIONS.store;
+		}
+
+		@Bean
+		TipPhotoClaims tipPhotoClaims() {
+			return CLAIMS.store;
 		}
 
 		@Bean
@@ -102,6 +110,7 @@ class StuckTipRecoveryJobTest {
 	@BeforeEach
 	void clear() {
 		STATES.states.clear();
+		CLAIMS.claims.clear();
 		EDITS.clear();
 	}
 

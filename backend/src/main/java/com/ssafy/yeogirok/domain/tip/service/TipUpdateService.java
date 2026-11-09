@@ -36,6 +36,7 @@ public class TipUpdateService {
 
 	private final MyTipFinder myTipFinder;
 	private final TipPhotoUploads tipPhotoUploads;
+	private final TipPhotoClaims tipPhotoClaims;
 	private final TipRelocations tipRelocations;
 	private final TipEditStore editStore;
 	private final TipPublishStore publishStore;
@@ -68,9 +69,11 @@ public class TipUpdateService {
 			.orElseThrow(() -> new BusinessException(ExceptionType.TIP_EDIT_IN_PROGRESS));
 		String jobId = UUID.randomUUID().toString();
 		try {
-			editStore.save(tipId, jobId, draft);
-			publishStore.save(tipId, TipPublishState.queuedUpdate(jobId, draft.photoChanged(),
-				draft.relocation() != null));
+			tipPhotoClaims.claimWhile(tipId, command.uploadIds(), () -> {
+				editStore.save(tipId, jobId, draft);
+				publishStore.save(tipId, TipPublishState.queuedUpdate(jobId, draft.photoChanged(),
+					draft.relocation() != null));
+			});
 		} catch (RuntimeException e) {
 			editStore.release(tipId, lockToken);
 			throw e;
