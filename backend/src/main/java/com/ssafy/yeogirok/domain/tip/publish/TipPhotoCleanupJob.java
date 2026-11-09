@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 public class TipPhotoCleanupJob {
 
 	private static final String TIP_PHOTO_PREFIX = FilePurpose.TIP_PHOTO.confirmedKey("");
+	/** IN 절 한 번에 넣는 경로 수. PostgreSQL 바인드 한도(32767)를 넘지 않게 나눠 조회한다. */
+	static final int LOOKUP_BATCH_SIZE = 1000;
 
 	private final FileStorage fileStorage;
 	private final FileProperties fileProperties;
@@ -48,7 +50,11 @@ public class TipPhotoCleanupJob {
 			if (candidates.isEmpty()) {
 				return;
 			}
-			Set<String> keep = new HashSet<>(arTipImageRepository.findLinkedPaths(candidates));
+			Set<String> keep = new HashSet<>();
+			for (int from = 0; from < candidates.size(); from += LOOKUP_BATCH_SIZE) {
+				keep.addAll(arTipImageRepository.findLinkedPaths(
+					candidates.subList(from, Math.min(from + LOOKUP_BATCH_SIZE, candidates.size()))));
+			}
 			keep.addAll(publishStore.imagePaths());
 			keep.addAll(editStore.imagePaths());
 			for (String key : candidates) {

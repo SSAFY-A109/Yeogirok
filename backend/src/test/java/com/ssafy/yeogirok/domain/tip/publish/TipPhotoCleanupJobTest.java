@@ -5,14 +5,17 @@ import static com.ssafy.yeogirok.domain.tip.TipFixture.published;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,6 +110,22 @@ class TipPhotoCleanupJobTest {
 		verify(STORAGE, never()).delete("photos", "tip-photo/linked");
 		verify(STORAGE, never()).delete("photos", "tip-photo/publishing");
 		verify(STORAGE, never()).delete("photos", "tip-photo/editing");
+	}
+
+	@Test
+	void 후보가_많으면_나눠서_조회하고_뒤쪽_묶음의_연결된_사진도_지우지_않는다() {
+		int total = TipPhotoCleanupJob.LOOKUP_BATCH_SIZE * 2 + 1;
+		List<String> candidates = IntStream.range(0, total).mapToObj(i -> "tip-photo/p" + i).toList();
+		for (int i : new int[] {TipPhotoCleanupJob.LOOKUP_BATCH_SIZE + 5, total - 1}) {
+			em.persist(ArTipImage.of(em.persistAndGetId(published(1L), Long.class), candidates.get(i), NOW));
+		}
+		given(STORAGE.listKeysModifiedBefore(anyString(), anyString(), any())).willReturn(candidates);
+
+		job.deleteUnlinked();
+
+		verify(STORAGE, times(total - 2)).delete(eq("photos"), anyString());
+		verify(STORAGE, never()).delete("photos", candidates.get(TipPhotoCleanupJob.LOOKUP_BATCH_SIZE + 5));
+		verify(STORAGE, never()).delete("photos", candidates.get(total - 1));
 	}
 
 	@Test
