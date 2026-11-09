@@ -100,6 +100,14 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
       KAKAO_APP_KEY: ${KAKAO_APP_KEY}
+      # 선택 키 (값은 .env). 비어 있어도 백엔드는 뜨고, 아래 기능만 동작하지 않는다.
+      # - GOOGLE_WEB_CLIENT_SECRET: 구글 회원 탈퇴 때 구글 연결 해제. 없으면 구글 회원은 탈퇴할 수 없다.
+      # - KAKAO_ADMIN_KEY: 카카오 회원 탈퇴 때 카카오 연결 해제. 없으면 해제하지 않고 재시도 대상으로만 남는다.
+      # - KAKAO_REST_API_KEY: 발자취 주소·후보 장소 법정동(카카오 로컬 API). 없으면 주소가 비어 저장된다.
+      # :- 는 .env 에 없을 때 경고 없이 빈 값으로 넘긴다는 뜻이다.
+      GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
+      KAKAO_ADMIN_KEY: ${KAKAO_ADMIN_KEY:-}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
       # 여행방 초대 (백엔드 #55, 11/6). 둘 중 하나라도 빠지면 백엔드가 바로 멈춘다.
       # 초대 토큰 암호화 키는 비밀 값이라 .env 에 둔다. 한 번 만든 뒤에는 바꾸지 않는다.
       ROOM_INVITE_TOKEN_KEY: ${ROOM_INVITE_TOKEN_KEY}
