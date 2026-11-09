@@ -1,0 +1,9 @@
+# Jenkins 화면을 열 수 있는 IP 목록 예시 (가이드 10-2).
+# 서버의 /etc/nginx/snippets/yeogirok-jenkins-allow.conf 에 만든다. 실제 IP 는 공개 저장소에 올리지 않는다.
+# 한 줄에 하나. 바꾼 뒤에는 sudo nginx -t && sudo systemctl reload nginx
+#
+#   allow 203.0.113.10;       # 예: 인프라 담당 노트북 (서버에서 echo ${SSH_CLIENT%% *} 로 확인)
+#   allow 198.51.100.0/24;    # 예: 강의실 네트워크 대역
+#
+# 목록에 없는 곳(휴대폰 핫스팟 등)에서는 SSH 터널로 연다:
+#   ssh -i <키>.pem -L 9090:127.0.0.1:9090 ubuntu@<도메인>   → 브라우저에서 http://localhost:9090/jenkins/

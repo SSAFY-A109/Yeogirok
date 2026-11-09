@@ -31,7 +31,8 @@ flowchart LR
 | `infra/.env.example` | 서버 비밀값 목록 (값은 비워 둠) | 서버에서 `.env`로 복사 |
 | `infra/scripts/restore-db.sh` | 백업 파일로 DB 되돌리기 | 서버 (필요할 때 손으로) |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
-| `infra/nginx/jenkins.conf` | `https://<도메인>/jenkins/`를 Jenkins로 연결 | 서버 `/etc/nginx/snippets` |
+| `infra/nginx/jenkins.conf` | `https://<도메인>/jenkins/`를 Jenkins로 연결 (웹훅만 공개, 화면은 허용 IP만) | 서버 `/etc/nginx/snippets` |
+| `infra/nginx/jenkins-allow.conf.example` | Jenkins 화면 허용 IP 목록 예시 (실제 목록은 서버에만) | 서버 `/etc/nginx/snippets` |
 | `infra/scripts/deploy-backend.sh` | 최신 코드(또는 넘겨받은 커밋)로 백엔드 다시 띄우고 확인, 실패하면 이전 버전으로 되돌림 | 서버 (Actions·Jenkins가 실행) |
 | `infra/scripts/check-backend-env.sh` | 백엔드가 요구하는 값을 compose·`.env`가 다 넘기는지 확인 | 서버 배포 전, 백엔드 PR 검사 |
 | `infra/scripts/backup-db.sh` | DB 백업, 오래된 백업 정리 | 서버 (cron) |
@@ -632,6 +633,7 @@ flowchart LR
 
 - Jenkins는 앱과 **다른 compose 파일**(`infra/jenkins/docker-compose.yml`)로 띄웁니다. 앱을 다시 띄워도 Jenkins는 그대로이고, 반대도 마찬가지입니다.
 - 도메인이 하나라 `https://<도메인>/jenkins/` 경로로 엽니다. 새 포트는 열지 않습니다.
+- **인터넷 전체에 여는 것은 GitHub 웹훅 주소 하나(POST만)입니다.** Jenkins 화면은 허용한 IP에서만 열리고, 그 밖에서는 SSH 터널로 엽니다(10-2). Jenkins가 서버 Docker를 쓰기 때문에 Jenkins 관리자 권한이나 Jenkins 취약점 하나가 곧 서버 root 권한이라서입니다.
 - 배포는 Jenkins가 SSH로 서버에 들어가 `deploy-backend.sh`를 실행합니다. Actions와 같은 방식이라 손으로 배포할 때와 결과가 같습니다. 이때 **방금 테스트한 커밋**을 `DEPLOY_SHA`로 넘겨서, 그사이 새 커밋이 들어와도 테스트하지 않은 코드가 나가지 않습니다. 다른 배포(Actions나 수동 배포)가 돌고 있으면 끝날 때까지 기다렸다가 배포합니다.
 - 파이프라인 파일은 `infra/dev`에 둡니다(`infra/jenkins/backend.Jenkinsfile`). Actions 워크플로처럼 `backend/dev`에 넣지 않아도 되어서, 인프라가 백엔드 PR 없이 고칠 수 있습니다.
 
@@ -655,11 +657,23 @@ docker compose logs -f      # "Jenkins is fully up and running" 이 보이면 Ct
 
 certbot이 고친 서버 Nginx 파일은 덮어쓰지 않고, Jenkins 설정 조각을 따로 복사한 뒤 `include` 한 줄만 넣습니다.
 
+| 경로 | 누가 열 수 있나 |
+| --- | --- |
+| `/jenkins/generic-webhook-trigger/invoke` (GitHub 웹훅) | 어디서나, **POST만**. GitHub 서버 IP는 자주 바뀌어 IP로 막지 않고, 주소 끝 토큰(10-4 ③)이 맞아야 빌드가 돈다 |
+| `/jenkins/cli` | 아무도. 쓰지 않는 기능이고, 과거 Jenkins 큰 취약점이 이 경로로 들어왔다 |
+| 그 밖의 `/jenkins/` 전부(화면, 로그인, API) | **허용 IP 목록**에 있는 곳만. 나머지는 403 |
+
+허용 IP 목록은 IP가 공개 저장소에 올라가지 않게 **서버에만** 둡니다(`/etc/nginx/snippets/yeogirok-jenkins-allow.conf`, 예시는 `infra/nginx/jenkins-allow.conf.example`). 처음에는 지금 SSH로 접속한 IP(내 노트북의 바깥 IP)를 넣습니다.
+
 ```bash
 CONF=/etc/nginx/sites-available/yeogirok
 sudo cp $CONF ~/nginx-yeogirok.bak
 SNIP=/etc/nginx/snippets/yeogirok-jenkins.conf
 sudo cp ~/yeogirok/infra-src/infra/nginx/jenkins.conf $SNIP
+ALLOW=/etc/nginx/snippets/yeogirok-jenkins-allow.conf
+MYIP=${SSH_CLIENT%% *}
+echo $MYIP                          # 내 노트북의 바깥 IP
+echo "allow $MYIP;   # $(date +%F) 인프라 담당" | sudo tee $ALLOW
 grep -c 'location / {' $CONF        # 1 이어야 한다
 sudo sed -i '/location \/ {/i include snippets/yeogirok-jenkins.conf;' $CONF
 grep -n 'include snippets' $CONF    # 한 줄 보이면 정상
@@ -667,7 +681,11 @@ sudo nginx -t                       # "syntax is ok"
 sudo systemctl reload nginx
 ```
 
-브라우저에서 `https://<도메인>/jenkins/`를 열어 **Unlock Jenkins** 화면이 나오면 성공입니다. `nginx -t`가 실패하면 백업으로 되돌립니다: `sudo cp ~/nginx-yeogirok.bak $CONF`
+- 브라우저에서 `https://<도메인>/jenkins/`를 열어 **Unlock Jenkins** 화면이 나오면 성공입니다. `nginx -t`가 실패하면 백업으로 되돌립니다: `sudo cp ~/nginx-yeogirok.bak $CONF`
+- 허용 목록 밖(다른 팀원, 휴대폰 핫스팟 등)에서 열면 403이 정상입니다. IP를 더하려면 `echo "allow <IP>;   # 누구" | sudo tee -a $ALLOW` 후 `sudo nginx -t && sudo systemctl reload nginx`. 상대 IP는 그 사람이 브라우저에서 `https://ifconfig.me`를 열면 보입니다.
+- 목록 밖에서 잠깐 열 때는 **SSH 터널**을 씁니다(서버 키가 있는 사람만). 노트북 창에서 `ssh -i $HOME\.ssh\K15A109T.pem -L 9090:127.0.0.1:9090 ubuntu@k15a109.p.ssafy.io`로 접속해 둔 채, 브라우저에서 `http://localhost:9090/jenkins/`를 엽니다. 이때 "reverse proxy setup is broken" 경고가 보일 수 있는데, 주소가 달라서 생기는 것이라 무시해도 됩니다.
+- Mattermost 알림 카드의 빌드 로그 링크도 허용 IP에서만 열립니다.
+- 웹훅 주소를 브라우저로 열면(GET) 403입니다. GitHub는 POST로 보내므로 정상입니다.
 
 ### 10-3. 처음 설정 (브라우저, 20분)
 
@@ -677,7 +695,7 @@ sudo systemctl reload nginx
    docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
    ```
 2. **Install suggested plugins**를 누릅니다. 5분쯤 걸리고, 실패한 플러그인이 있으면 **Retry**를 누릅니다.
-3. **Create First Admin User**에서 관리자 계정을 만듭니다. 화면이 인터넷에 열려 있으니 비밀번호는 길게 만듭니다(`openssl rand -base64 18`).
+3. **Create First Admin User**에서 관리자 계정을 만듭니다. 허용 IP에서만 열리지만 이 계정이 곧 서버 root 권한이라 비밀번호는 길게 만들고(`openssl rand -base64 18`), 계정은 꼭 필요한 사람에게만 줍니다.
 4. **Instance Configuration**의 Jenkins URL에 `https://<도메인>/jenkins/`를 넣습니다. 알림에 붙는 빌드 링크가 이 주소로 만들어집니다.
 5. **Manage Jenkins → Plugins → Available plugins**에서 `Generic Webhook Trigger`를 찾아 설치합니다. 웹훅 내용을 읽어 `backend/dev`일 때만 빌드하는 데 씁니다.
 6. **Manage Jenkins → Security**에서 두 가지를 확인합니다.
@@ -877,6 +895,8 @@ grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
 | certbot 실패 (Timeout during connect) | 80번이 막혔거나 도메인이 다른 IP를 가리킴 | 보안 그룹 80번, `nslookup <도메인>` 확인 |
 | `address already in use` (8080·5432) | 다른 프로그램이 포트 사용 중 | `sudo ss -ltnp \| grep -E '8080\|5432'` |
 | `https://<도메인>/jenkins/`에 백엔드 404 화면이 나옴 | Nginx에 `include` 줄이 안 들어감 | 10-2의 `grep -n 'include snippets'`, `sudo nginx -t` |
+| `https://<도메인>/jenkins/`가 403 Forbidden | 지금 IP가 허용 목록에 없음(휴대폰 핫스팟 등으로 IP가 바뀜) | 10-2대로 IP를 허용 목록에 더하거나 SSH 터널로 엽니다 |
+| `nginx -t`가 `open() ".../yeogirok-jenkins-allow.conf" failed` | 허용 IP 목록 파일이 없음 | 10-2의 `ALLOW` 줄부터 실행해 파일을 만듭니다(비워 둬도 됨. 그러면 화면은 SSH 터널로만 열림) |
 | `https://<도메인>/jenkins/`가 502 | Jenkins가 꺼졌거나 켜지는 중 | `infra/jenkins`에서 `docker compose ps`, `docker compose logs --tail 50` |
 | Jenkins 화면에 "reverse proxy setup is broken" | Jenkins URL이 실제 주소와 다름 | Manage Jenkins → System → Jenkins URL을 `https://<도메인>/jenkins/`로 |
 | Jenkins 테스트 단계에 `Could not find a valid Docker environment` | Jenkins가 docker.sock을 쓸 권한이 없음 | `jenkins/.env`의 `DOCKER_GID`와 `getent group docker` 번호 비교, 고친 뒤 `docker compose up -d` |
