@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import com.ssafy.yeogirok.domain.file.FileProperties;
+import com.ssafy.yeogirok.domain.file.service.FileUrlIssuer;
 import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.tip.dto.MyTipDetailResponse;
 import com.ssafy.yeogirok.domain.tip.dto.MyTipListResponse;
@@ -34,7 +35,8 @@ import com.ssafy.yeogirok.support.TestFileProperties;
 
 /** API-053·090 규칙. 팁 등록 시각은 NOW 기준으로 다르게 둔다. S3 서명은 가짜다. */
 @DataJpaTest
-@Import({MyTipService.class, MyTipFinder.class, TipPhotoUrls.class, MyTipServiceTest.Config.class})
+@Import({MyTipService.class, MyTipFinder.class, TipPhotoUrls.class, FileUrlIssuer.class,
+	MyTipServiceTest.Config.class})
 class MyTipServiceTest {
 
 	static final Long ME = 8001L;

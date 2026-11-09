@@ -34,6 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.ssafy.yeogirok.domain.file.dto.FileAccessResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateRequest.TipCreateCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest.TipReactionCommand;
@@ -47,6 +48,7 @@ import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
+import com.ssafy.yeogirok.domain.tip.service.TipPhotoUrls;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
@@ -85,6 +87,9 @@ class TipControllerTest {
 
 	@MockitoBean
 	TipViewService tipViewService;
+
+	@MockitoBean
+	TipPhotoUrls tipPhotoUrls;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
@@ -350,6 +355,22 @@ class TipControllerTest {
 		void 위치_증거가_없으면_C008() throws Exception {
 			expectError(perform(post("/api/v1/tips/7/view"), "{}"), 422, "C008");
 			verifyNoInteractions(tipViewService);
+		}
+	}
+
+	@Nested
+	class API_013_팁_사진_URL {
+
+		@Test
+		void 기존_013과_같은_응답_모양을_돌려준다() throws Exception {
+			given(tipPhotoUrls.accessForAuthor(USER_ID, 7L, 801L)).willReturn(new FileAccessResponse("https://signed/abc",
+				Instant.parse("2026-11-08T03:15:00Z"), "image/jpeg"));
+
+			mockMvc.perform(get("/api/v1/tips/7/images/801/access").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.url").value("https://signed/abc"))
+				.andExpect(jsonPath("$.data.expiresAt").value("2026-11-08 12:15:00+09"))
+				.andExpect(jsonPath("$.data.contentType").value("image/jpeg"));
 		}
 	}
 }
