@@ -1,0 +1,49 @@
+# 백엔드 PR 이 서버에 없는 값을 요구하는지 머지 전에 확인한다.
+#
+# 설정 파일(application.yaml, application-prod.yaml)에 기본값 없는 값(${KEY})을 추가하면,
+# 서버 compose(infra/dev 의 infra/docker-compose.yml)도 그 값을 백엔드에 넘겨야 한다.
+# compose 보다 백엔드가 먼저 머지되면 자동 배포된 서버 백엔드가 뜨지 못한다(11/4 Redis, 11/6 여행방 장애).
+#
+# 빨간불이면: infra 담당에게 값 이름을 알린다. infra PR 이 infra/dev 에 머지되면 이 검사를 Re-run jobs 로 다시 돌린다.
+# 값 이름만 본다. 서버 .env 에 실제 값이 들어 있는지는 서버 배포 스크립트가 배포 직전에 한 번 더 확인한다.
+
+name: check-server-env
+
+on:
+  pull_request:
+    branches: [backend/dev]
+    paths:
+      - "backend/src/main/resources/application*.yaml"
+      - "backend/src/main/resources/application*.yml"
+      - ".github/workflows/check-server-env.yml"
+  workflow_dispatch: # Actions 탭에서 수동 실행
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 서버 compose와 점검 스크립트 받기 (infra/dev)
+        id: infra
+        run: |
+          git fetch --quiet --depth=1 origin infra/dev
+          dir="$RUNNER_TEMP/infra"
+          mkdir -p "$dir/scripts"
+          git show FETCH_HEAD:infra/docker-compose.yml > "$dir/docker-compose.yml"
+          if git show FETCH_HEAD:infra/scripts/check-backend-env.sh > "$dir/scripts/check-backend-env.sh" 2>/dev/null; then
+            echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::infra/dev 에 점검 스크립트(check-backend-env.sh)가 아직 없어 검사를 건너뜁니다."
+          fi
+
+      - name: 백엔드가 요구하는 값을 서버 compose가 넘기는지 확인
+        if: steps.infra.outputs.dir != ''
+        run: |
+          shopt -s nullglob
+          files=(backend/src/main/resources/application.y*ml backend/src/main/resources/application-prod.y*ml)
+          bash "${{ steps.infra.outputs.dir }}/scripts/check-backend-env.sh" --keys-only \
+            --compose "${{ steps.infra.outputs.dir }}/docker-compose.yml" "${files[@]}"
