@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
+import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /** API-048 응답. photos 는 0~1개이고 url 은 이 요청에서만 발급한 Presigned GET 이다. */
@@ -30,13 +31,11 @@ public record TipViewResponse(
 	public record Photo(Long imageId, String url, String attribution) {
 	}
 
-	/** 탈퇴했거나 없는 회원이면 id null, nickname "탈퇴한 사용자"(노션 048). */
+	/** 탈퇴했거나 없는 회원이면 id null, nickname 은 {@link User#WITHDRAWN_NICKNAME}(노션 048). */
 	public record Author(Long id, String nickname) {
 
-		static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
-
 		public static Author withdrawn() {
-			return new Author(null, WITHDRAWN_NICKNAME);
+			return new Author(null, User.WITHDRAWN_NICKNAME);
 		}
 	}
 
