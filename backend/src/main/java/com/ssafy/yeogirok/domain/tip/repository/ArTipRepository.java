@@ -1,9 +1,12 @@
 package com.ssafy.yeogirok.domain.tip.repository;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +20,12 @@ public interface ArTipRepository extends JpaRepository<ArTip, Long> {
 	Optional<ArTip> findByIdAndStatusAndDeletedAtIsNull(Long id, TipStatus status);
 
 	Optional<ArTip> findByIdAndDeletedAtIsNull(Long id);
+
+	/** API-053. 작성자의 삭제되지 않은 팁을 (createdAt, id) 내림차순으로, 커서 (at, id) 다음부터. */
+	@Query("select t from ArTip t where t.authorId = :authorId and t.deletedAt is null and t.status in :statuses"
+		+ " and (t.createdAt < :at or (t.createdAt = :at and t.id < :id)) order by t.createdAt desc, t.id desc")
+	List<ArTip> findMine(@Param("authorId") Long authorId, @Param("statuses") Collection<TipStatus> statuses,
+		@Param("at") Instant at, @Param("id") Long id, Limit limit);
 
 	/** API-047 후보. 공개 팁 중 위경도 사각형 안(경계 포함)인 것. category 가 null 이면 전체. 거리는 서비스가 다시 잰다. */
 	@Query("select t from ArTip t where t.status = com.ssafy.yeogirok.domain.tip.entity.TipStatus.PUBLISHED"

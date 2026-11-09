@@ -35,9 +35,19 @@ public final class TipFixture {
 	}
 
 	public static ArTip registering(Long authorId, ArTipCategory category, LocationEvidence location) {
+		return registeringAt(authorId, category, location, NOW);
+	}
+
+	/** {@code createdAt} 시각에 등록한 팁. */
+	public static ArTip registeringAt(Long authorId, Instant createdAt) {
+		return registeringAt(authorId, ArTipCategory.CAFE, locationAt(LAT, LNG), createdAt);
+	}
+
+	private static ArTip registeringAt(Long authorId, ArTipCategory category, LocationEvidence location,
+		Instant createdAt) {
 		return ArTip.register(authorId, category, "창가 자리가 좋아요", location, "test-v1",
 			new SpatialReference(SpatialReference.PROVIDER, "anchor-1", NOW.plusSeconds(86_400)),
-			Map.of("schemaVersion", 1, "anchorType", "CLOUD", "authorizationMode", "KEYLESS"), NOW);
+			Map.of("schemaVersion", 1, "anchorType", "CLOUD", "authorizationMode", "KEYLESS"), createdAt);
 	}
 
 	public static ArTip published(Long authorId) {
