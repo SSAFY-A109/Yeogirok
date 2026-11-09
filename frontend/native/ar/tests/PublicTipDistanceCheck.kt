@@ -34,5 +34,17 @@ fun main() {
     check(PublicTipPolicy.needsRefresh(NavigationPolicy.distance(originLat, originLon, elevenMeters, originLon)))
     // A successful refresh moves the origin: small subsequent movement must not query again.
     check(!PublicTipPolicy.needsRefresh(NavigationPolicy.distance(elevenMeters, originLon, elevenMeters + Math.toDegrees(9.0 / 6371008.8), originLon)))
-    println("Public tip distance checks passed: camera 5m, map 50m, GPS refresh 10m")
+
+    // A minute spent looking at a featureless surface must not use the remaining resolve time.
+    val timeout = ResolveTrackingTimeout()
+    check(!timeout.update(0L, tracking = true))
+    check(!timeout.update(12_000L, tracking = true))
+    check(!timeout.update(12_001L, tracking = false))
+    check(!timeout.update(72_001L, tracking = false))
+    check(!timeout.update(72_002L, tracking = true))
+    check(!timeout.update(120_001L, tracking = true))
+    check(timeout.update(120_002L, tracking = true))
+    timeout.reset()
+    check(!timeout.update(120_003L, tracking = true))
+    println("Public tip checks passed: camera 5m, map 50m, GPS refresh 10m, resolve tracking timeout")
 }

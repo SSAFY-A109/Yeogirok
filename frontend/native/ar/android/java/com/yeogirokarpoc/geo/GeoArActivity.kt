@@ -231,9 +231,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         }
         if (localTip == null || productMode) actions.addView(confirm, LinearLayout.LayoutParams(0, -2, 1f))
         retry = Button(this).apply {
-            text = if (productMode && restore != null) "다시 찾기" else if (restore != null) "복원 재시도" else "다시 배치"
+            text = if (publicTips || productMode && restore != null) "다시 찾기" else if (restore != null) "복원 재시도" else "다시 배치"
             setOnClickListener {
-                if (restore != null) { navigation?.startScan(); restoreRetryRequested.set(true) }
+                if (publicTips) restoreRetryRequested.set(true)
+                else if (restore != null) { navigation?.startScan(); restoreRetryRequested.set(true) }
                 else resetRequested.set(true)
             }
         }
@@ -281,7 +282,11 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     background = theme.background(theme.foreground, dp(16).toFloat()).apply { alpha = 217 }
                 }
             }
-            root.addView(status, FrameLayout.LayoutParams(resources.displayMetrics.widthPixels - dp(156), -2, Gravity.TOP or Gravity.START).apply {
+            val statusPanel = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(status, LinearLayout.LayoutParams(-1, -2))
+            }
+            root.addView(statusPanel, FrameLayout.LayoutParams(resources.displayMetrics.widthPixels - dp(156), -2, Gravity.TOP or Gravity.START).apply {
                 topMargin = dp(48); leftMargin = dp(16)
             })
             val nearby = LinearLayout(this).apply {
@@ -352,21 +357,21 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 orientation = LinearLayout.HORIZONTAL; setPadding(dp(8), dp(8), dp(8), 0)
                 setBackgroundColor(theme.card)
             }
-            val labels = listOf("여행방", "AR 팁", "메인", "My", "지도")
+            val destinations = listOf("여행방" to "rooms", "AR 팁" to null, "메인" to "", "My" to "my", "지도" to "map")
             val icons = listOf("8add0.svg", "dc787.svg", "97200.svg", "ef890.svg", "b4e02.svg")
-            labels.forEachIndexed { index, name ->
+            destinations.forEachIndexed { index, (name, path) ->
                 val tab = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isSelected = index == 1
-                    isEnabled = index in 0..2; alpha = if (isEnabled) 1f else 0.5f
-                    contentDescription = name + if (index == 1) " 선택됨" else ""
-                    addView(ArIcon(this@GeoArActivity, icons[index], if (index == 1) theme.primary else theme.secondary), LinearLayout.LayoutParams(dp(24), dp(24)))
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isSelected = path == null
+                    val color = if (isSelected) theme.primary else theme.secondary
+                    contentDescription = name + if (isSelected) " 선택됨" else ""
+                    addView(ArIcon(this@GeoArActivity, icons[index], color), LinearLayout.LayoutParams(dp(24), dp(24)))
                     addView(TextView(this@GeoArActivity).apply {
-                        text = name; textSize = if (index == 1) 12f else 11f; typeface = theme.medium
-                        includeFontPadding = false; setTextColor(if (index == 1) theme.primary else theme.secondary)
+                        text = name; textSize = if (path == null) 12f else 11f; typeface = theme.medium
+                        includeFontPadding = false; setTextColor(color)
                     }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
-                    if (index == 0 || index == 2) setOnClickListener {
-                        val path = if (index == 0) "rooms" else ""
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("yeogirokfe:///$path"))); finish()
+                    if (path != null) setOnClickListener {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("yeogirokfe:///$path")).setPackage(packageName))
+                        finish()
                     }
                 }
                 tabs.addView(tab, LinearLayout.LayoutParams(0, dp(48), 1f))
@@ -384,6 +389,11 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 button.setTextColor(if (button === confirm) theme.card else theme.foreground)
             }
             actions.visibility = View.GONE
+            if (publicTips) {
+                actions.removeView(retry)
+                retry.visibility = View.GONE
+                statusPanel.addView(retry, LinearLayout.LayoutParams(-2, dp(48)).apply { topMargin = dp(8) })
+            }
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 background = theme.background(theme.card, dp(20).toFloat())
@@ -426,7 +436,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             showPlacementControls()
             androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
                 val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                (status.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(64) }.also { status.layoutParams = it }
+                (statusPanel.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(64) }.also { statusPanel.layoutParams = it }
                 (nearby.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(8) }.also { nearby.layoutParams = it }
                 (header.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(8) }.also { header.layoutParams = it }
                 tabs.setPadding(dp(8), dp(8), dp(8), bars.bottom)
@@ -466,6 +476,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         productTabs?.visibility = if (placingTip) View.GONE else View.VISIBLE
         addTip?.visibility = if (placingTip) View.GONE else View.VISIBLE
         if (placingTip) {
+            if (publicTips) retry.visibility = View.GONE
             navigation?.startPlacement()
             val theme = ArTheme(this)
             status.setTextColor(theme.card)
@@ -701,10 +712,17 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 if (productMode && restore == null) runOnUiThread { showPlacementControls() }
             }
             if (restoreRetryRequested.getAndSet(false) && restore != null) {
-                resetRestoredAnchor()
-                placementMessage = if (measurementAnchor != null)
-                    "초록 기준점은 유지하고 주황 핀 좌표만 다시 복원합니다."
-                    else "주황 핀 좌표를 다시 복원합니다. 원래 지점을 선택하면 자동 계산됩니다."
+                if (publicTips) {
+                    if (!placingTip) {
+                        if (cloud.failed) cloud.reset()
+                        nearbyAnchors?.retryFailed()
+                    }
+                } else {
+                    resetRestoredAnchor()
+                    placementMessage = if (measurementAnchor != null)
+                        "초록 기준점은 유지하고 주황 핀 좌표만 다시 복원합니다."
+                        else "주황 핀 좌표를 다시 복원합니다. 원래 지점을 선택하면 자동 계산됩니다."
+                }
             }
             current.setDisplayGeometry(windowManager.defaultDisplay.rotation, width, height)
             current.setCameraTextureName(background.textureId)
@@ -1104,6 +1122,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             !cameraTracking -> if (productMode) productTrackingHint(frame) else "카메라 추적 대기: ${frame.camera.trackingFailureReason}"
             publicTips && !placingTip && primaryDistance != null && !PublicTipPolicy.inCamera(primaryDistance) -> "복원된 팁까지 약 %.1fm예요. 실제 거리 5m 이내에서 표시돼요.".format(primaryDistance)
             productMode && cloud.authorizationFailed -> "Keyless 인증에 실패했어요. Google Cloud의 앱 등록을 확인해 주세요."
+            publicTips && cloud.failed -> "이 팁의 위치를 복원하지 못했어요."
             productMode && cloud.failed -> "이 팁의 위치를 복원하지 못했어요. 위에서 팁을 다시 선택해 보세요."
             productMode && cloud.busy -> "저장했던 공간 위치를 찾고 있어요."
             cloud.failed || cloud.busy -> cloud.message
@@ -1210,6 +1229,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 "Depth 지원: $depthSupported / Hit 허용: $allowDepth / 배치 Hit: $placementHitType\n" +
                 "$trackingMessage\n$placementMessage\n${direction ?: ""}$coordinates$measured\n" +
                 "지리 좌표·위치 정확도: 이 모드에서는 측정하지 않음\n수명 ${restore?.getInt("ttlDays") ?: ArExperimentPolicy.CLOUD_TTL_DAYS}일 / 기기 간 복원 성공 미검증"
+            val nearbyFailed = (nearbyAnchors?.failedCount ?: 0) > 0
+            val restoreFailed = restore != null && (cloud.failed || nearbyFailed)
             runOnUiThread { if (!isFinishing) {
                 val centerHint = if (!cameraTracking) productTrackingHint(frame)
                     else if (center != null) "중앙 표면에 팁을 남길 수 있어요. ＋를 눌러 주세요."
@@ -1218,18 +1239,20 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     if (choosingCenter) "바닥이나 벽을 1–3m 안에서 비춰 주세요" else productSaveHint
                 } else if (localTip != null) {
                     when {
-                        frameRendered > 0 -> "마커를 눌러 팁을 확인하세요" + if ((nearbyAnchors?.failedCount ?: 0) > 0) "\n일부 위치를 복원하지 못했어요" else ""
+                        frameRendered > 0 -> "마커를 눌러 팁을 확인하세요" + if (restoreFailed) "\n일부 위치를 복원하지 못했어요" else ""
                         !cameraTracking -> productTrackingHint(frame)
-                        publicTips && !PublicTipPolicy.inCamera(primaryDistance) -> trackingMessage
+                        cloud.failed -> trackingMessage
                         cloud.busy -> "저장한 공간을 찾고 있어요. 주변 벽과 사물을 천천히 비춰 주세요."
                         frameOccluded > 0 -> "팁이 앞의 물체에 가려져 있어요. 옆으로 움직여 확인해 주세요."
                         frameOutside > 0 -> "${direction ?: "주변을 둘러보세요"} · 팁이 화면 밖에 있어요."
                         primaryPaused -> "저장한 위치를 다시 찾고 있어요. 주변 공간을 천천히 비춰 주세요."
+                        publicTips && nearbyFailed -> "일부 팁의 위치를 복원하지 못했어요."
                         else -> trackingMessage
                     }
                 } else if (exploring && explorerTips.isEmpty()) if (publicTips) "50m 안에 공개된 팁이 없어요. ＋로 첫 팁을 남겨 보세요." else "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
                 else if (exploring) centerHint else productSaveHint
                 if (status.text.toString() != nextStatus) status.text = nextStatus
+                if (publicTips) retry.visibility = if (!placingTip && restoreFailed) View.VISIBLE else View.GONE
                 confirm.isEnabled = enabled
                 if (productMode && restore == null) confirm.visibility = if (cloud.failed) View.VISIBLE else View.GONE
                 if (productMode) confirm.alpha = if (enabled) 1f else 0.4f

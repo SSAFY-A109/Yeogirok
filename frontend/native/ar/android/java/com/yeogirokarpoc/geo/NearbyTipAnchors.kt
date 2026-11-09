@@ -9,7 +9,8 @@ data class NearbyArPin(val tip: JSONObject, val projection: PinProjection, val d
 /** Render-thread owner; ARCore permits 40 operations including resolved cloud anchors. */
 class NearbyTipAnchors(tips: List<JSONObject>, primaryId: String?) {
     private data class Entry(var tip: JSONObject, var future: ResolveCloudAnchorFuture? = null,
-                             var anchor: Anchor? = null, var startedAt: Long = 0, var failed: Boolean = false)
+                             var anchor: Anchor? = null, var failed: Boolean = false,
+                             val timeout: ResolveTrackingTimeout = ResolveTrackingTimeout())
     private var entries = tips.filter { it.getString("id") != primaryId }.take(39).map { Entry(it) }
     val failedCount get() = entries.count { it.failed }
 
@@ -18,8 +19,8 @@ class NearbyTipAnchors(tips: List<JSONObject>, primaryId: String?) {
         val tracking = frame.camera.trackingState == TrackingState.TRACKING
         val pins = mutableListOf<NearbyArPin>()
         for (entry in entries) {
-            if (entry.startedAt == 0L && tracking && !entry.failed) {
-                entry.startedAt = now
+            if (entry.future == null && entry.anchor == null && tracking && !entry.failed) {
+                entry.timeout.reset()
                 try { entry.future = session.resolveCloudAnchorAsync(entry.tip.getJSONObject("cloudRecord").getString("anchorId"), null) }
                 catch (_: Exception) { entry.failed = true }
             }
@@ -28,8 +29,8 @@ class NearbyTipAnchors(tips: List<JSONObject>, primaryId: String?) {
                     entry.future = null
                     if (future.resultCloudAnchorState == Anchor.CloudAnchorState.SUCCESS) entry.anchor = future.resultAnchor
                     if (entry.anchor == null) entry.failed = true
-                } else if (now - entry.startedAt >= ArExperimentPolicy.CLOUD_TIMEOUT_MS) {
-                    future.cancel(); entry.future = null; entry.failed = true
+                } else if (entry.timeout.update(now, tracking) && future.cancel()) {
+                    entry.future = null; entry.failed = true
                 }
             }
             val anchor = entry.anchor ?: continue
@@ -58,8 +59,10 @@ class NearbyTipAnchors(tips: List<JSONObject>, primaryId: String?) {
                 future.resultAnchor?.detach() else future.cancel()
         }
         entry.future = null; entry.anchor?.detach(); entry.anchor = null
-        entry.startedAt = 0; entry.failed = false
+        entry.failed = false
     }
+
+    fun retryFailed() { entries.forEach { it.failed = false } }
 
     fun clear() { entries.forEach { release(it) } }
 }
