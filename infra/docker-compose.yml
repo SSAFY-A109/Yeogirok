@@ -63,7 +63,12 @@ services:
 
   backend:
     # 서버에 따로 받아 둔 backend/dev 코드로 이미지를 만든다 (가이드 3단계 폴더 구조).
-    build: ../../backend-src/backend
+    build:
+      context: ../../backend-src/backend
+      # 이미지를 만든 커밋을 표시해 둔다. deploy-backend.sh 가 넘기고, 되돌릴 때 어느 버전인지 알리는 데 쓴다.
+      # 지금 떠 있는 버전 보기: docker inspect -f '{{index .Config.Labels "yeogirok.commit"}}' yeogirok-backend:latest
+      labels:
+        yeogirok.commit: ${BACKEND_COMMIT:-unknown}
     image: yeogirok-backend:latest
     restart: unless-stopped
     depends_on:

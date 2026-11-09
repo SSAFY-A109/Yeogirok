@@ -32,7 +32,8 @@ flowchart LR
 | `infra/scripts/restore-db.sh` | 백업 파일로 DB 되돌리기 | 서버 (필요할 때 손으로) |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
 | `infra/nginx/jenkins.conf` | `https://<도메인>/jenkins/`를 Jenkins로 연결 | 서버 `/etc/nginx/snippets` |
-| `infra/scripts/deploy-backend.sh` | 최신 코드(또는 넘겨받은 커밋)로 백엔드 다시 띄우고 확인 | 서버 (Actions·Jenkins가 실행) |
+| `infra/scripts/deploy-backend.sh` | 최신 코드(또는 넘겨받은 커밋)로 백엔드 다시 띄우고 확인, 실패하면 이전 버전으로 되돌림 | 서버 (Actions·Jenkins가 실행) |
+| `infra/scripts/check-backend-env.sh` | 백엔드가 요구하는 값을 compose·`.env`가 다 넘기는지 확인 | 서버 배포 전, 백엔드 PR 검사 |
 | `infra/scripts/backup-db.sh` | DB 백업, 오래된 백업 정리 | 서버 (cron) |
 | `infra/jenkins/docker-compose.yml` | Jenkins 컨테이너 (앱과 따로 켜고 끔) | 서버 |
 | `infra/jenkins/backend.Jenkinsfile` | 백엔드 테스트 → 배포 → 알림 파이프라인 | Jenkins job `yeogirok-backend` |
@@ -45,6 +46,7 @@ flowchart LR
 | `ai/ocr/Dockerfile`, `ai/ocr/.dockerignore` | AI(OCR) 이미지를 만드는 방법. **`ai/dev`로 PR**해 AI 리뷰를 받습니다. `.dockerignore`는 허용 목록 방식이라 실제 영수증 사진(`real/`)이 이미지에 들어가지 않습니다 |
 | `backend/src/main/resources/application-prod.yaml` | 서버용 설정 프로필 (DB 접속, 프록시 헤더) |
 | `.github/workflows/deploy-backend.yml` | 자동 배포. push로 실행되는 워크플로는 **push된 브랜치에 있는 파일**을 쓰기 때문에 `backend/dev`에 있어야 동작합니다 |
+| `.github/workflows/check-server-env.yml` | 백엔드 PR이 서버 compose에 없는 값을 요구하면 빨간불 (6-6) |
 
 ## 진행 순서
 
@@ -329,6 +331,45 @@ crontab -e
 ```
 
 배포 기록은 `tail -f ~/yeogirok/deploy.log`로 봅니다. 이 경우 워크플로에서는 `deploy` 작업을 지우고 `test`만 남깁니다.
+
+### 6-6. 배포 안전장치
+
+**왜**: 11/4(Redis)와 11/6(여행방) 두 번, 서버에 없는 값을 요구하는 백엔드 코드가 머지되자마자 자동 배포돼 백엔드가 멈췄습니다(`https://<도메인>` 502). 이제 세 군데서 막습니다.
+
+| 언제 | 무엇이 | 하는 일 |
+| --- | --- | --- |
+| 백엔드 PR | GitHub Actions `check-server-env` | 백엔드 설정이 기본값 없이 요구하는 값(`${KEY}`)을 서버 compose(`infra/dev`)가 넘기지 않으면 PR에 빨간불. 파일 줄에 어떤 값인지 표시됩니다 |
+| 배포 직전 | `deploy-backend.sh` 배포 전 점검 | compose나 서버 `.env`에 값이 없거나 비어 있으면 **아무것도 바꾸지 않고** 멈춤. 떠 있는 백엔드는 그대로 |
+| 배포 직후 | `deploy-backend.sh` 자동 되돌리기 | 새 백엔드가 2분 안에 응답하지 않거나 시작하다 멈추기를 반복하면, 직전에 정상이던 이미지로 되돌림 |
+
+배포 스크립트가 끝나는 코드로 결과를 구분합니다. Jenkins는 이 코드로 Mattermost 알림 문구를 고릅니다(10단계).
+
+| 코드 | 뜻 | 서비스 |
+| --- | --- | --- |
+| 0 | 성공 | 새 버전 |
+| 2 | 배포 전 점검에서 멈춤 | 그대로 (바뀐 것 없음) |
+| 3 | 새 버전이 뜨지 않아 되돌림 | 이전 버전 |
+| 1 | 그 밖의 실패 | 빌드 실패면 그대로, 되돌릴 이미지가 없거나 되돌리기도 실패하면 멈춤 |
+
+손으로 확인할 때 (`~/yeogirok/infra-src/infra`에서):
+
+```bash
+bash scripts/deploy-backend.sh --check     # 배포하지 않고 값만 확인. 마지막 줄이 "통과"면 정상
+docker images yeogirok-backend             # latest(지금 버전), previous(되돌릴 버전)
+docker inspect -f '{{index .Config.Labels "yeogirok.commit"}}' yeogirok-backend:latest   # 지금 버전의 커밋
+```
+
+배포는 성공했는데 기능이 이상해서 직접 되돌릴 때:
+
+```bash
+docker tag yeogirok-backend:previous yeogirok-backend:latest
+docker compose up -d --no-deps --force-recreate backend
+```
+
+- 되돌리기는 **코드(이미지)만** 되돌립니다. DB는 그대로입니다. 지금은 `ddl-auto: update`라 새 버전이 컬럼을 추가해도 이전 버전이 뜹니다. 7단계 Flyway 뒤에 컬럼을 지우거나 이름을 바꾸는 마이그레이션이 들어가면 이전 버전이 뜨지 못할 수 있으니, 그런 PR은 백엔드와 배포 시간을 맞춥니다.
+- `previous` 표시는 배포 직전에 **정상 응답하던** 이미지에만 붙습니다. 백엔드가 멈춘 상태에서 배포하면 표시를 옮기지 않고, 예전에 표시한 정상 이미지를 그대로 둡니다.
+- 되돌린 뒤에도 서버 `backend-src`는 실패한 커밋에 있습니다. 고친 커밋이 머지되면 평소처럼 배포됩니다.
+- 되돌릴 이미지(`previous`)가 하나 더 남아 디스크를 백엔드 이미지 하나만큼(약 0.6GB) 더 씁니다.
 
 ---
 
@@ -717,6 +758,13 @@ pipeline {
 
 - 빌드 번호(`#1`) → **Console Output**에서 진행을 봅니다. 첫 빌드는 Gradle이 의존성을 받느라 5~10분 걸리고, 다음부터는 캐시 덕분에 빨라집니다.
 - 끝났다는 기준: 로그 끝에 `[deploy] 성공`과 `Finished: SUCCESS`, Mattermost에 초록 카드 `✅ 백엔드 배포 성공 · 빌드 #1`, 빌드 화면에 **Test Result**.
+- 실패 알림은 배포 스크립트의 끝나는 코드(6-6)에 따라 문구와 카드 색이 다릅니다.
+
+  | 알림 | 색 | 뜻 |
+  | --- | --- | --- |
+  | `⛔ 백엔드 배포 중단: 서버에 필요한 값이 없음 (서버는 그대로)` | 노랑 | 배포 전 점검에서 멈춤. 로그의 `[check]` 줄에 빠진 값이 나온다 |
+  | `⚠️ 백엔드 새 버전이 뜨지 않아 이전 버전으로 되돌림` | 주황 | 서비스는 이전 버전으로 살아 있다. 로그에서 새 버전이 멈춘 이유를 본다 |
+  | `❌ 백엔드 배포 실패` | 빨강 | 테스트 실패, 빌드 실패, 되돌리기 실패 등 |
 - 같은 커밋으로 다시 빌드하면 Gradle이 이미 통과한 테스트를 건너뛰어(`UP-TO-DATE`) 테스트 단계가 몇 초 만에 끝납니다. 정상입니다.
 - 첫 실행이 끝나야 Jenkinsfile의 웹훅 설정(`triggers`)이 Jenkins에 등록됩니다. 10-6은 그다음에 합니다.
 - Jenkins는 빌드할 때마다 `infra/dev`에서 Jenkinsfile을 새로 읽습니다. 파이프라인을 고치려면 `infra/dev`로 PR을 머지하면 다음 빌드부터 적용됩니다.
@@ -741,7 +789,7 @@ pipeline {
 
 Jenkins가 실제 머지로 배포에 한 번 이상 성공하면 Actions를 끕니다. 둘 다 켜 두면 머지할 때마다 테스트와 배포가 두 번 돌고, 연달아 머지하면 잠깐 이전 커밋이 다시 배포될 수 있습니다.
 
-1. `backend/dev`로 PR을 보내 `.github/workflows/deploy-backend.yml`을 지웁니다(백엔드 리뷰).
+1. `backend/dev`로 PR을 보내 `.github/workflows/deploy-backend.yml`을 지웁니다(백엔드 리뷰). PR 검사인 `check-server-env.yml`은 남깁니다.
 2. 저장소 Settings → Secrets에서 `SSH_HOST`·`SSH_USER`·`SSH_KEY`를 지웁니다.
 3. 서버에서 Actions용 키를 지웁니다. 지금 SSH 창은 닫지 말고, 새 창으로 다시 접속되는지 확인합니다.
 
@@ -753,8 +801,7 @@ grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
 
 ### 다음에 붙일 것
 
-- **배포 전 환경 변수 점검**: prod 프로필에 필요한 값이 compose와 `.env`에 다 있는지 배포 전에 확인합니다. 11/4 Redis 장애처럼 값이 빠져 백엔드가 멈추는 일을 막습니다.
-- **자동 롤백**: 응답 확인이 실패하면 이전 이미지로 되돌립니다.
+- 배포 전 환경 변수 점검과 자동 되돌리기는 6-6에 붙였습니다.
 - **AI 서버**: `ai/Dockerfile`이 나오면 `backend.Jenkinsfile`을 복사해 AI용 job을 만듭니다.
 - **Jenkins 업데이트**: 한 달에 한 번 `infra/jenkins`에서 `docker compose pull && docker compose up -d`, 화면에서 Manage Jenkins → Plugins → Updates.
 
@@ -772,6 +819,8 @@ grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
 | 백엔드 재시작 | `docker compose restart backend` |
 | AI 로그·OCR 점검 | `docker compose logs --tail 100 ai` · `bash scripts/check-ai.sh` |
 | 수동 배포 | `bash scripts/deploy-backend.sh` |
+| 배포 전 값 점검만 | `bash scripts/deploy-backend.sh --check` |
+| 직전 버전으로 되돌리기 | `docker tag yeogirok-backend:previous yeogirok-backend:latest && docker compose up -d --no-deps --force-recreate backend` |
 | DB 접속(서버 안) | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` |
 | Redis 접속(서버 안) | `docker compose exec redis redis-cli` (비밀번호는 자동으로 들어감) |
 | Redis 메모리 사용량 | `docker compose exec redis redis-cli info memory \| grep used_memory_human` |
@@ -788,6 +837,10 @@ grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
 | --- | --- | --- |
 | `permission denied ... docker.sock` | docker 그룹 추가 후 다시 접속하지 않음 | `exit` 후 다시 SSH 접속 |
 | 브라우저에 502 Bad Gateway | 백엔드가 꺼져 있거나 아직 뜨는 중 | `docker compose ps`, `docker compose logs --tail 100 backend` |
+| 배포 로그에 `[deploy] 중단: 배포하지 않았습니다` | 배포 전 점검(6-6)에서 값이 빠짐. 서버는 그대로 | 바로 위 `[check]` 줄의 값을 채움. "compose 가 넘기지 않음"이면 `git -C ~/yeogirok/infra-src pull`, ".env 에 없거나 값이 비어 있음"이면 `.env`에 추가. `bash scripts/deploy-backend.sh --check`가 통과하면 다시 배포 |
+| 배포 로그에 `되돌리기 성공` (Mattermost ⚠️) | 새 버전이 시작하다 멈춰 이전 버전으로 되돌림 | 서비스는 이전 버전으로 살아 있음. 로그의 `APPLICATION FAILED TO START` 아래 이유를 백엔드에 전달하고, 고친 커밋이 머지되면 다시 배포됨 |
+| 배포 로그에 `되돌릴 정상 이미지가 없습니다` | 첫 배포이거나 배포 전부터 백엔드가 멈춰 있었음 | 로그로 원인을 고친 뒤 다시 배포. 한 번 성공하면 다음 배포부터 되돌릴 이미지가 생김 |
+| `--check`가 `docker compose 가 설정을 읽지 못했습니다` | `.env`에 compose 필수 값(예: `REDIS_PASSWORD`)이 없음 | 아래 줄 `required variable ... is missing a value`의 값을 `.env`에 넣음 |
 | 업로드할 때 413 | 업로드 한도 초과 | Nginx `client_max_body_size`, Spring multipart 한도 확인 |
 | Swagger Try it out이 "Failed to fetch" | HTTPS 뒤에서 http 주소로 요청 | `application-prod.yaml`의 `forward-headers-strategy: framework` 확인 |
 | 빌드 중 `Killed` 또는 exit 137 | 메모리 부족 | 2-4 스왑 추가 |
