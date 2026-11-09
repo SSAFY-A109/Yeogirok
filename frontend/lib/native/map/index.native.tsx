@@ -2,7 +2,10 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import {
+  buildFocusScript,
   buildKakaoMapHtml,
+  buildSetCurrentLocationScript,
+  buildSetFootprintsScript,
   buildSetMarkersScript,
   buildSetRouteScript,
   KAKAO_JS_SDK_DOMAIN,
@@ -10,9 +13,15 @@ import {
   type KakaoMapFailure,
   type MapCamera,
   type MapClusterBadge,
+  type MapCurrentLocation,
+  type MapCurrentLocationStyle,
+  type MapFocusRequest,
+  type MapFootprint,
+  type MapFootprintStyle,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRegion,
   type MapRoute,
 } from "./kakao-map-bridge";
 
@@ -21,14 +30,21 @@ export {
   type KakaoMapFailure,
   type MapCamera,
   type MapClusterBadge,
+  type MapCurrentLocation,
+  type MapCurrentLocationStyle,
+  type MapFocusRequest,
+  type MapFootprint,
+  type MapFootprintStyle,
   type MapMarker,
   type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRegion,
   type MapRoute,
   type MapRouteColors,
   type MapRoutePoint,
 } from "./kakao-map-bridge";
 
+export { footprintPinImage } from "./footprint-pin";
 export { placePinImage } from "./place-pin";
 
 const NO_RESPONSE_TIMEOUT_MS = 20000;
@@ -41,7 +57,14 @@ type KakaoMapViewProps = {
   clusterBadge?: MapClusterBadge;
   fitToMarkers?: boolean;
   route?: MapRoute;
+  footprints?: readonly MapFootprint[];
+  footprintStyle?: MapFootprintStyle;
+  currentLocation?: MapCurrentLocation | null;
+  currentLocationStyle?: MapCurrentLocationStyle;
+  focusRequest?: MapFocusRequest | null;
   onPressPoint?: (id: string) => void;
+  onPressMap?: () => void;
+  onRegionChange?: (region: MapRegion) => void;
   onReady: () => void;
   onError: (reason: KakaoMapFailure) => void;
   onPerformance?: (report: MapPerformanceReport) => void;
@@ -56,7 +79,14 @@ export function KakaoMapView({
   clusterBadge,
   fitToMarkers = false,
   route,
+  footprints,
+  footprintStyle,
+  currentLocation,
+  currentLocationStyle,
+  focusRequest,
   onPressPoint,
+  onPressMap,
+  onRegionChange,
   onReady,
   onError,
   onPerformance,
@@ -75,6 +105,7 @@ export function KakaoMapView({
   const markersSentAt = useRef(0);
   const markersSignature = useRef("");
   const routeSignature = useRef("");
+  const appliedFocusId = useRef<number | null>(null);
 
   const reportNoResponse = useEffectEvent(() => {
     if (!hasResponded.current) {
@@ -118,6 +149,41 @@ export function KakaoMapView({
     }
   }, [route]);
 
+  function sendFootprints(nextFootprints: readonly MapFootprint[], style: MapFootprintStyle) {
+    webViewRef.current?.injectJavaScript(buildSetFootprintsScript(nextFootprints, style));
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && footprints && footprintStyle) {
+      sendFootprints(footprints, footprintStyle);
+    }
+  }, [footprints, footprintStyle]);
+
+  function sendCurrentLocation(location: MapCurrentLocation | null, style: MapCurrentLocationStyle) {
+    webViewRef.current?.injectJavaScript(buildSetCurrentLocationScript(location, style));
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && currentLocationStyle && currentLocation !== undefined) {
+      sendCurrentLocation(currentLocation, currentLocationStyle);
+    }
+  }, [currentLocation, currentLocationStyle]);
+
+  function sendFocus(request: MapFocusRequest) {
+    if (appliedFocusId.current === request.id) {
+      return;
+    }
+
+    appliedFocusId.current = request.id;
+    webViewRef.current?.injectJavaScript(buildFocusScript(request));
+  }
+
+  useEffect(() => {
+    if (isMapReady.current && focusRequest) {
+      sendFocus(focusRequest);
+    }
+  }, [focusRequest]);
+
   function handleMessage(event: WebViewMessageEvent) {
     const message = parseKakaoMapMessage(event.nativeEvent.data);
 
@@ -138,6 +204,18 @@ export function KakaoMapView({
         sendRoute(route);
       }
 
+      if (footprints && footprintStyle) {
+        sendFootprints(footprints, footprintStyle);
+      }
+
+      if (currentLocation && currentLocationStyle) {
+        sendCurrentLocation(currentLocation, currentLocationStyle);
+      }
+
+      if (focusRequest) {
+        sendFocus(focusRequest);
+      }
+
       onReady();
     }
 
@@ -147,6 +225,14 @@ export function KakaoMapView({
 
     if (message.type === "point-pressed") {
       onPressPoint?.(message.id);
+    }
+
+    if (message.type === "map-pressed") {
+      onPressMap?.();
+    }
+
+    if (message.type === "region-changed") {
+      onRegionChange?.(message.region);
     }
 
     if (message.type === "markers-rendered") {

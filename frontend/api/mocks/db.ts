@@ -1,9 +1,13 @@
+import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
 import type { ScheduleBodyDto } from "../../features/schedule/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
 import { createTipFixtures, type MockTip } from "./fixtures/tip";
 import type { MockIdempotentResponse, MockUpload } from "./fixtures/media";
+
+/** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
+type MockIdempotencyRecord = { requestHash: string; footprintId: number };
 
 /** 목 서버가 들고 있는 일정 초안 작업. `readyAt`이 지나야 완료로 보인다. */
 export type MockScheduleDraft = {
@@ -27,10 +31,13 @@ type MockDb = {
   nextUploadId: number;
   rooms: Map<number, MockRoom>;
   preferences: Map<number, RecommendationPreferenceDto>;
+  footprints: CreateFootprintResponseDto[];
+  footprintRequests: Map<string, MockIdempotencyRecord>;
   scheduleDrafts: Map<number, MockScheduleDraft>;
   nextRoomId: number;
   nextRoomPlaceId: number;
   nextRecommendationRequestId: number;
+  nextFootprintId: number;
   nextScheduleDraftId: number;
 };
 
@@ -50,10 +57,13 @@ function createDb(): MockDb {
     })),
 
     preferences: new Map(),
+    footprints: [],
+    footprintRequests: new Map(),
     scheduleDrafts: new Map(),
     nextRoomId: 100,
     nextRoomPlaceId: 9000,
     nextRecommendationRequestId: 1,
+    nextFootprintId: 1,
     nextScheduleDraftId: 1,
   };
 }

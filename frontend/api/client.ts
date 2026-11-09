@@ -4,6 +4,7 @@ import { clearTokens, getTokens, setTokens } from "../features/auth/token-store"
 import { isServiceTokenPair } from "../features/auth/tokens";
 import { unwrapEnvelope } from "./envelope";
 import { ApiError, toApiError } from "./errors";
+import { IDEMPOTENCY_HEADER } from "./idempotency";
 
 /** 환경 변수에 설정한 API 호스트. `/api/v1`은 클라이언트가 붙인다. */
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, "");
@@ -27,6 +28,14 @@ export const TIMEOUT_QUERY_MS = 10_000;
 export const TIMEOUT_MUTATION_MS = 30_000;
 /** 파일 업로드 요청에서 `config.timeout`으로 지정할 제한 시간(밀리초). */
 export const TIMEOUT_UPLOAD_MS = 60_000;
+
+/**
+ * 중복되면 안 되는 생성 요청의 요청 설정(발자취 저장 API-041 등). 헤더 이름은 `api/idempotency.ts`의 공통 상수를 쓴다(규칙 90).
+ * 키는 사용자가 제출을 시작할 때 한 번 만들고, 같은 내용을 다시 보낼 때 그대로 쓴다.
+ */
+export function idempotentRequestConfig(idempotencyKey: string) {
+  return { headers: { [IDEMPOTENCY_HEADER]: idempotencyKey }, timeout: TIMEOUT_MUTATION_MS };
+}
 
 /**
  * 도메인 API 함수에서 사용하는 공통 axios 클라이언트.

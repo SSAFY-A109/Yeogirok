@@ -5,6 +5,7 @@ import { Stack } from "expo-router";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { PortalHost } from "@rn-primitives/portal";
 import { View } from "react-native";
+import { KeyboardStateKeeper } from "@/components/keyboard-state-keeper";
 import { MainTabBar } from "@/components/main-tab-bar";
 import { useFonts } from "expo-font";
 import { Text } from "@/components/ui/text";
@@ -23,6 +24,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <KeyboardStateKeeper />
       <ToastProvider>
         <RootNavigator />
       </ToastProvider>
@@ -76,6 +78,8 @@ function RootNavigator() {
             <Stack.Screen name="rooms/[roomId]/search" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/recommend" options={{ headerShown: false }} />
             <Stack.Screen name="ar-tip" options={{ headerShown: false }} />
+            <Stack.Screen name="map" options={{ headerShown: false }} />
+            <Stack.Screen name="footprints/new" options={{ headerShown: false }} />
             <Stack.Screen name="my" options={{ headerShown: false }} />
             <Stack.Screen name="kakao-map-test" />
           </Stack.Protected>
