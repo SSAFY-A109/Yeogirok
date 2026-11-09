@@ -84,6 +84,23 @@ export function parseServerDateTime(value: unknown, field: string): Date {
   return date;
 }
 
+/** 서버 시간대(Asia/Seoul)의 UTC 오프셋(시간). 서머타임이 없어 고정이다. */
+const SERVER_UTC_OFFSET_HOURS = 9;
+const HOUR_MS = 3_600_000;
+
+/** `Date`를 계약의 datetime(`2026-07-27 15:30:00+09`)으로 적는다. 기기 시간대와 상관없이 서버 시간대로 적는다. */
+export function formatServerDateTime(date: Date): string {
+  const seoul = new Date(date.getTime() + SERVER_UTC_OFFSET_HOURS * HOUR_MS);
+  const day = `${seoul.getUTCFullYear()}-${pad(seoul.getUTCMonth() + 1)}-${pad(seoul.getUTCDate())}`;
+  const time = `${pad(seoul.getUTCHours())}:${pad(seoul.getUTCMinutes())}:${pad(seoul.getUTCSeconds())}`;
+  return `${day} ${time}+${pad(SERVER_UTC_OFFSET_HOURS)}`;
+}
+
+/** 기기 시간대 기준의 시각(`15:07`). */
+export function formatTimeOfDay(date: Date): string {
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /** 기기 시간대 기준의 오늘 날짜. */
 export function todayLocalDate(now: Date = new Date()): LocalDate {
   return makeLocalDate(now.getFullYear(), now.getMonth() + 1, now.getDate());

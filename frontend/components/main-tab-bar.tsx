@@ -7,10 +7,10 @@ const items = [
   { key: "/ar-tip", label: "AR 팁", icon: tabBarIcons.scanEye, testID: "tabs.ar-tip" },
   { key: "/", label: "메인", icon: tabBarIcons.house },
   { key: "/my", label: "My", icon: tabBarIcons.user, testID: "tabs.my" },
-  { key: "map", label: "지도", icon: tabBarIcons.map, disabled: true },
+  { key: "/map", label: "지도", icon: tabBarIcons.map, testID: "tabs.map" },
 ];
 
-const TAB_PATHS = ["/", "/ar-tip", "/rooms", "/my"];
+const TAB_PATHS = ["/", "/ar-tip", "/rooms", "/my", "/map"];
 
 export function MainTabBar() {
   const pathname = usePathname();
@@ -39,6 +39,10 @@ export function MainTabBar() {
 
     if (value === "/my") {
       router.navigate("/my");
+    }
+
+    if (value === "/map") {
+      router.navigate("/map");
     }
   }} />;
 }
