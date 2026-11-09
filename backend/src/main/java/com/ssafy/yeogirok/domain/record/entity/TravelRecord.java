@@ -16,7 +16,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,7 +23,9 @@ import lombok.NoArgsConstructor;
 /**
  * 여행 기록(방당 1개). 노션 DDL {@code travel_records} 와 맞춘다. DDL 과 다른 점: travel_rooms FK 없음,
  * ENUM 타입·{@code reference_plan} JSON 객체 CHECK·컬럼 기본값은 H2 비호환이라 Flyway V1 에 맡긴다.
- * 파일 API 는 기록 참여자 확인에만 쓴다. 기록 생성·수정은 기록 API 에서 만든다.
+ *
+ * <p>version 은 JPA {@code @Version} 이 아니라 직접 올린다. 방문·사진·이야기처럼 다른 테이블만 바뀌어도 기록 version 을
+ * 올려야 해서다. 쓰기는 모두 기록 행을 잠근 뒤에 하므로(명세 {@code specs/record-api.md} 1-2) 동시 수정은 잠금이 막는다.
  */
 @Getter
 @Entity
@@ -54,7 +55,6 @@ public class TravelRecord {
 	@Column(nullable = false, length = 20)
 	private RecordStatus status = RecordStatus.DRAFT;
 
-	@Version
 	@Column(nullable = false)
 	private Integer version = 1;
 
@@ -80,5 +80,23 @@ public class TravelRecord {
 		record.createdAt = now;
 		record.updatedAt = now;
 		return record;
+	}
+
+	public boolean isCompleted() {
+		return status == RecordStatus.COMPLETED;
+	}
+
+	/** 방문·사진 연결·이야기가 실제로 바뀌었을 때만 부른다. 완성한 기록은 다시 작성 중이 된다. published_at 은 그대로 둔다. */
+	public void markEdited(Instant now) {
+		status = RecordStatus.DRAFT;
+		version++;
+		updatedAt = now;
+	}
+
+	/** API-071. 이미 완성한 기록에는 부르지 않는다. */
+	public void complete(Instant now) {
+		status = RecordStatus.COMPLETED;
+		version++;
+		updatedAt = now;
 	}
 }

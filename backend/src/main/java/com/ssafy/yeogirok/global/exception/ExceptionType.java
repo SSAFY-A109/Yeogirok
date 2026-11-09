@@ -11,7 +11,7 @@ import lombok.Getter;
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
  * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
- * {@code P} 장소, {@code M} 파일.
+ * {@code RE} 여행 기록, {@code P} 장소, {@code M} 파일.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -79,6 +79,25 @@ public enum ExceptionType {
 	ROOM_FULL(CONFLICT, "RO007", "여행방 참여 인원이 가득 찼습니다."),
 	/** 없는 후보이거나 다른 방의 후보다. 뺀 후보(removed_at)는 찾을 수 있다. */
 	ROOM_PLACE_NOT_FOUND(NOT_FOUND, "RO009", "요청한 후보 장소가 해당 여행방에 없습니다."),
+
+	/* ── 여행 기록 RE (RE021 은 노션에서 사용 중단. RE011·RE012 는 초안 API 때 넣는다) ── */
+
+	/** 없는 기록과 방이 삭제된 기록을 구분하지 않는다. */
+	RECORD_NOT_FOUND(NOT_FOUND, "RE001", "여행 기록 없음"),
+	RECORD_NOT_MEMBER(FORBIDDEN, "RE002", "여행 기록 참여자가 아님"),
+	RECORD_EDIT_FORBIDDEN(FORBIDDEN, "RE003", "여행 기록 편집 권한 없음"),
+	VISIT_NOT_FOUND(NOT_FOUND, "RE013", "요청한 실제 방문 일정이 해당 기록에 없음"),
+	STORY_NOT_FOUND(NOT_FOUND, "RE014", "요청한 이야기가 해당 방문 일정에 없음"),
+	STORY_EDIT_FORBIDDEN(FORBIDDEN, "RE015", "일정별 이야기 편집 권한 없음"),
+	RECORD_NOT_COMPLETABLE(UNPROCESSABLE_CONTENT, "RE016",
+		"여행기 완성 필수조건 미충족: 실제 방문 0개 또는 장소·날짜·방문 시각 미확인"),
+	RECORD_ALREADY_EXISTS(CONFLICT, "RE017", "해당 여행방에 여행 기록이 이미 존재함"),
+	VISIT_PLACE_MISSING(BAD_REQUEST, "RE018", "실제 방문 일정의 장소 입력 누락"),
+	VISIT_HAS_PHOTOS(CONFLICT, "RE020", "삭제 대상 방문에 연결된 사진이 남아 있음"),
+	VISIT_STORIES_NOT_CONFIRMED(CONFLICT, "RE023",
+		"삭제 대상 방문에 이야기가 있으나 confirmDeleteStories=true 확인이 없음"),
+	TRIP_NOT_ENDED(UNPROCESSABLE_CONTENT, "RE024",
+		"여행 종료 조건 미충족: 종료일 미정 또는 Asia/Seoul 기준 종료일이 오늘·미래"),
 
 	/* ── 장소 P ─────────────────────────────────────────────── */
 
