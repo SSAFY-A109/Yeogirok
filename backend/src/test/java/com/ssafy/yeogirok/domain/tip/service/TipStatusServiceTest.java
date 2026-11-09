@@ -96,7 +96,7 @@ class TipStatusServiceTest {
 		ArTip tip = registering(AUTHOR);
 		tip.fail(NOW);
 		Long tipId = em.persistAndGetId(tip, Long.class);
-		STATES.states.put(tipId, TipPublishState.queued("job-1", true).running().failed("C014", "실패"));
+		STATES.states.put(tipId, TipPublishState.queued("job-1", true).running().failed("C014", "실패", true));
 
 		TipStatusResponse response = service.getStatus(AUTHOR, tipId);
 

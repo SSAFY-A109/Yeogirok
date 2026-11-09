@@ -29,6 +29,7 @@ import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.service.MyTipFinder;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
+import com.ssafy.yeogirok.domain.tip.service.TipPhotoUploads;
 import com.ssafy.yeogirok.domain.tip.service.TipPlacements;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.global.config.AsyncConfig;
@@ -42,8 +43,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** 049 커밋 → @Async AFTER_COMMIT 게시 → 047 에 보이기까지 실제 이벤트 연결로 확인한다(Redis 는 맵). */
 @DataJpaTest
-@Import({AsyncConfig.class, TipCreateService.class, MyTipFinder.class, TipPublisher.class, TipSearchService.class, TipPlacements.class,
-	LocationEvidencePolicy.class, TipPublishFlowTest.Config.class})
+@Import({AsyncConfig.class, TipCreateService.class, MyTipFinder.class, TipPhotoUploads.class, TipPublisher.class,
+	TipSearchService.class, TipPlacements.class, LocationEvidencePolicy.class, TipPublishFlowTest.Config.class})
 class TipPublishFlowTest {
 
 	static final JsonMapper MAPPER = JsonMapper.builder().build();

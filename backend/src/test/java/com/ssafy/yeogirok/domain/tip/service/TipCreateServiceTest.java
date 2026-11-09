@@ -53,7 +53,8 @@ import tools.jackson.databind.json.JsonMapper;
 /** API-049 규칙. 커밋 뒤 게시는 TipPublisherTest 가 본다. */
 @DataJpaTest
 @RecordApplicationEvents
-@Import({TipCreateService.class, MyTipFinder.class, TipPlacements.class, LocationEvidencePolicy.class, TipCreateServiceTest.Config.class})
+@Import({TipCreateService.class, MyTipFinder.class, TipPhotoUploads.class, TipPlacements.class,
+	LocationEvidencePolicy.class, TipCreateServiceTest.Config.class})
 class TipCreateServiceTest {
 
 	static final Long AUTHOR = 3001L;

@@ -57,6 +57,11 @@ public final class JsonFields {
 		return requiredString(value, field);
 	}
 
+	/** 생략이면 null(바꾸지 않음), 명시한 null C001, 문자열 아님 C002(부분 수정 요청용). */
+	public static String optionalNonNullString(JsonNode value, String field) {
+		return value == null ? null : nonNullString(value, field);
+	}
+
 	/** 생략·null 이면 null, 문자열 아님 C002. */
 	public static String optionalString(JsonNode value, String field) {
 		if (isAbsent(value)) {

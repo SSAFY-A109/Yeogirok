@@ -60,7 +60,7 @@ public class TipPublisher {
 				.filter(tip -> tip.getStatus() == TipStatus.REGISTERING)
 				.ifPresent(tip -> tip.fail(clock.instant())));
 			publishStore.save(event.tipId(),
-				running.failed(ExceptionType.SERVER_ERROR.getCode(), ExceptionType.SERVER_ERROR.getMessage()));
+				running.failed(ExceptionType.SERVER_ERROR.getCode(), ExceptionType.SERVER_ERROR.getMessage(), true));
 		}
 	}
 

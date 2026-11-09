@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,6 +45,8 @@ import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipUpdateRequest.TipUpdateCommand;
+import com.ssafy.yeogirok.domain.tip.dto.TipUpdateResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipViewResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
@@ -56,6 +59,7 @@ import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
+import com.ssafy.yeogirok.domain.tip.service.TipUpdateService;
 import com.ssafy.yeogirok.domain.tip.service.TipViewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -96,6 +100,9 @@ class TipControllerTest {
 
 	@MockitoBean
 	TipDeleteService tipDeleteService;
+
+	@MockitoBean
+	TipUpdateService tipUpdateService;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
@@ -405,6 +412,50 @@ class TipControllerTest {
 			}
 			expectError(mockMvc.perform(request), 400, code);
 			verifyNoInteractions(tipDeleteService);
+		}
+	}
+
+	@Nested
+	class API_054_수정 {
+
+		@Test
+		void 수정하면_202와_현재_상태_UPDATE_QUEUED를_돌려준다() throws Exception {
+			given(tipUpdateService.update(eq(USER_ID), eq(7L), any())).willReturn(new TipUpdateResponse(7L, "job-1",
+				TipStatus.PUBLISHED, TipPublishState.Operation.UPDATE, TipPublishState.OperationStatus.QUEUED, 3));
+
+			perform(patch("/api/v1/tips/7").header("Idempotency-Key", "key-1"),
+				"{\"version\":3,\"body\":\"새 본문\",\"uploadIds\":[]}")
+				.andExpect(status().isAccepted())
+				.andExpect(jsonPath("$.data.tipId").value(7))
+				.andExpect(jsonPath("$.data.jobId").value("job-1"))
+				.andExpect(jsonPath("$.data.status").value("PUBLISHED"))
+				.andExpect(jsonPath("$.data.operation").value("UPDATE"))
+				.andExpect(jsonPath("$.data.operationStatus").value("QUEUED"))
+				.andExpect(jsonPath("$.data.version").value(3));
+
+			ArgumentCaptor<TipUpdateCommand> command = ArgumentCaptor.forClass(TipUpdateCommand.class);
+			verify(idempotencyService).execute(eq(new IdempotencyKey(USER_ID, "tip-update", "7", "key-1")),
+				command.capture(), any(), any(), any());
+			assertThat(command.getValue().uploadIds()).isEmpty();
+			assertThat(command.getValue().category()).isNull();
+			assertThat(command.getValue().relocating()).isFalse();
+		}
+
+		@ParameterizedTest(name = "{0} → {1}")
+		@CsvSource(delimiter = '|', textBlock = """
+			{"body":"새 본문"}                                   | 400 | C001
+			{"version":null,"body":"새 본문"}                    | 400 | C002
+			{"version":3,"category":null}                        | 400 | C001
+			{"version":3,"body":null}                            | 400 | C001
+			{"version":3,"body":5}                               | 400 | C002
+			{"version":3,"uploadIds":null}                       | 400 | C001
+			{"version":3,"uploadIds":["not-a-uuid"]}             | 400 | C002
+			{"version":3,"placement":{"schemaVersion":2}}        | 422 | C008
+			{"version":3,"location":null,"placement":{}}         | 422 | C008
+			""")
+		void 요청_형식_오류(String body, int status, String code) throws Exception {
+			expectError(perform(patch("/api/v1/tips/7").header("Idempotency-Key", "key-1"), body), status, code);
+			verifyNoInteractions(tipUpdateService);
 		}
 	}
 }

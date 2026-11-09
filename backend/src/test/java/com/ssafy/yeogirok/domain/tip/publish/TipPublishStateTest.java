@@ -21,7 +21,7 @@ class TipPublishStateTest {
 		assertThat(queued.operationStatus()).isEqualTo(QUEUED);
 		assertThat(queued.steps()).isEqualTo(new Steps(SKIPPED, StepStatus.SUCCEEDED, StepStatus.SUCCEEDED));
 		assertThat(queued.running().succeeded().steps().media()).isEqualTo(SKIPPED);
-		assertThat(queued.running().failed("C014", "x").steps().media()).isEqualTo(SKIPPED);
+		assertThat(queued.running().failed("C014", "x", true).steps().media()).isEqualTo(SKIPPED);
 	}
 
 	@Test
@@ -31,10 +31,21 @@ class TipPublishStateTest {
 		assertThat(running.steps().media()).isEqualTo(PENDING);
 		assertThat(running.succeeded().operationStatus()).isEqualTo(SUCCEEDED);
 		assertThat(running.succeeded().steps().media()).isEqualTo(StepStatus.SUCCEEDED);
-		TipPublishState failed = running.failed("C014", "x");
+		TipPublishState failed = running.failed("C014", "x", true);
 		assertThat(failed.operationStatus()).isEqualTo(FAILED);
 		assertThat(failed.steps().media()).isEqualTo(StepStatus.FAILED);
 		assertThat(failed.error()).isEqualTo(new TipPublishState.Error("C014", "x"));
 		assertThat(failed.retryable()).isTrue();
+	}
+
+	@Test
+	void 수정_작업은_UPDATE이고_바꾸지_않는_단계는_SKIPPED() {
+		TipPublishState bodyOnly = TipPublishState.queuedUpdate("job", false, false);
+		TipPublishState photoAndRelocation = TipPublishState.queuedUpdate("job", true, true);
+
+		assertThat(bodyOnly.operation()).isEqualTo(TipPublishState.Operation.UPDATE);
+		assertThat(bodyOnly.steps()).isEqualTo(new Steps(SKIPPED, SKIPPED, StepStatus.SUCCEEDED));
+		assertThat(photoAndRelocation.steps()).isEqualTo(new Steps(PENDING, StepStatus.SUCCEEDED, StepStatus.SUCCEEDED));
+		assertThat(photoAndRelocation.running().failed("C004", "x", false).retryable()).isFalse();
 	}
 }

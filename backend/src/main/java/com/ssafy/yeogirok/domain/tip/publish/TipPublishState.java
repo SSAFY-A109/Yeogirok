@@ -1,8 +1,8 @@
 package com.ssafy.yeogirok.domain.tip.publish;
 
 /**
- * 팁 게시 작업 상태(Redis {@code tip-publish:{tipId}}, 노션 Redis 설계). 공개 여부의 기준은 RDB ar_tips.status 다.
- * 이번 범위의 작업은 최초 게시(CREATE)뿐이다.
+ * 팁 게시·수정 작업 상태(Redis {@code tip-publish:{tipId}}, 노션 Redis 설계). 공개 여부의 기준은 RDB ar_tips.status 다.
+ * 팁마다 마지막 작업 하나(최초 게시 CREATE 또는 수정 UPDATE)를 둔다.
  *
  * @param error 실패하면 {@code {code, message}}, 아니면 null
  */
@@ -15,7 +15,7 @@ public record TipPublishState(
 	boolean retryable
 ) {
 
-	public enum Operation { CREATE }
+	public enum Operation { CREATE, UPDATE }
 
 	public enum OperationStatus { QUEUED, RUNNING, SUCCEEDED, FAILED }
 
@@ -35,6 +35,16 @@ public record TipPublishState(
 			null, false);
 	}
 
+	/**
+	 * API-054 수정. 본문·종류는 요청 안에서 검증을 마친다. 재배치가 없으면 spatial, 사진을 바꾸지 않으면 media 가 SKIPPED.
+	 */
+	public static TipPublishState queuedUpdate(String jobId, boolean photoChanged, boolean relocated) {
+		return new TipPublishState(jobId, Operation.UPDATE, OperationStatus.QUEUED,
+			new Steps(photoChanged ? StepStatus.PENDING : StepStatus.SKIPPED,
+				relocated ? StepStatus.SUCCEEDED : StepStatus.SKIPPED, StepStatus.SUCCEEDED),
+			null, false);
+	}
+
 	public TipPublishState running() {
 		return new TipPublishState(jobId, operation, OperationStatus.RUNNING, steps, null, false);
 	}
@@ -43,9 +53,10 @@ public record TipPublishState(
 		return new TipPublishState(jobId, operation, OperationStatus.SUCCEEDED, media(StepStatus.SUCCEEDED), null, false);
 	}
 
-	public TipPublishState failed(String code, String message) {
+	/** @param retryable 같은 작업을 다시 시도할 수 있는지(051). 버전 충돌·삭제처럼 다시 해도 안 되는 실패는 false */
+	public TipPublishState failed(String code, String message, boolean retryable) {
 		return new TipPublishState(jobId, operation, OperationStatus.FAILED, media(StepStatus.FAILED),
-			new Error(code, message), true);
+			new Error(code, message), retryable);
 	}
 
 	/** 아직 끝나지 않은(PENDING) media 단계만 바꾼다. */

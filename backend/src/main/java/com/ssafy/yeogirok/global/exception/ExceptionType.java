@@ -95,6 +95,8 @@ public enum ExceptionType {
 	TIP_SPATIAL_EXPIRED(GONE, "T005", "AR 공간 참조가 만료되었습니다."),
 	TIP_SPATIAL_INVALID(UNPROCESSABLE_CONTENT, "T007", "AR 공간 참조 또는 배치 정보 검증에 실패했습니다."),
 	TIP_SELF_REACTION(CONFLICT, "T009", "본인이 작성한 팁에는 반응할 수 없습니다."),
+	/** 같은 팁에 다른 수정 작업이 진행 중이거나, 게시 전·실패한 팁이라 수정 대신 등록 흐름(051)을 따라야 한다. */
+	TIP_EDIT_IN_PROGRESS(CONFLICT, "T010", "같은 팁에 다른 작업이 진행 중이라 수정할 수 없습니다."),
 	/** 작성자 본인 조회(049 재전송·050)에서 없거나 삭제된 팁. */
 	TIP_NOT_EXIST(NOT_FOUND, "T012", "팁을 찾을 수 없습니다."),
 

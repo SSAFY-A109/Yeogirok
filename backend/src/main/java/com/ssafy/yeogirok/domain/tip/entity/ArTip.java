@@ -136,6 +136,34 @@ public class ArTip {
 		this.updatedAt = now;
 	}
 
+	/**
+	 * API-054 수정 적용. null 인 항목은 그대로 둔다. 사진만 바뀌어도 updatedAt 이 바뀌어 version 이 오른다.
+	 * status·publishedAt 은 그대로다.
+	 */
+	public void edit(ArTipCategory category, String body, Instant now) {
+		if (category != null) {
+			this.category = category;
+		}
+		if (body != null) {
+			this.body = body;
+		}
+		this.updatedAt = now;
+	}
+
+	/** API-054 AR 재배치. 좌표·위치 증거·공간 참조·배치를 함께 바꾼다. */
+	public void relocate(LocationEvidence location, String locationPolicyVersion, SpatialReference spatialReference,
+		Map<String, Object> placement) {
+		this.latitude = location.latitude();
+		this.longitude = location.longitude();
+		this.accuracyMeters = location.accuracyMeters();
+		this.locationCapturedAt = location.capturedAt();
+		this.locationPolicyVersion = locationPolicyVersion;
+		this.spatialProvider = spatialReference.provider();
+		this.spatialReferenceId = spatialReference.referenceId();
+		this.spatialExpiresAt = spatialReference.expiresAt();
+		this.placement = placement;
+	}
+
 	/** 최초 게시 실패. 공개하지 않는다. */
 	public void fail(Instant now) {
 		this.status = TipStatus.FAILED;

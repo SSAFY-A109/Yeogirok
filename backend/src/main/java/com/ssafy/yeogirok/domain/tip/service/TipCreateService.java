@@ -2,7 +2,6 @@ package com.ssafy.yeogirok.domain.tip.service;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -12,10 +11,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.ssafy.yeogirok.domain.file.FilePurpose;
-import com.ssafy.yeogirok.domain.file.session.UploadSession;
-import com.ssafy.yeogirok.domain.file.session.UploadSessionStore;
-import com.ssafy.yeogirok.domain.file.session.UploadStatus;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateRequest.TipCreateCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
@@ -26,10 +21,7 @@ import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishRequested;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishStore;
-import com.ssafy.yeogirok.domain.tip.repository.ArTipImageRepository;
 import com.ssafy.yeogirok.domain.tip.repository.ArTipRepository;
-import com.ssafy.yeogirok.global.exception.BusinessException;
-import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.location.LocationEvidencePolicy;
 
 /**
@@ -42,8 +34,7 @@ public class TipCreateService {
 
 	private final ArTipRepository arTipRepository;
 	private final MyTipFinder myTipFinder;
-	private final ArTipImageRepository arTipImageRepository;
-	private final UploadSessionStore uploadSessionStore;
+	private final TipPhotoUploads tipPhotoUploads;
 	private final TipPublishStore publishStore;
 	private final TipPlacements tipPlacements;
 	private final LocationEvidencePolicy locationEvidencePolicy;
@@ -52,14 +43,12 @@ public class TipCreateService {
 	private final Clock clock;
 
 	public TipCreateService(ArTipRepository arTipRepository, MyTipFinder myTipFinder,
-		ArTipImageRepository arTipImageRepository,
-		UploadSessionStore uploadSessionStore, TipPublishStore publishStore, TipPlacements tipPlacements,
+		TipPhotoUploads tipPhotoUploads, TipPublishStore publishStore, TipPlacements tipPlacements,
 		LocationEvidencePolicy locationEvidencePolicy, ApplicationEventPublisher events,
 		PlatformTransactionManager transactionManager, Clock clock) {
 		this.arTipRepository = arTipRepository;
 		this.myTipFinder = myTipFinder;
-		this.arTipImageRepository = arTipImageRepository;
-		this.uploadSessionStore = uploadSessionStore;
+		this.tipPhotoUploads = tipPhotoUploads;
 		this.publishStore = publishStore;
 		this.tipPlacements = tipPlacements;
 		this.locationEvidencePolicy = locationEvidencePolicy;
@@ -75,7 +64,7 @@ public class TipCreateService {
 		String body = TipBody.normalize(command.body());
 		SpatialReference spatialReference = SpatialReference.read(command.spatialReference(), now);
 		Map<String, Object> placement = tipPlacements.toMap(command.placement());
-		String imagePath = photoPath(userId, command.uploadIds());
+		String imagePath = tipPhotoUploads.confirmedPath(userId, command.uploadIds());
 
 		String jobId = UUID.randomUUID().toString();
 		Long tipId = transactionTemplate.execute(status -> {
@@ -95,30 +84,5 @@ public class TipCreateService {
 		ArTip tip = myTipFinder.getOwn(tipId, userId);
 		String jobId = publishStore.find(tipId).map(TipPublishState::jobId).orElse(null);
 		return new TipCreateResponse(tipId, jobId, tip.getStatus());
-	}
-
-	/**
-	 * 사진 0~1장(2장 이상 C003). 세션 없음 M004 → 본인 것 아님 M005 → READY 아님 M006 → TIP_PHOTO 아님 M007 →
-	 * 이미 다른 팁에 붙은 사진 M005(11/8 결정).
-	 * @return 확정 경로. 사진이 없으면 null
-	 */
-	private String photoPath(Long userId, List<String> uploadIds) {
-		if (uploadIds.size() > 1) {
-			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "uploadIds: 사진은 최대 1장입니다.");
-		}
-		if (uploadIds.isEmpty()) {
-			return null;
-		}
-		UploadSession session = uploadSessionStore.findOwned(uploadIds.getFirst(), userId);
-		if (session.status() != UploadStatus.READY) {
-			throw new BusinessException(ExceptionType.FILE_NOT_UPLOADED);
-		}
-		if (session.purpose() != FilePurpose.TIP_PHOTO) {
-			throw new BusinessException(ExceptionType.FILE_PURPOSE_MISMATCH);
-		}
-		if (arTipImageRepository.existsByImagePath(session.confirmedKey())) {
-			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED, "이미 다른 팁에 붙인 사진입니다.");
-		}
-		return session.confirmedKey();
 	}
 }

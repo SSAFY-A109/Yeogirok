@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -24,6 +25,9 @@ import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipUpdateRequest;
+import com.ssafy.yeogirok.domain.tip.dto.TipUpdateRequest.TipUpdateCommand;
+import com.ssafy.yeogirok.domain.tip.dto.TipUpdateResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipViewRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipViewResponse;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
@@ -32,6 +36,7 @@ import com.ssafy.yeogirok.domain.tip.service.TipPhotoUrls;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
 import com.ssafy.yeogirok.domain.tip.service.TipStatusService;
+import com.ssafy.yeogirok.domain.tip.service.TipUpdateService;
 import com.ssafy.yeogirok.domain.tip.service.TipViewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -49,6 +54,8 @@ public class TipController {
 
 	/** 멱등키 scope. 새로 만드는 요청이라 대상은 "-" 다. */
 	static final String CREATE_SCOPE = "tip-create";
+	/** 멱등키 scope. 대상은 팁 id 다. */
+	static final String UPDATE_SCOPE = "tip-update";
 
 	private final TipCreateService tipCreateService;
 	private final TipSearchService tipSearchService;
@@ -57,6 +64,7 @@ public class TipController {
 	private final TipViewService tipViewService;
 	private final TipPhotoUrls tipPhotoUrls;
 	private final TipDeleteService tipDeleteService;
+	private final TipUpdateService tipUpdateService;
 	private final IdempotencyService idempotencyService;
 
 	/** 형식 검사는 멱등키 처리 전, 값 검사는 처리 안에서 한다. 재요청은 유효 시각이 지나도 처음 결과를 준다. */
@@ -122,5 +130,21 @@ public class TipController {
 		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId, @RequestParam int version) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			tipDeleteService.delete(user.userId(), tipId, version)));
+	}
+
+	@Operation(summary = "API-054 내 팁 본문·사진·배치 수정")
+	@PatchMapping("/{tipId}")
+	public ResponseEntity<ApiResponseBody<TipUpdateResponse>> update(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@RequestBody TipUpdateRequest request) {
+		TipUpdateCommand command = request.toCommand();
+		TipUpdateResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), UPDATE_SCOPE, String.valueOf(tipId), idempotencyKey),
+			command,
+			() -> tipUpdateService.update(user.userId(), tipId, command),
+			TipUpdateResponse::jobId,
+			jobId -> tipUpdateService.getQueued(user.userId(), tipId, jobId));
+		return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseUtil.createSuccessResponse(response));
 	}
 }
