@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.tip.publish;
 
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -31,5 +32,11 @@ public class TipPublishStore {
 	public Optional<TipPublishState> find(Long tipId) {
 		return Optional.ofNullable(redis.opsForValue().get(PREFIX + tipId))
 			.map(value -> jsonMapper.readValue(value, TipPublishState.class));
+	}
+
+	/** 모든 {@code tip-publish:*} 의 사진 경로(팁에 안 붙은 사진 정리 때 지우지 않을 것). */
+	public Set<String> imagePaths() {
+		return RedisScans.collect(redis, PREFIX + "*",
+			value -> jsonMapper.readValue(value, TipPublishState.class).imagePath());
 	}
 }

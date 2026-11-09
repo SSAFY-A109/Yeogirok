@@ -51,6 +51,15 @@ class TipEditStoreTest {
 	}
 
 	@Test
+	void 모든_수정안의_새_사진_경로를_모으고_예약_키는_건너뛴다() {
+		store.save(7L, "job-1", new TipEditDraft(1L, 1, null, null, PhotoChange.REPLACE, "tip-photo/new", null));
+		store.save(8L, "job-2", new TipEditDraft(1L, 1, null, "본문", PhotoChange.KEEP, null, null));
+		store.reserve(7L);
+
+		assertThat(store.imagePaths()).containsExactly("tip-photo/new");
+	}
+
+	@Test
 	void 예약은_하나만_걸리고_처리_중_표시_수명만큼_두며_내가_건_예약만_푼다() {
 		String token = store.reserve(7L).orElseThrow();
 

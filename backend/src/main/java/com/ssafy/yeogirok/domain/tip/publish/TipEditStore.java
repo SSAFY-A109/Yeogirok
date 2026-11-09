@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.tip.publish;
 
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -39,6 +40,12 @@ public class TipEditStore {
 
 	public void delete(Long tipId, String jobId) {
 		redis.delete(draftKey(tipId, jobId));
+	}
+
+	/** 모든 수정안의 새 사진 경로(팁에 안 붙은 사진 정리 때 지우지 않을 것). {@code tip-edit-lock:*} 은 패턴에 걸리지 않는다. */
+	public Set<String> imagePaths() {
+		return RedisScans.collect(redis, DRAFT_PREFIX + "*",
+			value -> jsonMapper.readValue(value, TipEditDraft.class).imagePath());
 	}
 
 	/** @return 풀 때 넘길 값. 다른 수정이 예약돼 있으면 empty */

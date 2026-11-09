@@ -8,9 +8,11 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.ssafy.yeogirok.domain.tip.publish.TipEditDraft;
 import com.ssafy.yeogirok.domain.tip.publish.TipEditStore;
@@ -28,6 +30,8 @@ public final class InMemoryTipEditStore {
 			drafts.put(key(invocation.getArgument(0), invocation.getArgument(1)), invocation.getArgument(2));
 			return null;
 		}).when(store).save(anyLong(), anyString(), any());
+		given(store.imagePaths()).willAnswer(invocation -> drafts.values().stream()
+			.map(TipEditDraft::imagePath).filter(Objects::nonNull).collect(Collectors.toSet()));
 		given(store.find(anyLong(), anyString())).willAnswer(invocation ->
 			Optional.ofNullable(drafts.get(key(invocation.getArgument(0), invocation.getArgument(1)))));
 		doAnswer(invocation -> drafts.remove(key(invocation.getArgument(0), invocation.getArgument(1))))

@@ -37,4 +37,14 @@ class TipPublishStoreTest {
 		assertThat(TestRedis.template().getExpire("tip-publish:7"))
 			.isBetween(RETENTION.toSeconds() - 5, RETENTION.toSeconds());
 	}
+
+	@Test
+	void 모든_작업_상태의_사진_경로를_모은다() {
+		store.save(7L, TipPublishState.queued("job-1", "tip-photo/a"));
+		store.save(8L, TipPublishState.queued("job-2", null));
+		store.save(9L, TipPublishState.queuedUpdate("job-3", true, false));
+		TestRedis.template().opsForValue().set("tip-edit-lock:7", "token");
+
+		assertThat(store.imagePaths()).containsExactly("tip-photo/a");
+	}
 }

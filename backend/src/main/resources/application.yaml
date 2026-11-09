@@ -44,7 +44,8 @@ yeogirok:
       TIP_PHOTO: 20MB
       RECORD_PHOTO: 20MB
       RECEIPT: 10MB
-    # 영수증 원본 정리 주기(11/6 결정). 기한 목록은 자주, Redis 유실 대비 버킷 전체 스캔은 드물게 돈다.
+    # 정리 주기(11/6 결정). 기한 목록은 자주, Redis 유실 대비 버킷 스캔은 드물게 돈다.
+    # safety-scan-interval 은 팁에 연결되지 않은 사진 정리(TipPhotoCleanupJob, 11/9)도 같이 쓴다.
     cleanup:
       due-interval: PT10M
       safety-scan-interval: PT1H

@@ -7,8 +7,10 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishStore;
@@ -24,6 +26,8 @@ public final class InMemoryTipPublishStates {
 			states.put(invocation.getArgument(0), invocation.getArgument(1));
 			return null;
 		}).when(store).save(anyLong(), any());
+		given(store.imagePaths()).willAnswer(invocation -> states.values().stream()
+			.map(TipPublishState::imagePath).filter(Objects::nonNull).collect(Collectors.toSet()));
 		given(store.find(anyLong()))
 			.willAnswer(invocation -> Optional.ofNullable(states.get(invocation.<Long>getArgument(0))));
 	}
