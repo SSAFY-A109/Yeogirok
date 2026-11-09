@@ -11,7 +11,7 @@ import lombok.Getter;
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
  * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
- * {@code P} 장소, {@code M} 파일.
+ * {@code P} 장소, {@code M} 파일, {@code T} AR 팁.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -34,6 +34,7 @@ public enum ExceptionType {
 	PAGE_SIZE_OUT_OF_RANGE(BAD_REQUEST, "C007", "페이지 크기가 허용 범위를 벗어났습니다."),
 	LOCATION_EVIDENCE_MISSING(UNPROCESSABLE_CONTENT, "C008", "현재 위치 증거가 없습니다."),
 	LOCATION_EVIDENCE_EXPIRED(UNPROCESSABLE_CONTENT, "C009", "현재 위치 증거의 유효 시각이 지났습니다. 위치를 다시 확인해 주세요."),
+	LOCATION_ACCURACY_INSUFFICIENT(UNPROCESSABLE_CONTENT, "C010", "현재 위치 정확도가 기준에 미치지 못합니다. 위치를 다시 확인해 주세요."),
 	COORDINATE_OUT_OF_RANGE(BAD_REQUEST, "C011", "위도·경도가 허용 범위를 벗어났습니다."),
 	INVALID_DATE_RANGE(BAD_REQUEST, "C012", "시작·종료 날짜 또는 시각의 범위·순서가 올바르지 않습니다."),
 	INVALID_BBOX(BAD_REQUEST, "C013", "지도 조회 영역의 형식 또는 범위가 올바르지 않습니다."),
@@ -84,7 +85,24 @@ public enum ExceptionType {
 
 	CUSTOM_PLACE_NAME_INVALID(BAD_REQUEST, "P004", "직접 추가할 장소명은 앞뒤 공백을 빼고 1~255자여야 합니다."),
 
-	/* ── 파일 M (M007·M009·M010 은 쓰는 곳이 없어 넣지 않는다) ──────── */
+	/* ── AR 팁 T ─────────────────────────────────────────────── */
+
+	/** 없거나, 게시 전·실패·삭제된 팁. 공개 조회(047·048·052)에서는 구분하지 않는다. */
+	TIP_NOT_FOUND(NOT_FOUND, "T001", "공개 조회 가능한 팁이 없습니다."),
+	TIP_NOT_OWNER(FORBIDDEN, "T002", "팁 작성자 본인이 아닙니다."),
+	TIP_OUT_OF_RANGE(UNPROCESSABLE_CONTENT, "T004", "팁 이용을 위한 현장 방문 조건을 충족하지 않습니다."),
+	/** spatial_expires_at 이 지났다. 팁 없음(T001)과 구분한다. */
+	TIP_SPATIAL_EXPIRED(GONE, "T005", "AR 공간 참조가 만료되었습니다."),
+	TIP_SPATIAL_INVALID(UNPROCESSABLE_CONTENT, "T007", "AR 공간 참조 또는 배치 정보 검증에 실패했습니다."),
+	/** 다시 실행할 실패 작업·수정안이 없거나 사라졌다. 새로 수정(054)하거나 사진을 다시 지정한다. */
+	TIP_RETRY_UNAVAILABLE(CONFLICT, "T008", "재시도할 실패 작업이나 수정안이 없습니다."),
+	TIP_SELF_REACTION(CONFLICT, "T009", "본인이 작성한 팁에는 반응할 수 없습니다."),
+	/** 같은 팁에 다른 수정 작업이 진행 중이거나, 게시 전·실패한 팁이라 수정 대신 등록 흐름(051)을 따라야 한다. */
+	TIP_EDIT_IN_PROGRESS(CONFLICT, "T010", "같은 팁에 다른 작업이 진행 중이라 수정할 수 없습니다."),
+	/** 작성자 본인 조회(049 재전송·050)에서 없거나 삭제된 팁. */
+	TIP_NOT_EXIST(NOT_FOUND, "T012", "팁을 찾을 수 없습니다."),
+
+	/* ── 파일 M (M009·M010 은 쓰는 곳이 없어 넣지 않는다) ──────── */
 
 	FILE_TOO_LARGE(CONTENT_TOO_LARGE, "M001", "업로드 파일 크기가 허용 범위를 넘었습니다."),
 	FILE_TYPE_NOT_SUPPORTED(UNSUPPORTED_MEDIA_TYPE, "M002", "지원하지 않는 파일 형식입니다. JPEG·PNG·WEBP 만 올릴 수 있습니다."),
@@ -94,6 +112,7 @@ public enum ExceptionType {
 	FILE_ACCESS_DENIED(FORBIDDEN, "M005", "파일을 열람하거나 사용할 권한이 없습니다."),
 	/** S3 에 객체가 아직 없다. 같은 uploadId 로 다시 시도할 수 있다. */
 	FILE_NOT_UPLOADED(UNPROCESSABLE_CONTENT, "M006", "파일 업로드·검증이 끝나지 않았습니다."),
+	FILE_PURPOSE_MISMATCH(UNPROCESSABLE_CONTENT, "M007", "파일 사용 용도가 일치하지 않습니다."),
 	UPLOAD_TARGET_ACCESS_DENIED(FORBIDDEN, "M008", "파일 업로드 대상 여행방·기록에 접근할 권한이 없습니다."),
 	UPLOAD_SESSION_EXPIRED(GONE, "M011", "업로드 세션 유효기간이 지났습니다. 새로 업로드해 주세요."),
 	/** 같은 요청으로 다시 시도할 수 있다. */

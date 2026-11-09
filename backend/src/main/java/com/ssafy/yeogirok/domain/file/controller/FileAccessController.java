@@ -17,7 +17,7 @@ import com.ssafy.yeogirok.global.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 
-/** API-013 파일 조회 URL. 팁 사진 경로(/tips/{tipId}/images/{imageId}/access)는 AR 팁 API 에서 연결한다. */
+/** API-013 파일 조회 URL. 팁 사진 경로(/tips/{tipId}/images/{imageId}/access)는 TipController 에 있다. */
 @RestController
 @RequestMapping("/api/v1/records/{recordId}")
 @RequiredArgsConstructor

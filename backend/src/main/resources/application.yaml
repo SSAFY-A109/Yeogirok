@@ -11,6 +11,12 @@ spring:
     hibernate:
       # 스키마 관리 도구는 ERD 확정 뒤에 정한다. 그 전까지 로컬에서만 엔티티 기준으로 테이블을 만든다(application-local.yaml).
       ddl-auto: none
+  task:
+    execution:
+      shutdown:
+        # 배포·재시작 때 진행 중인 비동기 작업(팁 게시·수정)이 끝날 때까지 기다린다. 넘기면 StuckTipRecoveryJob 이 정리한다.
+        await-termination: true
+        await-termination-period: 30s
 
 yeogirok:
   footprint:
@@ -19,6 +25,16 @@ yeogirok:
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
+  tip:
+    # AR 팁 거리·개수(11/6 확정): 주변 탐색 50m, 상세·반응 5m(경계 포함), 탐색 결과 가까운 순 최대 10개.
+    search-radius-meters: 50
+    interaction-radius-meters: 5
+    max-search-results: 10
+    # placement JSON 최대 크기(11/8 결정 8KB). 앱은 3개 필드만 보낸다.
+    placement-max-bytes: 8192
+    # 게시 작업이 끊겨 REGISTERING 에 남은 팁을 FAILED 로 돌리는 주기와 기준 시간(PR #64 리뷰 제안 5분).
+    stuck-check-interval: PT5M
+    stuck-registering-timeout: PT5M
   room:
     invite:
       # 초대 토큰 암호화 키(AES-SIV). Base64, 디코드했을 때 64바이트. 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
@@ -37,7 +53,8 @@ yeogirok:
       TIP_PHOTO: 20MB
       RECORD_PHOTO: 20MB
       RECEIPT: 10MB
-    # 영수증 원본 정리 주기(11/6 결정). 기한 목록은 자주, Redis 유실 대비 버킷 전체 스캔은 드물게 돈다.
+    # 정리 주기(11/6 결정). 기한 목록은 자주, Redis 유실 대비 버킷 스캔은 드물게 돈다.
+    # safety-scan-interval 은 팁에 연결되지 않은 사진 정리(TipPhotoCleanupJob, 11/9)도 같이 쓴다.
     cleanup:
       due-interval: PT10M
       safety-scan-interval: PT1H

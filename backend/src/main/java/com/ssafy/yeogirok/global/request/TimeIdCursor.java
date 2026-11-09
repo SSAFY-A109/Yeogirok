@@ -1,4 +1,4 @@
-package com.ssafy.yeogirok.domain.footprint.service;
+package com.ssafy.yeogirok.global.request;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -8,18 +8,20 @@ import java.util.Base64;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
-/** API-042 목록 커서. base64url("{visitedAt ISO-8601}|{id}"), 해석할 수 없으면 C006. */
-record FootprintCursor(Instant visitedAt, Long id) {
+/**
+ * (시각, id) 내림차순 목록 커서(API-042 발자취·053 팁). base64url("{시각 ISO-8601}|{id}"), 해석할 수 없으면 C006.
+ */
+public record TimeIdCursor(Instant time, Long id) {
 
 	private static final String SEPARATOR = "|";
 
-	String encode() {
-		String raw = visitedAt + SEPARATOR + id;
+	public String encode() {
+		String raw = time + SEPARATOR + id;
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
 	}
 
 	/** @return 값이 없으면 null */
-	static FootprintCursor decodeOrNull(String cursor) {
+	public static TimeIdCursor decodeOrNull(String cursor) {
 		if (cursor == null) {
 			return null;
 		}
@@ -29,12 +31,12 @@ record FootprintCursor(Instant visitedAt, Long id) {
 			if (separator < 0) {
 				throw invalid();
 			}
-			Instant visitedAt = Instant.parse(raw.substring(0, separator));
+			Instant time = Instant.parse(raw.substring(0, separator));
 			long id = Long.parseLong(raw.substring(separator + 1));
 			if (id < 1) {
 				throw invalid();
 			}
-			return new FootprintCursor(visitedAt, id);
+			return new TimeIdCursor(time, id);
 		} catch (IllegalArgumentException | DateTimeParseException e) {
 			throw invalid();
 		}

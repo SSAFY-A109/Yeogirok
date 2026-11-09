@@ -34,7 +34,8 @@ public class User {
 
 	/** ID 토큰에 이름 클레임이 없을 때 쓰는 닉네임. nickname 이 NOT NULL 이라 둔다. */
 	private static final String DEFAULT_NICKNAME = "여행자";
-	private static final String WITHDRAWN_NICKNAME = "탈퇴한 회원";
+	/** 탈퇴 후 저장하는 닉네임이자 작성자 표시 API 가 탈퇴자에게 보여 주는 이름(노션 048). 문구는 여기 한 곳에서 정한다. */
+	public static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
 	/** 탈퇴 후 provider_subject 에 넣는 값의 접두어. 원래 sub 를 비워 같은 계정이 새 회원으로 가입할 수 있게 한다. */
 	private static final String WITHDRAWN_SUBJECT_PREFIX = "withdrawn:";
 

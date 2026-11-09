@@ -5,19 +5,11 @@ import static com.ssafy.yeogirok.global.request.JsonFields.isAbsent;
 import static com.ssafy.yeogirok.global.request.JsonFields.missing;
 import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.ssafy.yeogirok.global.exception.BusinessException;
-import com.ssafy.yeogirok.global.exception.ExceptionType;
-import com.ssafy.yeogirok.global.geo.Coordinates;
-import com.ssafy.yeogirok.global.response.ApiDateTime;
+import com.ssafy.yeogirok.global.location.LocationEvidence;
 
 import tools.jackson.databind.JsonNode;
 
@@ -26,8 +18,6 @@ import tools.jackson.databind.JsonNode;
  * 타입·capturedAt 형식 오류는 C002. body 는 생략·null 허용.
  */
 public class FootprintCreateRequest {
-
-	private static final DateTimeFormatter CAPTURED_AT_FORMAT = DateTimeFormatter.ofPattern(ApiDateTime.PATTERN);
 
 	@JsonProperty("location")
 	private JsonNode location;
@@ -39,42 +29,9 @@ public class FootprintCreateRequest {
 	private JsonNode categoryCodes;
 
 	public FootprintCreateCommand toCommand() {
-		if (isAbsent(location)) {
-			throw evidenceMissing("location");
-		}
-		if (!location.isObject()) {
-			throw invalidFormat("location", "객체여야 합니다.");
-		}
-		return new FootprintCreateCommand(coordinate("latitude"), coordinate("longitude"), capturedAt(),
+		LocationEvidence evidence = LocationEvidence.read(location, false);
+		return new FootprintCreateCommand(evidence.latitude(), evidence.longitude(), evidence.capturedAt(),
 			optionalString(body, "body"), categoryCodes());
-	}
-
-	private BigDecimal coordinate(String field) {
-		JsonNode value = evidence(field);
-		if (!value.isNumber()) {
-			throw invalidFormat("location." + field, "숫자여야 합니다.");
-		}
-		return Coordinates.toDecimal(value);
-	}
-
-	private Instant capturedAt() {
-		JsonNode value = evidence("capturedAt");
-		try {
-			if (value.isString()) {
-				return OffsetDateTime.parse(value.stringValue(), CAPTURED_AT_FORMAT).toInstant();
-			}
-		} catch (DateTimeParseException ignored) {
-			// 아래에서 형식 오류로 알린다
-		}
-		throw invalidFormat("location.capturedAt", "형식은 YYYY-MM-DD HH:mm:ss+09 입니다.");
-	}
-
-	private JsonNode evidence(String field) {
-		JsonNode value = location.get(field);
-		if (isAbsent(value)) {
-			throw evidenceMissing("location." + field);
-		}
-		return value;
 	}
 
 	private List<String> categoryCodes() {
@@ -89,9 +46,5 @@ public class FootprintCreateRequest {
 			throw invalidFormat("categoryCodes", "문자열 배열이어야 합니다.");
 		}
 		return codes;
-	}
-
-	private static BusinessException evidenceMissing(String field) {
-		return new BusinessException(ExceptionType.LOCATION_EVIDENCE_MISSING, field + ": 현재 위치 증거가 필요합니다.");
 	}
 }

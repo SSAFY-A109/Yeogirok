@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -13,6 +14,7 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -23,6 +25,7 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
@@ -116,6 +119,21 @@ class FileStorageTest {
 				S3Object.builder().key("receipt/old").lastModified(cutoff.minusSeconds(3600)).build()).build());
 
 		assertThat(storage().listKeysModifiedBefore("receipts", cutoff)).containsExactly("tmp/old", "receipt/old");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 목록을_prefix로_좁힐_수_있다() {
+		given(s3Client.listObjectsV2(any(Consumer.class))).willReturn(ListObjectsV2Response.builder().build());
+
+		storage().listKeysModifiedBefore("photos", "tip-photo/", Instant.parse("2026-11-06T00:00:00Z"));
+
+		ArgumentCaptor<Consumer<ListObjectsV2Request.Builder>> request = ArgumentCaptor.forClass(Consumer.class);
+		verify(s3Client).listObjectsV2(request.capture());
+		ListObjectsV2Request.Builder builder = ListObjectsV2Request.builder();
+		request.getValue().accept(builder);
+		assertThat(builder.build().prefix()).isEqualTo("tip-photo/");
+		assertThat(builder.build().bucket()).isEqualTo("photos");
 	}
 
 	@Test

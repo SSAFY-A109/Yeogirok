@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
+import com.ssafy.yeogirok.global.lock.RedisLock;
 import com.ssafy.yeogirok.support.TestRedis;
 
 /** uploadId 별 완료 처리 잠금. 이미 잠겨 있으면 C018, 남이 건 잠금은 풀지 않는다. 실제 Redis. */
@@ -23,7 +24,7 @@ class UploadLockTest {
 	@BeforeEach
 	void setUp() {
 		TestRedis.flushAll();
-		lock = new UploadLock(TestRedis.template(), new IdempotencyProperties(Duration.ofHours(24),
+		lock = new UploadLock(new RedisLock(TestRedis.template()), new IdempotencyProperties(Duration.ofHours(24),
 			Duration.ofSeconds(30)));
 	}
 
