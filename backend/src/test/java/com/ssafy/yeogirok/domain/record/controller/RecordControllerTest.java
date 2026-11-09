@@ -36,6 +36,7 @@ import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
@@ -123,6 +124,42 @@ class RecordControllerTest {
 					.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C001"));
+		}
+	}
+
+	@Nested
+	class API_058 {
+
+		@Test
+		void 목록_응답_모양과_쿼리_연결() throws Exception {
+			given(recordQueryService.getList(USER_ID, 7L, RecordStatus.COMPLETED, "c1", 10)).willReturn(
+				new RecordListResponse(List.of(new RecordListResponse.Item(9L, "가을 여행", 7L, RecordStatus.COMPLETED,
+					LocalDate.parse("2026-11-01"), LocalDate.parse("2026-11-02"), "강문동", 1,
+					List.of(new RecordListResponse.Member(1L, "여행자", null)), 2,
+					new RecordProgress(RecordProgress.Stage.COMPLETED, null, null),
+					new RecordListResponse.Publication(9L, Instant.parse("2026-11-03T01:00:00Z"), 4))), "next"));
+
+			mockMvc.perform(get("/api/v1/records").with(asUser(USER_ID)).param("roomId", "7")
+					.param("status", "COMPLETED").param("cursor", "c1").param("limit", "10"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"items": [{
+					  "id": 9, "title": "가을 여행", "roomId": 7, "status": "COMPLETED",
+					  "startDate": "2026-11-01", "endDate": "2026-11-02", "regionName": "강문동", "memberCount": 1,
+					  "members": [{"userId": 1, "nickname": "여행자", "profileImageUrl": null}],
+					  "placeCount": 2, "progress": {"stage": "COMPLETED", "draftKey": null, "jobId": null},
+					  "publication": {"courseId": 9, "publishedAt": "2026-11-03 10:00:00+09", "version": 4}
+					}], "nextCursor": "next"}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@CsvSource({"status, DONE", "roomId, abc", "limit, x"})
+		void 쿼리_형식_오류는_C002(String name, String value) throws Exception {
+			mockMvc.perform(get("/api/v1/records").with(asUser(USER_ID)).param(name, value))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("C002"));
+			verifyNoInteractions(recordQueryService);
 		}
 	}
 

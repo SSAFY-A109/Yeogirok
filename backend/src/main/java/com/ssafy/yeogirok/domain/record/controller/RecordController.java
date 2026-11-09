@@ -9,20 +9,25 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateRequest;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
+import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
+import com.ssafy.yeogirok.global.request.JsonFields;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
 import com.ssafy.yeogirok.global.response.ApiResponseUtil;
 import com.ssafy.yeogirok.global.security.AuthenticatedUser;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 
 /** 여행 기록 API. 명세 {@code specs/record-api.md}. */
@@ -55,11 +60,35 @@ public class RecordController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
 	}
 
+	@Operation(summary = "API-058 참여 여행 기록 목록 조회")
+	@GetMapping("/records")
+	public ResponseEntity<ApiResponseBody<RecordListResponse>> getList(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestParam(required = false) Long roomId,
+		@Parameter(description = "DRAFT·COMPLETED") @RequestParam(required = false) String status,
+		@RequestParam(required = false) String cursor,
+		@Parameter(description = "한 번에 받을 개수. 기본 20, 최대 50") @RequestParam(required = false) Integer limit) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			recordQueryService.getList(user.userId(), roomId, parseStatus(status), cursor, limit)));
+	}
+
 	@Operation(summary = "API-059 여행 기록 상세 조회")
 	@GetMapping("/records/{recordId}")
 	public ResponseEntity<ApiResponseBody<RecordDetailResponse>> getDetail(
 		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long recordId) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			recordQueryService.getDetail(user.userId(), recordId)));
+	}
+
+	/** 생략이면 null, DRAFT·COMPLETED 가 아니면 C002(노션 058). */
+	private static RecordStatus parseStatus(String status) {
+		if (status == null) {
+			return null;
+		}
+		try {
+			return RecordStatus.valueOf(status);
+		} catch (IllegalArgumentException e) {
+			throw JsonFields.invalidFormat("status", "DRAFT 또는 COMPLETED 여야 합니다.");
+		}
 	}
 }
