@@ -56,7 +56,7 @@ public class TipPublisher {
 			publishStore.save(event.tipId(), running.succeeded());
 		} catch (RuntimeException e) {
 			log.error("팁 게시 실패 tipId={} jobId={}", event.tipId(), event.jobId(), e);
-			transactionTemplate.executeWithoutResult(status -> arTipRepository.findById(event.tipId())
+			transactionTemplate.executeWithoutResult(status -> arTipRepository.findForUpdateById(event.tipId())
 				.filter(tip -> tip.getStatus() == TipStatus.REGISTERING)
 				.ifPresent(tip -> tip.fail(clock.instant())));
 			publishStore.save(event.tipId(),
@@ -64,10 +64,10 @@ public class TipPublisher {
 		}
 	}
 
-	/** 게시 전(REGISTERING) 팁만 게시한다. 그사이 바뀐 팁은 건드리지 않는다. */
+	/** 게시 전(REGISTERING) 팁만 게시한다. 행을 잠가 다시 읽어 그사이 삭제(API-055)된 팁은 되살리지 않는다. */
 	private void link(TipPublishRequested event, Instant now) {
-		ArTip tip = arTipRepository.findById(event.tipId())
-			.filter(found -> found.getStatus() == TipStatus.REGISTERING && found.getDeletedAt() == null)
+		ArTip tip = arTipRepository.findForUpdateById(event.tipId())
+			.filter(found -> found.getStatus() == TipStatus.REGISTERING && !found.isDeleted())
 			.orElseThrow(() -> new IllegalStateException("게시할 수 없는 팁 tipId=" + event.tipId()));
 		if (event.imagePath() != null) {
 			arTipImageRepository.save(ArTipImage.of(tip.getId(), event.imagePath(), now));

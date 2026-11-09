@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,11 +16,18 @@ import com.ssafy.yeogirok.domain.tip.entity.ArTip;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 
+import jakarta.persistence.LockModeType;
+
 public interface ArTipRepository extends JpaRepository<ArTip, Long> {
 
 	Optional<ArTip> findByIdAndStatusAndDeletedAtIsNull(Long id, TipStatus status);
 
 	Optional<ArTip> findByIdAndDeletedAtIsNull(Long id);
+
+	/** 팁 행을 잠가 읽는다(SELECT ... FOR UPDATE). 삭제·게시·수정이 한 줄로 서서 삭제한 팁을 되살리지 않게 한다. */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select t from ArTip t where t.id = :id")
+	Optional<ArTip> findForUpdateById(@Param("id") Long id);
 
 	/** API-053. 작성자의 삭제되지 않은 팁을 (createdAt, id) 내림차순으로, 커서 (at, id) 다음부터. */
 	@Query("select t from ArTip t where t.authorId = :authorId and t.deletedAt is null and t.status in :statuses"

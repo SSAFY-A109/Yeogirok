@@ -142,6 +142,17 @@ public class ArTip {
 		this.updatedAt = now;
 	}
 
+	/** API-055. 소프트 삭제. 공개 검색·상세·내 목록·사진 접근에서 빠진다. */
+	public void delete(Instant now) {
+		this.status = TipStatus.DELETED;
+		this.deletedAt = now;
+		this.updatedAt = now;
+	}
+
+	public boolean isDeleted() {
+		return deletedAt != null;
+	}
+
 	public SpatialReference spatialReference() {
 		return new SpatialReference(spatialProvider, spatialReferenceId, spatialExpiresAt);
 	}

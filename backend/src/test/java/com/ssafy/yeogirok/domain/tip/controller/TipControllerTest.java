@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -37,6 +38,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import com.ssafy.yeogirok.domain.file.dto.FileAccessResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateRequest.TipCreateCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipDeleteResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest.TipReactionCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest.TipSearchQuery;
@@ -48,6 +50,7 @@ import com.ssafy.yeogirok.domain.tip.entity.SpatialReference;
 import com.ssafy.yeogirok.domain.tip.entity.TipReaction;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
+import com.ssafy.yeogirok.domain.tip.service.TipDeleteService;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUrls;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.publish.TipPublishState;
@@ -90,6 +93,9 @@ class TipControllerTest {
 
 	@MockitoBean
 	TipPhotoUrls tipPhotoUrls;
+
+	@MockitoBean
+	TipDeleteService tipDeleteService;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
@@ -371,6 +377,34 @@ class TipControllerTest {
 				.andExpect(jsonPath("$.data.url").value("https://signed/abc"))
 				.andExpect(jsonPath("$.data.expiresAt").value("2026-11-08 12:15:00+09"))
 				.andExpect(jsonPath("$.data.contentType").value("image/jpeg"));
+		}
+	}
+
+	@Nested
+	class API_055_삭제 {
+
+		@Test
+		void 삭제하면_tipId와_DELETED를_돌려준다() throws Exception {
+			given(tipDeleteService.delete(USER_ID, 7L, 3)).willReturn(new TipDeleteResponse(7L, TipStatus.DELETED));
+
+			mockMvc.perform(delete("/api/v1/tips/7").with(asUser(USER_ID)).param("version", "3"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.tipId").value(7))
+				.andExpect(jsonPath("$.data.status").value("DELETED"));
+		}
+
+		@ParameterizedTest(name = "version={0} → {1}")
+		@CsvSource(delimiter = '|', nullValues = "NONE", textBlock = """
+			NONE | C001
+			abc  | C002
+			""")
+		void version이_없으면_C001_숫자가_아니면_C002(String version, String code) throws Exception {
+			var request = delete("/api/v1/tips/7").with(asUser(USER_ID));
+			if (version != null) {
+				request.param("version", version);
+			}
+			expectError(mockMvc.perform(request), 400, code);
+			verifyNoInteractions(tipDeleteService);
 		}
 	}
 }

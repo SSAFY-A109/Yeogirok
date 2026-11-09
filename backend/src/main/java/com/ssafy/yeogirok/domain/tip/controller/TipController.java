@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.tip.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,12 +11,14 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ssafy.yeogirok.domain.file.dto.FileAccessResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateRequest.TipCreateCommand;
 import com.ssafy.yeogirok.domain.tip.dto.TipCreateResponse;
+import com.ssafy.yeogirok.domain.tip.dto.TipDeleteResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipReactionResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipSearchRequest;
@@ -24,6 +27,7 @@ import com.ssafy.yeogirok.domain.tip.dto.TipStatusResponse;
 import com.ssafy.yeogirok.domain.tip.dto.TipViewRequest;
 import com.ssafy.yeogirok.domain.tip.dto.TipViewResponse;
 import com.ssafy.yeogirok.domain.tip.service.TipCreateService;
+import com.ssafy.yeogirok.domain.tip.service.TipDeleteService;
 import com.ssafy.yeogirok.domain.tip.service.TipPhotoUrls;
 import com.ssafy.yeogirok.domain.tip.service.TipReactionService;
 import com.ssafy.yeogirok.domain.tip.service.TipSearchService;
@@ -52,6 +56,7 @@ public class TipController {
 	private final TipStatusService tipStatusService;
 	private final TipViewService tipViewService;
 	private final TipPhotoUrls tipPhotoUrls;
+	private final TipDeleteService tipDeleteService;
 	private final IdempotencyService idempotencyService;
 
 	/** 형식 검사는 멱등키 처리 전, 값 검사는 처리 안에서 한다. 재요청은 유효 시각이 지나도 처음 결과를 준다. */
@@ -109,5 +114,13 @@ public class TipController {
 		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId, @PathVariable Long imageId) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			tipPhotoUrls.accessForAuthor(user.userId(), tipId, imageId)));
+	}
+
+	@Operation(summary = "API-055 내 팁 삭제")
+	@DeleteMapping("/{tipId}")
+	public ResponseEntity<ApiResponseBody<TipDeleteResponse>> delete(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long tipId, @RequestParam int version) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			tipDeleteService.delete(user.userId(), tipId, version)));
 	}
 }
