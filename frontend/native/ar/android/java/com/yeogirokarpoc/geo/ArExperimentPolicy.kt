@@ -25,6 +25,23 @@ internal fun cloudAnchorExpiry(hostedAt: Instant, ttlDays: Int): Instant {
     return hostedAt.plusSeconds(ttlDays * 86400L)
 }
 
+/** Time spent looking for a saved anchor while camera tracking is available. */
+internal class ResolveTrackingTimeout {
+    private var previousTrackingFrame: Long? = null
+    private var trackedMillis = 0L
+
+    fun reset() {
+        previousTrackingFrame = null
+        trackedMillis = 0L
+    }
+
+    fun update(now: Long, tracking: Boolean): Boolean {
+        if (tracking) previousTrackingFrame?.let { trackedMillis += now - it }
+        previousTrackingFrame = now.takeIf { tracking }
+        return trackedMillis >= ArExperimentPolicy.CLOUD_TIMEOUT_MS
+    }
+}
+
 /** Reset on a new hit, tracking loss, low quality, or an operation being started. */
 fun cloudQualityAllowsHost(quality: String, fresh: Boolean, stableGood: Boolean, diagnostic: Boolean,
                           onPlacement: Boolean = false): Boolean =
