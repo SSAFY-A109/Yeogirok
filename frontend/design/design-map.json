@@ -395,7 +395,7 @@
         "EXP-05",
         "EXP-07"
       ],
-      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 코스 장소 id가 MSW 장소 목록과 연결되지 않아 아직 비활성(메인 인기 장소만 연결). Pencil 미대조."
+      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 선택한 공개 방문과 코스 ID를 넘겨 방 생성 후 API-030으로 가져온다. Pencil 미대조."
     }
   },
   "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."

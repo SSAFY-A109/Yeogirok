@@ -54,6 +54,68 @@ async function checkCourseHandlers(origin) {
   console.info("코스 MSW: 네 조회 API의 인증, 검색 필터·개수, 추천 커서, 작성자·방문 ID, 인기 장소 필터 확인");
 }
 
+async function checkRoomCourseImport(origin) {
+  const url = `${origin}/api/v1/rooms`;
+  const body = { title: "코스 여행방", startDate: null, endDate: null, transportMode: "TRANSIT" };
+  const headers = { Authorization: "Bearer mock-access-token", "Content-Type": "application/json" };
+
+  const post = (requestHeaders, requestBody = body) => {
+    return fetch(url, { method: "POST", headers: requestHeaders, body: JSON.stringify(requestBody) });
+  };
+
+  const missingKey = await post(headers);
+  assert.equal(missingKey.status, 400);
+  assert.equal((await missingKey.json()).code, "C001");
+
+  const keyedHeaders = { ...headers, "Idempotency-Key": "room-create-check" };
+  const results = await Promise.all([post(keyedHeaders), post(keyedHeaders)]);
+
+  assert.ok(results.every((response) => {
+    return response.status === 201;
+  }));
+
+  const [created, repeated] = await Promise.all(results.map((response) => {
+    return response.json();
+  }));
+
+  assert.deepEqual(created, { success: true, data: { id: 100, version: 1, isCreator: true } });
+  assert.deepEqual(repeated, created);
+
+  const conflict = await post(keyedHeaders, { ...body, title: "다른 여행방" });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, "C005");
+
+  const placesUrl = `${url}/${created.data.id}/places`;
+  const importHeaders = { ...headers, "Idempotency-Key": "course-import-check" };
+
+  const importVisits = (visitIds, requestHeaders = importHeaders) => {
+    return fetch(`${url}/${created.data.id}/place-imports`, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({ recordId: 501, visitIds }),
+    });
+  };
+
+  const invalidVisit = await importVisits([701, 731]);
+  assert.equal(invalidVisit.status, 400);
+  assert.equal((await invalidVisit.json()).code, "CO007");
+  assert.deepEqual((await (await fetch(placesUrl)).json()).data.places, []);
+
+  const imported = await importVisits([701, 702]);
+  assert.equal(imported.status, 201);
+  const result = (await imported.json()).data;
+
+  assert.deepEqual(result.added.map(({ sourceType, sourceRecordId, place }) => {
+    return [sourceType, sourceRecordId, place.providerPlaceId];
+  }), [["COURSE", 501, "101"], ["COURSE", 501, "102"]]);
+
+  assert.deepEqual((await (await importVisits([701, 702])).json()).data, result);
+  const repeatedVisit = await importVisits([701], { ...headers, "Idempotency-Key": "course-import-another-selection" });
+  assert.equal(repeatedVisit.status, 201);
+  assert.equal((await (await fetch(placesUrl)).json()).data.places.length, 3);
+  console.info("여행방 생성·코스 가져오기 MSW: 응답 계약, 원본 방문 검증, 저장과 멱등성 확인");
+}
+
 async function checkMyHandlers(origin) {
   async function request(path, { status = 200, method = "GET", body, key, authenticated = true } = {}) {
     const headers = { "Content-Type": "application/json" };
@@ -222,6 +284,7 @@ async function check() {
 
         if (name === "server") {
           await checkCourseHandlers(origin);
+          await checkRoomCourseImport(origin);
           await checkMyHandlers(origin);
           resetMockDb();
           assert.equal(networkRequests, 0);

@@ -1,5 +1,6 @@
 import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
+import type { CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
 import type { ScheduleBodyDto } from "../../features/schedule/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
@@ -31,6 +32,8 @@ type MockDb = {
   nextTipId: number;
   nextUploadId: number;
   rooms: Map<number, MockRoom>;
+  roomCreateRequests: Map<string, { requestBody: string; response: CreateRoomResponseDto }>;
+  courseImportRequests: Map<string, { requestBody: string; response: ImportCoursePlacesResponseDto }>;
   preferences: Map<number, RecommendationPreferenceDto>;
   footprints: Map<number, MockFootprint>;
   footprintRequests: Map<string, MockIdempotencyRecord>;
@@ -57,6 +60,9 @@ function createDb(): MockDb {
     rooms: new Map(rooms.map((room) => {
       return [room.detail.roomId, room];
     })),
+
+    roomCreateRequests: new Map(),
+    courseImportRequests: new Map(),
 
     preferences: new Map(),
 

@@ -1,17 +1,21 @@
 import { delay, http } from "msw";
 
+import { IDEMPOTENCY_HEADER } from "../../idempotency";
 import type {
   AddRoomPlacesRequestDto,
   CreateRoomRequestDto,
+  ImportCoursePlacesRequestDto,
+  ImportCoursePlacesResponseDto,
   RoomDetailDto,
   RoomSummaryDto,
   UpdateRoomRequestDto,
 } from "../../../features/room/model";
 
 import { mockDb, syncRoomDerivedFields } from "../db";
+import { findMockCourse } from "../fixtures/course";
 import { findCatalogPlace, toAreaName } from "../fixtures/place";
-import { MOCK_ME, ROOM_MEMBER_LIMIT, type MockRoom } from "../fixtures/room";
-import { fail, MOCK_DELAY_MS, ok, readId, roomNotFound } from "./respond";
+import { createRoomPlaceFixture, MOCK_ME, ROOM_MEMBER_LIMIT, type MockRoom } from "../fixtures/room";
+import { fail, MOCK_DELAY_MS, ok, readId, requireMockBearer, roomNotFound } from "./respond";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -33,7 +37,7 @@ function findRoom(roomId: string | readonly string[] | undefined): MockRoom | nu
   return id === null ? null : mockDb.rooms.get(id) ?? null;
 }
 
-/** 출발일과 돌아오는 날은 함께 정하거나 함께 비우고, 출발일이 앞이어야 한다(C016). */
+/** 출발일과 돌아오는 날은 함께 정하거나 함께 비우고, 출발일이 앞이어야 한다. */
 function isValidDateRange(startDate: string | null, endDate: string | null): boolean {
   if (startDate === null || endDate === null) {
     return startDate === endDate;
@@ -69,22 +73,47 @@ export const roomHandlers = [
 
   http.post("*/api/v1/rooms", async ({ request }) => {
     await delay(MOCK_DELAY_MS);
-    const body = (await request.json()) as CreateRoomRequestDto;
+    const unauthorized = requireMockBearer(request);
 
-    if (typeof body.name !== "string" || body.name.trim() === "") {
-      return fail(400, "C001", "name은 필수입니다.");
+    if (unauthorized) {
+      return unauthorized;
     }
 
-    if (!isValidDateRange(body.startDate, body.endDate)) {
-      return fail(400, "C016", "시작·종료 날짜의 범위나 순서가 올바르지 않습니다.");
+    const key = request.headers.get(IDEMPOTENCY_HEADER)?.trim();
+    const body = (await request.json()) as CreateRoomRequestDto;
+
+    if (!key || body.title == null || body.transportMode == null) {
+      return fail(400, "C001", "Idempotency-Key, title, transportMode는 필수입니다.");
+    }
+
+    if (typeof body.title !== "string" || typeof body.transportMode !== "string") {
+      return fail(400, "C002", "title과 transportMode는 문자열이어야 합니다.");
+    }
+
+    const title = body.title.trim();
+    const { startDate = null, endDate = null, transportMode } = body;
+
+    if (title === "" || [...title].length > 200 || (transportMode !== "CAR" && transportMode !== "TRANSIT")) {
+      return fail(400, "C003", "여행방 이름 또는 이동 수단이 올바르지 않습니다.");
+    }
+
+    const requestBody = JSON.stringify({ title, startDate, endDate, transportMode });
+    const previous = mockDb.roomCreateRequests.get(key);
+
+    if (previous) {
+      return previous.requestBody === requestBody ? ok(previous.response, 201) : fail(409, "C005", "같은 멱등키로 다른 요청을 보냈습니다.");
+    }
+
+    if (!isValidDateRange(startDate, endDate)) {
+      return fail(400, "C012", "시작·종료 날짜의 범위나 순서가 올바르지 않습니다.");
     }
 
     const detail: RoomDetailDto = {
       roomId: mockDb.nextRoomId,
-      name: body.name.trim(),
-      startDate: body.startDate,
-      endDate: body.endDate,
-      transportMode: body.transportMode,
+      name: title,
+      startDate,
+      endDate,
+      transportMode: transportMode === "TRANSIT" ? "PUBLIC_TRANSIT" : transportMode,
       memberCount: 1,
       members: [MOCK_ME],
       recordId: null,
@@ -95,7 +124,9 @@ export const roomHandlers = [
 
     mockDb.nextRoomId += 1;
     mockDb.rooms.set(detail.roomId, { detail, places: [], schedule: null });
-    return ok(detail, 201);
+    const response = { id: detail.roomId, version: 1, isCreator: true };
+    mockDb.roomCreateRequests.set(key, { requestBody, response });
+    return ok(response, 201);
   }),
 
   http.get("*/api/v1/rooms/:roomId", async ({ params }) => {
@@ -205,6 +236,83 @@ export const roomHandlers = [
     room.places = [...room.places, ...added];
     syncRoomDerivedFields(room);
     return ok({ places: added }, 201);
+  }),
+
+  http.post("*/api/v1/rooms/:roomId/place-imports", async ({ params, request }) => {
+    await delay(MOCK_DELAY_MS);
+    const unauthorized = requireMockBearer(request);
+
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const key = request.headers.get(IDEMPOTENCY_HEADER)?.trim();
+    const body = (await request.json()) as ImportCoursePlacesRequestDto;
+
+    if (!key || body.recordId === undefined) {
+      return fail(400, "C001", "Idempotency-Key와 recordId가 필요합니다.");
+    }
+
+    if (!Array.isArray(body.visitIds) || body.visitIds.length === 0) {
+      return fail(400, "CO006", "가져올 코스 장소를 선택하지 않았습니다.");
+    }
+
+    const room = findRoom(params.roomId);
+
+    if (room === null) {
+      return fail(404, "RO001", "대상 여행방을 찾을 수 없습니다.");
+    }
+
+    const course = findMockCourse(body.recordId);
+
+    if (course === null) {
+      return fail(404, "CO001", "공개 코스를 찾을 수 없습니다.");
+    }
+
+    const scopedKey = `${room.detail.roomId}:${key}`;
+    const requestBody = JSON.stringify({ recordId: body.recordId, visitIds: body.visitIds });
+    const previous = mockDb.courseImportRequests.get(scopedKey);
+
+    if (previous) {
+      return previous.requestBody === requestBody ? ok(previous.response, 201) : fail(409, "C005", "같은 멱등키로 다른 요청을 보냈습니다.");
+    }
+
+    const visits = new Map(course.detail.days.flatMap((day) => {
+      return day.items.map((visit) => {
+        return [visit.visitId, visit] as const;
+      });
+    }));
+
+    const selected = body.visitIds.map((visitId) => {
+      return visits.get(visitId);
+    });
+
+    if (!selected.every((visit) => {
+      return visit !== undefined;
+    })) {
+      return fail(400, "CO007", "선택한 방문이 이 코스에 속하지 않습니다.");
+    }
+
+    const added: ImportCoursePlacesResponseDto["added"] = [];
+
+    for (const visit of selected) {
+      const id = mockDb.nextRoomPlaceId;
+      mockDb.nextRoomPlaceId += 1;
+      room.places.push(createRoomPlaceFixture(id, Number(visit.place.providerPlaceId), "COURSE"));
+      added.push({
+        id,
+        place: { ...visit.place, regionCode: course.regionCode, regionName: course.summary.regionName },
+        sourceType: "COURSE",
+        sourceRecordId: body.recordId,
+        addedBy: MOCK_ME.userId,
+      });
+    }
+
+    syncRoomDerivedFields(room);
+    room.version = (room.version ?? 1) + 1;
+    const response = { added, version: room.version };
+    mockDb.courseImportRequests.set(scopedKey, { requestBody, response });
+    return ok(response, 201);
   }),
 
   http.delete("*/api/v1/rooms/:roomId/places/:roomPlaceId", async ({ params }) => {

@@ -41,7 +41,7 @@ export function createRoomPlaceFixture(
   };
 }
 
-export type MockRoom = { detail: RoomDetailDto; places: RoomPlaceDto[]; schedule: RoomScheduleDto | null };
+export type MockRoom = { detail: RoomDetailDto; places: RoomPlaceDto[]; schedule: RoomScheduleDto | null; version?: number };
 
 const FIXTURE_STAY_MINUTES = 60;
 

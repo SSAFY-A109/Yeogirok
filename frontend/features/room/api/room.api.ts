@@ -1,4 +1,4 @@
-import { api, TIMEOUT_MUTATION_MS } from "@/api/client";
+import { api, idempotentRequestConfig, TIMEOUT_MUTATION_MS } from "@/api/client";
 import {
   toRoomDetail,
   toRoomInvitation,
@@ -6,9 +6,13 @@ import {
   toRoomSummary,
   type AddRoomPlacesRequestDto,
   type CreateRoomRequestDto,
+  type CreateRoomResponseDto,
+  type ImportCoursePlacesRequestDto,
+  type ImportCoursePlacesResponseDto,
   type LeaveRoomResponseDto,
   type RoomDetail,
   type RoomDetailDto,
+  type RoomFormValues,
   type RoomInvitation,
   type RoomInvitationDto,
   type RoomPlace,
@@ -17,6 +21,7 @@ import {
   type RoomSummary,
   type UpdateRoomRequestDto,
 } from "@/features/room/model";
+import { assertId } from "@/lib/contract";
 
 /** API-020 참여 여행방 목록. */
 export async function getRooms(signal?: AbortSignal): Promise<RoomSummary[]> {
@@ -30,10 +35,20 @@ export async function getRoom(roomId: number, signal?: AbortSignal): Promise<Roo
   return toRoomDetail(data);
 }
 
-/** API-021 여행방 생성. */
-export async function createRoom(request: CreateRoomRequestDto): Promise<RoomDetail> {
-  const { data } = await api.post<RoomDetailDto>("/rooms", request, { timeout: TIMEOUT_MUTATION_MS });
-  return toRoomDetail(data);
+export type CreateRoomInput = { values: RoomFormValues; idempotencyKey: string };
+
+/** API-021 여행방 생성. 응답은 상세 정보 없이 생성된 방의 식별자를 준다. */
+export async function createRoom({ values, idempotencyKey }: CreateRoomInput): Promise<number> {
+  const request: CreateRoomRequestDto = {
+    title: values.name,
+    startDate: values.startDate,
+    endDate: values.endDate,
+    transportMode: values.transportMode === "PUBLIC_TRANSIT" ? "TRANSIT" : values.transportMode,
+  };
+
+  const { data } = await api.post<CreateRoomResponseDto>("/rooms", request, idempotentRequestConfig(idempotencyKey));
+
+  return assertId(data.id, "id");
 }
 
 export type UpdateRoomInput = { roomId: number; request: UpdateRoomRequestDto };
@@ -68,6 +83,14 @@ export type AddRoomPlacesInput = { roomId: number; request: AddRoomPlacesRequest
 export async function addRoomPlaces({ roomId, request }: AddRoomPlacesInput): Promise<RoomPlace[]> {
   const { data } = await api.post<RoomPlacesResponseDto>(`/rooms/${roomId}/places`, request, { timeout: TIMEOUT_MUTATION_MS });
   return data.places.map(toRoomPlace);
+}
+
+export type ImportCoursePlacesInput = { roomId: number; request: ImportCoursePlacesRequestDto; idempotencyKey: string };
+
+/** API-030 현재 공개된 코스의 선택 방문을 여행방으로 가져온다. */
+export async function importCoursePlaces({ roomId, request, idempotencyKey }: ImportCoursePlacesInput): Promise<number> {
+  const { data } = await api.post<ImportCoursePlacesResponseDto>(`/rooms/${roomId}/place-imports`, request, idempotentRequestConfig(idempotencyKey));
+  return data.added.length;
 }
 
 export type DeleteRoomPlaceInput = { roomId: number; roomPlaceId: number };
