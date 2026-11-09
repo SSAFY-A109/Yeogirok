@@ -2,6 +2,7 @@
 //
 // backend/dev 에 push 되면 GitHub 웹훅이 Jenkins 를 깨운다.
 // 체크아웃 → 테스트 → 배포(서버에 SSH 로 들어가 deploy-backend.sh 실행) 순서로 돌고, 결과를 Mattermost 로 알린다.
+// GitHub 커밋 옆에도 jenkins/backend 상태(진행 중·성공·실패)를 남긴다(가이드 10-8, 토큰이 없으면 건너뛴다).
 //
 // Jenkins job "yeogirok-backend" 가 infra/dev 브랜치의 이 파일을 읽어 실행한다.
 // 그래서 파이프라인을 고칠 때는 백엔드 PR 없이 infra/dev 로 PR 하면 된다.
@@ -10,6 +11,7 @@
 //   server-ssh            SSH Username with private key   서버(ubuntu) 배포용 키
 //   mattermost-webhook    Secret text                     Mattermost Incoming Webhook 주소
 //   github-webhook-token  Secret text                     GitHub 웹훅 주소 끝에 붙이는 토큰
+//   github-status-token   Secret text                     GitHub 커밋 상태를 쓰는 토큰 (선택, 가이드 10-8)
 
 pipeline {
     // Jenkins 자신(컨테이너)에서 실행한다. 일을 나눠 맡길 다른 컴퓨터(에이전트)는 쓰지 않는다.
@@ -43,6 +45,7 @@ pipeline {
     environment {
         REPO_URL = 'https://github.com/SSAFY-A109/Yeogirok.git'  // 공개 저장소라 로그인 없이 받는다
         REPO_WEB = 'https://github.com/SSAFY-A109/Yeogirok'      // 알림의 커밋 링크
+        GITHUB_REPO = 'SSAFY-A109/Yeogirok'                     // GitHub 커밋 상태를 쓸 저장소
         BRANCH   = 'backend/dev'
         SERVER   = 'host.docker.internal'                       // Jenkins 컨테이너에서 본 서버 주소
     }
@@ -67,6 +70,8 @@ pipeline {
                     ''').trim()
                 }
                 echo "커밋 ${env.COMMIT.substring(0, 7)} (${env.COMMIT_SUBJECT}) 을 테스트하고 배포합니다"
+                // GitHub 커밋 옆에 노란 점(진행 중)을 붙인다. 끝나면 post 에서 초록 체크나 빨간 X 로 바꾼다.
+                script { githubStatus('pending', '테스트와 배포를 진행하고 있습니다') }
             }
         }
 
@@ -113,11 +118,57 @@ pipeline {
 
     post {
         success {
-            script { notifyMattermost('✅ 백엔드 배포 성공', '#2EB67D') }   // 초록
+            script {
+                githubStatus('success', '테스트와 배포 성공')
+                notifyMattermost('✅ 백엔드 배포 성공', '#2EB67D')   // 초록
+            }
         }
         failure {
-            script { notifyMattermost(failureTitle(), failureColor()) }
+            script {
+                githubStatus('failure', failureDescription())
+                notifyMattermost(failureTitle(), failureColor())
+            }
         }
+        aborted {
+            // 30분 시간 초과나 손으로 중지한 빌드. 노란 점이 그대로 남지 않게 닫는다.
+            script { githubStatus('error', '빌드가 중지됨 (시간 초과 또는 수동 중지)') }
+        }
+    }
+}
+
+// GitHub 커밋 상태에 붙일 한 줄 설명(140자 이내). 실패 알림 문구와 같은 기준으로 나눈다.
+def failureDescription() {
+    switch (env.DEPLOY_CODE) {
+        case '2': return '배포 중단: 서버에 필요한 값이 없음 (서버는 그대로)'
+        case '3': return '새 버전이 뜨지 않아 이전 버전으로 되돌림'
+        default:  return env.DEPLOY_CODE ? '배포 실패' : '테스트 실패'
+    }
+}
+
+// GitHub 커밋 옆에 jenkins/backend 상태를 남긴다(가이드 10-8). 누르면 Jenkins 빌드 로그로 간다(허용 IP에서만 열림).
+// 토큰(github-status-token)이 없거나 GitHub 가 응답하지 않아도 빌드 결과는 바꾸지 않는다.
+def githubStatus(String state, String description) {
+    if (!env.COMMIT) {
+        return   // 체크아웃 전에 실패하면 어느 커밋인지 모른다
+    }
+    def payload = [
+        state      : state,
+        context    : 'jenkins/backend',
+        description: description,
+        target_url : "${env.BUILD_URL}console",
+    ]
+    writeFile file: 'github-status.json', text: groovy.json.JsonOutput.toJson(payload)
+    try {
+        withCredentials([string(credentialsId: 'github-status-token', variable: 'GH_TOKEN')]) {
+            sh '''
+                code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                  -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                  --data @github-status.json "https://api.github.com/repos/$GITHUB_REPO/statuses/$COMMIT") || true
+                [ "$code" = 201 ] || echo "GitHub 상태 표시 실패 (HTTP $code) - 가이드 10-8 문제 해결 참고"
+            '''
+        }
+    } catch (err) {
+        echo "GitHub 상태 표시를 건너뜁니다 (github-status-token 이 없음): ${err}"
     }
 }
 
