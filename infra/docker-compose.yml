@@ -119,23 +119,32 @@ services:
     ports:
       - "127.0.0.1:8080:8080"   # Nginx만 접근
 
-  # AI 서버는 FastAPI 앱이 준비되면 주석을 푼다 (가이드 9단계).
-  # 앱에서 직접 부르지 않고 백엔드가 내부망(http://ai:8000)으로 부르므로 포트를 열지 않는다.
-  # ai:
-  #   build: ../../ai-src/ai
-  #   image: yeogirok-ai:latest
-  #   restart: unless-stopped
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   environment:
-  #     DB_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_NAME}
-  #     GMS_KEY: ${GMS_KEY}
-  #     TZ: Asia/Seoul
-  #   volumes:
-  #     - paddle-models:/root/.paddlex   # OCR 모델 파일을 배포 때마다 다시 받지 않게 보관
+  # 영수증 OCR 서버 (FastAPI + PaddleOCR, CPU). 서버에 따로 받아 둔 ai/dev 코드의 ai/ocr/Dockerfile 로 이미지를 만든다 (가이드 9단계 AI 서버).
+  # 앱에서 직접 부르지 않고 백엔드가 내부망(http://ai:8000/ocr/receipt)으로 부르므로 포트를 열지 않는다.
+  # ~/yeogirok/ai-src 가 없으면 이 서비스를 빌드하지 못한다. docker compose 명령에 서비스 이름(backend 등)을 붙여 쓰면 영향이 없다.
+  ai:
+    build: ../../ai-src/ai/ocr
+    image: yeogirok-ai:latest
+    restart: unless-stopped
+    environment:
+      OCR_DEVICE: cpu
+      TZ: Asia/Seoul
+      # 켤 때마다 모델 저장소들에 연결해 보느라 느려지는 것을 끈다. 모델은 처음 켤 때 한 번 받아 볼륨에 둔다.
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+    volumes:
+      - ai-models:/home/app/.paddlex   # OCR 모델(약 100MB)을 배포 때마다 다시 받지 않게 보관
+    # 휴대폰 원본 크기 사진(3024x4032) 한 장에 메모리를 7GB 가까이 쓴다(11/9 노트북 시험). 서버 전체가 흔들리지 않게 묶는다.
+    # 넘으면 AI 컨테이너만 강제 종료되고 다시 켜진다. 평소(긴 변 2000px 이하 사진)는 2.5GB 이하다.
+    mem_limit: 3g
+    healthcheck:
+      # /health 는 모델을 다 불러온 뒤에 응답한다. 처음 켤 때는 모델을 받느라 1~2분 걸릴 수 있다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
 volumes:
   db-data:
   redis-data:
-  # paddle-models:
+  ai-models:

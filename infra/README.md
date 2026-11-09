@@ -26,7 +26,8 @@ flowchart LR
 | 파일 | 하는 일 | 쓰는 곳 |
 | --- | --- | --- |
 | `infra/docker-compose.local.yml` | 로컬 개발용 DB·Redis | 팀원 노트북 |
-| `infra/docker-compose.yml` | 서버의 DB·Redis·백엔드(·AI) 구성 | 서버 |
+| `infra/docker-compose.yml` | 서버의 DB·Redis·백엔드·AI 구성 | 서버 |
+| `infra/scripts/check-ai.sh` | AI(OCR) 컨테이너가 실제로 글자를 읽는지 확인 | 서버 (AI 배포 뒤) |
 | `infra/.env.example` | 서버 비밀값 목록 (값은 비워 둠) | 서버에서 `.env`로 복사 |
 | `infra/nginx/yeogirok.conf` | HTTPS·업로드 한도·타임아웃 | 서버 `/etc/nginx` |
 | `infra/nginx/jenkins.conf` | `https://<도메인>/jenkins/`를 Jenkins로 연결 | 서버 `/etc/nginx/snippets` |
@@ -40,6 +41,7 @@ flowchart LR
 | 파일 | 이유 |
 | --- | --- |
 | `backend/Dockerfile`, `backend/.dockerignore` | 백엔드 이미지를 만드는 방법 |
+| `ai/ocr/Dockerfile`, `ai/ocr/.dockerignore` | AI(OCR) 이미지를 만드는 방법. **`ai/dev`로 PR**해 AI 리뷰를 받습니다. `.dockerignore`는 허용 목록 방식이라 실제 영수증 사진(`real/`)이 이미지에 들어가지 않습니다 |
 | `backend/src/main/resources/application-prod.yaml` | 서버용 설정 프로필 (DB 접속, 프록시 헤더) |
 | `.github/workflows/deploy-backend.yml` | 자동 배포. push로 실행되는 워크플로는 **push된 브랜치에 있는 파일**을 쓰기 때문에 `backend/dev`에 있어야 동작합니다 |
 
@@ -379,12 +381,42 @@ gunzip -c ~/yeogirok/backups/<파일>.sql.gz | docker compose exec -T db sh -c '
 
 ## 9단계. 다음 주에 붙일 것 (11/2~3)
 
-**AI 서버**
-- FastAPI 앱과 `ai/Dockerfile`이 준비되면 `docker-compose.yml`의 `ai` 주석을 풉니다.
-- 서버에 `ai/dev`를 따로 받습니다: `git clone --single-branch --branch ai/dev https://github.com/SSAFY-A109/Yeogirok.git ~/yeogirok/ai-src`
-- 배포 스크립트와 워크플로는 백엔드 것을 복사해 `backend`를 `ai`로 바꿉니다.
-- `ai/ocr/requirements.txt`는 GPU용 `paddlepaddle-gpu`를 씁니다. GPU가 없는 서버에서는 CPU용 `paddlepaddle`로 설치해야 합니다.
-- 백엔드는 `http://ai:8000`으로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다.
+**AI 서버 (영수증 OCR)**
+- 이미지는 `ai/dev`의 `ai/ocr/Dockerfile`(AI 파트 리뷰)로 만들고, `docker-compose.yml`의 `ai` 서비스가 띄웁니다. 서버에 GPU가 없어 CPU용 paddle로 돌립니다.
+- 백엔드는 내부망 `http://ai:8000/ocr/receipt`로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다. 지금(11/9) 백엔드에는 AI를 부르는 코드가 아직 없습니다.
+- OCR 모델(약 100MB)은 처음 켤 때 받아 `ai-models` 볼륨에 둡니다. 다시 배포해도 새로 받지 않습니다.
+- 메모리는 `mem_limit: 3g`로 묶었습니다. 휴대폰 원본 크기 사진 한 장에 7GB 가까이 써서 서버 전체가 흔들릴 수 있기 때문입니다. 넘으면 AI 컨테이너만 다시 켜집니다.
+
+  | 시험 사진 (11/9 노트북, 22코어) | 걸린 시간 | 메모리 최고 | 결과 |
+  | --- | --- | --- | --- |
+  | 620×736 | 0.8초 | 0.6GB | 성공 |
+  | 1512×2016 | 4.8초 | 1.8GB | 성공 |
+  | 3024×4032 (휴대폰 원본) | 17초 | 6.9GB | 실패 |
+  | 3024×4032, 검출 입력을 긴 변 1600으로 제한 | 2.4초 | 2.0GB | 성공 |
+
+  서버는 노트북보다 코어가 적어 더 느립니다. 큰 사진은 AI 파트에 검출 입력 크기 제한을 요청했습니다(마지막 줄). 반영 전에는 큰 사진에서 3GB를 넘어 그 요청이 실패할 수 있습니다.
+
+- **순서**: AI 파트의 Dockerfile PR이 `ai/dev`에 먼저 머지되고, 그다음 이 compose 변경을 `infra/dev`에 머지합니다. 서버에서는 `ai-src`를 먼저 받습니다. `ai-src`가 없으면 `docker compose up -d`(서비스 이름 없이 전체)가 ai를 빌드하지 못해 멈춥니다. 서비스 이름을 붙인 명령(`up -d backend` 등)과 배포·백업 스크립트는 영향이 없습니다.
+
+```bash
+git clone --single-branch --branch ai/dev https://github.com/SSAFY-A109/Yeogirok.git ~/yeogirok/ai-src   # 처음 한 번
+cd ~/yeogirok/infra-src && git pull
+cd infra
+docker compose up -d --build ai      # 첫 빌드 3~5분 (paddle 설치, 이미지 약 2.4GB)
+docker compose ps ai                 # (healthy) 가 보일 때까지 기다린다. 처음에는 모델을 받느라 1~2분
+bash scripts/check-ai.sh             # 마지막 줄이 "[ai] 성공" 이면 끝
+docker stats --no-stream             # ai 메모리 확인
+```
+
+- `/health`는 모델을 불러오기만 하면 200이라, OCR이 실제로 도는지는 `check-ai.sh`로 봅니다. 시험 그림을 컨테이너 안에서 만들어 읽힙니다.
+- `ai/dev`가 바뀌면 손으로 다시 배포합니다. 자동 배포는 아직 없습니다. Jenkins(10단계)를 쓰게 되면 AI용 job을 따로 만듭니다.
+
+```bash
+git -C ~/yeogirok/ai-src pull
+cd ~/yeogirok/infra-src/infra
+docker compose up -d --build ai
+bash scripts/check-ai.sh
+```
 
 **파일 저장소 (API-012 업로드, API-086 완료 확인, API-013 조회)**
 - 사진·영수증 파일은 **S3에 저장합니다** (2026-11-02 결정). 서버 디스크에는 저장하지 않습니다.
@@ -727,6 +759,7 @@ grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
 | 백엔드 로그 실시간 | `docker compose logs -f backend` |
 | 최근 로그 100줄 | `docker compose logs --tail 100 backend` |
 | 백엔드 재시작 | `docker compose restart backend` |
+| AI 로그·OCR 점검 | `docker compose logs --tail 100 ai` · `bash scripts/check-ai.sh` |
 | 수동 배포 | `bash scripts/deploy-backend.sh` |
 | DB 접속(서버 안) | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` |
 | Redis 접속(서버 안) | `docker compose exec redis redis-cli` (비밀번호는 자동으로 들어감) |
@@ -755,6 +788,9 @@ grep -c 'yeogirok-deploy' ~/.ssh/authorized_keys    # 0 이면 정상
 | 백엔드 로그에 `Could not resolve placeholder 'ROOM_INVITE_TOKEN_KEY'`처럼 `Could not resolve placeholder '<값 이름>'` | 백엔드가 새 필수 값을 추가했는데 서버 compose나 `.env`에 없음 | infra 코드를 받고 `docker compose config -q 2>&1 \| grep 'not set'`으로 빠진 값을 확인해 채움. compose에도 없으면 9단계 "외부 키 추가하는 법" |
 | 백엔드 로그에 `yeogirok.file.region 값이 필요합니다`(또는 `photo-bucket`·`receipt-bucket`) | 서버 `.env`에 S3 리전·버킷 값이 없음 | `.env.example`의 `AWS_REGION`·`S3_PHOTO_BUCKET`·`S3_RECEIPT_BUCKET` 값을 서버 `.env`에 넣고 `docker compose up -d backend` |
 | 백엔드 오류에 `OOM command not allowed` | Redis 메모리 256MB가 다 참(`noeviction`이라 쓰기 거부) | `info memory`로 확인하고 `docker-compose.yml`의 `--maxmemory`를 늘림 |
+| `docker compose up -d`(서비스 이름 없이)가 `additional privileges requested: pass "--allow=fs.read=..."`로 멈춤 | 서버에 `~/yeogirok/ai-src`가 없어 ai를 빌드하지 못함 | 9단계 AI 서버의 `git clone`으로 받음. 급하면 서비스 이름을 붙여 실행(`docker compose up -d backend`) |
+| `check-ai.sh`가 `HTTP 500` | OCR 처리 중 오류 | `docker compose logs --tail 80 ai`. `ConvertPirAttribute2RuntimeAttribute`가 보이면 `ai/ocr/Dockerfile`의 CPU paddle 버전(3.2.2)이 바뀌었는지 확인 |
+| 큰 사진 OCR만 실패하고 ai 재시작 횟수가 늘어남 | 사진이 커서 메모리 3GB(`mem_limit`)를 넘어 AI 컨테이너가 강제 종료됨(몇 초 뒤 다시 켜짐) | `docker inspect -f '{{.RestartCount}}' yeogirok-ai-1`로 확인. AI 파트의 검출 입력 크기 제한이 반영됐는지 확인 |
 | Flyway `non-empty schema ... without schema history table` | `update`로 만든 테이블이 남음 | 7단계 DB 비우기 |
 | Flyway `checksum mismatch` | 이미 적용된 V 파일을 수정함 | 원래대로 되돌리고 새 번호 파일로 수정 |
 | Actions의 SSH 단계가 `i/o timeout` | 22번이 GitHub에서 막힘 | 6-5 플랜 B |
