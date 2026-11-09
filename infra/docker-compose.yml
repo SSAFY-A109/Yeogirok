@@ -63,7 +63,12 @@ services:
 
   backend:
     # 서버에 따로 받아 둔 backend/dev 코드로 이미지를 만든다 (가이드 3단계 폴더 구조).
-    build: ../../backend-src/backend
+    build:
+      context: ../../backend-src/backend
+      # 이미지를 만든 커밋을 표시해 둔다. deploy-backend.sh 가 넘기고, 되돌릴 때 어느 버전인지 알리는 데 쓴다.
+      # 지금 떠 있는 버전 보기: docker inspect -f '{{index .Config.Labels "yeogirok.commit"}}' yeogirok-backend:latest
+      labels:
+        yeogirok.commit: ${BACKEND_COMMIT:-unknown}
     image: yeogirok-backend:latest
     restart: unless-stopped
     depends_on:
@@ -90,28 +95,69 @@ services:
       S3_RECEIPT_BUCKET: ${S3_RECEIPT_BUCKET}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # 로그인 (값은 .env, 백엔드 backend/docs/05-social-login-setup.md 참고). 하나라도 비면 백엔드가 바로 멈춘다.
+      # 구글 웹 클라이언트 ID와 카카오 네이티브 앱 키는 앱(프론트)과 같은 값이다.
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
+      KAKAO_APP_KEY: ${KAKAO_APP_KEY}
+      # 선택 키 (값은 .env). 비어 있어도 백엔드는 뜨고, 아래 기능만 동작하지 않는다.
+      # - GOOGLE_WEB_CLIENT_SECRET: 구글 회원 탈퇴 때 구글 연결 해제. 없으면 구글 회원은 탈퇴할 수 없다.
+      # - KAKAO_ADMIN_KEY: 카카오 회원 탈퇴 때 카카오 연결 해제. 없으면 해제하지 않고 재시도 대상으로만 남는다.
+      # - KAKAO_REST_API_KEY: 발자취 주소·후보 장소 법정동(카카오 로컬 API). 없으면 주소가 비어 저장된다.
+      # :- 는 .env 에 없을 때 경고 없이 빈 값으로 넘긴다는 뜻이다.
+      GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
+      KAKAO_ADMIN_KEY: ${KAKAO_ADMIN_KEY:-}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      # 여행방 초대 (백엔드 #55, 11/6). 둘 중 하나라도 빠지면 백엔드가 바로 멈춘다.
+      # 초대 토큰 암호화 키는 비밀 값이라 .env 에 둔다. 한 번 만든 뒤에는 바꾸지 않는다.
+      ROOM_INVITE_TOKEN_KEY: ${ROOM_INVITE_TOKEN_KEY}
+      # 초대 링크 앞부분(뒤에 /{초대 토큰}이 붙는다). 비밀 값이 아니라 여기에 바로 적는다.
+      # TBD: 앱 딥링크 주소가 정해지면 바꾼다. 지금 앱은 이 링크를 복사·공유만 하고, 눌렀을 때 열리는 화면은 없다.
+      ROOM_INVITE_URL_BASE: https://k15a109.p.ssafy.io/invite
+      # 방문 분포(API-046)와 현재 위치 증거(DEC-01). 비밀 값이 아니라 여기에 바로 적는다. 하나라도 빠지면 백엔드가 바로 멈춘다.
+      # TBD: 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다. 팀이 정하면 바꾼다.
+      # 셀 크기를 바꾸면 VISIT_STATS_AGGREGATION_VERSION 도, 위치 기준을 바꾸면 LOCATION_POLICY_VERSION 도 함께 바꾼다.
+      VISIT_STATS_AGGREGATION_VERSION: grid-0.005-v1
+      VISIT_STATS_BASE_CELL_SIZE_DEGREES: "0.005"
+      VISIT_STATS_ZOOM_MULTIPLIERS: "15:1,13:2,11:8,9:32,0:128"
+      VISIT_STATS_MIN_COUNT: "1"
+      LOCATION_EVIDENCE_MAX_AGE: 2m
+      LOCATION_EVIDENCE_MAX_FUTURE_SKEW: 30s
+      LOCATION_POLICY_VERSION: location-v1
+      # AR 팁 위치 정확도 기준(미터, 백엔드 #64 AR 팁 API). TBD: 백엔드 로컬 제안값(11/8)을 임시로 넣었다.
+      # #64 가 머지되기 전에 서버에 있어야 한다. 그 전에는 백엔드가 이 값을 읽지 않아 넣어 둬도 영향이 없다.
+      LOCATION_EVIDENCE_MAX_ACCURACY_METERS: "30"
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
-      # JWT_SECRET: ${JWT_SECRET}
+      # TOUR_API_KEY: ${TOUR_API_KEY}
     ports:
       - "127.0.0.1:8080:8080"   # Nginx만 접근
 
-  # AI 서버는 FastAPI 앱이 준비되면 주석을 푼다 (가이드 9단계).
-  # 앱에서 직접 부르지 않고 백엔드가 내부망(http://ai:8000)으로 부르므로 포트를 열지 않는다.
-  # ai:
-  #   build: ../../ai-src/ai
-  #   image: yeogirok-ai:latest
-  #   restart: unless-stopped
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   environment:
-  #     DB_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_NAME}
-  #     GMS_KEY: ${GMS_KEY}
-  #     TZ: Asia/Seoul
-  #   volumes:
-  #     - paddle-models:/root/.paddlex   # OCR 모델 파일을 배포 때마다 다시 받지 않게 보관
+  # 영수증 OCR 서버 (FastAPI + PaddleOCR, CPU). 서버에 따로 받아 둔 ai/dev 코드의 ai/ocr/Dockerfile 로 이미지를 만든다 (가이드 9단계 AI 서버).
+  # 앱에서 직접 부르지 않고 백엔드가 내부망(http://ai:8000/ocr/receipt)으로 부르므로 포트를 열지 않는다.
+  # ~/yeogirok/ai-src 가 없으면 이 서비스를 빌드하지 못한다. docker compose 명령에 서비스 이름(backend 등)을 붙여 쓰면 영향이 없다.
+  ai:
+    build: ../../ai-src/ai/ocr
+    image: yeogirok-ai:latest
+    restart: unless-stopped
+    environment:
+      OCR_DEVICE: cpu
+      TZ: Asia/Seoul
+      # 켤 때마다 모델 저장소들에 연결해 보느라 느려지는 것을 끈다. 모델은 처음 켤 때 한 번 받아 볼륨에 둔다.
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+    volumes:
+      - ai-models:/home/app/.paddlex   # OCR 모델(약 100MB)을 배포 때마다 다시 받지 않게 보관
+    # 휴대폰 원본 크기 사진(3024x4032) 한 장에 메모리를 7GB 가까이 쓴다(11/9 노트북 시험). 서버 전체가 흔들리지 않게 묶는다.
+    # 넘으면 AI 컨테이너만 강제 종료되고 다시 켜진다. 평소(긴 변 2000px 이하 사진)는 2.5GB 이하다.
+    mem_limit: 3g
+    healthcheck:
+      # /health 는 모델을 다 불러온 뒤에 응답한다. 처음 켤 때는 모델을 받느라 1~2분 걸릴 수 있다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
 volumes:
   db-data:
   redis-data:
-  # paddle-models:
+  ai-models:
