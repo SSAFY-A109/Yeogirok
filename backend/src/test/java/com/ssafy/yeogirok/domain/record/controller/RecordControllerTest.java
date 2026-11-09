@@ -6,11 +6,16 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -23,12 +28,20 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
+import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
+import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
+import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
 
@@ -43,6 +56,8 @@ class RecordControllerTest {
 	MockMvc mockMvc;
 	@MockitoBean
 	RecordCreateService recordCreateService;
+	@MockitoBean
+	RecordQueryService recordQueryService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -108,6 +123,48 @@ class RecordControllerTest {
 					.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C001"));
+		}
+	}
+
+	@Nested
+	class API_059 {
+
+		@Test
+		void 상세_응답_모양() throws Exception {
+			RecordPhotoView photo = new RecordPhotoView(31L, null, null, 701L);
+			ActualVisitView visit = new ActualVisitView(701L, new RecordPlaceView(PlaceProvider.MANUAL, null, "경포대",
+				new BigDecimal("37.7519000"), new BigDecimal("128.8761000"), null, null, null, null), null,
+				LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, List.of(photo),
+				List.of(new ActualVisitView.Story(41L, 2L, "좋았다")));
+			given(recordQueryService.getDetail(USER_ID, 9L)).willReturn(new RecordDetailResponse(9L, "가을 여행",
+				RecordStatus.DRAFT, 7L, List.of(new RecordDetailResponse.Member(1L, "여행자", true)),
+				LocalDate.parse("2026-11-01"), LocalDate.parse("2026-11-02"),
+				new RecordProgress(RecordProgress.Stage.EDIT, null, null), null, List.of(), List.of(photo),
+				List.of(visit), List.of(), null, 3));
+
+			mockMvc.perform(get("/api/v1/records/9").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {
+					  "id": 9, "title": "가을 여행", "status": "DRAFT", "roomId": 7,
+					  "members": [{"userId": 1, "nickname": "여행자", "isCreator": true}],
+					  "startDate": "2026-11-01", "endDate": "2026-11-02",
+					  "progress": {"stage": "EDIT", "draftKey": null, "jobId": null},
+					  "plannedSchedule": null, "uploads": [],
+					  "photoPool": [{"imageId": 31, "attribution": null, "uploadedBy": null, "visitId": 701}],
+					  "actualVisits": [{
+					    "id": 701,
+					    "place": {"provider": "MANUAL", "providerPlaceId": null, "name": "경포대",
+					      "latitude": 37.7519000, "longitude": 128.8761000, "address": null, "categoryCode": null,
+					      "imageUrl": null, "imageAttribution": null},
+					    "plannedItemId": null, "visitDate": "2026-11-01", "visitedAt": "2026-11-01 09:30:00+09",
+					    "order": 1,
+					    "photos": [{"imageId": 31, "attribution": null, "uploadedBy": null, "visitId": 701}],
+					    "stories": [{"id": 41, "authorId": 2, "body": "좋았다"}]
+					  }],
+					  "materials": [], "publishedCourseId": null, "version": 3
+					}}
+					""", JsonCompareMode.STRICT));
 		}
 	}
 }
