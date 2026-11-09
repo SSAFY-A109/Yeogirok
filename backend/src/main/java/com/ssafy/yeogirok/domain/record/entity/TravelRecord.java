@@ -35,6 +35,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TravelRecord {
 
+	public static final int TITLE_MAX_LENGTH = 200;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -42,7 +44,7 @@ public class TravelRecord {
 	@Column(name = "room_id", nullable = false, unique = true)
 	private Long roomId;
 
-	@Column(nullable = false, length = 200)
+	@Column(nullable = false, length = TITLE_MAX_LENGTH)
 	private String title;
 
 	@Column(nullable = false, columnDefinition = "text")

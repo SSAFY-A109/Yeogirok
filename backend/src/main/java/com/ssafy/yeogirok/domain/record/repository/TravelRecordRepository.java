@@ -13,6 +13,8 @@ import jakarta.persistence.LockModeType;
 
 public interface TravelRecordRepository extends JpaRepository<TravelRecord, Long> {
 
+	boolean existsByRoomId(Long roomId);
+
 	@Query("select r.roomId from TravelRecord r where r.id = :id")
 	Optional<Long> findRoomIdById(@Param("id") Long id);
 
