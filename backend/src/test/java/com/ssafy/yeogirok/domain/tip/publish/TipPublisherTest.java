@@ -133,7 +133,7 @@ class TipPublisherTest {
 	}
 
 	@Test
-	void 이미_게시된_팁은_다시_게시하지_않고_실패로_남긴다() {
+	void 이미_게시된_팁은_다시_게시하지_않고_재시도_불가_실패로_남긴다() {
 		ArTip tip = registering(AUTHOR);
 		tip.publish(NOW.minusSeconds(60));
 		Long tipId = em.persistAndGetId(tip, Long.class);
@@ -141,6 +141,26 @@ class TipPublisherTest {
 		publisher.publish(new TipPublishRequested(tipId, "job-1", null));
 
 		assertThat(em.find(ArTip.class, tipId).getStatus()).isEqualTo(TipStatus.PUBLISHED);
-		assertThat(STATES.states.get(tipId).operationStatus()).isEqualTo(OperationStatus.FAILED);
+		assertNotPublishable(tipId);
+	}
+
+	@Test
+	void 게시_직전_삭제된_팁은_사진을_붙이지_않고_재시도_불가_실패로_남긴다() {
+		ArTip tip = registering(AUTHOR);
+		tip.delete(NOW.minusSeconds(1));
+		Long tipId = em.persistAndGetId(tip, Long.class);
+
+		publisher.publish(new TipPublishRequested(tipId, "job-1", "tip-photo/abc"));
+
+		assertThat(em.find(ArTip.class, tipId).getStatus()).isEqualTo(TipStatus.DELETED);
+		assertThat(arTipImageRepository.existsByImagePath("tip-photo/abc")).isFalse();
+		assertNotPublishable(tipId);
+	}
+
+	private static void assertNotPublishable(Long tipId) {
+		TipPublishState state = STATES.states.get(tipId);
+		assertThat(state.operationStatus()).isEqualTo(OperationStatus.FAILED);
+		assertThat(state.error().code()).isEqualTo("T012");
+		assertThat(state.retryable()).isFalse();
 	}
 }

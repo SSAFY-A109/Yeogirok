@@ -52,8 +52,14 @@ public class TipPublisher {
 		TipPublishState running = TipPublishState.queued(event.jobId(), event.imagePath()).running();
 		publishStore.save(event.tipId(), running);
 		try {
-			transactionTemplate.executeWithoutResult(status -> link(event, clock.instant()));
-			publishStore.save(event.tipId(), running.succeeded());
+			if (Boolean.TRUE.equals(transactionTemplate.execute(status -> link(event, clock.instant())))) {
+				publishStore.save(event.tipId(), running.succeeded());
+				return;
+			}
+			// 그사이 삭제(API-055)됐거나 이미 처리된 팁. 정상 흐름이라 ERROR 로 남기지 않고, 다시 해도 소용없어 재시도 불가.
+			log.warn("게시할 수 없는 팁이라 건너뜀 tipId={} jobId={}", event.tipId(), event.jobId());
+			publishStore.save(event.tipId(),
+				running.failed(ExceptionType.TIP_NOT_EXIST.getCode(), "게시할 수 없는 팁입니다.", false));
 		} catch (RuntimeException e) {
 			log.error("팁 게시 실패 tipId={} jobId={}", event.tipId(), event.jobId(), e);
 			transactionTemplate.executeWithoutResult(status -> arTipRepository.findForUpdateById(event.tipId())
@@ -64,14 +70,21 @@ public class TipPublisher {
 		}
 	}
 
-	/** 게시 전(REGISTERING) 팁만 게시한다. 행을 잠가 다시 읽어 그사이 삭제(API-055)된 팁은 되살리지 않는다. */
-	private void link(TipPublishRequested event, Instant now) {
+	/**
+	 * 게시 전(REGISTERING) 팁만 게시한다. 행을 잠가 다시 읽어 그사이 삭제(API-055)된 팁은 되살리지 않는다.
+	 * @return 게시했으면 true, 게시할 수 없는 팁이면 false
+	 */
+	private boolean link(TipPublishRequested event, Instant now) {
 		ArTip tip = arTipRepository.findForUpdateById(event.tipId())
 			.filter(found -> found.getStatus() == TipStatus.REGISTERING && !found.isDeleted())
-			.orElseThrow(() -> new IllegalStateException("게시할 수 없는 팁 tipId=" + event.tipId()));
+			.orElse(null);
+		if (tip == null) {
+			return false;
+		}
 		if (event.imagePath() != null) {
 			arTipImageRepository.save(ArTipImage.of(tip.getId(), event.imagePath(), now));
 		}
 		tip.publish(now);
+		return true;
 	}
 }
