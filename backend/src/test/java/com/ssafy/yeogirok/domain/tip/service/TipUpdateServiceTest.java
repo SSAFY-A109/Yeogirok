@@ -262,6 +262,29 @@ class TipUpdateServiceTest {
 	}
 
 	@Test
+	void 이_팁에_이미_붙은_사진을_다시_보내도_받는다() {
+		ArTip saved = em.persistFlushFind(published(AUTHOR));
+		em.persist(ArTipImage.of(saved.getId(), FilePurpose.TIP_PHOTO.confirmedKey(UPLOAD_ID), NOW));
+		SESSIONS.put(readyPhoto(AUTHOR, FilePurpose.TIP_PHOTO));
+
+		service.update(AUTHOR, saved.getId(), command(saved.getVersion(), null, null, List.of(UPLOAD_ID), null));
+
+		assertThat(images(saved.getId())).extracting(ArTipImage::getImagePath)
+			.containsExactly(FilePurpose.TIP_PHOTO.confirmedKey(UPLOAD_ID));
+	}
+
+	@Test
+	void 다른_팁에_붙어_있는_사진으로_바꾸면_M005() {
+		ArTip saved = em.persistFlushFind(published(AUTHOR));
+		Long otherTipId = em.persistAndGetId(published(AUTHOR), Long.class);
+		em.persist(ArTipImage.of(otherTipId, FilePurpose.TIP_PHOTO.confirmedKey(UPLOAD_ID), NOW));
+		SESSIONS.put(readyPhoto(AUTHOR, FilePurpose.TIP_PHOTO));
+
+		expect(() -> service.update(AUTHOR, saved.getId(), command(saved.getVersion(), null, null, List.of(UPLOAD_ID),
+			null)), ExceptionType.FILE_ACCESS_DENIED);
+	}
+
+	@Test
 	void 멱등키_재전송은_같은_jobId와_그때의_작업_상태를_준다() {
 		ArTip saved = em.persistFlushFind(published(AUTHOR));
 		TipUpdateResponse first = service.update(AUTHOR, saved.getId(), command(saved.getVersion(), "TMI", null, null,

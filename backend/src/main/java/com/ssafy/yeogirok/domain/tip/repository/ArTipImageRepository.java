@@ -14,6 +14,8 @@ public interface ArTipImageRepository extends JpaRepository<ArTipImage, Long> {
 
 	boolean existsByImagePath(String imagePath);
 
+	boolean existsByImagePathAndTipIdNot(String imagePath, Long tipId);
+
 	Optional<ArTipImage> findByTipId(Long tipId);
 
 	void deleteByTipId(Long tipId);

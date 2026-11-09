@@ -107,7 +107,7 @@ public class TipRetryService {
 		TipRetryCommand command, Instant now) {
 		TipBody.normalize(tip.getBody());
 		String imagePath = command.replacementUploadIds() != null
-			? tipPhotoUploads.confirmedPath(userId, command.replacementUploadIds())
+			? tipPhotoUploads.confirmedPath(userId, tip.getId(), command.replacementUploadIds())
 			: state.filter(found -> found.operation() == Operation.CREATE)
 				.orElseThrow(() -> new BusinessException(ExceptionType.TIP_RETRY_UNAVAILABLE,
 					"지난 게시 작업 정보가 없습니다. replacementUploadIds 로 사진을 다시 지정해 주세요."))
@@ -157,7 +157,7 @@ public class TipRetryService {
 		PhotoChange photo = draft.photo();
 		String imagePath = draft.imagePath();
 		if (command.replacementUploadIds() != null) {
-			imagePath = tipPhotoUploads.confirmedPath(userId, command.replacementUploadIds());
+			imagePath = tipPhotoUploads.confirmedPath(userId, tip.getId(), command.replacementUploadIds());
 			photo = imagePath == null ? PhotoChange.REMOVE : PhotoChange.REPLACE;
 		}
 		TipEditDraft.Relocation relocation = draft.relocation();

@@ -67,7 +67,7 @@ public class TipCreateService {
 		String body = TipBody.normalize(command.body());
 		SpatialReference spatialReference = SpatialReference.read(command.spatialReference(), now);
 		Map<String, Object> placement = tipPlacements.toMap(command.placement());
-		String imagePath = tipPhotoUploads.confirmedPath(userId, command.uploadIds());
+		String imagePath = tipPhotoUploads.confirmedPath(userId, null, command.uploadIds());
 
 		String jobId = UUID.randomUUID().toString();
 		AtomicReference<Long> claimedBy = new AtomicReference<>();

@@ -63,7 +63,7 @@ public class TipUpdateService {
 		TipEditDraft draft = new TipEditDraft(userId, tip.getVersion(),
 			command.category() == null ? null : ArTipCategory.fromCode(command.category()),
 			command.body() == null ? null : TipBody.normalize(command.body()),
-			photoChange(command), photoPath(userId, command), relocation(tip, command, now));
+			photoChange(command), photoPath(userId, tipId, command), relocation(tip, command, now));
 
 		String lockToken = editStore.reserve(tipId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.TIP_EDIT_IN_PROGRESS));
@@ -102,8 +102,8 @@ public class TipUpdateService {
 		return command.uploadIds().isEmpty() ? PhotoChange.REMOVE : PhotoChange.REPLACE;
 	}
 
-	private String photoPath(Long userId, TipUpdateCommand command) {
-		return command.uploadIds() == null ? null : tipPhotoUploads.confirmedPath(userId, command.uploadIds());
+	private String photoPath(Long userId, Long tipId, TipUpdateCommand command) {
+		return command.uploadIds() == null ? null : tipPhotoUploads.confirmedPath(userId, tipId, command.uploadIds());
 	}
 
 	private TipEditDraft.Relocation relocation(ArTip tip, TipUpdateCommand command, Instant now) {
