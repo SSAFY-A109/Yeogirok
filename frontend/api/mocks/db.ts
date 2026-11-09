@@ -3,6 +3,8 @@ import type { RecommendationPreferenceDto } from "../../features/recommendation/
 import type { ScheduleBodyDto } from "../../features/schedule/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
+import { createTipFixtures, type MockTip } from "./fixtures/tip";
+import type { MockIdempotentResponse, MockUpload } from "./fixtures/media";
 
 /** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
 type MockIdempotencyRecord = { requestHash: string; footprintId: number };
@@ -21,6 +23,12 @@ export type MockScheduleDraft = {
 };
 
 type MockDb = {
+  tips: Map<number, MockTip>;
+  uploads: Map<string, MockUpload>;
+  tipIdempotency: Map<string, MockIdempotentResponse>;
+  uploadIdempotency: Map<string, MockIdempotentResponse>;
+  nextTipId: number;
+  nextUploadId: number;
   rooms: Map<number, MockRoom>;
   preferences: Map<number, RecommendationPreferenceDto>;
   footprints: CreateFootprintResponseDto[];
@@ -37,6 +45,13 @@ function createDb(): MockDb {
   const rooms = createRoomFixtures();
 
   return {
+    tips: createTipFixtures(),
+    uploads: new Map(),
+    tipIdempotency: new Map(),
+    uploadIdempotency: new Map(),
+    nextTipId: 100,
+    nextUploadId: 1,
+
     rooms: new Map(rooms.map((room) => {
       return [room.detail.roomId, room];
     })),

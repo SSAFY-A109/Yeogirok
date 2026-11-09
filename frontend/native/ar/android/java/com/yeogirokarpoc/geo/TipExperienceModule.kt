@@ -15,6 +15,14 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.Executors
+import android.Manifest
+import android.content.pm.PackageManager
+import android.util.Base64
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import java.time.Instant
 
 class TipExperienceModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
     private val worker = Executors.newSingleThreadExecutor()
@@ -40,6 +48,35 @@ class TipExperienceModule(private val context: ReactApplicationContext) : ReactC
 
     init { context.addActivityEventListener(listener) }
     override fun getName() = "TipExperience"
+
+    @ReactMethod fun getCurrentLocation(promise: Promise) {
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            promise.reject("LOCATION_PERMISSION", "현재 위치 권한이 필요해요."); return
+        }
+        val cancellation = CancellationTokenSource()
+        try {
+            val request = CurrentLocationRequest.Builder().setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxUpdateAgeMillis(0).setDurationMillis(15_000).build()
+            LocationServices.getFusedLocationProviderClient(context).getCurrentLocation(request, cancellation.token)
+                .addOnSuccessListener { location ->
+                    if (location == null || !location.hasAccuracy() || location.time <= 0) {
+                        promise.reject("LOCATION_REQUIRED", "현재 위치를 측정하지 못했어요. 다시 시도해 주세요.")
+                    } else promise.resolve(JSONObject().put("latitude", location.latitude).put("longitude", location.longitude)
+                        .put("accuracyMeters", location.accuracy.toDouble()).put("capturedAt", Instant.ofEpochMilli(location.time).toString()).toString())
+                }.addOnFailureListener { promise.reject("LOCATION_REQUIRED", "현재 위치를 측정하지 못했어요.") }
+        } catch (_: SecurityException) { promise.reject("LOCATION_PERMISSION", "현재 위치 권한이 필요해요.") }
+    }
+
+    @ReactMethod fun readPhoto(name: String, promise: Promise) {
+        worker.execute {
+            try {
+                val file = LocalTipStore.photoFile(context, name)
+                require(file.isFile && file.length() > 0)
+                promise.resolve(JSONObject().put("sizeBytes", file.length())
+                    .put("base64", Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)).toString())
+            } catch (_: Exception) { promise.reject("PHOTO_FAILED", "사진을 읽지 못했어요. 다시 선택해 주세요.") }
+        }
+    }
 
     @ReactMethod fun listTips(promise: Promise) {
         worker.execute {

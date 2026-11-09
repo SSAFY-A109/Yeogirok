@@ -8,6 +8,8 @@ import { placeHandlers } from "./place";
 import { recommendationHandlers } from "./recommendation";
 import { roomHandlers } from "./room";
 import { scheduleHandlers } from "./schedule";
+import { tipHandlers } from "./tip";
+import { mediaHandlers } from "./media";
 import { statisticsHandlers } from "./statistics";
 
 export const handlers: RequestHandler[] = [
@@ -19,5 +21,7 @@ export const handlers: RequestHandler[] = [
   ...recommendationHandlers,
   ...roomHandlers,
   ...scheduleHandlers,
+  ...tipHandlers,
+  ...mediaHandlers,
   ...statisticsHandlers,
 ];
