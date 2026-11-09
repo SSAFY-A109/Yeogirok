@@ -42,6 +42,7 @@ pipeline {
 
     environment {
         REPO_URL = 'https://github.com/SSAFY-A109/Yeogirok.git'  // 공개 저장소라 로그인 없이 받는다
+        REPO_WEB = 'https://github.com/SSAFY-A109/Yeogirok'      // 알림의 커밋 링크
         BRANCH   = 'backend/dev'
         SERVER   = 'host.docker.internal'                       // Jenkins 컨테이너에서 본 서버 주소
     }
@@ -52,8 +53,20 @@ pipeline {
                 git url: env.REPO_URL, branch: env.BRANCH
                 script {
                     env.COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    // 알림에 쓸 내용. backend/dev 의 커밋은 대부분 PR 머지 커밋이라,
+                    // 머지 커밋이면 "#번호 PR 제목"과 PR 브랜치 작성자를, 아니면 커밋 제목과 작성자를 쓴다.
+                    env.COMMIT_SUBJECT = sh(returnStdout: true, script: '''
+                        s=$(git log -1 --format=%s)
+                        case "$s" in
+                          "Merge pull request #"*) echo "$(echo "$s" | cut -d' ' -f4) $(git log -1 --format=%b | sed -n '/./{p;q}')" ;;
+                          *) echo "$s" ;;
+                        esac
+                    ''').trim()
+                    env.COMMIT_AUTHOR = sh(returnStdout: true, script: '''
+                        git log -1 --format=%an "$(git rev-parse -q --verify HEAD^2 || echo HEAD)"
+                    ''').trim()
                 }
-                echo "커밋 ${env.COMMIT.substring(0, 7)} 을 테스트하고 배포합니다"
+                echo "커밋 ${env.COMMIT.substring(0, 7)} (${env.COMMIT_SUBJECT}) 을 테스트하고 배포합니다"
             }
         }
 
@@ -65,8 +78,14 @@ pipeline {
             }
             post {
                 // 테스트가 깨져도 결과 표는 남긴다. 빌드 화면의 "Test Result" 에서 어떤 테스트가 실패했는지 본다.
+                // 테스트 수는 알림 카드에 넣는다.
                 always {
-                    junit allowEmptyResults: true, testResults: 'backend/build/test-results/test/*.xml'
+                    script {
+                        def t = junit allowEmptyResults: true, testResults: 'backend/build/test-results/test/*.xml'
+                        if (t.totalCount > 0) {
+                            env.TEST_SUMMARY = t.failCount > 0 ? "${t.totalCount}개 중 ${t.failCount}개 실패" : "${t.totalCount}개 통과"
+                        }
+                    }
                 }
             }
         }
@@ -87,20 +106,43 @@ pipeline {
 
     post {
         success {
-            script { notifyMattermost('✅ 백엔드 배포 성공') }
+            script { notifyMattermost('✅ 백엔드 배포 성공', '#2EB67D') }   // 초록
         }
         failure {
-            script { notifyMattermost('❌ 백엔드 배포 실패') }
+            script { notifyMattermost('❌ 백엔드 배포 실패', '#E01E5A') }   // 빨강
         }
     }
 }
 
-// Mattermost 채널에 한 줄 알림을 보낸다. 알림이 실패해도 빌드 결과는 바꾸지 않는다.
-// 메시지에 큰따옴표(")를 넣지 않는다. JSON 을 손으로 만들기 때문에 깨진다.
-def notifyMattermost(String title) {
-    def commit = env.COMMIT ? env.COMMIT.substring(0, 7) : '-'
-    def text = "${title} · 커밋 ${commit} · [빌드 #${env.BUILD_NUMBER} 로그](${env.BUILD_URL}console)"
-    writeFile file: 'mattermost.json', text: """{"text": "${text}"}"""
+// Mattermost 채널에 알림 카드를 보낸다(Incoming Webhook, 가이드 10-4 ②). 알림이 실패해도 빌드 결과는 바꾸지 않는다.
+// 카드: 왼쪽 색 띠(결과), 제목(누르면 빌드 로그), 커밋·작성자·PR 제목·테스트 수·걸린 시간.
+// 보내는 이름(Jenkins)과 아이콘은 Mattermost 서버가 웹훅의 이름·사진 바꾸기를 허용할 때만 적용된다.
+// 허용하지 않으면 웹훅을 만든 사람 이름에 BOT 표시가 붙어 보이고, 카드 내용은 같다.
+def notifyMattermost(String title, String color) {
+    def sha = env.COMMIT ?: ''
+    def fields = []
+    if (sha) {
+        fields.add(['short': true, title: '커밋', value: "[${sha.substring(0, 7)}](${env.REPO_WEB}/commit/${sha})"])
+        fields.add(['short': true, title: '작성자', value: env.COMMIT_AUTHOR ?: '-'])
+        fields.add(['short': false, title: '내용', value: env.COMMIT_SUBJECT ?: '-'])
+    }
+    if (env.TEST_SUMMARY) {
+        fields.add(['short': true, title: '테스트', value: env.TEST_SUMMARY])
+    }
+    fields.add(['short': true, title: '걸린 시간', value: durationText(System.currentTimeMillis() - currentBuild.startTimeInMillis)])
+    def payload = [
+        username   : 'Jenkins',
+        icon_url   : 'https://www.jenkins.io/images/logos/jenkins/jenkins.png',
+        attachments: [[
+            fallback  : "${title} · 커밋 ${sha ? sha.substring(0, 7) : '-'}",   // 휴대폰 푸시 알림에 보이는 한 줄
+            color     : color,
+            title     : "${title} · 빌드 #${env.BUILD_NUMBER}",
+            title_link: "${env.BUILD_URL}console",
+            fields    : fields,
+        ]],
+    ]
+    // 커밋 제목에 따옴표 같은 기호가 있어도 깨지지 않게 JSON 은 직접 만들지 않고 변환한다.
+    writeFile file: 'mattermost.json', text: groovy.json.JsonOutput.toJson(payload)
     try {
         withCredentials([string(credentialsId: 'mattermost-webhook', variable: 'MM_URL')]) {
             sh 'curl -sS -o /dev/null -X POST -H "Content-Type: application/json" --data @mattermost.json "$MM_URL" || true'
@@ -108,4 +150,10 @@ def notifyMattermost(String title) {
     } catch (err) {
         echo "Mattermost 알림을 보내지 못했습니다: ${err}"
     }
+}
+
+// 밀리초를 "2분 13초"처럼 바꾼다.
+def durationText(long ms) {
+    long sec = (long) (ms / 1000)
+    return sec >= 60 ? "${(long) (sec / 60)}분 ${sec % 60}초" : "${sec}초"
 }

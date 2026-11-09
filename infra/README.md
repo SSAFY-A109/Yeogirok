@@ -583,11 +583,27 @@ cat ~/jenkins_key           # 출력 전체를 복사한다
 저장한 뒤 서버의 키 파일은 지웁니다: `rm ~/jenkins_key ~/jenkins_key.pub`
 
 **② Mattermost 알림 주소 (`mattermost-webhook`)**
-1. Mattermost 왼쪽 위 팀 메뉴 → **통합(Integrations)** → **Incoming Webhooks** → **추가**
-2. 알림 받을 채널을 고르고 저장한 뒤, 나온 주소(`https://.../hooks/...`)를 복사합니다.
-3. Jenkins에 Kind **Secret text**, ID `mattermost-webhook`, Secret에 그 주소를 넣습니다.
 
-메뉴 이름은 Mattermost 버전과 언어에 따라 조금 다릅니다. 통합 메뉴가 안 보이면 팀 관리자 권한이 필요할 수 있습니다.
+Jenkins는 빌드가 끝날 때마다 Mattermost 채널에 알림 카드를 보냅니다. 왼쪽 색 띠로 결과(초록 성공, 빨강 실패)를 보여 주고, 제목을 누르면 빌드 로그가 열립니다. 카드에는 커밋(GitHub 링크), 작성자, `#PR번호 PR 제목`, 테스트 수, 걸린 시간이 들어갑니다.
+
+1. Mattermost 왼쪽 위 팀 메뉴 → **통합(Integrations)** → **Incoming Webhooks** → **추가**
+2. 아래처럼 채우고 저장합니다.
+
+   | 칸 | 값 |
+   | --- | --- |
+   | 제목(Title) | `Jenkins` (통합 목록에만 보이는 이름) |
+   | 설명 | `백엔드 CI/CD 알림` |
+   | 채널 | 알림 받을 채널. 따로 `배포-알림` 채널을 만들어 두면 대화 채널이 덜 시끄럽습니다 |
+   | 이 채널로 고정(Lock to this channel) | 체크 (주소가 새도 다른 채널에는 못 올림) |
+   | 사용자 이름(Username) | `Jenkins` |
+   | 프로필 사진(Profile Picture) | `https://www.jenkins.io/images/logos/jenkins/jenkins.png` |
+
+3. 나온 주소(`https://.../hooks/...`)를 복사합니다. 이 주소를 아는 사람은 누구나 채널에 글을 올릴 수 있어 Git·노션·메신저에 올리지 않습니다.
+4. Jenkins에 Kind **Secret text**, ID `mattermost-webhook`, Secret에 그 주소를 넣습니다.
+
+- 메뉴 이름은 Mattermost 버전과 언어에 따라 조금 다릅니다. 통합 메뉴가 안 보이면 팀 관리자 권한이 필요할 수 있습니다.
+- 사용자 이름·프로필 사진 칸이 없으면 Mattermost 서버가 바꾸기를 막아 둔 것입니다. 그래도 알림은 오고, 웹훅을 만든 사람 이름에 `BOT` 표시가 붙어 보입니다. 카드 내용은 같습니다.
+- 주소가 맞는지 바로 보려면 서버에서 `curl -X POST -H 'Content-Type: application/json' -d '{"text":"Jenkins 알림 시험"}' '<복사한 주소>'`를 실행해 채널에 글이 올라오는지 봅니다.
 
 **③ 웹훅 토큰 (`github-webhook-token`)**: 아무나 웹훅 주소를 불러 빌드를 돌리지 못하게 주소 끝에 붙이는 비밀 문자열입니다. 저장소가 공개라 Jenkinsfile에는 쓰지 않습니다.
 
@@ -632,7 +648,7 @@ pipeline {
 | Lightweight checkout | 체크 |
 
 - 빌드 번호(`#1`) → **Console Output**에서 진행을 봅니다. 첫 빌드는 Gradle이 의존성을 받느라 5~10분 걸리고, 다음부터는 캐시 덕분에 빨라집니다.
-- 끝났다는 기준: 로그 끝에 `[deploy] 성공`과 `Finished: SUCCESS`, Mattermost에 `✅ 백엔드 배포 성공`, 빌드 화면에 **Test Result**.
+- 끝났다는 기준: 로그 끝에 `[deploy] 성공`과 `Finished: SUCCESS`, Mattermost에 초록 카드 `✅ 백엔드 배포 성공 · 빌드 #1`, 빌드 화면에 **Test Result**.
 - 같은 커밋으로 다시 빌드하면 Gradle이 이미 통과한 테스트를 건너뛰어(`UP-TO-DATE`) 테스트 단계가 몇 초 만에 끝납니다. 정상입니다.
 - 첫 실행이 끝나야 Jenkinsfile의 웹훅 설정(`triggers`)이 Jenkins에 등록됩니다. 10-6은 그다음에 합니다.
 - Jenkins는 빌드할 때마다 `infra/dev`에서 Jenkinsfile을 새로 읽습니다. 파이프라인을 고치려면 `infra/dev`로 PR을 머지하면 다음 빌드부터 적용됩니다.
