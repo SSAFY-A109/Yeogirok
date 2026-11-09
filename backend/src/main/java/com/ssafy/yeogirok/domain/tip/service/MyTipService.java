@@ -9,6 +9,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ssafy.yeogirok.domain.tip.dto.MyTipDetailResponse;
 import com.ssafy.yeogirok.domain.tip.dto.MyTipListResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
@@ -20,7 +21,7 @@ import com.ssafy.yeogirok.global.request.TimeIdCursor;
 
 import lombok.RequiredArgsConstructor;
 
-/** 작성자 본인 팁 원격 조회(API-053). 현장 위치 없이 본다. */
+/** 작성자 본인 팁 원격 조회(API-053·090). 현장 위치 없이 본다. */
 @Service
 @RequiredArgsConstructor
 public class MyTipService {
@@ -33,6 +34,8 @@ public class MyTipService {
 		Long.MAX_VALUE);
 
 	private final ArTipRepository arTipRepository;
+	private final MyTipFinder myTipFinder;
+	private final TipPhotoUrls tipPhotoUrls;
 
 	/** API-053. 최신 등록순(createdAt·id 내림차순). status 는 REGISTERING·PUBLISHED·FAILED 만, 그 외 C003. */
 	@Transactional(readOnly = true)
@@ -49,6 +52,13 @@ public class MyTipService {
 		String nextCursor = hasNext ? new TimeIdCursor(page.getLast().getCreatedAt(), page.getLast().getId()).encode()
 			: null;
 		return new MyTipListResponse(page.stream().map(MyTipListResponse.Item::from).toList(), nextCursor);
+	}
+
+	/** API-090. 남의 팁 T002, 없거나 삭제 T012. 사진 URL 은 작성자 권한을 확인한 뒤 발급한다. */
+	@Transactional(readOnly = true)
+	public MyTipDetailResponse getMyTip(Long userId, Long tipId) {
+		ArTip tip = myTipFinder.getOwn(tipId, userId);
+		return MyTipDetailResponse.of(tip, tipPhotoUrls.issueFor(tipId).stream().toList());
 	}
 
 	private static TipStatus parseStatus(String status) {

@@ -7,14 +7,10 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ssafy.yeogirok.domain.file.FileProperties;
-import com.ssafy.yeogirok.domain.file.FilePurpose;
-import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.tip.dto.TipViewResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipReaction;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipReactionId;
-import com.ssafy.yeogirok.domain.tip.repository.ArTipImageRepository;
 import com.ssafy.yeogirok.domain.tip.repository.ArTipReactionRepository;
 import com.ssafy.yeogirok.domain.tip.repository.ArTipReactionRepository.ReactionCounts;
 import com.ssafy.yeogirok.domain.user.domain.User;
@@ -35,12 +31,10 @@ import lombok.RequiredArgsConstructor;
 public class TipViewService {
 
 	private final PublicTipFinder publicTipFinder;
-	private final ArTipImageRepository imageRepository;
+	private final TipPhotoUrls tipPhotoUrls;
 	private final ArTipReactionRepository reactionRepository;
 	private final UserRepository userRepository;
 	private final LocationEvidencePolicy locationEvidencePolicy;
-	private final FileStorage fileStorage;
-	private final FileProperties fileProperties;
 	private final Clock clock;
 
 	@Transactional(readOnly = true)
@@ -54,10 +48,8 @@ public class TipViewService {
 			throw new BusinessException(ExceptionType.TIP_SPATIAL_EXPIRED);
 		}
 
-		List<TipViewResponse.Photo> photos = imageRepository.findByTipId(tipId)
-			.map(image -> new TipViewResponse.Photo(image.getId(), fileStorage.presignGet(
-				fileProperties.bucketFor(FilePurpose.TIP_PHOTO), image.getImagePath(), fileProperties.downloadUrlTtl()),
-				null))
+		List<TipViewResponse.Photo> photos = tipPhotoUrls.issueFor(tipId)
+			.map(photo -> new TipViewResponse.Photo(photo.imageId(), photo.url(), null))
 			.stream().toList();
 		TipViewResponse.Author author = userRepository.findById(tip.getAuthorId())
 			.filter(User::isActive)

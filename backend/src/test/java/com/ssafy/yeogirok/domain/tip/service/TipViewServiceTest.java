@@ -37,7 +37,8 @@ import com.ssafy.yeogirok.support.TestUsers;
 
 /** API-048 규칙. 팁은 기준 위치에 있고, 요청 위치는 북쪽으로 약 1.11m 단위로 옮긴다. S3 서명은 가짜다. */
 @DataJpaTest
-@Import({TipViewService.class, PublicTipFinder.class, LocationEvidencePolicy.class, TipViewServiceTest.Config.class})
+@Import({TipViewService.class, PublicTipFinder.class, TipPhotoUrls.class, LocationEvidencePolicy.class,
+	TipViewServiceTest.Config.class})
 class TipViewServiceTest {
 
 	static final Long AUTHOR = 7001L;

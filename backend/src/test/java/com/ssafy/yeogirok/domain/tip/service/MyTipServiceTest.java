@@ -5,7 +5,10 @@ import static com.ssafy.yeogirok.domain.tip.TipFixture.publish;
 import static com.ssafy.yeogirok.domain.tip.TipFixture.registeringAt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
+import java.time.Duration;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -14,20 +17,48 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
+import com.ssafy.yeogirok.domain.file.FileProperties;
+import com.ssafy.yeogirok.domain.file.storage.FileStorage;
+import com.ssafy.yeogirok.domain.tip.dto.MyTipDetailResponse;
 import com.ssafy.yeogirok.domain.tip.dto.MyTipListResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTip;
+import com.ssafy.yeogirok.domain.tip.entity.ArTipImage;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestFileProperties;
 
-/** API-053 규칙. 팁 등록 시각은 NOW 기준 분 단위로 다르게 둔다. */
+/** API-053·090 규칙. 팁 등록 시각은 NOW 기준으로 다르게 둔다. S3 서명은 가짜다. */
 @DataJpaTest
-@Import(MyTipService.class)
+@Import({MyTipService.class, MyTipFinder.class, TipPhotoUrls.class, MyTipServiceTest.Config.class})
 class MyTipServiceTest {
 
 	static final Long ME = 8001L;
 	static final Long OTHER = 8002L;
+	static final FileStorage STORAGE = mock(FileStorage.class);
+
+	@TestConfiguration
+	static class Config {
+
+		@Bean
+		MutableClock clock() {
+			return new MutableClock(NOW);
+		}
+
+		@Bean
+		FileStorage fileStorage() {
+			return STORAGE;
+		}
+
+		@Bean
+		FileProperties fileProperties() {
+			return TestFileProperties.VALUE;
+		}
+	}
 
 	@Autowired
 	MyTipService service;
@@ -101,6 +132,49 @@ class MyTipServiceTest {
 			.extracting("exceptionType").isEqualTo(ExceptionType.PAGE_SIZE_OUT_OF_RANGE);
 		assertThatThrownBy(() -> service.getMyTips(ME, null, "%%%", null))
 			.extracting("exceptionType").isEqualTo(ExceptionType.INVALID_CURSOR);
+	}
+
+	@Test
+	void 상세는_사진_URL과_만료_시각을_주고_수정_기준_version을_준다() {
+		Long tipId = persist(publish(registeringAt(ME, NOW)));
+		Long imageId = em.persistAndGetId(ArTipImage.of(tipId, "tip-photo/abc", NOW), Long.class);
+		given(STORAGE.presignGet("photos", "tip-photo/abc", Duration.ofMinutes(15))).willReturn("https://signed/abc");
+
+		MyTipDetailResponse response = service.getMyTip(ME, tipId);
+
+		assertThat(response.tipId()).isEqualTo(tipId);
+		assertThat(response.body()).isEqualTo("창가 자리가 좋아요");
+		assertThat(response.photos()).containsExactly(
+			new MyTipDetailResponse.Photo(imageId, "https://signed/abc", NOW.plus(Duration.ofMinutes(15))));
+		assertThat(response.status()).isEqualTo(TipStatus.PUBLISHED);
+		assertThat(response.version()).isEqualTo(em.find(ArTip.class, tipId).getVersion());
+		assertThat(response.publishedAt()).isEqualTo(NOW);
+	}
+
+	@Test
+	void 게시_전_팁도_본인에게는_보여주고_사진이_없으면_빈_배열() {
+		Long tipId = persist(registeringAt(ME, NOW));
+
+		MyTipDetailResponse response = service.getMyTip(ME, tipId);
+
+		assertThat(response.status()).isEqualTo(TipStatus.REGISTERING);
+		assertThat(response.photos()).isEmpty();
+		assertThat(response.publishedAt()).isNull();
+	}
+
+	@Test
+	void 상세는_남의_팁이면_T002_없거나_삭제된_팁이면_T012() {
+		Long tipId = persist(registeringAt(ME, NOW));
+		Long deleted = persist(registeringAt(ME, NOW));
+		em.getEntityManager().createNativeQuery("UPDATE ar_tips SET deleted_at = created_at WHERE id = " + deleted)
+			.executeUpdate();
+
+		assertThatThrownBy(() -> service.getMyTip(OTHER, tipId))
+			.extracting("exceptionType").isEqualTo(ExceptionType.TIP_NOT_OWNER);
+		assertThatThrownBy(() -> service.getMyTip(ME, deleted))
+			.extracting("exceptionType").isEqualTo(ExceptionType.TIP_NOT_EXIST);
+		assertThatThrownBy(() -> service.getMyTip(ME, tipId + 1000))
+			.extracting("exceptionType").isEqualTo(ExceptionType.TIP_NOT_EXIST);
 	}
 
 	private Long persist(ArTip tip) {

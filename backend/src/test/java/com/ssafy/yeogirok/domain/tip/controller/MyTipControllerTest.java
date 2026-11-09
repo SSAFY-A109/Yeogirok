@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.ssafy.yeogirok.domain.tip.dto.MyTipDetailResponse;
 import com.ssafy.yeogirok.domain.tip.dto.MyTipListResponse;
 import com.ssafy.yeogirok.domain.tip.entity.ArTipCategory;
 import com.ssafy.yeogirok.domain.tip.entity.TipStatus;
@@ -64,6 +65,36 @@ class MyTipControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C002"));
 			verifyNoInteractions(myTipService);
+		}
+	}
+
+	@Nested
+	class API_090_상세 {
+
+		@Test
+		void 앱이_검사하는_응답_모양을_돌려준다() throws Exception {
+			given(myTipService.getMyTip(USER_ID, 7L)).willReturn(new MyTipDetailResponse(7L, ArTipCategory.PHOTO,
+				"노을 명당", List.of(new MyTipDetailResponse.Photo(801L, "https://signed/abc",
+					Instant.parse("2026-11-08T03:15:00Z"))),
+				TipStatus.REGISTERING, 1, null, Instant.parse("2026-11-08T03:00:00Z"),
+				Instant.parse("2026-11-08T03:00:00Z")));
+
+			mockMvc.perform(get("/api/v1/users/me/tips/7").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.tipId").value(7))
+				.andExpect(jsonPath("$.data.category").value("PHOTO"))
+				.andExpect(jsonPath("$.data.body").value("노을 명당"))
+				.andExpect(jsonPath("$.data.photos[0].imageId").value(801))
+				.andExpect(jsonPath("$.data.photos[0].url").value("https://signed/abc"))
+				.andExpect(jsonPath("$.data.photos[0].expiresAt").value("2026-11-08 12:15:00+09"))
+				.andExpect(jsonPath("$.data.status").value("REGISTERING"))
+				.andExpect(jsonPath("$.data.version").value(1))
+				.andExpect(jsonPath("$.data.publishedAt").hasJsonPath())
+				.andExpect(jsonPath("$.data.publishedAt").isEmpty())
+				.andExpect(jsonPath("$.data.createdAt").value("2026-11-08 12:00:00+09"))
+				.andExpect(jsonPath("$.data.latitude").doesNotExist())
+				.andExpect(jsonPath("$.data.spatialReference").doesNotExist())
+				.andExpect(jsonPath("$.data.placement").doesNotExist());
 		}
 	}
 }
