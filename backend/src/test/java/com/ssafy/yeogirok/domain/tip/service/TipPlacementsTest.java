@@ -3,6 +3,8 @@ package com.ssafy.yeogirok.domain.tip.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -17,7 +19,7 @@ class TipPlacementsTest {
 
 	static final JsonMapper MAPPER = JsonMapper.builder().build();
 	static final int MAX = 8192;
-	final TipPlacements placements = new TipPlacements(MAPPER, new TipProperties(50, 5, 10, MAX));
+	final TipPlacements placements = new TipPlacements(MAPPER, new TipProperties(50, 5, 10, MAX, Duration.ofMinutes(5)));
 
 	@Test
 	void 앱이_보낸_객체를_그대로_돌려준다() {

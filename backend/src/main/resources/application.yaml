@@ -11,6 +11,12 @@ spring:
     hibernate:
       # 스키마 관리 도구는 ERD 확정 뒤에 정한다. 그 전까지 로컬에서만 엔티티 기준으로 테이블을 만든다(application-local.yaml).
       ddl-auto: none
+  task:
+    execution:
+      shutdown:
+        # 배포·재시작 때 진행 중인 비동기 작업(팁 게시·수정)이 끝날 때까지 기다린다. 넘기면 StuckTipRecoveryJob 이 정리한다.
+        await-termination: true
+        await-termination-period: 30s
 
 yeogirok:
   footprint:
@@ -26,6 +32,9 @@ yeogirok:
     max-search-results: 10
     # placement JSON 최대 크기(11/8 결정 8KB). 앱은 3개 필드만 보낸다.
     placement-max-bytes: 8192
+    # 게시 작업이 끊겨 REGISTERING 에 남은 팁을 FAILED 로 돌리는 주기와 기준 시간(PR #64 리뷰 제안 5분).
+    stuck-check-interval: PT5M
+    stuck-registering-timeout: PT5M
   room:
     invite:
       # 초대 토큰 암호화 키(AES-SIV). Base64, 디코드했을 때 64바이트. 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.

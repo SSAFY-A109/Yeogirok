@@ -1,5 +1,7 @@
 package com.ssafy.yeogirok.domain.tip;
 
+import java.time.Duration;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -13,6 +15,7 @@ import jakarta.validation.constraints.Positive;
  * @param interactionRadiusMeters 상세·반응 허용 거리(m, 경계 포함). 넘으면 T004
  * @param maxSearchResults        주변 탐색 최대 개수
  * @param placementMaxBytes       placement JSON(UTF-8) 최대 바이트. 넘으면 T007
+ * @param stuckRegisteringTimeout REGISTERING 이 이보다 오래되면 게시 작업이 끊긴 것으로 본다
  */
 @Validated
 @ConfigurationProperties("yeogirok.tip")
@@ -20,7 +23,8 @@ public record TipProperties(
 	@NotNull @Positive Integer searchRadiusMeters,
 	@NotNull @Positive Integer interactionRadiusMeters,
 	@NotNull @Positive Integer maxSearchResults,
-	@NotNull @Positive Integer placementMaxBytes
+	@NotNull @Positive Integer placementMaxBytes,
+	@NotNull Duration stuckRegisteringTimeout
 ) {
 
 	public boolean canInteract(double distanceMeters) {

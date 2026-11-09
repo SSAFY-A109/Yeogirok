@@ -20,8 +20,8 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 049 커밋 뒤 비동기 게시(11/8 결정 A): 사진 연결 → PUBLISHED. 실패하면 팁을 FAILED 로 두고 공개하지 않는다.
- * 서버가 처리 중에 멈추면 작업이 RUNNING 으로 남는다(감시는 범위 밖, specs/ar-tip-api.md 5절 6).
+ * 049·051 커밋 뒤 비동기 게시(11/8 결정 A): 사진 연결 → PUBLISHED. 실패하면 팁을 FAILED 로 두고 공개하지 않는다.
+ * 끊겨서 REGISTERING 에 남은 팁은 {@link StuckTipRecoveryJob} 이 FAILED 로 돌린다.
  */
 @Slf4j
 @Component
@@ -50,16 +50,18 @@ public class TipPublisher {
 
 	public void publish(TipPublishRequested event) {
 		TipPublishState running = TipPublishState.queued(event.jobId(), event.imagePath()).running();
-		publishStore.save(event.tipId(), running);
 		try {
-			if (Boolean.TRUE.equals(transactionTemplate.execute(status -> link(event, clock.instant())))) {
-				publishStore.save(event.tipId(), running.succeeded());
-				return;
+			switch (transactionTemplate.execute(status -> link(event, running, clock.instant()))) {
+				case PUBLISHED -> publishStore.save(event.tipId(), running.succeeded());
+				case GONE -> {
+					// 그사이 삭제(API-055)됐거나 이미 게시된 팁. 정상 흐름이라 ERROR 로 남기지 않고, 다시 해도 소용없어 재시도 불가.
+					log.warn("게시할 수 없는 팁이라 건너뜀 tipId={} jobId={}", event.tipId(), event.jobId());
+					publishStore.save(event.tipId(),
+						running.failed(ExceptionType.TIP_NOT_EXIST.getCode(), "게시할 수 없는 팁입니다.", false));
+				}
+				// 051 로 새 작업이 생겼거나 정리 작업이 이미 FAILED 로 돌린 팁. 최신 작업 상태를 덮어쓰지 않는다.
+				case STALE -> log.warn("지난 게시 작업이라 건너뜀 tipId={} jobId={}", event.tipId(), event.jobId());
 			}
-			// 그사이 삭제(API-055)됐거나 이미 처리된 팁. 정상 흐름이라 ERROR 로 남기지 않고, 다시 해도 소용없어 재시도 불가.
-			log.warn("게시할 수 없는 팁이라 건너뜀 tipId={} jobId={}", event.tipId(), event.jobId());
-			publishStore.save(event.tipId(),
-				running.failed(ExceptionType.TIP_NOT_EXIST.getCode(), "게시할 수 없는 팁입니다.", false));
 		} catch (RuntimeException e) {
 			log.error("팁 게시 실패 tipId={} jobId={}", event.tipId(), event.jobId(), e);
 			transactionTemplate.executeWithoutResult(status -> arTipRepository.findForUpdateById(event.tipId())
@@ -70,21 +72,29 @@ public class TipPublisher {
 		}
 	}
 
+	private enum Outcome { PUBLISHED, GONE, STALE }
+
 	/**
-	 * 게시 전(REGISTERING) 팁만 게시한다. 행을 잠가 다시 읽어 그사이 삭제(API-055)된 팁은 되살리지 않는다.
-	 * @return 게시했으면 true, 게시할 수 없는 팁이면 false
+	 * 행을 잠가 다시 읽고, 이 작업이 그 팁의 최신 작업(Redis jobId)이고 팁이 게시 전(REGISTERING)일 때만 게시한다.
+	 * 그사이 삭제(API-055)된 팁은 되살리지 않는다.
 	 */
-	private boolean link(TipPublishRequested event, Instant now) {
-		ArTip tip = arTipRepository.findForUpdateById(event.tipId())
-			.filter(found -> found.getStatus() == TipStatus.REGISTERING && !found.isDeleted())
-			.orElse(null);
-		if (tip == null) {
-			return false;
+	private Outcome link(TipPublishRequested event, TipPublishState running, Instant now) {
+		ArTip tip = arTipRepository.findForUpdateById(event.tipId()).orElse(null);
+		// 잠근 뒤에 읽어야 051 이 같은 잠금 안에서 바꾼 최신 jobId 를 본다.
+		boolean current = publishStore.find(event.tipId())
+			.filter(state -> state.jobId().equals(event.jobId()))
+			.isPresent();
+		if (!current || (tip != null && tip.getStatus() == TipStatus.FAILED)) {
+			return Outcome.STALE;
 		}
+		if (tip == null || tip.isDeleted() || tip.getStatus() != TipStatus.REGISTERING) {
+			return Outcome.GONE;
+		}
+		publishStore.save(event.tipId(), running);
 		if (event.imagePath() != null) {
 			arTipImageRepository.save(ArTipImage.of(tip.getId(), event.imagePath(), now));
 		}
 		tip.publish(now);
-		return true;
+		return Outcome.PUBLISHED;
 	}
 }

@@ -77,7 +77,7 @@ class TipPublisherTest {
 	void 사진_없이_게시하면_PUBLISHED이고_주변_탐색에_보인다() {
 		Long tipId = em.persistAndGetId(registering(AUTHOR), Long.class);
 
-		publisher.publish(new TipPublishRequested(tipId, "job-1", null));
+		publisher.publish(requested(tipId, null));
 
 		em.flush();
 		em.clear();
@@ -93,7 +93,7 @@ class TipPublisherTest {
 	void 사진이_있으면_ar_tip_images에_연결하고_media_SUCCEEDED() {
 		Long tipId = em.persistAndGetId(registering(AUTHOR), Long.class);
 
-		publisher.publish(new TipPublishRequested(tipId, "job-1", "tip-photo/abc"));
+		publisher.publish(requested(tipId, "tip-photo/abc"));
 
 		assertThat(em.getEntityManager()
 			.createQuery("select i.imagePath from ArTipImage i where i.tipId = :tipId", String.class)
@@ -117,7 +117,7 @@ class TipPublisherTest {
 		Long tipId = arTipRepository.save(registering(AUTHOR)).getId();
 		arTipImageRepository.save(ArTipImage.of(tipId, "tip-photo/old", NOW));
 		try {
-			publisher.publish(new TipPublishRequested(tipId, "job-1", "tip-photo/new"));
+			publisher.publish(requested(tipId, "tip-photo/new"));
 
 			assertThat(arTipRepository.findById(tipId).orElseThrow().getStatus()).isEqualTo(TipStatus.FAILED);
 			TipPublishState state = STATES.states.get(tipId);
@@ -138,7 +138,7 @@ class TipPublisherTest {
 		tip.publish(NOW.minusSeconds(60));
 		Long tipId = em.persistAndGetId(tip, Long.class);
 
-		publisher.publish(new TipPublishRequested(tipId, "job-1", null));
+		publisher.publish(requested(tipId, null));
 
 		assertThat(em.find(ArTip.class, tipId).getStatus()).isEqualTo(TipStatus.PUBLISHED);
 		assertNotPublishable(tipId);
@@ -150,11 +150,46 @@ class TipPublisherTest {
 		tip.delete(NOW.minusSeconds(1));
 		Long tipId = em.persistAndGetId(tip, Long.class);
 
-		publisher.publish(new TipPublishRequested(tipId, "job-1", "tip-photo/abc"));
+		publisher.publish(requested(tipId, "tip-photo/abc"));
 
 		assertThat(em.find(ArTip.class, tipId).getStatus()).isEqualTo(TipStatus.DELETED);
 		assertThat(arTipImageRepository.existsByImagePath("tip-photo/abc")).isFalse();
 		assertNotPublishable(tipId);
+	}
+
+	/** 051 재시도로 새 작업이 생긴 뒤 늦게 도착한 옛 작업. 옛 사진으로 게시하지 않고 새 작업 상태도 그대로 둔다. */
+	@Test
+	void 최신_작업이_아니면_게시하지_않고_작업_상태도_바꾸지_않는다() {
+		Long tipId = em.persistAndGetId(registering(AUTHOR), Long.class);
+		TipPublishState newer = TipPublishState.queued("job-2", "tip-photo/new");
+		STATES.states.put(tipId, newer);
+
+		publisher.publish(new TipPublishRequested(tipId, "job-1", "tip-photo/old"));
+
+		assertThat(em.find(ArTip.class, tipId).getStatus()).isEqualTo(TipStatus.REGISTERING);
+		assertThat(arTipImageRepository.existsByImagePath("tip-photo/old")).isFalse();
+		assertThat(STATES.states.get(tipId)).isEqualTo(newer);
+	}
+
+	/** 정리 작업(StuckTipRecoveryJob)이 이미 FAILED·재시도 가능으로 돌린 팁에 늦게 도착한 작업. */
+	@Test
+	void 정리_작업이_실패로_돌린_팁은_게시하지_않고_재시도_가능_상태를_덮어쓰지_않는다() {
+		ArTip tip = registering(AUTHOR);
+		tip.fail(NOW);
+		Long tipId = em.persistAndGetId(tip, Long.class);
+		TipPublishState recovered = TipPublishState.queued("job-1", null).failed("C014", "x", true);
+		STATES.states.put(tipId, recovered);
+
+		publisher.publish(new TipPublishRequested(tipId, "job-1", null));
+
+		assertThat(em.find(ArTip.class, tipId).getStatus()).isEqualTo(TipStatus.FAILED);
+		assertThat(STATES.states.get(tipId)).isEqualTo(recovered);
+	}
+
+	/** 049·051 이 커밋 전에 남기는 작업 상태와 같이 둔 뒤의 게시 요청. */
+	private static TipPublishRequested requested(Long tipId, String imagePath) {
+		STATES.states.put(tipId, TipPublishState.queued("job-1", imagePath));
+		return new TipPublishRequested(tipId, "job-1", imagePath);
 	}
 
 	private static void assertNotPublishable(Long tipId) {

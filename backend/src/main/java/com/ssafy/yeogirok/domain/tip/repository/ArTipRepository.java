@@ -29,6 +29,11 @@ public interface ArTipRepository extends JpaRepository<ArTip, Long> {
 	@Query("select t from ArTip t where t.id = :id")
 	Optional<ArTip> findForUpdateById(@Param("id") Long id);
 
+	/** 게시 작업이 끊겨 REGISTERING 에 남은 팁 후보. 잠근 뒤 다시 확인한다. */
+	@Query("select t.id from ArTip t where t.status = com.ssafy.yeogirok.domain.tip.entity.TipStatus.REGISTERING"
+		+ " and t.deletedAt is null and t.updatedAt < :cutoff")
+	List<Long> findStuckRegisteringIds(@Param("cutoff") Instant cutoff);
+
 	/** API-053. 작성자의 삭제되지 않은 팁을 (createdAt, id) 내림차순으로, 커서 (at, id) 다음부터. */
 	@Query("select t from ArTip t where t.authorId = :authorId and t.deletedAt is null and t.status in :statuses"
 		+ " and (t.createdAt < :at or (t.createdAt = :at and t.id < :id)) order by t.createdAt desc, t.id desc")
