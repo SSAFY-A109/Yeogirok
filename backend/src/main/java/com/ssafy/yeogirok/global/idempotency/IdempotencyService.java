@@ -16,6 +16,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.cfg.JsonNodeFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -66,14 +67,15 @@ public class IdempotencyService {
 
 	private final StringRedisTemplate redis;
 	private final JsonMapper jsonMapper;
-	/** 요청 해시용. Map 은 키 순서로 직렬화해 같은 내용이면 같은 해시가 나오게 한다. */
+	/** 요청 해시용. Map·JSON 객체(JsonNode)는 키 순서로 직렬화해 같은 내용이면 같은 해시가 나오게 한다. */
 	private final JsonMapper hashMapper;
 	private final IdempotencyProperties properties;
 
 	public IdempotencyService(StringRedisTemplate redis, JsonMapper jsonMapper, IdempotencyProperties properties) {
 		this.redis = redis;
 		this.jsonMapper = jsonMapper;
-		this.hashMapper = jsonMapper.rebuild().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build();
+		this.hashMapper = jsonMapper.rebuild().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+			.enable(JsonNodeFeature.WRITE_PROPERTIES_SORTED).build();
 		this.properties = properties;
 	}
 
