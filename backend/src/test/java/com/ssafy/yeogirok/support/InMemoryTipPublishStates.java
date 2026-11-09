@@ -33,6 +33,15 @@ public final class InMemoryTipPublishStates {
 			states.put(invocation.getArgument(0), invocation.getArgument(1));
 			return null;
 		}).when(store).save(anyLong(), any());
+		given(store.saveIfCurrent(anyLong(), any())).willAnswer(invocation -> {
+			TipPublishState state = invocation.getArgument(1);
+			TipPublishState current = states.get(invocation.<Long>getArgument(0));
+			if (current == null || !current.jobId().equals(state.jobId())) {
+				return false;
+			}
+			states.put(invocation.getArgument(0), state);
+			return true;
+		});
 		given(store.imagePaths()).willAnswer(invocation -> states.values().stream()
 			.map(TipPublishState::imagePath).filter(Objects::nonNull).collect(Collectors.toSet()));
 		given(store.find(anyLong()))

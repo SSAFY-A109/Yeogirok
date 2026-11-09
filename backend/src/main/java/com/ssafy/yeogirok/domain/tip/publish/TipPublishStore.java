@@ -1,9 +1,11 @@
 package com.ssafy.yeogirok.domain.tip.publish;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
@@ -21,12 +23,31 @@ public class TipPublishStore {
 
 	private static final String PREFIX = "tip-publish:";
 
+	/** 저장된 작업의 jobId 가 ARGV[1] 일 때만 바꾼다. */
+	private static final RedisScript<Long> SAVE_IF_CURRENT = RedisScript.of("""
+		local current = redis.call('get', KEYS[1])
+		if current and cjson.decode(current).jobId == ARGV[1] then
+		  redis.call('set', KEYS[1], ARGV[2], 'PX', ARGV[3])
+		  return 1
+		end
+		return 0
+		""", Long.class);
+
 	private final StringRedisTemplate redis;
 	private final JsonMapper jsonMapper;
 	private final IdempotencyProperties idempotencyProperties;
 
 	public void save(Long tipId, TipPublishState state) {
 		redis.opsForValue().set(PREFIX + tipId, jsonMapper.writeValueAsString(state), idempotencyProperties.retention());
+	}
+
+	/**
+	 * 같은 팁의 최신 작업이 아직 {@code state.jobId()} 일 때만 저장한다. 늦게 돈 앞 작업이 새 작업 상태를 덮지 않게 한다.
+	 * @return 저장했으면 true
+	 */
+	public boolean saveIfCurrent(Long tipId, TipPublishState state) {
+		return Long.valueOf(1).equals(redis.execute(SAVE_IF_CURRENT, List.of(PREFIX + tipId), state.jobId(),
+			jsonMapper.writeValueAsString(state), String.valueOf(idempotencyProperties.retention().toMillis())));
 	}
 
 	public Optional<TipPublishState> find(Long tipId) {

@@ -39,6 +39,23 @@ class TipPublishStoreTest {
 	}
 
 	@Test
+	void 최신_작업이_같은_jobId_일_때만_저장한다() {
+		TipPublishState queued = TipPublishState.queuedUpdate("job-2", false, false);
+		store.save(7L, queued);
+
+		assertThat(store.saveIfCurrent(7L, TipPublishState.queuedUpdate("job-1", false, false).running())).isFalse();
+		assertThat(store.find(7L)).contains(queued);
+		assertThat(store.saveIfCurrent(8L, queued.running())).isFalse();
+		assertThat(store.find(8L)).isEmpty();
+
+		TipPublishState running = queued.running();
+		assertThat(store.saveIfCurrent(7L, running)).isTrue();
+		assertThat(store.find(7L)).contains(running);
+		assertThat(TestRedis.template().getExpire("tip-publish:7"))
+			.isBetween(RETENTION.toSeconds() - 5, RETENTION.toSeconds());
+	}
+
+	@Test
 	void 모든_작업_상태의_사진_경로를_모은다() {
 		store.save(7L, TipPublishState.queued("job-1", "tip-photo/a"));
 		store.save(8L, TipPublishState.queued("job-2", null));
