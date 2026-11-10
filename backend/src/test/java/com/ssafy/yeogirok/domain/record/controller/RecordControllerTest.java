@@ -40,9 +40,13 @@ import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
+import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
+import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
+import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
+import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
 
@@ -59,6 +63,8 @@ class RecordControllerTest {
 	RecordCreateService recordCreateService;
 	@MockitoBean
 	RecordQueryService recordQueryService;
+	@MockitoBean
+	VisitCommandService visitCommandService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -124,6 +130,67 @@ class RecordControllerTest {
 					.contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C001"));
+		}
+	}
+
+	@Nested
+	class API_066 {
+
+		static final String VALID_ITEM = "\"customPlace\": {\"name\": \" 경포대 \", \"latitude\": 37.795, \"longitude\": 128.9},"
+			+ " \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1";
+
+		@Test
+		void 추가_응답은_201이고_검사한_값을_넘긴다() throws Exception {
+			VisitAddCommand expected = new VisitAddCommand(3, List.of(new VisitAddCommand.Item(
+				new VisitPlaceInput.CustomPlace("경포대", new BigDecimal("37.7950000"), new BigDecimal("128.9000000"), null),
+				LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1)));
+			given(visitCommandService.add(USER_ID, 9L, expected))
+				.willReturn(new VisitAddResponse(List.of(701L), 4, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + VALID_ITEM + "}]}"))
+				.andExpect(status().isCreated())
+				.andExpect(content().json("""
+					{"success": true, "data": {"visitIds": [701], "version": 4, "status": "DRAFT"}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"{\"items\": [{ITEM}]}|C001",
+			"{\"version\": \"3\", \"items\": [{ITEM}]}|C002",
+			"{\"version\": 3}|C001",
+			"{\"version\": 3, \"items\": []}|C003",
+			"{\"version\": 3, \"items\": {}}|C002",
+			"{\"version\": 3, \"draftKey\": \"k\", \"items\": [{ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"itemId\": 1, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"story\": \"x\", ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 5, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"placeRef\": {\"provider\": \"TOUR_API\", \"providerPlaceId\": \"1\"}, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|RE018",
+			"{\"version\": 3, \"items\": [{\"placeRef\": {\"provider\": \"MANUAL\", \"providerPlaceId\": \"1\"}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|C003",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"  \", \"latitude\": 37, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|P004",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 91, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|C011",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 37, \"longitude\": 128}, \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|C001",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 37, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": null, \"order\": 1}]}|C001",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 37, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00\", \"order\": 1}]}|C002",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 37, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-02 00:30:00+09\", \"order\": 1}]}|C012",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 37, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 0}]}|C003",
+			"{\"version\": 3, \"items\": [{\"customPlace\": {\"name\": \"a\", \"latitude\": 37, \"longitude\": 128}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\"}]}|C001"
+		})
+		void 요청_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), body.replace("ITEM", VALID_ITEM)))
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(visitCommandService);
+		}
+
+		@Test
+		void 입력_오프셋_기준으로_날짜를_비교한다() throws Exception {
+			given(visitCommandService.add(eq(USER_ID), eq(9L), any()))
+				.willReturn(new VisitAddResponse(List.of(701L), 4, RecordStatus.DRAFT));
+			String utcSameDay = VALID_ITEM.replace("2026-11-01 09:30:00+09", "2026-11-01 23:30:00Z");
+
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + utcSameDay + "}]}"))
+				.andExpect(status().isCreated());
 		}
 	}
 

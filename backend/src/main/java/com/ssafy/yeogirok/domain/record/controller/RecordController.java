@@ -1,5 +1,7 @@
 package com.ssafy.yeogirok.domain.record.controller;
 
+import java.util.Arrays;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,9 +18,13 @@ import com.ssafy.yeogirok.domain.record.dto.RecordCreateRequest;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
+import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
+import com.ssafy.yeogirok.domain.record.dto.VisitAddRequest;
+import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
+import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.request.JsonFields;
@@ -38,9 +44,12 @@ public class RecordController {
 
 	/** 멱등키 scope. 대상은 방 ID 다. */
 	static final String CREATE_SCOPE = "record-create";
+	/** 멱등키 scope. 대상은 기록 ID 다. */
+	static final String VISIT_ADD_SCOPE = "record-visit-add";
 
 	private final RecordCreateService recordCreateService;
 	private final RecordQueryService recordQueryService;
+	private final VisitCommandService visitCommandService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-057 여행방에서 기록 공간 생성")
@@ -78,6 +87,25 @@ public class RecordController {
 		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long recordId) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			recordQueryService.getDetail(user.userId(), recordId)));
+	}
+
+	/** 형식 검사는 멱등키 처리 전에 한다. 결과 ID 는 만든 방문 ID 들을 쉼표로 이은 값이다. */
+	@Operation(summary = "API-066 실제 방문 수동 추가")
+	@PostMapping("/records/{recordId}/visits")
+	public ResponseEntity<ApiResponseBody<VisitAddResponse>> addVisits(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long recordId,
+		@RequestBody VisitAddRequest request) {
+		VisitAddCommand command = request.toCommand();
+		VisitAddResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), VISIT_ADD_SCOPE, recordId.toString(), idempotencyKey),
+			command,
+			() -> visitCommandService.add(user.userId(), recordId, command),
+			added -> String.join(",", added.visitIds().stream().map(String::valueOf).toList()),
+			ids -> visitCommandService.getAdded(user.userId(), recordId,
+				Arrays.stream(ids.split(",")).map(Long::valueOf).toList()));
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
 	}
 
 	/** 생략이면 null, DRAFT·COMPLETED 가 아니면 C002(노션 058). */
