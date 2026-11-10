@@ -46,6 +46,8 @@ import com.ssafy.yeogirok.domain.record.dto.MaterialReviewCommand;
 import com.ssafy.yeogirok.domain.record.dto.MaterialReviewResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
+import com.ssafy.yeogirok.domain.record.dto.MaterialRetryResponse;
+import com.ssafy.yeogirok.domain.record.material.MaterialRetryService;
 import com.ssafy.yeogirok.domain.record.material.MaterialReviewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -67,6 +69,8 @@ class RecordMaterialControllerTest {
 	MaterialQueryService materialQueryService;
 	@MockitoBean
 	MaterialReviewService materialReviewService;
+	@MockitoBean
+	MaterialRetryService materialRetryService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -199,6 +203,45 @@ class RecordMaterialControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C002"));
 			verifyNoInteractions(materialReviewService);
+		}
+	}
+
+	@Nested
+	class API_092 {
+
+		static final String MATERIAL_ID = "11111111-2222-4333-8444-555555555555";
+		static final String PATH = "/api/v1/records/10/materials/" + MATERIAL_ID + "/ocr";
+
+		@Test
+		void 재시도_응답은_202() throws Exception {
+			given(materialRetryService.retry(USER_ID, 10L, MATERIAL_ID, 2))
+				.willReturn(MaterialRetryResponse.queued(MATERIAL_ID, 3, "job-2"));
+
+			mockMvc.perform(json(post(PATH), "{\"version\":2}"))
+				.andExpect(status().isAccepted())
+				.andExpect(content().json("""
+					{"success":true,"data":{"materialId":"11111111-2222-4333-8444-555555555555","version":3,
+					 "jobId":"job-2","status":"QUEUED"}}
+					""", JsonCompareMode.STRICT));
+			verify(idempotencyService).execute(eq(new IdempotencyKey(USER_ID, RecordMaterialController.RETRY_SCOPE,
+				"10-" + MATERIAL_ID, "key-1")), eq(2), any(), any(), any());
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {"{}|C001", "{\"version\":null}|C001", "{\"version\":\"2\"}|C002",
+			"{\"version\":1.5}|C002"})
+		void 요청_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(post(PATH), body))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(materialRetryService);
+		}
+
+		@Test
+		void 자료_ID_가_UUID_가_아니면_C002() throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/10/materials/not-uuid/ocr"), "{\"version\":2}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("C002"));
 		}
 	}
 

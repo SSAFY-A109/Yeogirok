@@ -19,7 +19,10 @@ import com.ssafy.yeogirok.domain.record.dto.MaterialListResponse;
 import com.ssafy.yeogirok.domain.record.dto.MaterialReviewCommand;
 import com.ssafy.yeogirok.domain.record.dto.MaterialReviewRequest;
 import com.ssafy.yeogirok.domain.record.dto.MaterialReviewResponse;
+import com.ssafy.yeogirok.domain.record.dto.MaterialRetryRequest;
+import com.ssafy.yeogirok.domain.record.dto.MaterialRetryResponse;
 import com.ssafy.yeogirok.domain.record.material.MaterialLinkService;
+import com.ssafy.yeogirok.domain.record.material.MaterialRetryService;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.material.MaterialReviewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
@@ -42,10 +45,13 @@ public class RecordMaterialController {
 	static final String LINK_SCOPE = "record-material-link";
 	/** 멱등키 scope. 대상은 "기록 ID-자료 ID" 다. */
 	static final String REVIEW_SCOPE = "record-material-review";
+	/** 멱등키 scope. 대상은 "기록 ID-자료 ID" 다. */
+	static final String RETRY_SCOPE = "record-material-ocr-retry";
 
 	private final MaterialLinkService materialLinkService;
 	private final MaterialQueryService materialQueryService;
 	private final MaterialReviewService materialReviewService;
+	private final MaterialRetryService materialRetryService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-062 영수증·결제 자료 연결")
@@ -89,5 +95,23 @@ public class RecordMaterialController {
 			MaterialReviewResponse::materialId,
 			id -> materialReviewService.getReviewed(user.userId(), recordId, id));
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-092 영수증 OCR 개별 재시도")
+	@PostMapping("/{materialId}/ocr")
+	public ResponseEntity<ApiResponseBody<MaterialRetryResponse>> retry(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long recordId, @PathVariable String materialId,
+		@RequestBody MaterialRetryRequest request) {
+		Uuids.require(materialId, "materialId");
+		int version = request.toVersion();
+		MaterialRetryResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), RETRY_SCOPE, recordId + "-" + materialId, idempotencyKey),
+			version,
+			() -> materialRetryService.retry(user.userId(), recordId, materialId, version),
+			MaterialRetryResponse::jobId,
+			jobId -> materialRetryService.getRetried(user.userId(), recordId, materialId, jobId));
+		return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseUtil.createSuccessResponse(response));
 	}
 }

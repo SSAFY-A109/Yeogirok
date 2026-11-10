@@ -33,13 +33,7 @@ public class MaterialReviewService {
 	public MaterialReviewResponse review(Long userId, Long recordId, String materialId, MaterialReviewCommand command) {
 		recordFinder.checkWritable(recordId, userId);
 		ReceiptMaterial saved = materials.update(materialId, material -> {
-			checkOwnLinked(material, recordId, userId);
-			if (materials.current(material).isInProgress()) {
-				throw new BusinessException(ExceptionType.RECEIPT_NOT_READY);
-			}
-			if (material.version() != command.version()) {
-				throw new BusinessException(ExceptionType.VERSION_MISMATCH);
-			}
+			materials.checkChangeable(material, recordId, userId, command.version());
 			return material.reviewed(new ReceiptMaterial.Values(command.merchantName(), command.paidAt().toInstant(),
 				command.paidAt().toLocalDate(), command.paidAt().toLocalTime(), place(command.place())));
 		}).orElseThrow(() -> new BusinessException(ExceptionType.MATERIAL_NOT_FOUND));
@@ -51,18 +45,8 @@ public class MaterialReviewService {
 		recordFinder.checkWritable(recordId, userId);
 		ReceiptMaterial material = materials.find(materialId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.MATERIAL_NOT_FOUND));
-		checkOwnLinked(material, recordId, userId);
+		ReceiptMaterials.checkOwnLinked(material, recordId, userId);
 		return MaterialReviewResponse.of(materialId, materials.current(material));
-	}
-
-	/** 다른 기록·연결 전 자료는 없는 자료와 같게 RE008, 그다음 업로더가 아니면 M005. */
-	static void checkOwnLinked(ReceiptMaterial material, Long recordId, Long userId) {
-		if (!material.isLinked() || !recordId.equals(material.recordId())) {
-			throw new BusinessException(ExceptionType.MATERIAL_NOT_FOUND);
-		}
-		if (!userId.equals(material.uploadedBy())) {
-			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED);
-		}
 	}
 
 	/** 투어API 장소는 places 에 이미 있는 행만 받는다(1차 5절 6, 투어API 클라이언트 전까지). */

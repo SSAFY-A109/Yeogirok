@@ -85,6 +85,30 @@ public class ReceiptMaterials {
 		return material;
 	}
 
+	/** 다른 기록·연결 전 자료는 없는 자료와 같게 RE008, 그다음 업로더가 아니면 M005(API-091·092 재전송). */
+	public static void checkOwnLinked(ReceiptMaterial material, Long recordId, Long userId) {
+		if (!material.isLinked() || !recordId.equals(material.recordId())) {
+			throw new BusinessException(ExceptionType.MATERIAL_NOT_FOUND);
+		}
+		if (!userId.equals(material.uploadedBy())) {
+			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED);
+		}
+	}
+
+	/**
+	 * API-091·092 공통 판정: RE008 → M005 → OCR 처리 중 RE022(끊긴 작업은 처리 중이 아니다) → version 불일치 C004.
+	 * 자료 잠금 안에서 부른다.
+	 */
+	public void checkChangeable(ReceiptMaterial material, Long recordId, Long userId, int expectedVersion) {
+		checkOwnLinked(material, recordId, userId);
+		if (current(material).isInProgress()) {
+			throw new BusinessException(ExceptionType.RECEIPT_NOT_READY);
+		}
+		if (material.version() != expectedVersion) {
+			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
+		}
+	}
+
 	private static ReceiptMaterial.Error toError(JobError error) {
 		return new ReceiptMaterial.Error(error.code(), error.message());
 	}
