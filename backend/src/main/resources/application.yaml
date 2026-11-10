@@ -68,6 +68,17 @@ yeogirok:
     cleanup:
       due-interval: PT10M
       safety-scan-interval: PT1H
+  # 채팅(11/10 결정). 앱은 25초마다 PING 을 보낸다. Nginx proxy_read_timeout 은 idle-timeout 보다 길게 둔다.
+  chat:
+    ticket-ttl: PT30S
+    auth-timeout: PT10S
+    idle-timeout: PT60S
+    sweep-interval: PT5S
+    # 방 삭제 뒤 메시지 정리. 정리 목록(Redis)은 10분, Redis 유실 대비 DB 스캔은 1시간마다(파일 정리 주기와 같다).
+    cleanup:
+      due-interval: PT10M
+      safety-scan-interval: PT1H
+      batch-size: 500
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.

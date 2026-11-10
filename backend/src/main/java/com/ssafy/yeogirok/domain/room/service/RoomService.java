@@ -6,8 +6,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
+import com.ssafy.yeogirok.domain.chat.service.ChatReadStates;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomDetailResponse;
@@ -26,6 +29,7 @@ import com.ssafy.yeogirok.domain.room.entity.RoomMemberId;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomMemberLeftEvent;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceCount;
@@ -50,11 +54,14 @@ public class RoomService {
 	private final RoomFinder roomFinder;
 	private final ScheduleRoomChanges scheduleRoomChanges;
 	private final TransactionTemplate transactionTemplate;
+	private final ChatReadStates chatReadStates;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public RoomService(TravelRoomRepository travelRoomRepository, RoomMemberRepository roomMemberRepository,
 		RoomPlaceRepository roomPlaceRepository, CategoryNames categoryNames, RoomFinder roomFinder,
-		ScheduleRoomChanges scheduleRoomChanges, PlatformTransactionManager transactionManager, Clock clock) {
+		ScheduleRoomChanges scheduleRoomChanges, PlatformTransactionManager transactionManager,
+		ChatReadStates chatReadStates, ApplicationEventPublisher eventPublisher, Clock clock) {
 		this.travelRoomRepository = travelRoomRepository;
 		this.roomMemberRepository = roomMemberRepository;
 		this.roomPlaceRepository = roomPlaceRepository;
@@ -62,6 +69,8 @@ public class RoomService {
 		this.roomFinder = roomFinder;
 		this.scheduleRoomChanges = scheduleRoomChanges;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
+		this.chatReadStates = chatReadStates;
+		this.eventPublisher = eventPublisher;
 		this.clock = clock;
 	}
 
@@ -115,9 +124,11 @@ public class RoomService {
 			.countActiveByRoomIds(page.stream().map(TravelRoom::getId).toList())
 			.stream()
 			.collect(Collectors.toMap(RoomPlaceCount::roomId, RoomPlaceCount::count));
+		Set<Long> unreadRoomIds = chatReadStates.unreadRoomIds(userId, page.stream().map(TravelRoom::getId).toList());
 		List<RoomListResponse.Item> items = page.stream()
 			.map(room -> RoomListResponse.Item.of(room, membersByRoom.getOrDefault(room.getId(), List.of()),
-				placeCountByRoom.getOrDefault(room.getId(), 0L).intValue(), userId))
+				placeCountByRoom.getOrDefault(room.getId(), 0L).intValue(), userId,
+				unreadRoomIds.contains(room.getId())))
 			.toList();
 		String nextCursor = hasNext ? new RoomCursor(page.getLast().getId()).encode() : null;
 		return new RoomListResponse(items, nextCursor);
@@ -130,7 +141,7 @@ public class RoomService {
 		List<RoomPlace> places = roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
 		List<String> categoryCodes = places.stream().map(place -> place.getPlace().getCategoryCode()).toList();
 		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)), places,
-			categoryNames.of(categoryCodes), found.member(), scheduleRoomChanges.view(found.room()));
+			categoryNames.of(categoryCodes), chatReadStates.of(found.member()), scheduleRoomChanges.view(found.room()));
 	}
 
 	/**
@@ -205,6 +216,7 @@ public class RoomService {
 	/**
 	 * API-087. 본인만 나간다. 이미 나간 사람의 재요청은 바꾸는 것 없이 성공한다. 마지막 현재 참여자가 나가면
 	 * 같은 트랜잭션에서 방을 소프트 삭제한다. 방 행을 잠가 API-025 참여와 한 줄로 세운다(삭제된 방에 참여하지 못하게).
+	 * 커밋 뒤 채팅이 이 사람의 연결을 끊고, 방이 삭제됐으면 메시지 정리 대상으로 등록한다({@link RoomMemberLeftEvent}).
 	 */
 	@Transactional
 	public void leave(Long userId, Long roomId) {
@@ -220,9 +232,11 @@ public class RoomService {
 		Instant now = clock.instant();
 		member.leave(now);
 		roomMemberRepository.flush();
-		if (roomMemberRepository.countCurrentMembers(roomId) == 0) {
+		boolean roomDeleted = roomMemberRepository.countCurrentMembers(roomId) == 0;
+		if (roomDeleted) {
 			room.softDelete(now);
 		}
+		eventPublisher.publishEvent(new RoomMemberLeftEvent(roomId, userId, roomDeleted));
 	}
 
 	/** 앞뒤 공백을 지운다. 비었거나 200자를 넘으면 C003. */

@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
+import com.ssafy.yeogirok.domain.chat.service.ChatReadStates;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteProperties;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteTokenCipher;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
@@ -27,7 +28,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 @TestConfiguration
 @Import({RoomService.class, RoomInvitationService.class, RoomPlaceService.class, RoomFinder.class,
 	RoomVersions.class, CategoryNames.class, ScheduleService.class, ScheduleRoomChanges.class, ScheduleWriter.class,
-	ScheduleReader.class})
+	ScheduleReader.class, ChatReadStates.class})
 public class RoomTestConfig {
 
 	/** 가짜 길찾기의 기본 구간 이동 시간(분). */

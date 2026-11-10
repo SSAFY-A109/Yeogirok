@@ -49,6 +49,7 @@ src/main/java/com/ssafy/yeogirok/
 | [docs/04-auth-api.md](docs/04-auth-api.md) | 인증 API 설계 — B안(네이티브 SDK + ID 토큰 검증) |
 | [docs/05-social-login-setup.md](docs/05-social-login-setup.md) | 구글·카카오 콘솔 설정과 서버 환경 변수 |
 | [docs/06-schedule.md](docs/06-schedule.md) | 계획 일정 흐름과 결정 사항(출발·도착지, 체류 시간, 식사 배치, 이동 시간) |
+| [docs/07-chat.md](docs/07-chat.md) | 여행방 채팅 흐름과 결정 사항(WebSocket·티켓, 저장 순서와 잠금, Redis 전달, 읽음, 강제 종료, 정리) |
 
 ## 계약 원천
 
