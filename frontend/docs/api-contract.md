@@ -22,11 +22,11 @@
 | 명명 | **상세 미확인** (path는 kebab-case 복수형, 예 `/room-invitations`) | API 목록 |
 | 날짜·시각 | date `2026-07-27`, time `15:30:00`, datetime `2026-07-27 15:30:00+09`. datetime은 날짜와 시각 사이가 **공백**이고 오프셋을 포함한다 | 명세 "날짜/시간 형식" |
 | 시간대 | datetime에 오프셋(`+09`)이 포함된다. 오프셋이 없는 값은 받지 않는다고 가정하고, 오면 불일치로 보고한다 | 위 형식 |
-| 페이지네이션 | 커서 방식(C010 커서 무효, C011 페이지 크기 범위 오류). 파라미터 이름·크기 범위·마지막 페이지 표시는 **상세 미확인** | 공통 실패 코드 |
-| 멱등성 | 멱등키를 사용한다(C009 같은 멱등키에 다른 요청 내용). 헤더 이름과 적용 API는 **상세 미확인**. 백엔드 공통 멱등키 처리(`backend/dev`, 2026-11-04 확인)는 `Idempotency-Key` 헤더를 쓰고, 같은 요청이 처리 중이면 409 `C018`을 준다 | 공통 실패 코드 |
-| 버전 충돌 | 자원 버전 비교(C008 요청한 자원의 버전과 현재 버전 불일치). 버전 값 전달 방식은 **상세 미확인** | 공통 실패 코드 |
-| 위치 증거 | 현재 위치가 필요한 요청은 위치 증거를 보낸다. 누락 C012, 유효 시각 만료 C013, 정확도 미달 C014. 필드 구성은 **상세 미확인** | 공통 실패 코드 |
-| 지도 조회 영역 | 영역 파라미터가 있다(C017 형식·범위 오류). 형식은 **상세 미확인** | 공통 실패 코드 |
+| 페이지네이션 | 커서 방식(C006 커서 무효, C007 페이지 크기 범위 오류). 여행방 목록(API-020)은 `cursor`·`limit`(기본 20, 최대 50)을 받고 `{ items, nextCursor }`를 준다. 마지막 쪽은 `nextCursor: null`이다. 다른 목록은 해당 API에서 확인한다 | 공통 실패 코드 |
+| 멱등성 | 멱등키를 사용한다(C005 같은 멱등키에 다른 요청 내용). 여행방에서는 생성(021)·초대 링크(024)·초대 수락(025)·장소 담기(029·030·031)·일정 초안 생성과 조정(037·084)·일정 저장(039)이 헤더를 요구한다. 백엔드 공통 멱등키 처리(`backend/dev`, 2026-11-04 확인)는 `Idempotency-Key` 헤더를 쓰고, 같은 요청이 처리 중이면 409 `C018`을 준다 | 공통 실패 코드 |
+| 버전 충돌 | 자원 버전 비교(409 C004 요청한 자원의 버전과 현재 버전 불일치). 여행방은 응답의 `version`을 받아 수정(023 본문 `version`)·후보 빼기(032 쿼리 `version`)·복원(094 본문 `version`)·일정 요청(`baseVersion`)에 싣는다 | 공통 실패 코드 |
+| 위치 증거 | 현재 위치가 필요한 요청은 위치 증거를 보낸다. 누락 C008, 유효 시각 만료 C009, 정확도 미달 C010. 필드 구성은 **상세 미확인** | 공통 실패 코드 |
+| 지도 조회 영역 | 영역 파라미터가 있다(C013 형식·범위 오류). 형식은 **상세 미확인** | 공통 실패 코드 |
 | 비동기 작업 | 작업 상태 조회 API-011 `GET /jobs/{jobId}`(오류 접두어 `J`). 작업 상태 열거형은 **상세 미확인** | API 목록 |
 | 파일 | 업로드 API-012 `POST /media` → `mediaId`. 접근 API-013 `GET /media/{mediaId}/access` | API 목록 |
 | 실시간 | 여행방 채팅(P1)은 API-077 `POST /realtime/tickets`로 연결 티켓을 받는다. 프로토콜 **상세 미확인** | API 목록 |
@@ -135,22 +135,35 @@
 | C001 | 400 | 필수 요청값 누락 | 개발 오류로 보고, 일반 오류 문구 |
 | C002 | 400 | 요청 필드의 타입·형식 오류 | 〃 |
 | C003 | 400 | 허용하지 않는 요청값 | 해당 필드 옆에 안내 |
-| C004 | 401 | 서비스 액세스 토큰 누락 | 로그인으로 이동 |
-| C005 | 401 | 서비스 액세스 토큰 만료 | 토큰 갱신 후 1회 재시도(규칙 90) |
-| C006 | 401 | 서비스 액세스 토큰 무효·위변조 | 토큰 삭제 후 로그인 |
-| C007 | 403 | 요청에 필요한 서비스 ROLE 부족 | 접근 불가 안내, 재시도 없음 |
-| C008 | 409 | 요청한 자원의 버전과 현재 버전 불일치 | 최신 상태 다시 불러오기 + 반영 안 됨 안내 |
-| C009 | 409 | 동일 멱등키에 다른 요청 내용 사용 | 개발 오류로 보고(키 재사용 버그) |
-| C010 | 400 | 페이지 커서 무효 | 목록 처음부터 다시 조회 |
-| C011 | 400 | 페이지 크기 범위 오류 | 개발 오류로 보고 |
-| C012 | 422 | 현재 위치 증거 누락 | 위치 다시 측정 안내 |
-| C013 | 422 | 현재 위치 증거의 유효 시각 만료 | 위치 다시 측정 안내 |
-| C014 | 422 | 현재 위치 정확도 기준 미충족 | 탁 트인 곳에서 다시 측정 안내 |
-| C015 | 400 | 위도·경도 범위 오류 | 개발 오류로 보고 |
-| C016 | 400 | 시작·종료 날짜 또는 시각의 범위·순서 오류 | 해당 입력 옆에 안내 |
-| C017 | 400 | 지도 조회 영역 형식·범위 오류 | 개발 오류로 보고 |
+| C004 | 409 | 요청한 자원의 버전과 현재 버전 불일치 | 최신 상태 다시 불러오기 + 반영 안 됨 안내 |
+| C005 | 409 | 동일 멱등키에 다른 요청 내용 사용 | 개발 오류로 보고(키 재사용 버그) |
+| C006 | 400 | 페이지 커서 무효 | 목록 처음부터 다시 조회 |
+| C007 | 400 | 페이지 크기 범위 오류 | 개발 오류로 보고 |
+| C008 | 422 | 현재 위치 증거 누락 | 위치 다시 측정 안내 |
+| C009 | 422 | 현재 위치 증거의 유효 시각 만료 | 위치 다시 측정 안내 |
+| C010 | 422 | 현재 위치 정확도 기준 미충족 | 탁 트인 곳에서 다시 측정 안내 |
+| C011 | 400 | 위도·경도 범위 오류 | 개발 오류로 보고 |
+| C012 | 400 | 시작·종료 날짜 또는 시각의 범위·순서 오류 | 해당 입력 옆에 안내 |
+| C013 | 400 | 지도 조회 영역 형식·범위 오류 | 개발 오류로 보고 |
+| C014 | 500 | 예상하지 못한 서버 오류 | 일반 오류 문구, 다시 시도 |
+| C015 | 404 | 없는 경로 | 개발 오류로 보고 |
+| C016 | 405 | 허용되지 않은 HTTP 메서드 | 개발 오류로 보고 |
+| C017 | 415 | 지원하지 않는 Content-Type | 개발 오류로 보고 |
+| C018 | 409 | 같은 멱등키 요청을 처리하는 중 | 잠시 후 다시 시도 안내 |
+| A001 | 401 | 서비스 액세스 토큰 누락 | 로그인으로 이동 |
+| A002 | 401 | 서비스 액세스 토큰 만료 | 토큰 갱신 후 1회 재시도(규칙 90) |
+| A003 | 401 | 서비스 액세스 토큰 무효·위변조 | 토큰 삭제 후 로그인 |
+| A004 | 403 | 요청에 필요한 서비스 ROLE 부족 | 접근 불가 안내, 재시도 없음 |
+| RO001 | 404 | 여행방 없음 | "찾을 수 없어요" 안내 |
+| RO002 | 403 | 여행방 참여자가 아님 | 접근 불가 안내 |
+| RO005 | 404 | 초대 토큰이 유효하지 않음 | 링크를 다시 받도록 안내 |
+| RO007 | 409 | 여행방 정원(10명) 가득 참 | 정원 안내(W08-F) |
+| RO009 | 404 | 후보 장소가 그 여행방에 없음 | 목록 다시 조회 |
+| RO010 | 409 | 일정이 있는 여행방의 날짜를 비우려 함 | 날짜 필드 옆에 안내 |
 
-**도메인 접두어**: `C` 공통 · `AU` 인증 · `U` 사용자 · `J` 비동기 작업 · `M` 파일 · `CO` 공유 코스 · `RO` 여행방 · `P` 장소 · `AI` 추천 · `SC` 계획 일정 · `F` 발자취 · `ST` 방문 통계 · `T` AR 팁 · `RE` 여행 기록. 도메인별 code는 각 API 상세의 실패 응답 영역에 있다(**상세 미확인**).
+2026-11-10에 팀 Notion "API 명세"의 공통 실패 코드 표와 `backend/dev`(`8778cb2`)의 `ExceptionType`을 대조해 번호를 고쳤다. 이전 표(C004~C006 인증, C008 버전 충돌, C009 멱등키 등)는 폐기된 번호다.
+
+**도메인 접두어**: `C` 공통 · `A` 인증·인가 · `U` 사용자 · `J` 비동기 작업 · `M` 파일 · `CO` 공유 코스 · `RO` 여행방 · `P` 장소 · `AI` 추천 · `SC` 계획 일정 · `F` 발자취 · `ST` 방문 통계 · `T` AR 팁 · `RE` 여행 기록. 도메인별 code는 각 API 상세의 실패 응답 영역에 있다(**상세 미확인**).
 
 ## 3. 엔드포인트 상세
 
@@ -171,19 +184,30 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 
 | API | 가정 타입 위치 | 비고 |
 | --- | --- | --- |
-| 020·022·023·024·028·029·032 | `features/room/model.ts` (`RoomSummaryDto`, `RoomDetailDto`, `UpdateRoomRequestDto`, `RoomInvitationDto`, `RoomPlaceDto`, `AddRoomPlacesRequestDto`) | 목록 응답은 `{ rooms }`, 장소 목록은 `{ places }`로 감쌌다고 가정 |
-| 026 | `features/place/model.ts` (`PlaceDto`, `SearchPlacesResponseDto`) | 쿼리 `keyword`·`cursor`·`size`, 응답 `{ items, nextCursor }` |
-| 033(=080)·081·034 | `features/recommendation/model.ts` | 조건 `{ categoryCodes, regionCode }`, 결과 `{ requestId, criteria, items }`. `routeHint`는 서버 문구 |
-| 036·037·038·039 | `features/schedule/model.ts` (`RoomScheduleDto`, `CreateScheduleDraftRequestDto`, `ScheduleDraftDto`, `ApplyScheduleDraftRequestDto`) | 2026-11-04 추가. Figma "여행방 일정 만들기"(W13·W14·W09-B)에서 역산. 일정이 없으면 `data: null`. 초안 생성(037)은 작업이라 202 `{ draftId, status }`를 주고, 진행과 결과는 038의 `status`(`PROCESSING`·`COMPLETED`·`FAILED`)로 확인한다(API-011 대신). "다시 계산"도 037로 보낸다(날마다 `stops`를 보내면 그 순서·머무는 시간으로 시각만 계산). 적용(039)은 초안의 `baseVersion`을 보내고, 그사이 일정이 바뀌었으면 409 C008. 이동 시간·주차·넣지 못한 이유 문구는 서버 값. 일정 조정(TRP-09, 2026-11-05)도 040(수동 편집) 대신 "다시 계산"(037)으로 새 초안을 만들고 039로 저장한다고 가정했다(TBD, 명세가 040을 쓰게 정하면 바꾼다) |
+| 020·021·022·023·024·025·028·032·087·094 | `features/room/model.ts` | **가정 아님** — 2026-11-10 `backend/dev`(`8778cb2`)의 room 컨트롤러·DTO로 맞췄다(아래 "여행방 실제 계약" 단락) |
+| 029 | `features/room/model.ts` (`AddRoomPlacesRequestDto`, `AddRoomPlacesResponseDto`) | **가정 아님** — 서버에는 아직 없고 2026-11-10 Notion 명세 상세로 맞췄다. 요청 `{ items[{ placeRef, sourceType, recommendationRequestId?, rank? }] }` + `Idempotency-Key`, 응답 `{ added, addedCount, version }` |
+| 026 | `features/place/model.ts` (`PlaceDto`, `SearchPlacesResponseDto`) | **가정 아님** — 2026-11-10 Notion 명세 상세로 맞췄다(아래 "026·029·033·034·081" 단락). 쿼리 `q`·`regionCode`·`cursor`·`limit`, 응답 `{ items, nextCursor, totalCount }` |
+| 033(=080)·034 | `features/recommendation/model.ts` | **가정 아님** — 2026-11-10 Notion 명세 상세로 맞췄다(아래 단락). 조건 요청 `{ version, regionCode, categoryCodes, skipped: false }`, 추천 결과 `{ recommendationRequestId, mode, items[{ rank, place, reason, reasonEvidence }], generatedAt }` |
+| 081 | `features/recommendation/model.ts` (`RecommendationPreferenceDto`) | **가정(TBD)** — 상세 페이지 미확인. API-033 응답과 같은 `{ roomId, preferences, version }`, 저장한 조건이 없으면 빈 본문으로 가정 |
+| 036·037·038·084·039 | `features/schedule/model.ts` | **가정 아님** — 2026-11-10 `backend/dev`(`8778cb2`)의 schedule 컨트롤러·DTO와 `backend/docs/06-schedule.md`로 맞췄다. 037은 202 `{ jobId, draftKey, status }`(헤더 `Idempotency-Key`, 본문 `baseVersion`·`roomPlaceIds`·`days`·`fixedItems?`), 038은 `{ status(QUEUED·RUNNING·SUCCEEDED·FAILED), baseVersion, draftVersion, conditions, schedule, error }`, 084는 바꾼 항목만 보내는 재계산, 039는 고친 전체 상태(`days`·`unassignedItemIds`)를 보내는 저장이다. 일차 시각은 `HH:mm:ss`, 항목 시각은 datetime이며 모르면 `null`이다. pace는 없다. 확정 일정 직접 편집(040)과 작업 상태 조회(011)는 앱이 부르지 않는다 |
 | 078·079 | `features/common/model.ts` | 지역은 시/도 → 시/군/구 2단(`children`) |
-| **목록에 없음** | `DELETE /rooms/{roomId}/members/me` → `{ roomDeleted }` | 여행방 나가기(W06-L·L2). **백엔드에 엔드포인트 요청 필요** |
 
-- 도메인 오류 code(`RO`·`P`·`AI`·`SC`)는 미확정이라 화면은 공통 code와 도메인 기본 문구만 쓴다. MSW는 없는 여행방에 목 전용 `RO404`를 돌려준다.
-- 이때 일정 초안 생성(037)은 `Idempotency-Key` 헤더를, 일정 적용(039)은 버전(`baseVersion`)을 보내도록 했다.
+- 도메인 오류 code는 `RO`(여행방)·`SC`(일정)가 서버에 있다(§3-0, `features/room/errors.ts`, `features/schedule/errors.ts`). `AI`(추천)는 아직 없어 도메인 기본 문구만 쓴다.
 
 2026-11-09 최신 `backend/dev`(`473ba06`)의 `RoomController`, `RoomCreateRequest`, `RoomCreateResponse`를 대조해 여행방 생성(API-021)을 실제 계약에 맞췄다. 같은 요청 재시도에는 동일한 `Idempotency-Key`를 사용한다. Swagger는 HTTP 502였고, 같은 브랜치의 `RoomPlaceService`에는 코스 장소 가져오기(API-030)가 미구현으로 명시되어 있다.
 
 2026-11-09 사용자가 제공한 API-030 명세로 새 여행방 생성 후 공개 코스의 선택 방문을 가져오는 클라이언트와 MSW를 연결했다. 배포 서버의 API-030 구현 여부는 미확인이다.
+
+**026·029·033·034·081 — Notion 명세 상세 반영 (2026-11-10).** 이 다섯 API는 서버에 아직 없다. Figma에서 역산했던 가정 DTO를 팀 Notion "API 명세" 상세 페이지 기준으로 바꿨고, MSW 목도 같은 모양이다. 서버에 올라오면 Swagger로 다시 대조한다.
+
+- 장소는 전역 숫자 id가 없다. `provider`(`TOUR_API`·`MANUAL`)와 `providerPlaceId`(string, 없으면 `null`)로 구별하고, 담을 때는 `placeRef: { provider, providerPlaceId }`로 가리킨다. 화면의 목록 키와 "이미 담긴 곳" 판정은 `toPlaceKey(provider, providerPlaceId)`(`features/room/model.ts`)를 쓴다. `providerPlaceId`가 없는 장소는 가리킬 수 없어 담기 대상에서 뺀다.
+- 검색·추천 응답의 장소는 `{ provider, providerPlaceId, name, latitude, longitude, address, categoryCode, imageUrl, imageAttribution }`다. 카테고리 이름은 주지 않으므로 공통 카테고리 목록(API-079)에서 코드로 찾아 보여 준다.
+- API-026 `GET /places`: 쿼리 `q`(필수)·`regionCode`·`cursor`·`limit`, 응답 `{ items, nextCursor, totalCount }`. 실패는 400 `P002`(검색어 조건), 502 `P003`(외부 장소 정보 공급자), 공통 `C006`(커서)·`C007`(페이지 크기). `limit` 허용 범위는 명세에 없다(TBD).
+- API-029 `POST /rooms/{roomId}/places`: `Idempotency-Key` 필수. 본문 `{ items: [{ placeRef, sourceType: "SEARCH" } | { placeRef, sourceType: "AI", recommendationRequestId, rank }] }`(1개 이상), 201 `{ added, addedCount, version }`. 같은 장소를 새 요청으로 여러 번 담을 수 있다(팀 확정 정책). 화면은 Figma W12대로 이미 담긴 곳을 "담음" 비활성으로 둔다.
+- API-033 `PUT /rooms/{roomId}/preferences`: 본문 `{ version, regionCode, categoryCodes, skipped }`. `regionCode`는 시/군/구 코드(추천 실행 전 필수), `categoryCodes`는 API-079의 코드로 1개 이상(상한 없음), `skipped`는 `false`만 받는다. 선택 필드(startAt·endAt·companions·tasteKeywords·transportMode·style·includeMeals·freeText)는 W10 입력이 아니라 보내지 않는다. 응답 `{ roomId, preferences: { regionCode, categoryCodes, skipped }, version }`.
+  - **TBD:** 요청의 `version`이 조건의 version인지 여행방 version인지 명세에 설명이 없다. 응답의 `version`을 받아 두었다가 다음 저장에 보낸다(처음에는 API-081 응답의 값, 저장한 조건이 없으면 1).
+- API-034 `POST /rooms/{roomId}/place-recommendations`: `Idempotency-Key` 필수, 저장된 조건으로 추천한다. 본문 `{ limit?, excludedPlaces?: PlaceRef[] }`(화면은 둘 다 보내지 않는다), 응답 `{ recommendationRequestId, mode, items: [{ rank, place, reason, reasonEvidence }], generatedAt }`. 예전 가정의 `requestId`·`criteria`·`routeHint`는 명세에 없어 지웠다. 결과 화면의 "○○ 기준" 줄은 사용자가 고른 카테고리 이름으로 만든다. 도메인 오류 code(`AI`)는 명세에 아직 없다(TBD).
+- 확정 정책: 추천 카테고리는 1개 이상 필수(건너뛰기 없음), 추천 지역은 사용자가 직접 고른다(담은 장소로 자동 선택하지 않는다. 전에 저장한 값은 되살린다).
 
 ### 3-2. 방문 분포도 API-046 — 백엔드 코드 대조 (2026-11-06)
 
@@ -290,3 +314,24 @@ type CreateFootprintResponse = {
 1. 원천(Notion API 명세, 서버에 반영된 API는 Swagger)에서 바뀐 항목을 읽는다.
 2. §2 표와 §3 타입을 고치고, 머리말의 대조 일시와 범위를 갱신한다.
 3. 바뀐 필드를 쓰는 `features/<domain>/model.ts`, `api/mocks/fixtures/`, `api/mocks/handlers/`를 함께 고친다.
+
+### 3-2. 여행방 실제 계약 (2026-11-10, backend/dev 8778cb2)
+
+Swagger는 요청 필드 이름과 헤더·쿼리만 보여 주고 응답은 `{ success }`로만 나온다. 응답 모양과 오류 코드는 `backend/dev`의 `domain/room` 컨트롤러·DTO와 `ExceptionType`을 읽어 맞췄다.
+
+| API | 요청 | 응답 | 비고 |
+| --- | --- | --- | --- |
+| 020 `GET /rooms` | 쿼리 `cursor?`·`limit?`(기본 20, 최대 50) | `{ items[{ id, title, startDate, endDate, transportMode, memberCount, members[{ userId, nickname, profileImageUrl }], placeCount, recordIds, chatReadState }], nextCursor }` | 화면이 다가오는·지난 여행으로 나누므로 `nextCursor`가 `null`일 때까지 모두 받는다 |
+| 021 `POST /rooms` | 헤더 `Idempotency-Key`, `{ title, startDate, endDate, transportMode }` | 201 `{ id, version, isCreator }` | `transportMode`는 `CAR`·`TRANSIT`. 출발일이 오늘보다 앞이면 C012 |
+| 022 `GET /rooms/{roomId}` | — | `{ id, title, startDate, endDate, transportMode, members[{ userId, nickname, isCreator }], places, recordIds, version, chatReadState, schedule }` | 정원(10명)·"나" 표시·일정 생성 시각은 응답에 없다. 정원은 상수, "나"는 내 계정 id와 비교한다 |
+| 023 `PATCH /rooms/{roomId}` | `{ version, title?, startDate?, endDate?, transportMode?, previewOnly? }` | `{ id, version, applied, scheduleNeedsRecalculation, affectedItems[{ scheduleItemId, roomPlaceId, name, visitDate }], schedule }` | 일정이 있는 방의 날짜·이동 수단을 바꾸면 `previewOnly: true`로 빠질 항목을 먼저 받아 W06-E2에 보여 준다. 날짜를 비우면 RO010 |
+| 024 `POST /rooms/{roomId}/invitations` | 헤더 `Idempotency-Key` | `{ invitationId, inviteToken, expiresAt: null, inviteUrl }` | 링크는 방마다 하나이고 만료가 없다 |
+| 025 `POST /room-invitations/accept` | 헤더 `Idempotency-Key`, `{ inviteToken }` | `{ roomId, membershipStatus: "JOINED", isCreator }` | 참여 확인 화면 `app/invite/[token].tsx`. 정원 초과 RO007, 잘못된 토큰 RO005 |
+| 028 `GET /rooms/{roomId}/places` | 쿼리 `state?`(ACTIVE·REMOVED·ALL) | `{ items[{ id, place{ provider, providerPlaceId, name, latitude, longitude, address, categoryCode, categoryName, regionCode, regionName, imageUrl, imageAttribution }, sourceType, sourceRecordId, sourceRecord, addedBy, removedAt }], version }` | `sourceType`은 SEARCH·COURSE·AI·MANUAL. `addedBy`는 사용자 id라 닉네임은 참여자 목록에서 찾는다 |
+| 032 `DELETE /rooms/{roomId}/places/{roomPlaceId}` | 쿼리 `version` | `{ removed, version, scheduleNeedsRecalculation, undoExpiresAt: null }` | 후보 목록에서만 뺀다. 일정 항목은 남는다 |
+| 094 `PATCH /rooms/{roomId}/places/{roomPlaceId}` | `{ version, action: "RESTORE" }` | `{ restored, roomPlaceId, version, scheduleNeedsRecalculation }` | "되돌리기" 토스트가 부른다. 시간 제한 없음 |
+| 087 `DELETE /rooms/{roomId}/members/me` | — | 본문 없음 | 마지막 참여자가 나가면 서버가 방을 지운다. 삭제 여부는 응답에 없어 나가기 전 인원으로 판단한다 |
+
+- 여행방 `version`은 `features/room/api/queries.ts`의 `resolveRoomVersion`·`storeRoomVersion`이 캐시에서 읽고 쓴다. version을 싣는 변경 요청은 같은 scope로 차례로 보낸다.
+- 초대 주소(`inviteUrl`)는 서버 설정 `ROOM_INVITE_URL_BASE` + `/{inviteToken}`이다. 앱이 이 주소를 직접 여는 설정(앱 링크·유니버설 링크)은 아직 없다(`TBD`).
+- 지도 핀으로 장소 직접 추가(031)와 기록 공간 생성(057)은 서버에 있지만 화면이 없다.

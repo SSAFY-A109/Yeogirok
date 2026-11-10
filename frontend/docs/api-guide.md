@@ -54,7 +54,7 @@ app/ 화면 ──▶ features/<domain>/api/queries.ts ──▶ features/<domai
 | `room` | RO | API-020~025·028~032·076·077 | 여행방·장소 담기·초대·채팅(P1) |
 | `place` | P | API-026·027 | 장소 검색·상세 |
 | `recommendation` | AI | API-033~035·080~082 | 추천 온보딩·추천 결과 |
-| `schedule` | SC | API-036~040 | 여행방 일정·AI 일정 초안 |
+| `schedule` | SC | API-036~040·084 | 여행방 일정·일정 초안(생성·조회·다시 계산·저장). 앱은 040(직접 편집)을 쓰지 않는다 |
 | `footprint` | F | API-041~045 | 발자취·방명록 |
 | `statistics` | ST | API-046 | 방문 분포도 |
 | `tip` | T | API-047~056 | AR 팁 |
@@ -225,9 +225,10 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | `POST /rooms/{id}/place-imports` (API-030) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)`, `roomKeys.list()`, `courseKeys.all` | — |
 | `DELETE /rooms/{id}/places/{roomPlaceId}` (API-032) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — (화면이 되돌리기 토스트 동안 행을 숨겼다가 확정 시 요청) |
 | `PUT /rooms/{id}/preferences` + `POST …/place-recommendations` (API-033·034) | `recommendationKeys.preference(roomId)` | — (추천 결과는 뮤테이션 `data`로만 쓴다) |
-| `POST /rooms/{id}/schedule-drafts` (API-037, 작업) | — (진행은 `scheduleKeys.draft(roomId, draftId)`를 끝날 때까지 확인. 끝난 초안은 다시 받지 않는다) | — |
-| `PUT /rooms/{id}/schedule` (API-039) | `roomKeys.detail(roomId)`. 409 C008이면 `scheduleKeys.room(roomId)`·`roomKeys.detail(roomId)` 다시 조회 | 응답 일정 → `scheduleKeys.room(roomId)` |
-| `PATCH /rooms/{id}/schedule` (API-040) | 409 C008이면 `scheduleKeys.room(roomId)` 다시 조회 | 응답 일정 |
+| `POST /rooms/{id}/schedule-drafts` (API-037, 작업) | — (진행은 `scheduleKeys.draft(roomId, draftKey)`를 끝날 때까지 확인). 409 C004면 `roomKeys.detail(roomId)`·`roomKeys.places(roomId)`·`scheduleKeys.room(roomId)` 다시 조회. "일정 조정하기"는 저장된 일정을 이어받는 초안을 `scheduleKeys.savedDraft(roomId)` 쿼리로 만든다(캐시를 남기지 않는다) | — |
+| `PATCH /rooms/{id}/schedule-drafts/{draftKey}` (API-084, 작업) | `scheduleKeys.draft(roomId, draftKey)`(끝날 때까지 확인). 409 C004·422 SC003이면 초안을, C004면 `roomKeys.detail(roomId)`·`roomKeys.places(roomId)`·`scheduleKeys.room(roomId)`도 다시 조회 | 초안을 계산 중으로 표시 |
+| `PUT /rooms/{id}/schedule` (API-039) | `roomKeys.detail(roomId)`, `scheduleKeys.room(roomId)`. 409 C004면 `scheduleKeys.draft(roomId, draftKey)`·`scheduleKeys.room(roomId)`·`roomKeys.detail(roomId)`·`roomKeys.places(roomId)` 다시 조회(덮어쓰지 않는다) | 응답 일정 → `scheduleKeys.room(roomId)`, 응답 version → `storeRoomVersion` |
+| `PATCH /rooms/{id}/schedule` (API-040) | 앱에서 쓰지 않는다(일정 조정은 037 `fixedItems` → 084 → 039). 쓰게 되면 039와 같이 처리하고 409 C004면 `scheduleKeys.room(roomId)` 다시 조회 | — |
 | `POST /records/{id}/drafts` (API-064) | 작업 완료 시 `recordKeys.drafts(recordId)` | — |
 | `POST /records/{id}/publications` (API-073) | `recordKeys.detail(recordId)`, `courseKeys.mine()` | — |
 | `POST /auth/token` (API-005) | 전체 캐시 `queryClient.clear()` 후 시작 | — |
