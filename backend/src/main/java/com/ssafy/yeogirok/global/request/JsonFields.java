@@ -73,6 +73,14 @@ public final class JsonFields {
 		return value.stringValue();
 	}
 
+	/** 생략·null C001, 정수(long 범위) 아님 C002. */
+	public static long requiredLong(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			throw missing(field);
+		}
+		return optionalLong(value, field);
+	}
+
 	/** 생략·null 이면 null, 정수(long 범위) 아님 C002. */
 	public static Long optionalLong(JsonNode value, String field) {
 		if (isAbsent(value)) {

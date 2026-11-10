@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.global.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -12,7 +13,27 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class SecurityConfig {
 
+	/**
+	 * 채팅 WebSocket(API-077) 연결 경로. 인증은 HTTP 가 아니라 연결 뒤 첫 AUTH 프레임의 1회용 티켓으로 한다.
+	 * 아래 기본 체인과 분리해 Bearer 토큰 검사를 아예 걸지 않는다. 같은 체인에서 permitAll 만 하면 앱이 습관처럼 붙인
+	 * 만료 토큰 헤더 때문에 핸드셰이크가 401 로 실패한다.
+	 */
 	@Bean
+	@Order(1)
+	public SecurityFilterChain chatWebSocketFilterChain(HttpSecurity http) throws Exception {
+		http
+			.securityMatcher("/ws/**")
+			.csrf(AbstractHttpConfigurer::disable)
+			.formLogin(AbstractHttpConfigurer::disable)
+			.httpBasic(AbstractHttpConfigurer::disable)
+			.logout(AbstractHttpConfigurer::disable)
+			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+			.authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll());
+		return http.build();
+	}
+
+	@Bean
+	@Order(2)
 	public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder serviceJwtDecoder,
 		ServiceJwtAuthenticationConverter authenticationConverter,
 		RestAuthenticationEntryPoint authenticationEntryPoint,

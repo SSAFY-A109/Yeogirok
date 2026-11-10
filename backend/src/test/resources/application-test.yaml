@@ -33,6 +33,13 @@ yeogirok:
     cleanup:
       due-interval: P1D
       safety-scan-interval: P1D
+  # 채팅 정리·시간 초과 검사도 테스트에서 직접 호출한다.
+  chat:
+    sweep-interval: P1D
+    cleanup:
+      due-interval: P1D
+      safety-scan-interval: P1D
+      batch-size: 2
 
 auth:
   jwt:

@@ -6,7 +6,6 @@ import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
-import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
@@ -32,11 +31,11 @@ public record RoomDetailResponse(
 ) {
 
 	public static RoomDetailResponse of(TravelRoom room, List<RoomMemberView> members, List<RoomPlace> places,
-		Map<String, String> categoryNames, RoomMember requester, ScheduleView schedule) {
+		Map<String, String> categoryNames, ChatReadState chatReadState, ScheduleView schedule) {
 		return new RoomDetailResponse(room.getId(), room.getTitle(), room.getStartDate(), room.getEndDate(),
 			room.getTransportMode(), members.stream().map(Member::from).toList(),
 			places.stream().map(place -> Place.from(place, categoryNames)).toList(), List.of(), room.getVersion(),
-			ChatReadState.of(requester.getLastReadMessageId()), schedule);
+			chatReadState, schedule);
 	}
 
 	/** sourceRecord 는 공개 코스가 아직 없어 항상 null 이다(API-028 과 같다). */
