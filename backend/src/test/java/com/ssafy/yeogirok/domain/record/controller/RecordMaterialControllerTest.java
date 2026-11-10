@@ -6,12 +6,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -23,6 +26,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -38,7 +42,11 @@ import com.ssafy.yeogirok.domain.record.dto.MaterialLinkResponse;
 import com.ssafy.yeogirok.domain.record.dto.MaterialListResponse;
 import com.ssafy.yeogirok.domain.record.dto.MaterialView;
 import com.ssafy.yeogirok.domain.record.material.MaterialLinkService;
+import com.ssafy.yeogirok.domain.record.dto.MaterialReviewCommand;
+import com.ssafy.yeogirok.domain.record.dto.MaterialReviewResponse;
+import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
+import com.ssafy.yeogirok.domain.record.material.MaterialReviewService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -57,6 +65,8 @@ class RecordMaterialControllerTest {
 	MaterialLinkService materialLinkService;
 	@MockitoBean
 	MaterialQueryService materialQueryService;
+	@MockitoBean
+	MaterialReviewService materialReviewService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -118,6 +128,77 @@ class RecordMaterialControllerTest {
 					.content("{\"type\":\"RECEIPT\",\"uploadId\":\"" + UPLOAD_ID + "\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C001"));
+		}
+	}
+
+	@Nested
+	class API_091 {
+
+		static final String MATERIAL_ID = "11111111-2222-4333-8444-555555555555";
+		static final String PATH = "/api/v1/records/10/materials/" + MATERIAL_ID + "/review";
+		static final String PLACE = "\"customPlace\":{\"name\":\" 안목 카페 \",\"latitude\":37.77,\"longitude\":128.947}";
+
+		@Test
+		void 보정_응답은_200_이고_paidAt_은_09_로_자른_날짜_시각이다() throws Exception {
+			given(materialReviewService.review(eq(USER_ID), eq(10L), eq(MATERIAL_ID), any()))
+				.willReturn(new MaterialReviewResponse(MATERIAL_ID, 3, ReceiptMaterial.ReviewStatus.CONFIRMED, false,
+					List.of(), new MaterialView.Values("가게", Instant.parse("2026-11-01T15:30:15Z"), null,
+						LocalDate.of(2026, 11, 2), LocalTime.of(0, 30, 15)), ReceiptMaterial.Status.READY, true));
+
+			mockMvc.perform(json(patch(PATH), "{\"version\":2,\"merchantName\":\" 가게 \","
+					+ "\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success":true,"data":{"materialId":"11111111-2222-4333-8444-555555555555","version":3,
+					 "reviewStatus":"CONFIRMED","needsReview":false,"missingFields":[],
+					 "values":{"merchantName":"가게","paidAt":"2026-11-02 00:30:15+09","place":null,
+					   "paidDate":"2026-11-02","paidTime":"00:30:15"},
+					 "status":"READY","canUseForDraft":true}}
+					""", JsonCompareMode.STRICT));
+			ArgumentCaptor<MaterialReviewCommand> command = ArgumentCaptor.forClass(MaterialReviewCommand.class);
+			verify(materialReviewService).review(eq(USER_ID), eq(10L), eq(MATERIAL_ID), command.capture());
+			assertThat(command.getValue().merchantName()).isEqualTo("가게");
+			assertThat(command.getValue().paidAt().toLocalTime()).isEqualTo(LocalTime.of(0, 30, 15));
+			assertThat(command.getValue().place()).isEqualTo(new VisitPlaceInput.CustomPlace("안목 카페",
+				new BigDecimal("37.7700000"), new BigDecimal("128.9470000"), null));
+			verify(idempotencyService).execute(eq(new IdempotencyKey(USER_ID, RecordMaterialController.REVIEW_SCOPE,
+				"10-" + MATERIAL_ID, "key-1")), eq(command.getValue()), any(), any(), any());
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"{\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}|C001",
+			"{\"version\":null,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}|C001",
+			"{\"version\":\"2\",\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}|C002",
+			"{\"version\":2,\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}|C001",
+			"{\"version\":2,\"merchantName\":\"  \",\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}|C003",
+			"{\"version\":2,\"merchantName\":3,\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}|C002",
+			"{\"version\":2,\"merchantName\":\"가게\"," + PLACE + "}|C001",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15\"," + PLACE + "}|C002",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-01 15:30:15Z\"," + PLACE + "}|C002",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\"}|C001",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\",\"placeRef\":"
+				+ "{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"T-1\"}," + PLACE + "}|C003",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\",\"placeRef\":"
+				+ "{\"provider\":\"KAKAO\",\"providerPlaceId\":\"T-1\"}}|C003",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\",\"customPlace\":"
+				+ "{\"name\":\"카페\",\"latitude\":91,\"longitude\":128}}|C011",
+			"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\",\"customPlace\":"
+				+ "{\"name\":\"  \",\"latitude\":37,\"longitude\":128}}|P004"
+		})
+		void 요청_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(patch(PATH), body))
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(materialReviewService);
+		}
+
+		@Test
+		void 자료_ID_가_UUID_가_아니면_C002() throws Exception {
+			mockMvc.perform(json(patch("/api/v1/records/10/materials/not-uuid/review"),
+					"{\"version\":2,\"merchantName\":\"가게\",\"paidAt\":\"2026-11-02 00:30:15+09\"," + PLACE + "}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("C002"));
+			verifyNoInteractions(materialReviewService);
 		}
 	}
 

@@ -48,6 +48,11 @@ public record MaterialView(
 		LocalDate paidDate,
 		@JsonFormat(pattern = "HH:mm:ss") LocalTime paidTime
 	) {
+
+		public static Values of(ReceiptMaterial.Values values) {
+			return new Values(values.merchantName(), values.paidAt(), values.place(), values.paidDate(),
+				values.paidTime());
+		}
 	}
 
 	/** @param material 끊긴 작업 판정을 마친 자료 */
@@ -59,7 +64,7 @@ public record MaterialView(
 				: new Extracted(extracted.merchantName(), extracted.placeCandidates(), extracted.paidAt(),
 					extracted.confidence(), extracted.paidDate(), extracted.paidTime()),
 			material.needsReview(), material.error(), material.version(), material.jobId(),
-			new Values(values.merchantName(), values.paidAt(), values.place(), values.paidDate(), values.paidTime()),
+			Values.of(values),
 			material.reviewStatus(), material.missingFields(), material.canUseForDraft(),
 			material.isOriginalAvailable(now), material.deleteAfter(), material.uploadAcceptedAt());
 	}

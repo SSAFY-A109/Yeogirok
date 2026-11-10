@@ -29,7 +29,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @TestConfiguration
 @Import({RecordTestConfig.class, JobStore.class, JobRunner.class, RedisLock.class, ReceiptMaterialStore.class,
-	UploadSessionStore.class, ReceiptMaterials.class, ReceiptOcrRunner.class, MaterialLinkService.class})
+	UploadSessionStore.class, ReceiptMaterials.class, ReceiptOcrRunner.class, MaterialLinkService.class,
+	MaterialReviewService.class})
 public class MaterialTestConfig {
 
 	public static final Duration QUEUE_TIMEOUT = Duration.ofMinutes(10);
