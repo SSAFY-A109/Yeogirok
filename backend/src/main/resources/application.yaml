@@ -68,6 +68,12 @@ yeogirok:
     cleanup:
       due-interval: PT10M
       safety-scan-interval: PT1H
+  ocr:
+    # 영수증 OCR 서버(ai/ocr). 서버는 compose 내부 주소 http://ai:8000. 비어 있으면 앱은 뜨고 OCR 작업만 실패한다(C014).
+    base-url: ${OCR_BASE_URL:}
+    connect-timeout: 2s
+    # 대기(최대 한 건) + 호출이 작업 실행 제한(yeogirok.job.run-timeout 2m) 안에 들어오게 둔다. CPU 처리 시간 확인 후 조정.
+    read-timeout: 45s
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.
