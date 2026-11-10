@@ -330,6 +330,15 @@
       ],
       "note": "2026-11-03 사용자 지정 Figma 직접 대조. Pencil 미대조. API는 명세 미확정이라 가정 DTO + MSW(docs/api-contract.md §3-1). 카카오톡 공유는 시스템 공유 시트로 대체(TBD)."
     },
+    "rooms/[roomId]/chat": {
+      "route": "/rooms/[roomId]/chat",
+      "pencil": "없음",
+      "figma": "Figma 자율 A109 › Design v3 전체 화면 › 여행방 함께 장소 모으기 (821:9703). 상세 대조는 Pro 팀 복제본 FtdERgkTJWJFxS1u0fGsvu (1:6676) · W09-2 (821:10081, 복제본 1:7056), 진입 버튼은 W09 헤더의 Chat (821:9798)",
+      "features": [
+        "TRP-11"
+      ],
+      "note": "2026-11-10 사용자 제공 Figma 이미지·메타로 대조. Pencil 미대조. 1단계(화면·이력 076·읽은 위치 088)만 구현. 계약은 backend PR #82(미머지) + MSW. 헤더 부제는 실시간 연결 전이라 \"N명 참여 중\"(Figma는 \"N명 실시간 연결됨\" + 초록 점), 입력창은 비활성."
+    },
     "rooms/[roomId]/search": {
       "route": "/rooms/[roomId]/search",
       "pencil": "없음",
