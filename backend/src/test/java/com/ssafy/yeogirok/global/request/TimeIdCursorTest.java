@@ -1,4 +1,4 @@
-package com.ssafy.yeogirok.domain.footprint.service;
+package com.ssafy.yeogirok.global.request;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,14 +14,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
-class FootprintCursorTest {
+class TimeIdCursorTest {
 
 	@Test
 	void 만든_커서를_그대로_다시_읽고_값이_없으면_null() {
-		FootprintCursor cursor = new FootprintCursor(Instant.parse("2026-11-04T03:00:00.123456Z"), 15L);
+		TimeIdCursor cursor = new TimeIdCursor(Instant.parse("2026-11-04T03:00:00.123456Z"), 15L);
 
-		assertThat(FootprintCursor.decodeOrNull(cursor.encode())).isEqualTo(cursor);
-		assertThat(FootprintCursor.decodeOrNull(null)).isNull();
+		assertThat(TimeIdCursor.decodeOrNull(cursor.encode())).isEqualTo(cursor);
+		assertThat(TimeIdCursor.decodeOrNull(null)).isNull();
 	}
 
 	@ParameterizedTest
@@ -41,7 +41,7 @@ class FootprintCursorTest {
 	}
 
 	private static void expectInvalid(String cursor) {
-		assertThatThrownBy(() -> FootprintCursor.decodeOrNull(cursor))
+		assertThatThrownBy(() -> TimeIdCursor.decodeOrNull(cursor))
 			.isInstanceOf(BusinessException.class)
 			.extracting("exceptionType").isEqualTo(ExceptionType.INVALID_CURSOR);
 	}

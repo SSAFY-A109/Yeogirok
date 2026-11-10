@@ -7,6 +7,8 @@ import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
 
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,15 @@ public class UploadSessionStore {
 			return;
 		}
 		redis.opsForValue().set(PREFIX + session.uploadId(), jsonMapper.writeValueAsString(session), ttl);
+	}
+
+	/** 세션이 없으면 M004, 다른 사람 세션이면 M005(API-086·049). */
+	public UploadSession findOwned(String uploadId, Long userId) {
+		UploadSession session = find(uploadId).orElseThrow(() -> new BusinessException(ExceptionType.FILE_NOT_FOUND));
+		if (!session.uploadedBy().equals(userId)) {
+			throw new BusinessException(ExceptionType.FILE_ACCESS_DENIED);
+		}
+		return session;
 	}
 
 	public Optional<UploadSession> find(String uploadId) {

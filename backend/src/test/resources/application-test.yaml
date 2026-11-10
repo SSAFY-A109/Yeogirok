@@ -15,6 +15,7 @@ yeogirok:
     max-age: 2m
     max-future-skew: 30s
     policy-version: location-v1
+    max-accuracy-meters: 30
   idempotency:
     retention: 24h
     processing-timeout: 30s

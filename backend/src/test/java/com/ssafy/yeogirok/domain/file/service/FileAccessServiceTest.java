@@ -53,8 +53,8 @@ class FileAccessServiceTest {
 		given(recordAccess.isCurrentMember(RECORD_ID, USER_ID)).willReturn(true);
 		given(storage.head(anyString(), anyString())).willReturn(Optional.of(new StoredObject(10, "\"e\"", "image/png")));
 		given(storage.presignGet(anyString(), anyString(), any())).willReturn("https://signed-get");
-		service = new FileAccessService(recordAccess, visitImageRepository, materialStore, storage,
-			TestFileProperties.VALUE, clock);
+		service = new FileAccessService(recordAccess, visitImageRepository, materialStore,
+			new FileUrlIssuer(storage), TestFileProperties.VALUE, clock);
 	}
 
 	void photo(Long recordId) {

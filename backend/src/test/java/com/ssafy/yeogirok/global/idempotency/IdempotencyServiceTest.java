@@ -215,6 +215,18 @@ class IdempotencyServiceTest {
 
 			assertThat(store.created).hasValue(1);
 		}
+
+		/** 049·051·054 의 placement·spatialReference 처럼 요청에 JsonNode 가 들어가는 경우. 안쪽 객체도 본다. */
+		@Test
+		void JSON_객체_값도_키_순서와_상관없이_같은_내용이면_같은_요청이다() {
+			Map<String, Object> a = Map.of("placement", JSON.readTree("{\"x\": 1, \"pose\": {\"b\": 2, \"a\": 1}}"));
+			Map<String, Object> b = Map.of("placement", JSON.readTree("{\"pose\": {\"a\": 1, \"b\": 2}, \"x\": 1}"));
+
+			service.execute(key("k1"), a, () -> store.create(seoul), Footprint::id, store::find);
+			service.execute(key("k1"), b, () -> store.create(seoul), Footprint::id, store::find);
+
+			assertThat(store.created).hasValue(1);
+		}
 	}
 
 	/* ── AC-05 처리 중 ─────────────────────────────────────────── */

@@ -24,6 +24,7 @@ import com.ssafy.yeogirok.global.geo.BoundingBox;
 import com.ssafy.yeogirok.global.lock.UserLock;
 import com.ssafy.yeogirok.global.request.DateRange;
 import com.ssafy.yeogirok.global.request.PageSize;
+import com.ssafy.yeogirok.global.request.TimeIdCursor;
 
 import lombok.RequiredArgsConstructor;
 
@@ -76,7 +77,7 @@ public class FootprintService {
 		BoundingBox box = BoundingBox.parseOrNull(bbox);
 		DateRange dates = new DateRange(from, to);
 		TravelCategory.validateFilter(category);
-		FootprintCursor after = FootprintCursor.decodeOrNull(cursor);
+		TimeIdCursor after = TimeIdCursor.decodeOrNull(cursor);
 		int size = PageSize.resolve(limit);
 
 		Specification<Footprint> spec = FootprintSpecifications.ownedAndNotDeleted(userId);
@@ -90,7 +91,7 @@ public class FootprintService {
 			spec = spec.and(FootprintSpecifications.hasCategory(category));
 		}
 		if (after != null) {
-			spec = spec.and(FootprintSpecifications.after(after.visitedAt(), after.id()));
+			spec = spec.and(FootprintSpecifications.after(after.time(), after.id()));
 		}
 
 		// 한 개 더 읽어서 다음 쪽이 있는지 본다.
@@ -103,7 +104,7 @@ public class FootprintService {
 		String nextCursor = null;
 		if (hasNext) {
 			Footprint last = page.getLast();
-			nextCursor = new FootprintCursor(last.getVisitedAt(), last.getId()).encode();
+			nextCursor = new TimeIdCursor(last.getVisitedAt(), last.getId()).encode();
 		}
 		return new FootprintListResponse(page.stream().map(FootprintListResponse.Item::from).toList(), nextCursor);
 	}

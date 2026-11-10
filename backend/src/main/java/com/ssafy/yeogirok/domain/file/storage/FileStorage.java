@@ -114,12 +114,17 @@ public class FileStorage {
 
 	/** 마지막 수정 시각이 {@code cutoff} 보다 이른 객체의 key. 정리 작업의 안전망 스캔에 쓴다. */
 	public List<String> listKeysModifiedBefore(String bucket, Instant cutoff) {
+		return listKeysModifiedBefore(bucket, null, cutoff);
+	}
+
+	/** {@link #listKeysModifiedBefore(String, Instant)} 를 {@code prefix} 로 시작하는 key 로 좁힌다(null 이면 전체). */
+	public List<String> listKeysModifiedBefore(String bucket, String prefix, Instant cutoff) {
 		try {
 			List<String> keys = new ArrayList<>();
 			String token = null;
 			do {
 				String continuation = token;
-				ListObjectsV2Response page = s3Client.listObjectsV2(builder -> builder.bucket(bucket)
+				ListObjectsV2Response page = s3Client.listObjectsV2(builder -> builder.bucket(bucket).prefix(prefix)
 					.continuationToken(continuation));
 				page.contents().stream()
 					.filter(object -> object.lastModified().isBefore(cutoff))

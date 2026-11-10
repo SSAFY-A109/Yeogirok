@@ -29,6 +29,7 @@ yeogirok:
     max-age: ${LOCATION_EVIDENCE_MAX_AGE}
     max-future-skew: ${LOCATION_EVIDENCE_MAX_FUTURE_SKEW}
     policy-version: ${LOCATION_POLICY_VERSION}
+    max-accuracy-meters: ${LOCATION_EVIDENCE_MAX_ACCURACY_METERS}
   idempotency:
     # 정하지 않은 수치는 기본값 없이 받는다. 값이 없으면 실행이 바로 실패한다.
     retention: ${IDEMPOTENCY_RETENTION}

@@ -27,6 +27,7 @@ public final class InMemoryUploadSessions {
 		}).when(store).save(any());
 		given(store.find(anyString()))
 			.willAnswer(invocation -> Optional.ofNullable(sessions.get(invocation.<String>getArgument(0))));
+		given(store.findOwned(anyString(), any())).willCallRealMethod();
 	}
 
 	public void put(UploadSession session) {
