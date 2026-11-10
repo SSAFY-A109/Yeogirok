@@ -148,5 +148,9 @@ export function createRoomFixtures(): MockRoom[] {
         { date: "2026-11-22", roomPlaceIds: [4003] },
       ],
     ),
+    makeRoom(
+      { roomId: 5, name: "속초 당일치기", startDate: "2026-09-21", endDate: "2026-09-21", transportMode: "CAR", members: [MOCK_ME], recordId: null },
+      [],
+    ),
   ];
 }

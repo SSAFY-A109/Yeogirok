@@ -46,6 +46,7 @@ export type MapRouteColors = {
 export type MapRoute = {
   points: readonly MapRoutePoint[];
   colors: MapRouteColors;
+  connectPoints?: boolean;
 };
 
 /** 지도에 보이는 영역(남서·북동 좌표)과 확대 단계. 카카오 지도는 level이 작을수록 가깝다. */
@@ -332,17 +333,20 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   window.yeogirokMap.setRoute = function (route, fit) {
     if (!map) return;
     if (routeLine) routeLine.setMap(null);
+    routeLine = null;
     routeOverlays.forEach(function (overlay) { overlay.setMap(null); });
     routeOverlays = [];
     var path = route.points.map(function (point) { return new kakao.maps.LatLng(point.lat, point.lng); });
-    routeLine = new kakao.maps.Polyline({
-      path: path,
-      strokeWeight: 4,
-      strokeColor: route.colors.line,
-      strokeOpacity: 0.95,
-      strokeStyle: "solid"
-    });
-    routeLine.setMap(map);
+    if (route.connectPoints !== false && path.length > 1) {
+      routeLine = new kakao.maps.Polyline({
+        path: path,
+        strokeWeight: 4,
+        strokeColor: route.colors.line,
+        strokeOpacity: 0.95,
+        strokeStyle: "solid"
+      });
+      routeLine.setMap(map);
+    }
     route.points.forEach(function (point, index) {
       var overlay = new kakao.maps.CustomOverlay({
         position: path[index],
@@ -577,7 +581,7 @@ export function buildSetRouteScript(route: MapRoute, fit: boolean): string {
     return { id, lat, lng, order, selected };
   });
 
-  return `window.yeogirokMap && window.yeogirokMap.setRoute(${toScriptLiteral({ points, colors: route.colors })}, ${fit ? "true" : "false"}); true;`;
+  return `window.yeogirokMap && window.yeogirokMap.setRoute(${toScriptLiteral({ points, colors: route.colors, connectPoints: route.connectPoints })}, ${fit ? "true" : "false"}); true;`;
 }
 
 export function buildSetMarkersScript(markers: readonly MapMarker[], image?: MapMarkerImage, fit = false, clusterBadge?: MapClusterBadge): string {

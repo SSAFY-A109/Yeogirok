@@ -26,8 +26,14 @@ export const placeHandlers = [
       return fail(400, "C010", "커서가 올바르지 않습니다.");
     }
 
-    const matched = placeCatalog.filter((place) => {
-      return place.name.includes(keyword) || (place.address?.includes(keyword) ?? false);
+    const terms = keyword.normalize().toLowerCase().split(/\s+/);
+
+    const matched = placeCatalog.filter(({ name, address }) => {
+      const searchableText = `${name.replace(/\s+/g, "")} ${address?.replace(/\s+/g, "") ?? ""}`.normalize().toLowerCase();
+
+      return terms.every((term) => {
+        return searchableText.includes(term);
+      });
     });
 
     const items = matched.slice(offset, offset + size);

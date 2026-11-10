@@ -41,7 +41,8 @@ export type RoomSummaryDto = {
   transportMode: string;
   memberCount: number;
   members: RoomMemberDto[];
-  recordId: number | null;
+  recordId?: number | null;
+  recordIds?: number[];
 };
 
 export type RoomsResponseDto = { rooms: RoomSummaryDto[] };
@@ -162,6 +163,7 @@ function toRoomMember(dto: RoomMemberDto): RoomMember {
 }
 
 export function toRoomSummary(dto: RoomSummaryDto): RoomSummary {
+  const recordId = dto.recordIds?.[0] ?? dto.recordId ?? null;
   return {
     id: assertId(dto.roomId, "roomId"),
     name: dto.name,
@@ -170,7 +172,7 @@ export function toRoomSummary(dto: RoomSummaryDto): RoomSummary {
     transportMode: toKnownEnum(dto.transportMode, TRANSPORT_MODES),
     memberCount: dto.memberCount,
     members: dto.members.map(toRoomMember),
-    recordId: dto.recordId === null ? null : assertId(dto.recordId, "recordId"),
+    recordId: recordId === null ? null : assertId(recordId, "recordId"),
   };
 }
 

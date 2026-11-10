@@ -1,7 +1,10 @@
 import { delay, http } from "msw";
 
+import type { CourseDetailDto, CourseSummaryDto } from "../../../features/course/model";
+import { mockDb } from "../db";
 import { findCategory } from "../fixtures/common";
-import { findMockCourse, importCountBasisFixture, mockCourses, popularPlaceFixtures, type MockCourse } from "../fixtures/course";
+import { findMockCourse, importCountBasisFixture, mockCourses, popularPlaceFixtures } from "../fixtures/course";
+import { publicRecordAuthors, publicRecordDays } from "../fixtures/record";
 import { fail, MOCK_DELAY_MS, ok, readId } from "./respond";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -35,7 +38,7 @@ function pageError(page: "invalid-cursor" | "invalid-limit") {
   return page === "invalid-cursor" ? fail(400, "C010", "커서가 올바르지 않습니다.") : fail(400, "C011", "페이지 크기 범위를 벗어났습니다.");
 }
 
-function matchesDuration(course: MockCourse, duration: string): boolean {
+function matchesDuration(course: { summary: CourseSummaryDto }, duration: string): boolean {
   const nights = course.summary.nightCount;
 
   return {
@@ -44,6 +47,54 @@ function matchesDuration(course: MockCourse, duration: string): boolean {
     ONE_NIGHT_TWO_DAYS: nights === 1,
     TWO_NIGHTS_OR_MORE: nights >= 2,
   }[duration] ?? false;
+}
+
+function publishedRecordCourse(courseId: number) {
+  const record = mockDb.records.get(courseId);
+  const room = mockDb.rooms.get(record?.detail.roomId ?? 0);
+
+  if (!record?.publication || !room) {
+    return null;
+  }
+
+  const { imageIds, description } = record.publication;
+  const { title, version } = record.detail;
+
+  const days = publicRecordDays(record, (imageId) => {
+    return imageIds.includes(imageId);
+  });
+
+  const authors = publicRecordAuthors(room);
+  const dayCount = days.length;
+  const nightCount = Math.max(0, dayCount - 1);
+  const transportMode = room.detail.transportMode === "PUBLIC_TRANSIT" ? "TRANSIT" : room.detail.transportMode;
+
+  const visits = days.flatMap((day) => {
+    return day.items;
+  });
+
+  const detail: CourseDetailDto = { id: courseId, title, description, version, days, authors, dayCount, nightCount, transportMode };
+  const summary: CourseSummaryDto = {
+    id: courseId, title, authors, dayCount, nightCount, transportMode, placeCount: visits.length, importCount: 0,
+    regionName: courseId === 1 ? "부산" : "지역 미정",
+
+    thumbnailUrl: visits.flatMap((visit) => {
+      return visit.photos;
+    })[0]?.url ?? null,
+
+    routePreview: visits.map((visit) => {
+      return visit.place.name;
+    }),
+  };
+  return {
+    detail, summary, regionCode: courseId === 1 ? "26" : null,
+
+    categoryCodes: visits.flatMap((visit) => {
+      return visit.place.categoryCode ? [visit.place.categoryCode] : [];
+    }),
+
+    searchText: [title, description, summary.regionName, ...summary.routePreview],
+  };
 }
 
 function isUnknownCategory(category: string | null): boolean {
@@ -107,7 +158,13 @@ export const courseHandlers = [
     }
 
     const courseId = readId(params.courseId);
-    const course = courseId === null ? null : findMockCourse(courseId);
+    const published = courseId === null ? null : publishedRecordCourse(courseId);
+
+    if (published && !request.headers.get("Authorization")?.startsWith("Bearer ")) {
+      return fail(401, "A001", "인증 필요");
+    }
+
+    const course = published ?? (courseId === null ? null : findMockCourse(courseId));
 
     if (course === null) {
       return fail(404, "CO001", "요청한 공개 코스를 이용할 수 없습니다.");
@@ -140,7 +197,13 @@ export const courseHandlers = [
       return fail(400, "CO002", "지원하지 않는 코스 검색 필터");
     }
 
-    const matched = mockCourses.filter((course) => {
+    const published = request.headers.get("Authorization")?.startsWith("Bearer ")
+      ? [...mockDb.records.keys()].flatMap((id) => {
+        const course = publishedRecordCourse(id);
+        return course ? [course] : [];
+      }) : [];
+
+    const matched = [...mockCourses, ...published].filter((course) => {
       return (keyword === "" || course.searchText.some((text) => {
         return text.toLowerCase().includes(keyword);
       }))
