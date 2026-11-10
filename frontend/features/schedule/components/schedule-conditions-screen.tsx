@@ -13,48 +13,39 @@ import { Text } from "@/components/ui/text";
 import { useRoom } from "@/features/room/api/queries";
 import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
 import { hasTripDates, MIN_PLACES_FOR_SCHEDULE, type RoomDetail } from "@/features/room/model";
-import { useCreateScheduleDraft } from "@/features/schedule/api/queries";
+import { useCreateScheduleDraft, useRoomSchedule } from "@/features/schedule/api/queries";
 import { TimePickerSheet } from "@/features/schedule/components/time-picker-sheet";
 import { getScheduleErrorMessage, SCHEDULE_ERROR_FALLBACK } from "@/features/schedule/errors";
-import {
-  getDefaultDayTimes,
-  isValidDayTimeRange,
-  SCHEDULE_PACE_LABEL,
-  SCHEDULE_PACES,
-  toCreateDraftRequest,
-  type DayTimeRange,
-  type LocalTime,
-  type SchedulePaceDto,
-} from "@/features/schedule/model";
-import { useIdempotencyKeyFor } from "@/hooks/use-idempotency-key";
-import { addDays, diffDays, formatShortMonthDay, type LocalDate } from "@/lib/date";
+import { getInitialDayTimes, getTripDates, isValidDayTimeRange, type DayTimeRange, type LocalTime, type RoomSchedule } from "@/features/schedule/model";
+import { goToScheduleDraft } from "@/features/schedule/navigation";
+import { formatShortMonthDay, type LocalDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
 const TITLE = "일정 만들기";
-const SEGMENT_HIT_SLOP = { top: 4, bottom: 4 };
 
 type TimeTarget = { date: LocalDate; edge: "startTime" | "endTime" };
-
-function tripDates(startDate: LocalDate, endDate: LocalDate): LocalDate[] {
-  return Array.from({ length: diffDays(startDate, endDate) + 1 }, (_, index) => {
-    return addDays(startDate, index);
-  });
-}
 
 function goBack() {
   router.back();
 }
 
-/** 일정 조건(Figma W13, TRP-08·10). 날마다 시작·종료 시각과 하루 일정 밀도를 정해 AI 초안을 만든다. */
-export function ScheduleConditionsScreen({ roomId }: { roomId: number | null }) {
-  return roomId === null ? <ConditionsMessage message="여행방을 찾을 수 없어요" /> : <ConditionsQuery roomId={roomId} />;
+type ScheduleConditionsScreenProps = {
+  /** 검증한 라우트 파라미터. 잘못된 id면 `null`. */
+  roomId: number | null;
+  /** 저장된 일정의 날짜별 장소를 이어받는 초안을 만든다("일정 조정하기"에서 시각 조건이 없어 넘어온 경우). */
+  keepSaved: boolean;
+};
+
+/** 일정 조건(Figma W13, TRP-08·10). 날마다 시작·종료 시각을 정해 일정 초안을 만든다(API-037). 하루 일정 밀도는 서버가 받지 않는다. */
+export function ScheduleConditionsScreen({ roomId, keepSaved }: ScheduleConditionsScreenProps) {
+  return roomId === null ? <ConditionsMessage message="여행방을 찾을 수 없어요" /> : <ConditionsQuery roomId={roomId} keepSaved={keepSaved} />;
 }
 
-function ConditionsQuery({ roomId }: { roomId: number }) {
+function ConditionsQuery({ roomId, keepSaved }: { roomId: number; keepSaved: boolean }) {
   const roomQuery = useRoom(roomId);
 
   if (roomQuery.data) {
-    return <ConditionsGate room={roomQuery.data} />;
+    return <ConditionsGate room={roomQuery.data} keepSaved={keepSaved} />;
   }
 
   if (roomQuery.isError) {
@@ -77,10 +68,14 @@ function ConditionsQuery({ roomId }: { roomId: number }) {
     );
   }
 
+  return <ConditionsLoading label="여행방을 불러오는 중" />;
+}
+
+function ConditionsLoading({ label }: { label: string }) {
   return (
     <Screen>
       <ScreenHeader title={TITLE} onBack={goBack} testID="schedule-conditions.header" />
-      <View accessibilityRole="progressbar" accessibilityLabel="여행방을 불러오는 중" accessibilityState={{ busy: true }} className="gap-4 px-5 pt-4">
+      <View accessibilityRole="progressbar" accessibilityLabel={label} accessibilityState={{ busy: true }} className="gap-4 px-5 pt-4">
         <Skeleton className="h-8 w-56 rounded-xs" />
         <Skeleton className="h-4 w-72 rounded-xs" />
         <Skeleton className="h-32 w-full rounded-md" />
@@ -90,7 +85,7 @@ function ConditionsQuery({ roomId }: { roomId: number }) {
 }
 
 /** 날짜가 없거나 후보 장소가 모자라면(딥링크 등) 조건 화면 대신 이유와 할 일을 보여 준다. */
-function ConditionsGate({ room }: { room: RoomDetail }) {
+function ConditionsGate({ room, keepSaved }: { room: RoomDetail; keepSaved: boolean }) {
   if (!hasTripDates(room)) {
     return (
       <ConditionsMessage message="여행 날짜를 정하면 일정을 만들 수 있어요">
@@ -119,18 +114,48 @@ function ConditionsGate({ room }: { room: RoomDetail }) {
     );
   }
 
-  return <ConditionsForm room={room} dates={tripDates(room.startDate, room.endDate)} />;
+  const dates = getTripDates(room.startDate, room.endDate);
+  return keepSaved && room.hasSchedule ? <SavedConditions room={room} dates={dates} /> : <ConditionsForm room={room} dates={dates} saved={null} />;
 }
 
-function ConditionsForm({ room, dates }: { room: RoomDetail; dates: LocalDate[] }) {
+/** 저장된 일정을 받아 그 시각 조건을 처음 값으로 쓰고, 초안이 날짜별 장소를 이어받게 한다. */
+function SavedConditions({ room, dates }: { room: RoomDetail; dates: LocalDate[] }) {
+  const savedQuery = useRoomSchedule(room.id);
+
+  if (savedQuery.data !== undefined) {
+    return <ConditionsForm room={room} dates={dates} saved={savedQuery.data} />;
+  }
+
+  if (savedQuery.isError) {
+    return (
+      <ConditionsMessage message={getScheduleErrorMessage(savedQuery.error)}>
+        <Button
+          variant="outline"
+          loading={savedQuery.isFetching}
+          loadingLabel="불러오는 중"
+
+          onPress={() => {
+            void savedQuery.refetch();
+          }}
+
+          testID="schedule-conditions.saved-retry"
+        >
+          <Text>다시 시도</Text>
+        </Button>
+      </ConditionsMessage>
+    );
+  }
+
+  return <ConditionsLoading label="지금 일정을 불러오는 중" />;
+}
+
+function ConditionsForm({ room, dates, saved }: { room: RoomDetail; dates: LocalDate[]; saved: RoomSchedule | null }) {
   const [days, setDays] = useState<DayTimeRange[]>(() => {
-    return getDefaultDayTimes(dates);
+    return getInitialDayTimes(dates, saved);
   });
 
-  const [pace, setPace] = useState<SchedulePaceDto>("NORMAL");
   const [timeTarget, setTimeTarget] = useState<TimeTarget | null>(null);
   const createDraft = useCreateScheduleDraft();
-  const keyFor = useIdempotencyKeyFor();
 
   const allValid = days.every(isValidDayTimeRange);
 
@@ -156,13 +181,11 @@ function ConditionsForm({ room, dates }: { room: RoomDetail; dates: LocalDate[] 
   };
 
   const submit = () => {
-    const request = toCreateDraftRequest(pace, days);
-
     createDraft.mutate(
-      { roomId: room.id, request, idempotencyKey: keyFor(JSON.stringify(request)) },
+      { roomId: room.id, days, keepSchedule: saved },
       {
-        onSuccess: ({ draftId }) => {
-          router.push({ pathname: "/rooms/[roomId]/schedule/draft", params: { roomId: String(room.id), draftId: String(draftId) } });
+        onSuccess: ({ draftKey }) => {
+          goToScheduleDraft(room.id, draftKey);
         },
       },
     );
@@ -175,6 +198,7 @@ function ConditionsForm({ room, dates }: { room: RoomDetail; dates: LocalDate[] 
         <View className="gap-2">
           <Text accessibilityRole="header" className="text-h2 text-foreground">몇 시부터 몇 시까지 다닐까요?</Text>
           <Text className="text-body-sm text-foreground-secondary">{`날마다 시작/종료 시각을 정하면 담은 장소 ${room.placeCount}곳으로 순서와 시간을 계산해요`}</Text>
+          {saved === null ? null : <Text className="text-caption text-muted-foreground">지금 일정에 넣은 장소는 같은 날에 두고 계산해요</Text>}
         </View>
         <View className="gap-2">
           <View className="rounded-md border border-border">
@@ -218,33 +242,6 @@ function ConditionsForm({ room, dates }: { room: RoomDetail; dates: LocalDate[] 
             })}
           </View>
           <Text className="text-caption text-muted-foreground">시각을 누르면 시간 선택기가 열려요</Text>
-        </View>
-        <View className="gap-3">
-          <Text accessibilityRole="header" className="text-label text-foreground">하루 일정</Text>
-          <View accessibilityRole="radiogroup" className="flex-row rounded-sm bg-muted p-1">
-            {SCHEDULE_PACES.map((value) => {
-              const selected = value === pace;
-
-              return (
-                <Pressable
-                  key={value}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
-                  className={cn("h-9 flex-1 items-center justify-center rounded-xs", selected && "border border-border bg-card")}
-                  hitSlop={SEGMENT_HIT_SLOP}
-
-                  onPress={() => {
-                    createDraft.reset();
-                    setPace(value);
-                  }}
-
-                  testID={`schedule-conditions.pace-${value.toLowerCase()}`}
-                >
-                  <Text className={selected ? "text-label text-foreground" : "text-body-sm text-foreground-secondary"}>{SCHEDULE_PACE_LABEL[value]}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
         </View>
       </ScrollView>
       <BottomCta className="border-t border-border">

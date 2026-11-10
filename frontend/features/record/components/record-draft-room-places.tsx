@@ -14,14 +14,14 @@ async function getCandidateLocation(candidate: RoomPlace): Promise<RecordPlace |
   let cursor: string | null = null;
 
   do {
-    const page = await searchPlaces({ keyword: candidate.name, cursor, size: 20 });
+    const page = await searchPlaces({ query: candidate.name, cursor, limit: 20 });
 
     const place = page.places.find((item) => {
-      return item.id === candidate.placeId;
+      return item.key === candidate.placeKey;
     });
 
     if (place) {
-      return { ...place.coordinate, name: place.name, address: place.address, categoryCode: place.category?.code ?? null,
+      return { ...place.coordinate, name: place.name, address: place.address, categoryCode: place.categoryCode,
         provider: "MANUAL", providerPlaceId: null, imageUrl: place.photoUrl, imageAttribution: null };
     }
 

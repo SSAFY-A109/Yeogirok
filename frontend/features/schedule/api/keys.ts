@@ -6,7 +6,12 @@ export const scheduleKeys = {
     return [...scheduleKeys.all, "room", roomId] as const;
   },
 
-  draft: (roomId: number, draftId: number) => {
-    return [...scheduleKeys.all, "draft", roomId, draftId] as const;
+  draft: (roomId: number, draftKey: string) => {
+    return [...scheduleKeys.all, "draft", roomId, draftKey] as const;
+  },
+
+  /** 저장된 일정을 이어받아 만든 초안("일정 조정하기"). */
+  savedDraft: (roomId: number) => {
+    return [...scheduleKeys.all, "saved-draft", roomId] as const;
   },
 };

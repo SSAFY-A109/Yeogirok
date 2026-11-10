@@ -9,58 +9,61 @@ import { Text } from "@/components/ui/text";
 import type { RecommendedPlace } from "@/features/recommendation/model";
 import { cn } from "@/lib/utils";
 
-/** `added`: 이미 여행방에 담긴 곳. 체크된 채 비활성으로 보인다. */
-export type RecommendedPlaceCardState = "unselected" | "selected" | "added";
+/**
+ * `added`: 이미 여행방에 담긴 곳. 체크된 채 비활성으로 보인다.
+ * `unavailable`: 장소 식별값(`providerPlaceId`)이 없어 담을 수 없는 곳. 체크 없이 비활성으로 보인다.
+ */
+export type RecommendedPlaceCardState = "unselected" | "selected" | "added" | "unavailable";
 
 type RecommendedPlaceCardProps = {
-  place: RecommendedPlace;
+  recommendation: RecommendedPlace;
+  /** 공통 카테고리 목록에서 찾은 이름. 못 찾았으면 `null`. */
+  categoryName: string | null;
   state: RecommendedPlaceCardState;
-  onToggle: (placeId: number) => void;
+  onToggle: (placeKey: string) => void;
 };
 
-/** 카드 보조 줄(카테고리 이름 + 서버가 준 이동 문구). 둘 다 없으면 `null`. */
-function getRecommendedPlaceSubtitle(place: RecommendedPlace): string | null {
-  const parts = [place.category?.name, place.routeHint].filter((part): part is string => {
-    return Boolean(part);
-  });
-
-  return parts.length > 0 ? parts.join(" ") : null;
-}
+const DISABLED_HINT: Readonly<Partial<Record<RecommendedPlaceCardState, string>>> = {
+  added: "이미 담은 장소예요",
+  unavailable: "담을 수 없는 장소예요",
+};
 
 /** AI 추천 장소 카드(Figma W11 `RecCard`). 카드 전체를 눌러 담을 곳을 고른다. */
-export function RecommendedPlaceCard({ place, state, onToggle }: RecommendedPlaceCardProps) {
+export function RecommendedPlaceCard({ recommendation, categoryName, state, onToggle }: RecommendedPlaceCardProps) {
+  const { place, reason } = recommendation;
   const isAdded = state === "added";
+  const isDisabled = isAdded || state === "unavailable";
   const isSelected = state === "selected";
-  const subtitle = getRecommendedPlaceSubtitle(place);
+  const isChecked = isSelected || isAdded;
 
-  const accessibilityLabel = [place.name, subtitle, place.reason]
+  const accessibilityLabel = [place.name, categoryName, reason]
     .filter((part): part is string => {
       return Boolean(part);
     })
     .join(", ");
 
   const handleToggle = () => {
-    onToggle(place.placeId);
+    onToggle(place.key);
   };
 
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={isAdded ? "이미 담은 장소예요" : undefined}
-      accessibilityState={{ checked: state !== "unselected", disabled: isAdded }}
+      accessibilityHint={DISABLED_HINT[state]}
+      accessibilityState={{ checked: isChecked, disabled: isDisabled }}
       className={cn("gap-3 rounded-md border border-border bg-card p-4", isSelected && "border-2 border-ring bg-accent")}
-      disabled={isAdded}
+      disabled={isDisabled}
       onPress={handleToggle}
-      testID={`recommend.card-${place.placeId}`}
+      testID={`recommend.card-${place.key}`}
     >
       <View className="flex-row items-center gap-3">
         <MediaPhoto uri={place.photoUrl} className="size-14" />
         <View className="min-w-0 flex-1 gap-1">
-          <Text className={cn("text-label text-foreground", isAdded && "text-muted-foreground")} numberOfLines={1}>
+          <Text className={cn("text-label text-foreground", isDisabled && "text-muted-foreground")} numberOfLines={1}>
             {place.name}
           </Text>
-          {subtitle ? <Text className="text-caption text-foreground-secondary">{subtitle}</Text> : null}
+          {categoryName ? <Text className="text-caption text-foreground-secondary">{categoryName}</Text> : null}
         </View>
         {isAdded ? (
           <Badge>
@@ -68,13 +71,13 @@ export function RecommendedPlaceCard({ place, state, onToggle }: RecommendedPlac
           </Badge>
         ) : null}
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Checkbox checked={state !== "unselected"} disabled={isAdded} onCheckedChange={handleToggle} />
+          <Checkbox checked={isChecked} disabled={isDisabled} onCheckedChange={handleToggle} />
         </View>
       </View>
-      {place.reason ? (
+      {reason ? (
         <View className={cn("flex-row items-start gap-2 rounded-sm bg-muted p-3", isSelected && "bg-card")}>
           <Icon as={Sparkles} size={14} className="mt-0.5 text-icon-active" />
-          <Text className="flex-1 text-caption text-foreground-secondary">{place.reason}</Text>
+          <Text className="flex-1 text-caption text-foreground-secondary">{reason}</Text>
         </View>
       ) : null}
     </Pressable>

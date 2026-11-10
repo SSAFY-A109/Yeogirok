@@ -13,12 +13,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { TextField } from "@/components/ui/text-field";
 import { useToast } from "@/components/ui/toast";
+import { useCategories } from "@/features/common/api/queries";
 import { useSearchPlaces } from "@/features/place/api/queries";
 import { PlaceSearchMap } from "@/features/place/components/place-search-map";
 import { PlaceSearchRow, type PlaceSearchRowState } from "@/features/place/components/place-search-row";
 import { getPlaceErrorMessage } from "@/features/place/errors";
+import { findCategoryName, type Place, type PlaceRef } from "@/features/place/model";
 import { useAddRoomPlaces, useRoomPlaces } from "@/features/room/api/queries";
 import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
+import type { AddRoomPlaceItemDto } from "@/features/room/model";
+import { useIdempotencyKeyFor } from "@/hooks/use-idempotency-key";
 
 /** 입력이 멈춘 뒤 검색을 보내기까지 기다리는 시간. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -43,13 +47,15 @@ function SearchPlacesContent({ roomId }: { roomId: number }) {
   const [input, setInput] = useState("");
   const [keyword, setKeyword] = useState("");
 
-  const [selectedPlaceIds, setSelectedPlaceIds] = useState<ReadonlySet<number>>(() => {
-    return new Set();
+  const [selectedRefs, setSelectedRefs] = useState<ReadonlyMap<string, PlaceRef>>(() => {
+    return new Map();
   });
 
   const search = useSearchPlaces(keyword);
+  const categories = useCategories();
   const roomPlaces = useRoomPlaces(roomId);
   const addRoomPlaces = useAddRoomPlaces();
+  const getIdempotencyKey = useIdempotencyKeyFor();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -71,30 +77,44 @@ function SearchPlacesContent({ roomId }: { roomId: number }) {
     return <SearchRoomNotFound />;
   }
 
-  const addedPlaceIds = new Set(roomPlaces.data?.map((place) => {
-    return place.placeId;
+  const totalCount = search.data?.pages[0]?.totalCount ?? places.length;
+
+  const addedPlaceKeys = new Set(roomPlaces.data?.map((place) => {
+    return place.placeKey;
   }));
 
-  const newPlaceIds = [...selectedPlaceIds].filter((placeId) => {
-    return !addedPlaceIds.has(placeId);
-  });
+  const newItems: AddRoomPlaceItemDto[] = [...selectedRefs]
+    .filter(([placeKey]) => {
+      return !addedPlaceKeys.has(placeKey);
+    })
+    .map(([, placeRef]) => {
+      return { placeRef, sourceType: "SEARCH" };
+    });
 
-  function getRowState(placeId: number): PlaceSearchRowState {
-    if (addedPlaceIds.has(placeId)) {
+  function getRowState(place: Place): PlaceSearchRowState {
+    if (addedPlaceKeys.has(place.key)) {
       return "added";
     }
 
-    return selectedPlaceIds.has(placeId) ? "selected" : "unselected";
+    if (place.ref === null) {
+      return "unavailable";
+    }
+
+    return selectedRefs.has(place.key) ? "selected" : "unselected";
   }
 
-  function togglePlace(placeId: number) {
-    setSelectedPlaceIds((previous) => {
-      const next = new Set(previous);
+  function togglePlace(place: Place) {
+    const { key, ref } = place;
 
-      if (next.has(placeId)) {
-        next.delete(placeId);
-      } else {
-        next.add(placeId);
+    if (ref === null) {
+      return;
+    }
+
+    setSelectedRefs((previous) => {
+      const next = new Map(previous);
+
+      if (!next.delete(key)) {
+        next.set(key, ref);
       }
 
       return next;
@@ -109,9 +129,9 @@ function SearchPlacesContent({ roomId }: { roomId: number }) {
 
   function addSelectedPlaces() {
     addRoomPlaces.mutate(
-      { roomId, request: { placeIds: newPlaceIds, source: "SEARCH", recommendationRequestId: null } },
+      { roomId, items: newItems, idempotencyKey: getIdempotencyKey(JSON.stringify(newItems)) },
       {
-        onSuccess: (addedPlaces) => {
+        onSuccess: ({ places: addedPlaces }) => {
           toast.show({ message: `${addedPlaces.length}곳을 담았어요` });
           router.back();
         },
@@ -149,17 +169,24 @@ function SearchPlacesContent({ roomId }: { roomId: number }) {
         className="flex-1"
         contentContainerClassName="pb-4"
         data={places}
-        extraData={{ selectedPlaceIds, addedPlaceIds }}
+        extraData={{ selectedRefs, addedPlaceKeys, categories: categories.data }}
         keyExtractor={(place) => {
-          return String(place.id);
+          return place.key;
         }}
         renderItem={({ item }) => {
-          return <PlaceSearchRow place={item} state={getRowState(item.id)} onToggle={togglePlace} />;
+          return (
+            <PlaceSearchRow
+              place={item}
+              categoryName={findCategoryName(categories.data, item.categoryCode)}
+              state={getRowState(item)}
+              onToggle={togglePlace}
+            />
+          );
         }}
         ItemSeparatorComponent={RowSeparator}
         ListHeaderComponent={
           <Text className="px-5 pb-1 pt-3 text-label text-foreground-secondary" testID="place-search.count">
-            {`검색 결과 ${places.length}곳`}
+            {`검색 결과 ${totalCount}곳`}
           </Text>
         }
         ListFooterComponent={
@@ -243,13 +270,13 @@ function SearchPlacesContent({ roomId }: { roomId: number }) {
         <Button
           size="lg"
           className="w-full"
-          disabled={newPlaceIds.length === 0 || !roomPlaces.isSuccess}
+          disabled={newItems.length === 0 || !roomPlaces.isSuccess}
           loading={addRoomPlaces.isPending}
           loadingLabel="담는 중"
           onPress={addSelectedPlaces}
           testID="place-search.submit"
         >
-          <Text>{`${newPlaceIds.length}곳 담기`}</Text>
+          <Text>{`${newItems.length}곳 담기`}</Text>
         </Button>
       </BottomCta>
     </KeyboardAvoidingView>

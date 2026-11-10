@@ -9,25 +9,26 @@ export type MockRecord = {
   publication: { description: string; publishedAt: string; imageIds: number[] } | null;
 };
 
-export function makeMockRecord(id: number, room: MockRoom, title = room.detail.name): MockRecord {
-  const { roomId, startDate, endDate, members } = room.detail;
+export function makeMockRecord(id: number, room: MockRoom, title = room.title): MockRecord {
+  const { id: roomId, startDate, endDate, members } = room;
   return {
     detail: {
       id, roomId, title, startDate, endDate, status: "DRAFT", version: 1,
 
-      members: members.map(({ userId, nickname, me }) => {
-        return { userId, nickname, isCreator: me };
+      members: members.map(({ userId, nickname, isCreator }) => {
+        return { userId, nickname, isCreator };
       }),
 
       progress: { stage: "UPLOAD", draftKey: null, jobId: null },
       plannedSchedule: room.schedule && {
-        roomId, version: room.schedule.version,
+        roomId, version: room.version,
 
         days: room.schedule.days.map((day) => {
-          return { ...day,
+          return { date: day.date,
 
-            stops: day.stops.map((stop) => {
-              return { ...stop };
+            // 확정 일정의 도착 시각(`yyyy-MM-dd HH:mm:ss+09`)에서 시·분만 쓴다. 모르면 null이다.
+            stops: day.items.map((item) => {
+              return { roomPlaceId: item.roomPlaceId, arrivalTime: item.arrivalAt === null ? null : item.arrivalAt.slice(11, 16) };
             }) };
         }),
       },
@@ -46,7 +47,7 @@ export const mockVisitPlace: RecordPlace = {
 
 export function createRecordFixtures(rooms: MockRoom[]) {
   const room = rooms.find((item) => {
-    return item.detail.roomId === 3;
+    return item.id === 3;
   })!;
 
   const record = makeMockRecord(1, room);
@@ -96,7 +97,7 @@ export function publicRecordDays(record: MockRecord, includePhoto: (imageId: num
 }
 
 export function publicRecordAuthors(room: MockRoom) {
-  return room.detail.members.map(({ userId, profileImageUrl }) => {
+  return room.members.map(({ userId, profileImageUrl }) => {
     return { id: userId, profileImageUrl };
   }).sort((a, b) => {
     return a.id - b.id;

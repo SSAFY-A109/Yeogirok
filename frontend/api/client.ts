@@ -150,7 +150,7 @@ async function refreshAccessToken(): Promise<string> {
       const tokens = await getTokens();
 
       if (!tokens) {
-        throw new ApiError(401, "C004", "갱신할 인증 토큰이 없습니다.");
+        throw new ApiError(401, "A001", "갱신할 인증 토큰이 없습니다.");
       }
 
       const { data } = await api.post<unknown>("/auth/token/refresh", {

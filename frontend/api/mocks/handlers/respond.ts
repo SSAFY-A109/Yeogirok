@@ -26,9 +26,9 @@ export function requireMockBearer(request: Request) {
   }
 }
 
-/** 없는 여행방. 도메인 code는 명세 미확정이라 목 전용 값을 쓴다(TBD). */
+/** 없는 여행방(서버 `ROOM_NOT_FOUND`). */
 export function roomNotFound() {
-  return fail(404, "RO404", "여행방을 찾을 수 없습니다.");
+  return fail(404, "RO001", "여행방을 찾을 수 없습니다.");
 }
 
 /** 경로의 숫자 id를 읽는다. 숫자가 아니면 `null`. */

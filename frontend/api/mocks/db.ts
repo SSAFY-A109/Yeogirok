@@ -1,9 +1,9 @@
 import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
-import type { CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
-import type { ScheduleBodyDto } from "../../features/schedule/model";
+import type { AddRoomPlacesResponseDto, CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
 
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
+import type { MockScheduleDraft } from "./fixtures/schedule";
 import { createFootprintFixtures, type MockFootprint } from "./fixtures/footprint";
 import { createTipFixtures, type MockTip } from "./fixtures/tip";
 import type { MockIdempotentResponse, MockUpload } from "./fixtures/media";
@@ -11,19 +11,6 @@ import { createRecordFixtures, type MockRecord } from "./fixtures/record";
 
 /** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
 type MockIdempotencyRecord = { requestHash: string; response: CreateFootprintResponseDto };
-
-/** 목 서버가 들고 있는 일정 초안 작업. `readyAt`이 지나야 완료로 보인다. */
-export type MockScheduleDraft = {
-  draftId: number;
-  roomId: number;
-  idempotencyKey: string;
-  /** 같은 멱등키로 다른 내용을 보냈는지 가리는 요청 본문. */
-  requestBody: string;
-  baseVersion: number | null;
-  readyAt: number;
-  schedule: ScheduleBodyDto | null;
-  failureCode: string | null;
-};
 
 type MockDb = {
   tips: Map<number, MockTip>;
@@ -38,15 +25,19 @@ type MockDb = {
   rooms: Map<number, MockRoom>;
   roomCreateRequests: Map<string, { requestBody: string; response: CreateRoomResponseDto }>;
   courseImportRequests: Map<string, { requestBody: string; response: ImportCoursePlacesResponseDto }>;
+  /** API-029 담기 요청. 키는 `여행방 id:멱등키`다. */
+  roomPlaceRequests: Map<string, { requestBody: string; response: AddRoomPlacesResponseDto }>;
   preferences: Map<number, RecommendationPreferenceDto>;
   footprints: Map<number, MockFootprint>;
   footprintRequests: Map<string, MockIdempotencyRecord>;
-  scheduleDrafts: Map<number, MockScheduleDraft>;
+  /** 일정 초안. 키는 `draftKey`다. */
+  scheduleDrafts: Map<string, MockScheduleDraft>;
   nextRoomId: number;
   nextRoomPlaceId: number;
   nextRecommendationRequestId: number;
   nextFootprintId: number;
-  nextScheduleDraftId: number;
+  /** 일정 초안 키·작업 id를 만들 때 쓰는 일련번호. */
+  nextScheduleSeq: number;
 };
 
 function createDb(): MockDb {
@@ -65,11 +56,12 @@ function createDb(): MockDb {
     nextUploadId: 1,
 
     rooms: new Map(rooms.map((room) => {
-      return [room.detail.roomId, room];
+      return [room.id, room];
     })),
 
     roomCreateRequests: new Map(),
     courseImportRequests: new Map(),
+    roomPlaceRequests: new Map(),
 
     preferences: new Map(),
 
@@ -87,7 +79,7 @@ function createDb(): MockDb {
       return item.id;
     })) + 1,
 
-    nextScheduleDraftId: 1,
+    nextScheduleSeq: 1,
   };
 }
 
@@ -97,11 +89,4 @@ export const mockDb: MockDb = createDb();
 /** 테스트에서 목 상태를 처음으로 되돌린다. */
 export function resetMockDb(): void {
   Object.assign(mockDb, createDb());
-}
-
-/** 장소 수·일정 요약처럼 다른 값에서 나오는 필드를 다시 맞춘다. */
-export function syncRoomDerivedFields(room: MockRoom): void {
-  room.detail.placeCount = room.places.length;
-  room.detail.memberCount = room.detail.members.length;
-  room.detail.schedule = room.schedule === null ? null : { createdAt: room.schedule.createdAt };
 }

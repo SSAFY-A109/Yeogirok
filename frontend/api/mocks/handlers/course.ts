@@ -67,7 +67,7 @@ function publishedRecordCourse(courseId: number) {
   const authors = publicRecordAuthors(room);
   const dayCount = days.length;
   const nightCount = Math.max(0, dayCount - 1);
-  const transportMode = room.detail.transportMode === "PUBLIC_TRANSIT" ? "TRANSIT" : room.detail.transportMode;
+  const { transportMode } = room;
 
   const visits = days.flatMap((day) => {
     return day.items;

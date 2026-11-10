@@ -16,6 +16,7 @@ import { InviteLinkSection } from "@/features/room/components/invite-link-sectio
 import { MemberAvatar } from "@/features/room/components/member-avatar";
 import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
 import { isRoomFull, type RoomDetail, type RoomMember } from "@/features/room/model";
+import { useMe } from "@/features/user/api/queries";
 
 /** 일행이 많을 때 처음 보여 주는 인원. 나머지는 "외 N명 더 보기"로 펼친다(Figma W08-F). */
 const COLLAPSED_MEMBER_COUNT = 3;
@@ -81,6 +82,8 @@ function InviteRoomContent({ roomId }: { roomId: number }) {
 
 function InviteBody({ room }: { room: RoomDetail }) {
   const [membersExpanded, setMembersExpanded] = useState(false);
+  // 참여자 응답에는 "나" 표시가 없어 내 계정 id와 비교한다.
+  const myUserId = useMe().data?.id ?? null;
   const isFull = isRoomFull(room);
   const hiddenMemberCount = membersExpanded ? 0 : Math.max(room.members.length - COLLAPSED_MEMBER_COUNT, 0);
   const visibleMembers = hiddenMemberCount > 0 ? room.members.slice(0, COLLAPSED_MEMBER_COUNT) : room.members;
@@ -94,7 +97,7 @@ function InviteBody({ room }: { room: RoomDetail }) {
         return String(member.id);
       }}
       renderItem={({ item, index }) => {
-        return <InviteMemberRow member={item} toneIndex={index} />;
+        return <InviteMemberRow member={item} isMe={item.id === myUserId} toneIndex={index} />;
       }}
       ListHeaderComponent={
         <View className="gap-6">
@@ -134,11 +137,11 @@ function InviteBody({ room }: { room: RoomDetail }) {
   );
 }
 
-function InviteMemberRow({ member, toneIndex }: { member: RoomMember; toneIndex: number }) {
+function InviteMemberRow({ member, isMe, toneIndex }: { member: RoomMember; isMe: boolean; toneIndex: number }) {
   return (
     <View
       accessible
-      accessibilityLabel={member.isMe ? `${member.nickname}, 나` : member.nickname}
+      accessibilityLabel={isMe ? `${member.nickname}, 나` : member.nickname}
       className="mt-2 flex-row items-center gap-3 py-2"
     >
       <MemberAvatar initial={member.initial} toneIndex={toneIndex} size="lg" />
@@ -146,7 +149,7 @@ function InviteMemberRow({ member, toneIndex }: { member: RoomMember; toneIndex:
         <Text className="text-label text-foreground" numberOfLines={1}>
           {member.nickname}
         </Text>
-        {member.isMe ? <Text className="text-caption text-muted-foreground">나</Text> : null}
+        {isMe ? <Text className="text-caption text-muted-foreground">나</Text> : null}
       </View>
     </View>
   );

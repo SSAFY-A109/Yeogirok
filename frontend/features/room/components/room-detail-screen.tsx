@@ -144,7 +144,7 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
     router.push({ pathname: "/rooms/[roomId]/schedule/draft", params });
   };
 
-  const showAdjustButton = tab === "schedule" && room.scheduleCreatedAt !== null;
+  const showAdjustButton = tab === "schedule" && room.hasSchedule;
 
   const header = (
     <>

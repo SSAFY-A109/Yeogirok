@@ -1,7 +1,20 @@
-import { assertId, toKnownEnum } from "@/lib/contract";
+import { assertId, ContractMismatchError, toKnownEnum } from "@/lib/contract";
 import { formatDateRange, formatMonthDay, formatServerDateTime, parseLocalDate, parseNullableLocalDate, parseServerDateTime } from "@/lib/date";
-import { parseLocalTime, type ScheduleDayDto } from "@/features/schedule/model";
 import type { CoursePreviewDto } from "@/features/course/model";
+
+/** 여행방 확정 일정에서 가져온 참고 계획의 하루. 서버는 일정 연동 전이라 아직 `plannedSchedule`을 항상 `null`로 준다. */
+type PlannedDayDto = { date: string; stops: { roomPlaceId: number; arrivalTime: string | null }[] };
+
+const LOCAL_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** 하루 안의 시각 `HH:mm`(24시간)인지 검증하고 그대로 돌려준다. */
+function parseLocalTime(value: unknown, field: string): string {
+  if (typeof value !== "string" || !LOCAL_TIME_PATTERN.test(value)) {
+    throw new ContractMismatchError(field);
+  }
+
+  return value;
+}
 
 const stages = ["UPLOAD", "RECEIPT_REVIEW", "READY_TO_GENERATE", "PROCESSING", "REVIEW", "EDIT", "COMPLETED"] as const;
 const statuses = ["DRAFT", "COMPLETED"] as const;
@@ -86,7 +99,7 @@ export type RecordUpload = {
 };
 export type RecordDetailDto = RecordBaseDto & {
   members: (Member & { isCreator: boolean })[];
-  plannedSchedule: { roomId: number; version: number; days: ScheduleDayDto[] } | null;
+  plannedSchedule: { roomId: number; version: number; days: PlannedDayDto[] } | null;
   uploads: RecordUpload[];
   photoPool: RecordPhoto[];
   actualVisits: ActualVisit[];

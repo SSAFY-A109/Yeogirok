@@ -17,7 +17,7 @@ export type DayChipItem = {
   label: string;
   /** 일정 탭은 날짜(`11/8 일`), 초안 조정은 장소 수(`5곳`). */
   caption: string;
-  /** 넣지 못한 장소가 있는 날(코랄 점). */
+  /** 서버 경고가 있는 날(코랄 점). */
   hasWarning: boolean;
 };
 
@@ -58,7 +58,7 @@ export function DayChips({ items, selectedDate, onSelect, onOpenPicker, testID }
             <Pressable
               key={item.date}
               accessibilityRole="button"
-              accessibilityLabel={`${item.label} ${item.caption}${item.hasWarning ? ", 넣지 못한 장소 있음" : ""}`}
+              accessibilityLabel={`${item.label} ${item.caption}${item.hasWarning ? ", 확인할 내용 있음" : ""}`}
               accessibilityState={{ selected }}
               className={cn("h-14 w-16 items-center justify-center rounded-md border", selected ? "border-primary bg-primary" : "border-border bg-card active:bg-muted")}
 

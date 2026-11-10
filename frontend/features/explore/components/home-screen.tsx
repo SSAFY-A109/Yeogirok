@@ -15,6 +15,8 @@ import type { Category } from "@/features/common/model";
 import { useCourseRecommendations, usePopularPlaces } from "@/features/course/api/queries";
 import { getCourseErrorMessage } from "@/features/course/errors";
 import type { PopularPlace } from "@/features/course/model";
+import type { PlaceRefDto } from "@/features/room/model";
+import { formatPlaceRefsParam } from "@/features/room/route-params";
 import { cn } from "@/lib/utils";
 import { categoryIconOf } from "./category-icons";
 import { FeaturedCarousel } from "./featured-carousel";
@@ -198,16 +200,20 @@ function CategoryGrid({ categories, selected, onSelect }: { categories: Category
   );
 }
 
-/** 새 여행방 화면은 숫자 장소 id만 받는다. TourAPI 장소의 숫자 식별값만 넘기고, 나머지는 준비 중으로 둔다(TBD). */
-function carryOverPlaceId(place: PopularPlace): string | null {
-  return place.provider === "TOUR_API" && place.providerPlaceId !== null && /^\d+$/.test(place.providerPlaceId) ? place.providerPlaceId : null;
+/** 새 여행방에 이어 담을 때(API-029) 장소를 가리키는 값. 공급자를 모르거나 장소 식별값이 없으면 담을 수 없어 `null`이다. */
+function toCarryOverPlaceRef(place: PopularPlace): PlaceRefDto | null {
+  if (place.provider === "UNKNOWN" || !place.providerPlaceId) {
+    return null;
+  }
+
+  return { provider: place.provider, providerPlaceId: place.providerPlaceId };
 }
 
 function RankingSection({ category }: { category: string | null }) {
   const ranking = usePopularPlaces(category);
   const [sheetPlace, setSheetPlace] = useState<PopularPlace>();
   const [notice, setNotice] = useState("");
-  const carryOverId = sheetPlace ? carryOverPlaceId(sheetPlace) : null;
+  const carryOverPlaceRef = sheetPlace ? toCarryOverPlaceRef(sheetPlace) : null;
 
   return (
     <View className="gap-4" testID="home.ranking">
@@ -256,9 +262,13 @@ function RankingSection({ category }: { category: string | null }) {
           setSheetPlace(undefined);
           setNotice(`${result.roomName}에 ${result.addedCount}곳을 담았어요`);
         }}
-        onCreateRoom={sheetPlace && carryOverId !== null ? () => {
+        onCreateRoom={sheetPlace && carryOverPlaceRef !== null ? () => {
           setSheetPlace(undefined);
-          router.push({ pathname: "/rooms/new", params: { placeIds: carryOverId, placeNames: sheetPlace.name } });
+
+          router.push({
+            pathname: "/rooms/new",
+            params: { placeRefs: formatPlaceRefsParam([carryOverPlaceRef]), placeNames: sheetPlace.name },
+          });
         } : undefined}
       >
         {sheetPlace && <PlaceLocationMap place={sheetPlace} />}

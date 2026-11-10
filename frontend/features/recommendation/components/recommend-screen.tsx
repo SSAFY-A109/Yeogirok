@@ -16,17 +16,20 @@ import { useRecommendationPreference, useRecommendPlaces } from "@/features/reco
 import {
   getConditionLabels,
   getInitialConditions,
+  getMissingConditionMessage,
+  getSelectedCategoryNames,
   RecommendConditions,
-  toRecommendationRequest,
+  toRecommendationConditions,
   type RecommendConditionsValue,
 } from "@/features/recommendation/components/recommend-conditions";
 import { RecommendLoading } from "@/features/recommendation/components/recommend-loading";
 import { RecommendResults } from "@/features/recommendation/components/recommend-results";
 import { getRecommendationErrorMessage } from "@/features/recommendation/errors";
-import type { RecommendationPreference } from "@/features/recommendation/model";
+import type { PlaceRecommendations, RecommendationPreference } from "@/features/recommendation/model";
 import { useAddRoomPlaces, useRoom, useRoomPlaces } from "@/features/room/api/queries";
 import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
-import type { RoomDetail, RoomPlace } from "@/features/room/model";
+import type { AddRoomPlaceItemDto, RoomDetail, RoomPlace } from "@/features/room/model";
+import { useIdempotencyKeyFor } from "@/hooks/use-idempotency-key";
 
 const CONDITIONS_TITLE = "AI 장소 추천";
 const RESULTS_TITLE = "추천 장소";
@@ -124,12 +127,15 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
     return getInitialConditions(preference, categories, regions);
   });
 
-  const [excludedPlaceIds, setExcludedPlaceIds] = useState<ReadonlySet<number>>(() => {
+  const [excludedPlaceKeys, setExcludedPlaceKeys] = useState<ReadonlySet<string>>(() => {
     return new Set();
   });
 
   const recommendPlaces = useRecommendPlaces(roomId);
   const addRoomPlaces = useAddRoomPlaces();
+  const getRecommendationKey = useIdempotencyKeyFor();
+  const getAddPlacesKey = useIdempotencyKeyFor();
+  const missingConditionMessage = getMissingConditionMessage(conditions);
 
   function returnToConditions() {
     if (addRoomPlaces.isPending) {
@@ -145,36 +151,57 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
     returnToConditions();
   });
 
-  const addedPlaceIds = new Set(roomPlaces.map((place) => {
-    return place.placeId;
+  const addedPlaceKeys = new Set(roomPlaces.map((place) => {
+    return place.placeKey;
   }));
 
   function requestRecommendation() {
-    setExcludedPlaceIds(new Set());
+    const recommendationConditions = toRecommendationConditions(conditions);
+
+    if (recommendationConditions === null) {
+      return;
+    }
+
+    setExcludedPlaceKeys(new Set());
     addRoomPlaces.reset();
     setStep("recommend");
-    recommendPlaces.mutate(toRecommendationRequest(conditions));
+
+    recommendPlaces.mutate({
+      conditions: recommendationConditions,
+      idempotencyKey: getRecommendationKey(JSON.stringify(recommendationConditions)),
+    });
   }
 
-  function togglePlace(placeId: number) {
-    setExcludedPlaceIds((previous) => {
+  function togglePlace(placeKey: string) {
+    setExcludedPlaceKeys((previous) => {
       const next = new Set(previous);
 
-      if (next.has(placeId)) {
-        next.delete(placeId);
-      } else {
-        next.add(placeId);
+      if (!next.delete(placeKey)) {
+        next.add(placeKey);
       }
 
       return next;
     });
   }
 
-  function addPlaces(recommendationRequestId: number, placeIds: number[]) {
+  /** 고른 추천 장소를 담기 요청 항목으로 바꾼다. 이미 담긴 곳, 뺀 곳, 담을 수 없는 곳은 넣지 않는다. */
+  function getSelectedItems(result: PlaceRecommendations): AddRoomPlaceItemDto[] {
+    const items: AddRoomPlaceItemDto[] = [];
+
+    for (const { place, rank } of result.places) {
+      if (place.ref !== null && !addedPlaceKeys.has(place.key) && !excludedPlaceKeys.has(place.key)) {
+        items.push({ placeRef: place.ref, sourceType: "AI", recommendationRequestId: result.requestId, rank });
+      }
+    }
+
+    return items;
+  }
+
+  function addPlaces(items: AddRoomPlaceItemDto[]) {
     addRoomPlaces.mutate(
-      { roomId, request: { placeIds, source: "AI_RECOMMENDATION", recommendationRequestId } },
+      { roomId, items, idempotencyKey: getAddPlacesKey(JSON.stringify(items)) },
       {
-        onSuccess: (addedPlaces) => {
+        onSuccess: ({ places: addedPlaces }) => {
           toast.show({ message: `${addedPlaces.length}곳을 담았어요` });
           disableBackPrevention();
           router.back();
@@ -196,7 +223,18 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
             onChange={setConditions}
           />
           <BottomCta>
-            <Button size="lg" className="w-full" onPress={requestRecommendation} testID="recommend.submit">
+            {missingConditionMessage !== null ? (
+              <Text className="text-center text-caption text-foreground-secondary" testID="recommend.requirement">
+                {missingConditionMessage}
+              </Text>
+            ) : null}
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={missingConditionMessage !== null}
+              onPress={requestRecommendation}
+              testID="recommend.submit"
+            >
               <Text>추천 받기</Text>
             </Button>
           </BottomCta>
@@ -207,20 +245,16 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
     const result = recommendPlaces.data;
 
     if (result !== undefined) {
-      const selectedPlaceIds = result.places
-        .filter((place) => {
-          return !addedPlaceIds.has(place.placeId) && !excludedPlaceIds.has(place.placeId);
-        })
-        .map((place) => {
-          return place.placeId;
-        });
+      const selectedItems = getSelectedItems(result);
 
       return (
         <>
           <RecommendResults
             result={result}
-            addedPlaceIds={addedPlaceIds}
-            excludedPlaceIds={excludedPlaceIds}
+            categories={categories}
+            criteria={getSelectedCategoryNames(conditions, categories)}
+            addedPlaceKeys={addedPlaceKeys}
+            excludedPlaceKeys={excludedPlaceKeys}
             onToggle={togglePlace}
             onReselect={returnToConditions}
           />
@@ -234,15 +268,15 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
               <Button
                 size="lg"
                 className="w-full"
-                disabled={selectedPlaceIds.length === 0}
+                disabled={selectedItems.length === 0}
                 loading={addRoomPlaces.isPending}
                 loadingLabel="담는 중"
                 onPress={() => {
-                  addPlaces(result.requestId, selectedPlaceIds);
+                  addPlaces(selectedItems);
                 }}
                 testID="recommend.add"
               >
-                <Text>{`${selectedPlaceIds.length}곳 담기`}</Text>
+                <Text>{`${selectedItems.length}곳 담기`}</Text>
               </Button>
             </BottomCta>
           ) : null}

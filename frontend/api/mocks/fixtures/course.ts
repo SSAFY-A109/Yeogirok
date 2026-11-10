@@ -130,21 +130,21 @@ function photoUrl(visitId: number): string {
 }
 
 function toPlace(catalogPlaceId: number): PlaceDto {
-  const place = findCatalogPlace(catalogPlaceId);
+  const place = findCatalogPlace(String(catalogPlaceId));
 
   if (place === null) {
     throw new Error(`목 장소가 없습니다: ${catalogPlaceId}`);
   }
 
   return {
-    provider: "TOUR_API",
-    providerPlaceId: String(place.placeId),
+    provider: place.provider,
+    providerPlaceId: place.providerPlaceId,
     name: place.name,
     latitude: place.latitude,
     longitude: place.longitude,
     address: place.address,
-    categoryCode: place.category?.code ?? null,
-    categoryName: place.category?.name ?? null,
+    categoryCode: place.categoryCode,
+    categoryName: place.categoryName,
     imageUrl: null,
     imageAttribution: null,
   };

@@ -1,11 +1,13 @@
 import { getErrorMessage, isApiError } from "@/api/errors";
 
-/**
- * 계획 일정(SC) 도메인 code별 문구. 도메인 code는 명세 미확정이라 아직 없다(TBD).
- * C018은 백엔드 공통 멱등키 처리의 "같은 요청 처리 중"이다(`backend/dev` ExceptionType, 2026-11-04 확인).
- */
+/** 계획 일정(SC)·여행방(RO) code별 문구. 번호는 백엔드 `ExceptionType`(backend/dev, 2026-11-10)과 같다. */
 const SCHEDULE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
-  C018: "같은 요청을 처리하고 있어요. 잠시 후 다시 시도해 주세요.",
+  SC001: "일정 초안을 찾을 수 없어요. 일정을 다시 만들어 주세요.",
+  SC002: "종료 시각을 넘기는 날이 있어요. 머무는 시간을 줄이거나 장소를 다른 날로 옮긴 뒤 다시 시도해 주세요.",
+  SC003: "아직 계산하고 있어요. 계산이 끝난 뒤 다시 시도해 주세요.",
+  SC004: "만들지 못한 초안이에요. 일정을 다시 만들어 주세요.",
+  RO001: "여행방을 찾을 수 없어요.",
+  RO002: "참여 중인 여행방이 아니에요.",
 };
 
 export const SCHEDULE_ERROR_FALLBACK = {
@@ -19,21 +21,31 @@ export function getScheduleErrorMessage(error: unknown, fallback: string = SCHED
   return getErrorMessage(error, SCHEDULE_ERROR_MESSAGES, fallback);
 }
 
-/**
- * 초안 작업이 실패(status FAILED)했을 때 code별 문구. code는 명세 미확정이라 목 값만 둔다(TBD).
- * 모르는 code는 기본 문구로 보여 준다.
- */
+/** 초안을 처음 만들다 실패했을 때(API-038 `error.code`) code별 문구. 모르는 code는 기본 문구로 보여 준다. */
 const DRAFT_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
-  SC_NO_PLACES: "일정에 넣을 후보 장소가 없어요. 장소를 담은 뒤 다시 만들어 주세요.",
+  SC002: "정한 시간 안에 일정을 넣을 수 없었어요. 하루 시간을 늘려 다시 만들어 주세요.",
+  C014: "일정 초안을 만드는 중에 문제가 생겼어요. 잠시 후 다시 만들어 주세요.",
 };
 
 export function getDraftFailureMessage(code: string | null): string {
   return (code === null ? undefined : DRAFT_FAILURE_MESSAGES[code]) ?? "일정 초안을 만들지 못했어요. 다시 시도해 주세요.";
 }
 
-const VERSION_CONFLICT_CODE = "C008";
+const VERSION_MISMATCH_CODE = "C004";
+const DRAFT_IN_PROGRESS_CODE = "SC003";
+const DRAFT_NOT_FOUND_CODE = "SC001";
 
-/** 그사이 일행이 일정을 바꿔 적용이 거절됐는지. */
+/** 그사이 여행방(정보·후보·일정)이나 초안이 바뀌어 요청이 거절됐는지(409 C004). */
 export function isScheduleConflict(error: unknown): boolean {
-  return isApiError(error) && error.code === VERSION_CONFLICT_CODE;
+  return isApiError(error) && error.code === VERSION_MISMATCH_CODE;
+}
+
+/** 같은 초안을 아직 계산하거나 저장하는 중이라 거절됐는지(422 SC003). */
+export function isDraftInProgress(error: unknown): boolean {
+  return isApiError(error) && error.code === DRAFT_IN_PROGRESS_CODE;
+}
+
+/** 초안이 없거나 보관 기간이 지났는지(404 SC001). */
+export function isDraftNotFound(error: unknown): boolean {
+  return isApiError(error) && error.code === DRAFT_NOT_FOUND_CODE;
 }

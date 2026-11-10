@@ -17,15 +17,13 @@ import { LeaveRoomDialog } from "@/features/room/components/leave-room-dialog";
 import { isValidRoomName, RoomNameField, toTripDateRange, TransportModeField, TripDateField } from "@/features/room/components/room-form";
 import { getScheduleImpact, ScheduleImpactDialog, type ScheduleImpact } from "@/features/room/components/schedule-impact-dialog";
 import type { TripDateRange } from "@/features/room/components/trip-date-sheet";
-import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
-import type { RoomDetail, TransportMode, UpdateRoomRequestDto } from "@/features/room/model";
-import { useRoomSchedule } from "@/features/schedule/api/queries";
-import { getScheduleErrorMessage } from "@/features/schedule/errors";
+import { getRoomErrorMessage, ROOM_DATE_RANGE_CODE, ROOM_DATES_IN_USE_CODE, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
+import type { RoomChanges, RoomDetail, TransportMode } from "@/features/room/model";
 
 const HTTP_NOT_FOUND = 404;
 
-/** 날짜 범위가 잘못됐다는 공통 오류 code. 날짜 필드 아래에 보여 준다. */
-const DATE_RANGE_ERROR_CODE = "C016";
+/** 날짜 필드 아래에 보여 줄 오류 code. 날짜 범위·순서 오류와, 일정이 있는 방의 날짜를 비우려 한 경우다. */
+const DATE_FIELD_ERROR_CODES: readonly string[] = [ROOM_DATE_RANGE_CODE, ROOM_DATES_IN_USE_CODE];
 
 /** 로딩 스켈레톤에서 이름·날짜 필드 자리 수. */
 const SKELETON_FIELD_COUNT = 2;
@@ -33,8 +31,8 @@ const SKELETON_FIELD_COUNT = 2;
 type RoomFormValues = { name: string; dateRange: TripDateRange | null; transportMode: TransportMode };
 
 /** 바뀐 항목만 담은 수정 요청. 출발일과 돌아오는 날은 함께 정하거나 비우므로 둘 중 하나라도 바뀌면 함께 보낸다. */
-function getRoomChanges(room: RoomDetail, { name, dateRange, transportMode }: RoomFormValues): UpdateRoomRequestDto {
-  const request: UpdateRoomRequestDto = {};
+function getRoomChanges(room: RoomDetail, { name, dateRange, transportMode }: RoomFormValues): RoomChanges {
+  const request: RoomChanges = {};
   const trimmedName = name.trim();
   const startDate = dateRange?.startDate ?? null;
   const endDate = dateRange?.endDate ?? null;
@@ -66,8 +64,9 @@ function returnToRoom(roomId: number) {
 }
 
 /**
- * 여행방 정보 수정(Figma W06-E). 일정이 있을 때 날짜를 줄이거나 이동 수단을 바꾸면 저장 전에 W06-E2로 묻고,
- * 맨 아래 "여행방 나가기"는 W06-L(혼자 남았으면 W06-L2)을 연다. 편집 권한(참여자 모두·방장)은 DEC-12로 정해지지 않아 모두에게 연다(TBD).
+ * 여행방 정보 수정(Figma W06-E). 일정이 있을 때 날짜나 이동 수단을 바꾸면 서버 미리보기(API-023 `previewOnly`)로
+ * 일정에서 빠질 장소를 받아 저장 전에 W06-E2로 묻고, 맨 아래 "여행방 나가기"는 W06-L(혼자 남았으면 W06-L2)을 연다.
+ * 참여자는 모두 같은 권한이라(팀 확정 정책) 누구나 고칠 수 있다.
  * `roomId`가 `null`이면 여행방을 찾을 수 없다는 안내를 보여 준다.
  */
 export function EditRoomScreen({ roomId }: { roomId: number | null }) {
@@ -110,8 +109,7 @@ function EditRoomContent({ roomId }: { roomId: number }) {
 function EditRoomForm({ room }: { room: RoomDetail }) {
   const toast = useToast();
   const updateRoom = useUpdateRoom();
-  const hasSchedule = room.scheduleCreatedAt !== null;
-  const schedule = useRoomSchedule(room.id, { enabled: hasSchedule });
+  const previewRoom = useUpdateRoom();
   const [name, setName] = useState(room.name);
   const [dateRange, setDateRange] = useState<TripDateRange | null>(toTripDateRange(room));
   const [transportMode, setTransportMode] = useState<TransportMode>(room.transportMode);
@@ -123,24 +121,26 @@ function EditRoomForm({ room }: { room: RoomDetail }) {
   const datesChanged = "startDate" in changes;
   const transportChanged = "transportMode" in changes;
 
-  const needsSchedulePreview = hasSchedule && datesChanged;
-  const schedulePreviewPending = needsSchedulePreview && schedule.isPending;
-  const schedulePreviewFailed = needsSchedulePreview && schedule.isError && schedule.data === undefined;
-  const canSave = hasChanges && isValidRoomName(name) && !schedulePreviewPending && !schedulePreviewFailed;
+  const needsSchedulePreview = room.hasSchedule && (datesChanged || transportChanged);
+  const canSave = hasChanges && isValidRoomName(name);
 
-  const saveError = updateRoom.error;
-  const isDateError = isApiError(saveError) && saveError.code === DATE_RANGE_ERROR_CODE;
+  const saveError = updateRoom.error ?? previewRoom.error;
+  const isDateError = isApiError(saveError) && DATE_FIELD_ERROR_CODES.includes(saveError.code);
   const errorMessage = saveError === null ? null : getRoomErrorMessage(saveError, ROOM_ERROR_FALLBACK.save);
 
   const clearSaveError = () => {
     if (updateRoom.error !== null) {
       updateRoom.reset();
     }
+
+    if (previewRoom.error !== null) {
+      previewRoom.reset();
+    }
   };
 
   const save = () => {
     updateRoom.mutate(
-      { roomId: room.id, request: changes },
+      { roomId: room.id, changes },
       {
         onSuccess: () => {
           setPendingImpact(null);
@@ -156,26 +156,32 @@ function EditRoomForm({ room }: { room: RoomDetail }) {
   };
 
   const handleSavePress = () => {
-    if (!canSave || updateRoom.isPending) {
+    if (!canSave || updateRoom.isPending || previewRoom.isPending) {
       return;
     }
 
-    if (hasSchedule) {
-      const impact = getScheduleImpact({
-        schedule: schedule.data ?? null,
-        previousRange: toTripDateRange(room),
-        nextRange: dateRange,
-        datesChanged,
-        transportChanged,
-      });
-
-      if (impact !== null) {
-        setPendingImpact(impact);
-        return;
-      }
+    if (!needsSchedulePreview) {
+      save();
+      return;
     }
 
-    save();
+    updateRoom.reset();
+
+    previewRoom.mutate(
+      { roomId: room.id, changes, previewOnly: true },
+      {
+        onSuccess: ({ affectedItems }) => {
+          const impact = getScheduleImpact({ affectedItems, previousRange: toTripDateRange(room), nextRange: dateRange, transportChanged });
+
+          if (impact === null) {
+            save();
+            return;
+          }
+
+          setPendingImpact(impact);
+        },
+      },
+    );
   };
 
   return (
@@ -215,24 +221,6 @@ function EditRoomForm({ room }: { room: RoomDetail }) {
         />
       </ScrollView>
       <BottomCta>
-        {schedulePreviewFailed ? (
-          <View className="w-full flex-row items-center gap-3" testID="edit-room.schedule-error">
-            <Text accessibilityRole="alert" className="flex-1 text-caption text-destructive">
-              {getScheduleErrorMessage(schedule.error)}
-            </Text>
-            <Button
-              variant="outline"
-              loading={schedule.isFetching}
-              loadingLabel="불러오는 중"
-              onPress={() => {
-                void schedule.refetch();
-              }}
-              testID="edit-room.schedule-retry"
-            >
-              <Text>다시 시도</Text>
-            </Button>
-          </View>
-        ) : null}
         {errorMessage !== null && !isDateError ? (
           <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="w-full text-caption text-destructive" testID="edit-room.error">
             {errorMessage}
@@ -242,8 +230,8 @@ function EditRoomForm({ room }: { room: RoomDetail }) {
           size="lg"
           className="w-full"
           disabled={!canSave}
-          loading={updateRoom.isPending || schedulePreviewPending}
-          loadingLabel={schedulePreviewPending ? "일정 확인 중" : "저장하는 중"}
+          loading={updateRoom.isPending || previewRoom.isPending}
+          loadingLabel={previewRoom.isPending ? "일정 확인 중" : "저장하는 중"}
           onPress={handleSavePress}
           testID="edit-room.save"
         >

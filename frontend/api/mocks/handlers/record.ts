@@ -4,6 +4,7 @@ import type { ActualVisit, Material, PlaceInput, PublicationInput, RecordListIte
 import { formatServerDateTime, parseServerDateTime } from "../../../lib/date";
 import { mockDb } from "../db";
 import { makeMockRecord, mockVisitPlace, publicRecordAuthors, publicRecordDays, type MockRecord } from "../fixtures/record";
+import { MOCK_ME, type MockRoom } from "../fixtures/room";
 import { fail, ok } from "./respond";
 
 const root = "*/api/v1/records/:recordId";
@@ -16,6 +17,13 @@ const authenticated = (request: Request) => {
 
 const unauthorized = () => {
   return fail(401, "A001", "인증 필요");
+};
+
+/** 목의 "나"가 이 여행방 참여자인지. */
+const isMember = (room: MockRoom) => {
+  return room.members.some((member) => {
+    return member.userId === MOCK_ME.userId;
+  });
 };
 
 const conflict = () => {
@@ -46,9 +54,7 @@ function recordAccess(recordId: unknown, request: Request) {
     return fail(404, "RE001", "기록 없음");
   }
 
-  if (room && !room.detail.members.some((member) => {
-    return member.me;
-  })) {
+  if (room && !isMember(room)) {
     return fail(403, "RE002", "참여자 아님");
   }
 
@@ -296,9 +302,7 @@ export const recordHandlers = [
       const detail = record.detail;
       const room = detail.roomId === null ? null : mockDb.rooms.get(detail.roomId);
 
-      if (!room || !room.detail.members.some((member) => {
-        return member.me;
-      }) || (roomId && Number(roomId) !== detail.roomId) ||
+      if (!room || !isMember(room) || (roomId && Number(roomId) !== detail.roomId) ||
         (status && status !== detail.status)) {
         return [];
       }
@@ -307,7 +311,7 @@ export const recordHandlers = [
       const { id, title, roomId: sourceRoom, status: recordStatus, startDate, endDate, progress, version, publishedCourseId } = detail;
       return [{
         id, title, roomId: sourceRoom, status: recordStatus, startDate, endDate, progress, regionName: id === 1 ? "부산" : null,
-        members: room.detail.members, memberCount: room.detail.members.length, placeCount: detail.actualVisits.length,
+        members: room.members, memberCount: room.members.length, placeCount: detail.actualVisits.length,
         publication: publishedCourseId === null || !record.publication ? null
           : { courseId: publishedCourseId, publishedAt: record.publication.publishedAt, version },
       }];
@@ -326,30 +330,28 @@ export const recordHandlers = [
       return fail(404, "RO001", "여행방 없음");
     }
 
-    if (!room.detail.members.some((member) => {
-      return member.me;
-    })) {
+    if (!isMember(room)) {
       return fail(403, "RO002", "참여자 아님");
     }
 
     const { title } = await request.clone().json() as { title?: string };
 
     return idempotent(request, () => {
-      if (room.detail.recordId != null) {
+      if (room.recordIds.length > 0) {
         return fail(409, "RE017", "기록 있음");
       }
 
       const today = formatServerDateTime(new Date()).slice(0, 10);
 
-      if (!room.detail.endDate || room.detail.endDate >= today) {
+      if (!room.endDate || room.endDate >= today) {
         return fail(422, "RE024", "여행 미종료");
       }
 
       const id = mockDb.nextRecordEntityId++;
       const record = makeMockRecord(id, room, title);
       mockDb.records.set(id, record);
-      room.detail.recordId = id;
-      return ok({ recordId: id, roomId: room.detail.roomId, status: "DRAFT", version: 1 }, 201);
+      room.recordIds = [id];
+      return ok({ recordId: id, roomId: room.id, status: "DRAFT", version: 1 }, 201);
     });
   }),
   http.get(root, ({ params, request }) => {
@@ -360,11 +362,11 @@ export const recordHandlers = [
     }
 
     syncProgress(record);
-    const members = mockDb.rooms.get(record.detail.roomId ?? 0)?.detail.members;
+    const members = mockDb.rooms.get(record.detail.roomId ?? 0)?.members;
     return ok({ ...record.detail,
 
-      members: members?.map(({ userId, nickname, me }) => {
-        return { userId, nickname, isCreator: me };
+      members: members?.map(({ userId, nickname, isCreator }) => {
+        return { userId, nickname, isCreator };
       }) ?? record.detail.members });
   }),
   http.get(`${root}/materials`, ({ params, request }) => {

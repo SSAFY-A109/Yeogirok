@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { hasTripDates, TRANSPORT_MODE_LABEL, type RoomDetail, type ScheduleReadiness } from "@/features/room/model";
-import { formatMonthDay, formatTripLength, toLocalDate } from "@/lib/date";
+import { formatTripLength } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
 /** 준비 줄 안 글자 링크(높이 16)의 터치 영역을 44로 넓히는 여백. */
@@ -40,7 +40,7 @@ function getReadinessContent(readiness: ScheduleReadiness, room: RoomDetail, pla
       return {
         icon: Info,
         tone: "muted",
-        message: `${formatMonthDay(toLocalDate(readiness.createdAt), { weekday: false })}에 만든 일정이 있어요. 다시 만들면 순서가 바뀌어요`,
+        message: "이미 만든 일정이 있어요. 다시 만들면 순서가 바뀌어요",
         link: null,
         button: { label: "일정 다시 만들기", variant: "outline", disabled: false },
       };

@@ -72,7 +72,7 @@ export function DayPickerSheet({ open, onOpenChange, items, selectedDate, onSele
                     <Pressable
                       key={item.date}
                       accessibilityRole="button"
-                      accessibilityLabel={`${item.label} ${item.caption}${item.hasWarning ? ", 넣지 못한 장소 있음" : ""}`}
+                      accessibilityLabel={`${item.label} ${item.caption}${item.hasWarning ? ", 확인할 내용 있음" : ""}`}
                       accessibilityState={{ selected }}
                       className={cn("h-14 flex-1 items-center justify-center rounded-md border", selected ? "border-primary bg-primary" : "border-border bg-card active:bg-muted")}
 
@@ -96,7 +96,7 @@ export function DayPickerSheet({ open, onOpenChange, items, selectedDate, onSele
         {hasWarning ? (
           <View className="flex-row items-center gap-2">
             <View accessible={false} className="h-1.5 w-1.5 rounded-full bg-highlight" />
-            <Text className="text-caption text-foreground-secondary">넣지 못한 장소가 있는 날</Text>
+            <Text className="text-caption text-foreground-secondary">확인할 내용이 있는 날</Text>
           </View>
         ) : null}
       </View>

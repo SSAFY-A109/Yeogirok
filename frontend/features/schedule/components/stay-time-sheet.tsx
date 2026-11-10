@@ -11,14 +11,12 @@ import { clampStayMinutes, formatDuration, STAY_MAX_MINUTES, STAY_MIN_MINUTES, S
 import { cn } from "@/lib/utils";
 
 export type StayTarget = {
-  stopId: number;
+  /** 초안 항목 번호(itemId). */
+  itemId: number;
   name: string;
   stayMinutes: number;
-  defaultStayMinutes: number;
-  /** `카페`. 카테고리를 모르면 `null`. */
-  categoryName: string | null;
-  /** 지금 자리. `지금 13:35 – 15:05`. */
-  detail: string;
+  /** 지금 자리. `지금 13:35 – 15:05`. 시각을 모르면 `null`. */
+  detail: string | null;
 };
 
 type StayTimeSheetProps = {
@@ -28,7 +26,7 @@ type StayTimeSheetProps = {
   onClose: () => void;
 };
 
-/** 머무는 시간 바꾸기(Figma W14-T). 10분 단위로 고르고, 적용하면 화면이 바로 다시 계산한다. */
+/** 머무는 시간 바꾸기(Figma W14-T). 10분씩 늘리고 줄인다. 적용해도 서버에 보내지 않고 화면의 배치만 바꾼다. */
 export function StayTimeSheet({ target, onApply, onClose }: StayTimeSheetProps) {
   return (
     <BottomSheet visible={target !== null} onClose={onClose} closeLabel="머무는 시간 닫기">
@@ -39,7 +37,6 @@ export function StayTimeSheet({ target, onApply, onClose }: StayTimeSheetProps) 
 
 function StayTimeContent({ target, onApply }: { target: StayTarget; onApply: StayTimeSheetProps["onApply"] }) {
   const [minutes, setMinutes] = useState(target.stayMinutes);
-  const defaultLabel = `${target.categoryName === null ? "" : `${target.categoryName} `}기본값 ${formatDuration(target.defaultStayMinutes)}`;
 
   const change = (next: number) => {
     setMinutes(clampStayMinutes(next));
@@ -49,13 +46,13 @@ function StayTimeContent({ target, onApply }: { target: StayTarget; onApply: Sta
     <View className="gap-5 px-5 pb-4 pt-2" testID="schedule-draft.stay-sheet">
       <View className="gap-1">
         <Text accessibilityRole="header" className="text-h3 text-foreground">{`${target.name}에 얼마나 머물까요?`}</Text>
-        <Text className="text-caption text-foreground-secondary tabular-nums">{`${target.detail} · ${defaultLabel}`}</Text>
+        {target.detail === null ? null : <Text className="text-caption text-foreground-secondary tabular-nums">{target.detail}</Text>}
       </View>
       <View className="flex-row items-center justify-between px-6">
         <StepButton
           icon={Minus}
           label={`${STAY_STEP_MINUTES}분 줄이기`}
-          disabled={minutes <= STAY_MIN_MINUTES}
+          disabled={minutes - STAY_STEP_MINUTES < STAY_MIN_MINUTES}
 
           onPress={() => {
             change(minutes - STAY_STEP_MINUTES);
@@ -65,12 +62,12 @@ function StayTimeContent({ target, onApply }: { target: StayTarget; onApply: Sta
         />
         <View accessible accessibilityLabel={`머무는 시간 ${formatDuration(minutes)}`} accessibilityLiveRegion="polite" className="items-center gap-1">
           <Text className="text-h1 text-foreground tabular-nums" testID="schedule-draft.stay-sheet.value">{`${minutes}분`}</Text>
-          <Text className="text-caption text-muted-foreground">{`${STAY_STEP_MINUTES}분 단위`}</Text>
+          <Text className="text-caption text-muted-foreground">{`${STAY_STEP_MINUTES}분씩 조절`}</Text>
         </View>
         <StepButton
           icon={Plus}
           label={`${STAY_STEP_MINUTES}분 늘리기`}
-          disabled={minutes >= STAY_MAX_MINUTES}
+          disabled={minutes + STAY_STEP_MINUTES > STAY_MAX_MINUTES}
 
           onPress={() => {
             change(minutes + STAY_STEP_MINUTES);
@@ -110,7 +107,7 @@ function StayTimeContent({ target, onApply }: { target: StayTarget; onApply: Sta
 
         testID="schedule-draft.stay-sheet.apply"
       >
-        <Text>적용하고 다시 계산</Text>
+        <Text>적용</Text>
       </Button>
     </View>
   );

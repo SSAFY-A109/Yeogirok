@@ -2,53 +2,77 @@ import { Bus, Car, Hourglass, type LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
-import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { TRANSPORT_MODE_LABEL, type TransportMode } from "@/features/room/model";
-import { getParkingLabel, getTravelLabel, type ScheduleDay, type ScheduleStop } from "@/features/schedule/model";
+import {
+  getItemTimeLabel,
+  getPlaceName,
+  getTravelLabel,
+  type ScheduleDay,
+  type ScheduleItem,
+  type ScheduleLeg,
+  type SchedulePlaceLookup,
+  type SchedulePoint,
+} from "@/features/schedule/model";
 import { cn } from "@/lib/utils";
 
 type ScheduleDayTimelineProps = {
   day: ScheduleDay;
-  transportMode: TransportMode;
+  places: SchedulePlaceLookup;
+  /** 첫날 출발지·마지막 날 도착지. 그날 구간에 출발지·도착지 구간이 있을 때 이름으로 쓴다. */
+  startPoint: SchedulePoint | null;
+  endPoint: SchedulePoint | null;
+  /** 고친 뒤 다시 계산하지 않은 날. 시각을 보여 주지 않는다. */
+  uncalculated?: boolean;
   /** 장소 카드 오른쪽 영역. 없으면 머무는 시간만 보여 준다. */
-  renderStopActions?: (stop: ScheduleStop) => ReactNode;
+  renderItemActions?: (item: ScheduleItem, name: string) => ReactNode;
   testID: string;
 };
 
 function transportIconOf(mode: TransportMode): LucideIcon {
-  return mode === "PUBLIC_TRANSIT" ? Bus : Car;
+  return mode === "TRANSIT" ? Bus : Car;
+}
+
+function legLabelOf(leg: ScheduleLeg, prefix: string | null): string {
+  const travel = getTravelLabel(TRANSPORT_MODE_LABEL[leg.transportMode], leg.travelMinutes);
+  return prefix === null ? travel : `${prefix} ${travel}`;
 }
 
 /**
- * 하루 일정 타임라인(Figma W14). 출발 → (이동) → 장소 카드 → … → (이동) → 도착 순서로 그린다.
- * 이동 시간과 주차 정보는 서버 값을 그대로 쓰고, 없으면 "정보 없음"으로 보여 준다.
+ * 하루 일정 타임라인(Figma W14). (이동) → 장소 카드 → (이동) → … 순서로 그린다.
+ * 시각과 이동 시간은 서버 값을 그대로 쓰고, 서버가 모르면 "정보 없음"으로 보여 준다.
  */
-export function ScheduleDayTimeline({ day, transportMode, renderStopActions, testID }: ScheduleDayTimelineProps) {
-  const modeLabel = TRANSPORT_MODE_LABEL[transportMode];
-  const travelIcon = transportIconOf(transportMode);
-  const showParking = transportMode === "CAR";
+export function ScheduleDayTimeline({ day, places, startPoint, endPoint, uncalculated = false, renderItemActions, testID }: ScheduleDayTimelineProps) {
+  const endLeg = day.legs.find((leg) => {
+    return leg.toItemId === null;
+  });
 
   return (
     <View className="px-5" testID={testID}>
-      <EndpointRow time={day.origin.time} label={`${day.origin.name} 출발`} position="first" />
-      {day.stops.map((stop, index) => {
+      {day.items.map((item, index) => {
+        const name = getPlaceName(places, item.roomPlaceId);
+
+        const leg = day.legs.find((candidate) => {
+          return candidate.toItemId === item.id;
+        });
+
         return (
-          <View key={stop.id}>
-            <LegRow icon={travelIcon} label={getTravelLabel(modeLabel, stop.travelMinutes)} />
-            <StopRow
-              stop={stop}
+          <View key={item.id}>
+            {leg === undefined ? null : <LegRow leg={leg} prefix={leg.fromItemId === null ? `${startPoint?.name ?? "출발지"}에서` : null} />}
+            <ItemRow
+              name={name}
               order={index + 1}
-              showParking={showParking}
-              actions={renderStopActions?.(stop) ?? <StayBadge minutes={stop.stayMinutes} />}
-              testID={`${testID}.stop-${stop.id}`}
+              timeLabel={uncalculated ? null : getItemTimeLabel(item)}
+              linkedAbove={leg !== undefined}
+              linkedBelow={index < day.items.length - 1 || endLeg !== undefined}
+              actions={renderItemActions?.(item, name) ?? <StayBadge minutes={item.stayMinutes} />}
+              testID={`${testID}.stop-${item.id}`}
             />
           </View>
         );
       })}
-      <LegRow icon={travelIcon} label={getTravelLabel(modeLabel, day.destination.travelMinutes)} />
-      <EndpointRow time={day.destination.time} label={`${day.destination.name} 도착`} position="last" />
+      {endLeg === undefined ? null : <LegRow leg={endLeg} prefix={`${endPoint?.name ?? "도착지"}까지`} />}
     </View>
   );
 }
@@ -65,58 +89,43 @@ function Rail({ children, top = true, bottom = true }: { children?: ReactNode; t
   );
 }
 
-function EndpointRow({ time, label, position }: { time: string; label: string; position: "first" | "last" }) {
-  return (
-    <View accessible accessibilityLabel={`${time} ${label}`} className="min-h-10 flex-row items-center gap-3">
-      <Rail top={position === "last"} bottom={position === "first"}>
-        <View className="h-3 w-3 rounded-full border-2 border-ring bg-card" />
-      </Rail>
-      <Text className="text-label text-foreground tabular-nums">{time}</Text>
-      <Text className="flex-1 text-body-sm text-foreground-secondary">{label}</Text>
-    </View>
-  );
-}
+function LegRow({ leg, prefix }: { leg: ScheduleLeg; prefix: string | null }) {
+  const label = legLabelOf(leg, prefix);
 
-function LegRow({ icon, label }: { icon: LucideIcon; label: string }) {
   return (
     <View accessible accessibilityLabel={label} className="min-h-8 flex-row items-center gap-3">
       <Rail />
       <View className="flex-row items-center gap-1.5">
-        <Icon as={icon} size={14} className="text-muted-foreground" />
+        <Icon as={transportIconOf(leg.transportMode)} size={14} className="text-muted-foreground" />
         <Text className="text-caption text-muted-foreground">{label}</Text>
       </View>
     </View>
   );
 }
 
-type StopRowProps = { stop: ScheduleStop; order: number; showParking: boolean; actions: ReactNode; testID: string };
+type ItemRowProps = {
+  name: string;
+  order: number;
+  /** `10:00 – 11:00`. 보여 주지 않으면 `null`. */
+  timeLabel: string | null;
+  linkedAbove: boolean;
+  linkedBelow: boolean;
+  actions: ReactNode;
+  testID: string;
+};
 
-function StopRow({ stop, order, showParking, actions, testID }: StopRowProps) {
-  const timeRange = `${stop.arrivalTime} – ${stop.departureTime}`;
-
+function ItemRow({ name, order, timeLabel, linkedAbove, linkedBelow, actions, testID }: ItemRowProps) {
   return (
     <View className="flex-row items-center gap-3" testID={testID}>
-      <Rail>
+      <Rail top={linkedAbove} bottom={linkedBelow}>
         <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
           <Text className="text-micro text-primary-foreground">{order}</Text>
         </View>
       </Rail>
       <View className="my-1 flex-1 flex-row items-center gap-2 rounded-md border border-border bg-card p-3">
-        <View
-          accessible
-          accessibilityLabel={[`${order}번째 ${stop.name}`, timeRange, stop.tag, showParking ? getParkingLabel(stop.parking) : null].filter(Boolean).join(", ")}
-          className="flex-1 gap-1"
-        >
-          <View className="flex-row flex-wrap items-center gap-1.5">
-            <Text className="text-label text-foreground">{stop.name}</Text>
-            {stop.tag === null ? null : (
-              <Badge className="self-center">
-                <Text>{stop.tag}</Text>
-              </Badge>
-            )}
-          </View>
-          <Text className="text-caption text-foreground-secondary tabular-nums">{timeRange}</Text>
-          {showParking ? <Text className="text-caption text-muted-foreground">{getParkingLabel(stop.parking)}</Text> : null}
+        <View accessible accessibilityLabel={[`${order}번째 ${name}`, timeLabel].filter(Boolean).join(", ")} className="flex-1 gap-1">
+          <Text className="text-label text-foreground">{name}</Text>
+          {timeLabel === null ? null : <Text className="text-caption text-foreground-secondary tabular-nums">{timeLabel}</Text>}
         </View>
         {actions}
       </View>
