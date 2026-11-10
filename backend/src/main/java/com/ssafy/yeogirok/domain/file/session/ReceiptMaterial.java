@@ -53,7 +53,7 @@ public record ReceiptMaterial(
 	 * OCR 제안. paidAt 은 날짜·시각이 둘 다 있을 때만 +09:00 으로 조합한다(명세 5절 6). placeCandidates 는 TourAPI 전까지 비어 있다.
 	 */
 	public record Extracted(String merchantName, LocalDate paidDate, LocalTime paidTime, Instant paidAt,
-		List<RecordPlaceView> placeCandidates, String confidence) {
+		List<RecordPlaceView> placeCandidates, Double confidence) {
 
 		public Extracted {
 			placeCandidates = placeCandidates == null ? List.of() : List.copyOf(placeCandidates);

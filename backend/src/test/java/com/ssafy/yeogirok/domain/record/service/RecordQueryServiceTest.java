@@ -4,12 +4,15 @@ import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.SIGNED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,10 +21,13 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
+import com.ssafy.yeogirok.domain.record.dto.MaterialSummary;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress.Stage;
@@ -56,12 +62,15 @@ class RecordQueryServiceTest {
 	TestEntityManager em;
 	@Autowired
 	FileStorage fileStorage;
+	@Autowired
+	MaterialQueryService materialQueryService;
 
 	TravelRoom room;
 	TravelRecord record;
 
 	@BeforeEach
 	void setUp() {
+		reset(materialQueryService);
 		TestUsers.insertActive(em.getEntityManager(), MEMBER, FRIEND, LEFT, STRANGER);
 		TestUsers.insert(em.getEntityManager(), WITHDRAWN, "WITHDRAWN");
 		room = em.persist(TravelRoom.builder().title("강릉 여행").startDate(DAY1).endDate(DAY2)
@@ -164,6 +173,16 @@ class RecordQueryServiceTest {
 			assertThat(view.id()).isEqualTo(lost.getId());
 			assertThat(view.place()).isNull();
 		});
+	}
+
+	@Test
+	void materials_는_요청자_본인_자료_요약이다() {
+		List<MaterialSummary> mine = List.of(new MaterialSummary("m-1", 1, "RECEIPT", ReceiptMaterial.Status.UPLOADED,
+			ReceiptMaterial.ReviewStatus.PENDING, false, List.of(), false, null));
+		given(materialQueryService.summaries(record.getId(), MEMBER)).willReturn(mine);
+
+		assertThat(recordQueryService.getDetail(MEMBER, record.getId()).materials()).isEqualTo(mine);
+		assertThat(recordQueryService.getDetail(FRIEND, record.getId()).materials()).isEmpty();
 	}
 
 	@Test

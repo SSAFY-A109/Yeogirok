@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Import;
 
 import com.ssafy.yeogirok.domain.file.FileProperties;
 import com.ssafy.yeogirok.domain.file.storage.FileStorage;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.service.RecordAuthors;
 import com.ssafy.yeogirok.domain.record.service.RecordCompleteService;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
@@ -64,5 +65,11 @@ public class RecordTestConfig {
 	@Bean
 	FixedLegalDongResolver legalDongResolver() {
 		return new FixedLegalDongResolver(LEGAL_DONG);
+	}
+
+	/** 059 materials. 영수증 자료(Redis)는 MaterialQueryServiceTest 가 본다. mock 은 빈 목록을 돌려준다. */
+	@Bean
+	MaterialQueryService materialQueryService() {
+		return mock(MaterialQueryService.class);
 	}
 }

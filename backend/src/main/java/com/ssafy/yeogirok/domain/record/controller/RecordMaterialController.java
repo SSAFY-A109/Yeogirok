@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.record.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,7 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ssafy.yeogirok.domain.record.dto.MaterialLinkCommand;
 import com.ssafy.yeogirok.domain.record.dto.MaterialLinkRequest;
 import com.ssafy.yeogirok.domain.record.dto.MaterialLinkResponse;
+import com.ssafy.yeogirok.domain.record.dto.MaterialListResponse;
 import com.ssafy.yeogirok.domain.record.material.MaterialLinkService;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
@@ -33,6 +36,7 @@ public class RecordMaterialController {
 	static final String LINK_SCOPE = "record-material-link";
 
 	private final MaterialLinkService materialLinkService;
+	private final MaterialQueryService materialQueryService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-062 영수증·결제 자료 연결")
@@ -50,5 +54,13 @@ public class RecordMaterialController {
 			MaterialLinkResponse::materialId,
 			materialId -> materialLinkService.getLinked(user.userId(), recordId, materialId));
 		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-063 등록 자료·추출 결과 조회")
+	@GetMapping
+	public ResponseEntity<ApiResponseBody<MaterialListResponse>> list(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long recordId) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(materialQueryService.list(user.userId(),
+			recordId)));
 	}
 }

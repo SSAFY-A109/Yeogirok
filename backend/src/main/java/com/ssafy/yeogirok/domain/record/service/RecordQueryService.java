@@ -22,6 +22,7 @@ import com.ssafy.yeogirok.domain.record.repository.VisitRegion;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder.RecordRoom;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
 import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
@@ -41,6 +42,7 @@ public class RecordQueryService {
 	private final TravelRoomRepository travelRoomRepository;
 	private final RoomMemberRepository roomMemberRepository;
 	private final ActualVisitRepository actualVisitRepository;
+	private final MaterialQueryService materialQueryService;
 
 	/**
 	 * API-058. 현재 참여 중이고 방이 삭제되지 않은 기록을 최근 생성 순(id 내림차순)으로(명세 5절 2).
@@ -90,7 +92,7 @@ public class RecordQueryService {
 		return new RecordDetailResponse(record.getId(), record.getTitle(), record.getStatus(), record.getRoomId(),
 			members, room.getStartDate(), room.getEndDate(),
 			RecordProgress.of(record.getStatus(), board.visits().size()), null, List.of(), board.photoPool(),
-			board.visits(), List.of(), record.getPublishedAt() == null ? null : record.getId(), record.getVersion());
+			board.visits(), materialQueryService.summaries(recordId, userId), record.getPublishedAt() == null ? null : record.getId(), record.getVersion());
 	}
 
 	private static RecordListResponse.Item item(TravelRecord record, TravelRoom room, List<RoomMemberView> members,

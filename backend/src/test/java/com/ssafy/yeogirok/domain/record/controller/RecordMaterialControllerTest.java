@@ -6,11 +6,16 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -27,9 +32,13 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.record.dto.MaterialLinkCommand;
 import com.ssafy.yeogirok.domain.record.dto.MaterialLinkResponse;
+import com.ssafy.yeogirok.domain.record.dto.MaterialListResponse;
+import com.ssafy.yeogirok.domain.record.dto.MaterialView;
 import com.ssafy.yeogirok.domain.record.material.MaterialLinkService;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -46,6 +55,8 @@ class RecordMaterialControllerTest {
 	MockMvc mockMvc;
 	@MockitoBean
 	MaterialLinkService materialLinkService;
+	@MockitoBean
+	MaterialQueryService materialQueryService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -107,6 +118,37 @@ class RecordMaterialControllerTest {
 					.content("{\"type\":\"RECEIPT\",\"uploadId\":\"" + UPLOAD_ID + "\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("C001"));
+		}
+	}
+
+	@Nested
+	class API_063 {
+
+		@Test
+		void 목록은_items_이고_시각은_09_시각만_있는_값은_HH_mm_ss() throws Exception {
+			Instant paidAt = Instant.parse("2026-11-02T03:00:00Z");
+			MaterialView view = new MaterialView("m-1", "RECEIPT", ReceiptMaterial.Status.READY,
+				new MaterialView.Extracted("가게", List.of(), paidAt, null, LocalDate.of(2026, 11, 2), LocalTime.NOON),
+				true, null, 2, "job-1",
+				new MaterialView.Values("가게", paidAt, null, LocalDate.of(2026, 11, 2), LocalTime.NOON),
+				ReceiptMaterial.ReviewStatus.REQUIRED, List.of("place"), false, true,
+				Instant.parse("2026-11-03T00:00:00Z"), Instant.parse("2026-11-02T00:00:00Z"));
+			given(materialQueryService.list(USER_ID, 10L)).willReturn(new MaterialListResponse(List.of(view)));
+
+			mockMvc.perform(get("/api/v1/records/10/materials").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success":true,"data":{"items":[{
+					  "materialId":"m-1","type":"RECEIPT","status":"READY",
+					  "extracted":{"merchantName":"가게","placeCandidates":[],"paidAt":"2026-11-02 12:00:00+09",
+					    "confidence":null,"paidDate":"2026-11-02","paidTime":"12:00:00"},
+					  "needsReview":true,"error":null,"version":2,"jobId":"job-1",
+					  "values":{"merchantName":"가게","paidAt":"2026-11-02 12:00:00+09","place":null,
+					    "paidDate":"2026-11-02","paidTime":"12:00:00"},
+					  "reviewStatus":"REQUIRED","missingFields":["place"],"canUseForDraft":false,
+					  "originalAvailable":true,"originalDeleteAfter":"2026-11-03 09:00:00+09",
+					  "uploadAcceptedAt":"2026-11-02 09:00:00+09"}]}}
+					""", JsonCompareMode.STRICT));
 		}
 	}
 }
