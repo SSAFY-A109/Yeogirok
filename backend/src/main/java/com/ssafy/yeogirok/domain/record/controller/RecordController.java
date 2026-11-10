@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.record.controller;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.record.dto.PhotoLinkRequest;
+import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteRequest;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateRequest;
@@ -36,6 +39,7 @@ import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
+import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.global.request.JsonFields;
@@ -61,12 +65,15 @@ public class RecordController {
 	static final String STORY_WRITE_SCOPE = "record-story-write";
 	/** 멱등키 scope. 대상은 기록 ID 다. */
 	static final String COMPLETE_SCOPE = "record-complete";
+	/** 멱등키 scope. 대상은 방문 ID 다. */
+	static final String PHOTO_LINK_SCOPE = "record-photo-link";
 
 	private final RecordCreateService recordCreateService;
 	private final RecordQueryService recordQueryService;
 	private final VisitCommandService visitCommandService;
 	private final StoryService storyService;
 	private final RecordCompleteService recordCompleteService;
+	private final VisitPhotoService visitPhotoService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-057 여행방에서 기록 공간 생성")
@@ -161,6 +168,25 @@ public class RecordController {
 		String body = request.toBody();
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			storyService.edit(user.userId(), recordId, visitId, storyId, body)));
+	}
+
+	/** 결과 ID 는 요청한 사진 ID 들을 쉼표로 이은 값이다(빈 배열이면 "-"). */
+	@Operation(summary = "API-068 방문에 사진 연결·이동")
+	@PostMapping("/records/{recordId}/visits/{visitId}/photos")
+	public ResponseEntity<ApiResponseBody<PhotoLinkResponse>> linkPhotos(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long recordId, @PathVariable Long visitId,
+		@RequestBody PhotoLinkRequest request) {
+		List<Long> imageIds = request.toImageIds();
+		PhotoLinkResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), PHOTO_LINK_SCOPE, visitId.toString(), idempotencyKey),
+			imageIds,
+			() -> visitPhotoService.link(user.userId(), recordId, visitId, imageIds),
+			linked -> imageIds.isEmpty() ? "-" : String.join(",", imageIds.stream().map(String::valueOf).toList()),
+			ids -> visitPhotoService.getLinked(user.userId(), recordId,
+				"-".equals(ids) ? List.of() : Arrays.stream(ids.split(",")).map(Long::valueOf).toList()));
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
 	}
 
 	@Operation(summary = "API-071 여행기 완성 처리")

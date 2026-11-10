@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
+import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
@@ -55,6 +56,7 @@ import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
+import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
 
@@ -77,6 +79,8 @@ class RecordControllerTest {
 	StoryService storyService;
 	@MockitoBean
 	RecordCompleteService recordCompleteService;
+	@MockitoBean
+	VisitPhotoService visitPhotoService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -300,6 +304,43 @@ class RecordControllerTest {
 			mockMvc.perform(json(patch("/api/v1/records/9/visits/701/stories/31"), body))
 				.andExpect(jsonPath("$.code").value(code));
 			verifyNoInteractions(storyService);
+		}
+	}
+
+	@Nested
+	class API_068 {
+
+		@Test
+		void 연결_응답은_201이고_같은_ID는_한_번만_넘긴다() throws Exception {
+			given(visitPhotoService.link(USER_ID, 9L, 701L, List.of(31L, 32L))).willReturn(new PhotoLinkResponse(
+				List.of(new PhotoLinkResponse.Photo(31L, 701L, 1L), new PhotoLinkResponse.Photo(32L, 701L, null)), 4,
+				RecordStatus.DRAFT));
+
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), "{\"imageIds\": [31, 32, 31]}"))
+				.andExpect(status().isCreated())
+				.andExpect(content().json("""
+					{"success": true, "data": {"photos": [
+					  {"imageId": 31, "visitId": 701, "uploadedBy": 1},
+					  {"imageId": 32, "visitId": 701, "uploadedBy": null}
+					], "version": 4, "status": "DRAFT"}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@Test
+		void 빈_배열은_그대로_넘긴다() throws Exception {
+			given(visitPhotoService.link(USER_ID, 9L, 701L, List.of()))
+				.willReturn(new PhotoLinkResponse(List.of(), 3, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), "{\"imageIds\": []}"))
+				.andExpect(status().isCreated());
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {"{}|C001", "{\"imageIds\": 31}|C002", "{\"imageIds\": [\"a\"]}|C002"})
+		void 요청_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), body))
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(visitPhotoService);
 		}
 	}
 

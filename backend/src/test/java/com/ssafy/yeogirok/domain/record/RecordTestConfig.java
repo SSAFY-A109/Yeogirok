@@ -19,6 +19,7 @@ import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.RecordVisitViews;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
+import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.support.FixedLegalDongResolver;
@@ -28,7 +29,7 @@ import com.ssafy.yeogirok.support.TestFileProperties;
 /** 여행 기록 서비스 @DataJpaTest 용 빈. */
 @TestConfiguration
 @Import({RecordCreateService.class, RecordQueryService.class, RecordVisitViews.class, VisitCommandService.class,
-	StoryService.class, RecordCompleteService.class, RecordFinder.class, RoomFinder.class})
+	StoryService.class, RecordCompleteService.class, VisitPhotoService.class, RecordFinder.class, RoomFinder.class})
 public class RecordTestConfig {
 
 	/** 2026-11-09 00:30 Asia/Seoul. UTC 날짜(11/8)와 서울 날짜(11/9)가 다른 시각이다. */

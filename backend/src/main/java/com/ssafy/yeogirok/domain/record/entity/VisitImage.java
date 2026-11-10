@@ -67,4 +67,16 @@ public class VisitImage {
 		image.createdAt = now;
 		return image;
 	}
+
+	/** API-068. 방문에 연결하거나 다른 방문으로 옮긴다. 공개 선택은 다시 고를 때까지 FALSE(노션 068). */
+	public void linkTo(Long visitId, int position) {
+		this.visitId = visitId;
+		this.position = position;
+		this.publicSelected = false;
+	}
+
+	/** 같은 방문 안의 순서만 바꾼다. */
+	public void moveTo(int position) {
+		this.position = position;
+	}
 }
