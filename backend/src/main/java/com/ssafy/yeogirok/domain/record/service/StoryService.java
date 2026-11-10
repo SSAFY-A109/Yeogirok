@@ -11,7 +11,6 @@ import com.ssafy.yeogirok.domain.record.dto.StoryWriteResponse;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.entity.VisitStory;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
-import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitStoryRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -27,7 +26,6 @@ import lombok.RequiredArgsConstructor;
 public class StoryService {
 
 	private final RecordFinder recordFinder;
-	private final TravelRecordRepository travelRecordRepository;
 	private final ActualVisitRepository actualVisitRepository;
 	private final VisitStoryRepository visitStoryRepository;
 	private final Clock clock;
@@ -48,10 +46,9 @@ public class StoryService {
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 그때 쓴 글과 지금 기록 상태를 준다. 그사이 지워졌으면 RE014. */
 	@Transactional(readOnly = true)
 	public StoryWriteResponse getWritten(Long userId, Long recordId, Long storyId) {
-		recordFinder.checkWritable(recordId, userId);
+		TravelRecord record = recordFinder.checkWritable(recordId, userId);
 		VisitStory story = visitStoryRepository.findById(storyId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.STORY_NOT_FOUND));
-		TravelRecord record = travelRecordRepository.findById(recordId).orElseThrow();
 		return new StoryWriteResponse(story.getId(), story.getAuthorId(), story.getBody(), record.getStatus());
 	}
 

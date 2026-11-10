@@ -30,7 +30,6 @@ import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
 import com.ssafy.yeogirok.domain.record.repository.RecordPlaceRepository;
-import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitStoryRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -49,7 +48,6 @@ public class VisitCommandService {
 
 	private final RecordFinder recordFinder;
 	private final RecordVisitViews recordVisitViews;
-	private final TravelRecordRepository travelRecordRepository;
 	private final ActualVisitRepository actualVisitRepository;
 	private final VisitImageRepository visitImageRepository;
 	private final VisitStoryRepository visitStoryRepository;
@@ -60,13 +58,12 @@ public class VisitCommandService {
 	private final Clock clock;
 
 	public VisitCommandService(RecordFinder recordFinder, RecordVisitViews recordVisitViews,
-		TravelRecordRepository travelRecordRepository, ActualVisitRepository actualVisitRepository,
+		ActualVisitRepository actualVisitRepository,
 		VisitImageRepository visitImageRepository, VisitStoryRepository visitStoryRepository,
 		RecordPlaceRepository recordPlaceRepository, PlaceRepository placeRepository, LegalDongResolver legalDongResolver,
 		PlatformTransactionManager transactionManager, Clock clock) {
 		this.recordFinder = recordFinder;
 		this.recordVisitViews = recordVisitViews;
-		this.travelRecordRepository = travelRecordRepository;
 		this.actualVisitRepository = actualVisitRepository;
 		this.visitImageRepository = visitImageRepository;
 		this.visitStoryRepository = visitStoryRepository;
@@ -102,8 +99,7 @@ public class VisitCommandService {
 
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 그때 만든 방문 ID 와 지금 기록 상태를 준다. */
 	public VisitAddResponse getAdded(Long userId, Long recordId, List<Long> visitIds) {
-		recordFinder.checkWritable(recordId, userId);
-		TravelRecord record = travelRecordRepository.findById(recordId).orElseThrow();
+		TravelRecord record = recordFinder.checkWritable(recordId, userId);
 		return new VisitAddResponse(visitIds, record.getVersion(), record.getStatus());
 	}
 

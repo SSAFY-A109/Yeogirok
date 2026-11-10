@@ -25,7 +25,6 @@ import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.record.repository.ActiveUserRepository;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
-import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -48,7 +47,6 @@ public class VisitPhotoService {
 	private static final int TEMP_BASE = 1_000_000;
 
 	private final RecordFinder recordFinder;
-	private final TravelRecordRepository travelRecordRepository;
 	private final ActualVisitRepository actualVisitRepository;
 	private final VisitImageRepository visitImageRepository;
 	private final ActiveUserRepository activeUserRepository;
@@ -83,12 +81,12 @@ public class VisitPhotoService {
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 그 사진들의 지금 연결과 기록 상태를 준다(그사이 지운 사진은 뺀다). */
 	@Transactional(readOnly = true)
 	public PhotoLinkResponse getLinked(Long userId, Long recordId, List<Long> imageIds) {
-		recordFinder.checkWritable(recordId, userId);
+		TravelRecord record = recordFinder.checkWritable(recordId, userId);
 		List<VisitImage> images = visitImageRepository.findAllById(imageIds).stream()
 			.filter(image -> image.getRecordId().equals(recordId))
 			.sorted(Comparator.comparingInt(image -> imageIds.indexOf(image.getId())))
 			.toList();
-		return response(images, travelRecordRepository.findById(recordId).orElseThrow());
+		return response(images, record);
 	}
 
 	/**
@@ -125,8 +123,7 @@ public class VisitPhotoService {
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 처음과 같은 성공 결과(지금 기록 상태)를 준다. */
 	@Transactional(readOnly = true)
 	public PhotoDeleteResponse getDeleted(Long userId, Long recordId, Long imageId) {
-		recordFinder.checkWritable(recordId, userId);
-		TravelRecord record = travelRecordRepository.findById(recordId).orElseThrow();
+		TravelRecord record = recordFinder.checkWritable(recordId, userId);
 		return new PhotoDeleteResponse(recordId, imageId, true, record.getStatus(), record.getVersion());
 	}
 

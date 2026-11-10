@@ -49,13 +49,15 @@ public class RecordFinder {
 	/**
 	 * 잠그지 않고 쓰기 권한만 확인한다(RE001·RE003). 외부 호출 전에 걸러 내거나 멱등 재전송을 확인할 때 쓴다.
 	 * 실제 쓰기는 {@link #lockWritable} 로 다시 확인한다.
+	 * @return 확인한 기록(재전송 응답의 지금 version·status 에 쓴다)
 	 */
 	@Transactional(readOnly = true)
-	public void checkWritable(Long recordId, Long userId) {
+	public TravelRecord checkWritable(Long recordId, Long userId) {
 		TravelRecord record = travelRecordRepository.findById(recordId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_NOT_FOUND));
 		liveRoom(record).filter(found -> isCurrentMember(found.getId(), userId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_EDIT_FORBIDDEN));
+		return record;
 	}
 
 	/** 기록 행을 잠그고 쓰기 권한을 확인한다. 호출한 트랜잭션 안에서만 쓴다. */

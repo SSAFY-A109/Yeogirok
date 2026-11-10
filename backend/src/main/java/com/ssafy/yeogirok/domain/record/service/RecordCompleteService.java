@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
-import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
@@ -20,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 public class RecordCompleteService {
 
 	private final RecordFinder recordFinder;
-	private final TravelRecordRepository travelRecordRepository;
 	private final ActualVisitRepository actualVisitRepository;
 	private final Clock clock;
 
@@ -50,7 +48,6 @@ public class RecordCompleteService {
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 지금 기록 상태를 준다(version 을 다시 올리지 않는다). */
 	@Transactional(readOnly = true)
 	public RecordCompleteResponse getCompleted(Long userId, Long recordId) {
-		recordFinder.checkWritable(recordId, userId);
-		return RecordCompleteResponse.from(travelRecordRepository.findById(recordId).orElseThrow());
+		return RecordCompleteResponse.from(recordFinder.checkWritable(recordId, userId));
 	}
 }
