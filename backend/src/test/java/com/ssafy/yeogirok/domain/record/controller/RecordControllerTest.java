@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
+import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
@@ -49,6 +50,7 @@ import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
 import com.ssafy.yeogirok.domain.record.dto.VisitUpdateCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
+import com.ssafy.yeogirok.domain.record.service.RecordCompleteService;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
@@ -73,6 +75,8 @@ class RecordControllerTest {
 	VisitCommandService visitCommandService;
 	@MockitoBean
 	StoryService storyService;
+	@MockitoBean
+	RecordCompleteService recordCompleteService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -296,6 +300,30 @@ class RecordControllerTest {
 			mockMvc.perform(json(patch("/api/v1/records/9/visits/701/stories/31"), body))
 				.andExpect(jsonPath("$.code").value(code));
 			verifyNoInteractions(storyService);
+		}
+	}
+
+	@Nested
+	class API_071 {
+
+		@Test
+		void 완성_응답은_200() throws Exception {
+			given(recordCompleteService.complete(USER_ID, 9L, 3))
+				.willReturn(new RecordCompleteResponse(9L, RecordStatus.COMPLETED, 4));
+
+			mockMvc.perform(json(post("/api/v1/records/9/complete"), "{\"version\": 3}"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"recordId": 9, "status": "COMPLETED", "version": 4}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {"{}|C001", "{\"version\": null}|C002", "{\"version\": 1.5}|C002"})
+		void version_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/9/complete"), body))
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(recordCompleteService);
 		}
 	}
 

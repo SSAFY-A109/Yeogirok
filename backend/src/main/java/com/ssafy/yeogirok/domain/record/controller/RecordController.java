@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.record.dto.RecordCompleteRequest;
+import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateRequest;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
@@ -29,6 +31,7 @@ import com.ssafy.yeogirok.domain.record.dto.VisitUpdateCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitUpdateRequest;
 import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
+import com.ssafy.yeogirok.domain.record.service.RecordCompleteService;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
@@ -56,11 +59,14 @@ public class RecordController {
 	static final String VISIT_ADD_SCOPE = "record-visit-add";
 	/** 멱등키 scope. 대상은 방문 ID 다. */
 	static final String STORY_WRITE_SCOPE = "record-story-write";
+	/** 멱등키 scope. 대상은 기록 ID 다. */
+	static final String COMPLETE_SCOPE = "record-complete";
 
 	private final RecordCreateService recordCreateService;
 	private final RecordQueryService recordQueryService;
 	private final VisitCommandService visitCommandService;
 	private final StoryService storyService;
+	private final RecordCompleteService recordCompleteService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-057 여행방에서 기록 공간 생성")
@@ -155,6 +161,23 @@ public class RecordController {
 		String body = request.toBody();
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			storyService.edit(user.userId(), recordId, visitId, storyId, body)));
+	}
+
+	@Operation(summary = "API-071 여행기 완성 처리")
+	@PostMapping("/records/{recordId}/complete")
+	public ResponseEntity<ApiResponseBody<RecordCompleteResponse>> complete(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long recordId,
+		@RequestBody RecordCompleteRequest request) {
+		int version = request.toVersion();
+		RecordCompleteResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), COMPLETE_SCOPE, recordId.toString(), idempotencyKey),
+			version,
+			() -> recordCompleteService.complete(user.userId(), recordId, version),
+			RecordCompleteResponse::recordId,
+			id -> recordCompleteService.getCompleted(user.userId(), recordId));
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(response));
 	}
 
 	/** 생략이면 null, DRAFT·COMPLETED 가 아니면 C002(노션 058). */
