@@ -101,14 +101,8 @@ public class VisitPhotoService {
 		visitImageRepository.delete(image);
 		visitImageRepository.flush();
 		if (image.getVisitId() != null) {
-			// 앞자리부터 하나씩 당기면 옮길 자리가 항상 비어 있어 순서 유니크(DEFERRABLE)와 겹치지 않는다.
-			List<VisitImage> rest = visitImageRepository.findByVisitIdOrderByPositionAsc(image.getVisitId());
-			for (int i = 0; i < rest.size(); i++) {
-				if (rest.get(i).getPosition() != i + 1) {
-					rest.get(i).moveTo(i + 1);
-					visitImageRepository.flush();
-				}
-			}
+			// 순서 유니크는 DEFERRABLE INITIALLY IMMEDIATE(문장이 끝날 때 검사)라 한 문장으로 한 칸씩 당겨도 겹치지 않는다.
+			visitImageRepository.pullForward(image.getVisitId(), image.getPosition());
 		}
 		record.markEdited(clock.instant());
 		eventPublisher.publishEvent(new RecordPhotoFileCleaner.RecordPhotoDeleted(imageId, image.getImagePath()));

@@ -103,6 +103,10 @@ class PhotoDeleteServiceTest {
 		assertThat(response).isEqualTo(new PhotoDeleteResponse(recordId, p2, true, RecordStatus.DRAFT, 3));
 		assertThat(photos()).containsExactly("1:" + p1, "2:" + p3);
 		assertThat(em.find(VisitImage.class, p2)).isNull();
+		// 순서를 UPDATE 한 번으로 당긴 뒤에도 기록 version·status 가 DB 에 저장된다.
+		TravelRecord saved = em.find(TravelRecord.class, recordId);
+		assertThat(saved.getVersion()).isEqualTo(3);
+		assertThat(saved.getStatus()).isEqualTo(RecordStatus.DRAFT);
 	}
 
 	@Test
