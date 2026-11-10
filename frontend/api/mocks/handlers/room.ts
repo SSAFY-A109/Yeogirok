@@ -25,6 +25,7 @@ function toSummary({ detail }: MockRoom): RoomSummaryDto {
     memberCount: detail.memberCount,
     members: detail.members.slice(0, 3),
     recordId: detail.recordId,
+    recordIds: detail.recordId == null ? [] : [detail.recordId],
   };
 }
 

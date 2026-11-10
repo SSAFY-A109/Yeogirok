@@ -55,7 +55,7 @@ export const mediaHandlers = [
       uploadUrl: `https://uploads.yeogirok.test/mock/${uploadId}`, uploadMethod: "PUT",
       uploadHeaders: { "Content-Type": body.contentType }, uploadExpiresAt: "2100-01-01 00:00:00+09",
     };
-    mockDb.uploads.set(uploadId, { request: body, session, transferredBytes: null, result: null });
+    mockDb.uploads.set(uploadId, { request: body, session, transferredBytes: null, result: null, acceptedAt: Date.now() });
     mockDb.uploadIdempotency.set(key, { request: text, data: session, status: 201 });
     return ok(session, 201);
   }),
@@ -66,7 +66,13 @@ export const mediaHandlers = [
       return new Response(null, { status: 403 });
     }
 
-    upload.transferredBytes = (await request.arrayBuffer()).byteLength;
+    const bytes = await request.arrayBuffer();
+    upload.transferredBytes = bytes.byteLength;
+
+    if (upload.request.purpose !== "TIP_PHOTO") {
+      upload.bytes = bytes;
+    }
+
     return new Response(null, { status: 200 });
   }),
   http.post("*/api/v1/uploads/:uploadId/complete", async ({ request, params }) => {
@@ -117,7 +123,7 @@ export const mediaHandlers = [
     }
 
     upload.result = {
-      uploadId, status: "READY", imageId: upload.request.purpose === "RECORD_PHOTO" ? mockDb.nextUploadId + 800 : null,
+      uploadId, status: "READY", imageId: upload.request.purpose === "RECORD_PHOTO" ? mockDb.nextRecordEntityId++ : null,
       materialId: upload.request.purpose === "RECEIPT" ? uploadId : null,
       contentType: upload.request.contentType, sizeBytes: upload.transferredBytes,
     };
