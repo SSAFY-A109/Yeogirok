@@ -171,7 +171,7 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 
 | API | 가정 타입 위치 | 비고 |
 | --- | --- | --- |
-| 020·021·022·023·024·028·029·032 | `features/room/model.ts` (`RoomSummaryDto`, `RoomDetailDto`, `CreateRoomRequestDto`, `UpdateRoomRequestDto`, `RoomInvitationDto`, `RoomPlaceDto`, `AddRoomPlacesRequestDto`) | 목록 응답은 `{ rooms }`, 장소 목록은 `{ places }`로 감쌌다고 가정 |
+| 020·022·023·024·028·029·032 | `features/room/model.ts` (`RoomSummaryDto`, `RoomDetailDto`, `UpdateRoomRequestDto`, `RoomInvitationDto`, `RoomPlaceDto`, `AddRoomPlacesRequestDto`) | 목록 응답은 `{ rooms }`, 장소 목록은 `{ places }`로 감쌌다고 가정 |
 | 026 | `features/place/model.ts` (`PlaceDto`, `SearchPlacesResponseDto`) | 쿼리 `keyword`·`cursor`·`size`, 응답 `{ items, nextCursor }` |
 | 033(=080)·081·034 | `features/recommendation/model.ts` | 조건 `{ categoryCodes, regionCode }`, 결과 `{ requestId, criteria, items }`. `routeHint`는 서버 문구 |
 | 036·037·038·039 | `features/schedule/model.ts` (`RoomScheduleDto`, `CreateScheduleDraftRequestDto`, `ScheduleDraftDto`, `ApplyScheduleDraftRequestDto`) | 2026-11-04 추가. Figma "여행방 일정 만들기"(W13·W14·W09-B)에서 역산. 일정이 없으면 `data: null`. 초안 생성(037)은 작업이라 202 `{ draftId, status }`를 주고, 진행과 결과는 038의 `status`(`PROCESSING`·`COMPLETED`·`FAILED`)로 확인한다(API-011 대신). "다시 계산"도 037로 보낸다(날마다 `stops`를 보내면 그 순서·머무는 시간으로 시각만 계산). 적용(039)은 초안의 `baseVersion`을 보내고, 그사이 일정이 바뀌었으면 409 C008. 이동 시간·주차·넣지 못한 이유 문구는 서버 값. 일정 조정(TRP-09, 2026-11-05)도 040(수동 편집) 대신 "다시 계산"(037)으로 새 초안을 만들고 039로 저장한다고 가정했다(TBD, 명세가 040을 쓰게 정하면 바꾼다) |
@@ -179,7 +179,11 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 | **목록에 없음** | `DELETE /rooms/{roomId}/members/me` → `{ roomDeleted }` | 여행방 나가기(W06-L·L2). **백엔드에 엔드포인트 요청 필요** |
 
 - 도메인 오류 code(`RO`·`P`·`AI`·`SC`)는 미확정이라 화면은 공통 code와 도메인 기본 문구만 쓴다. MSW는 없는 여행방에 목 전용 `RO404`를 돌려준다.
-- 일정 초안 생성(037)은 `Idempotency-Key` 헤더를, 일정 적용(039)은 버전(`baseVersion`)을 보낸다. 나머지 엔드포인트는 버전 필드와 멱등성 헤더를 아직 보내지 않는다.
+- 이때 일정 초안 생성(037)은 `Idempotency-Key` 헤더를, 일정 적용(039)은 버전(`baseVersion`)을 보내도록 했다.
+
+2026-11-09 최신 `backend/dev`(`473ba06`)의 `RoomController`, `RoomCreateRequest`, `RoomCreateResponse`를 대조해 여행방 생성(API-021)을 실제 계약에 맞췄다. 같은 요청 재시도에는 동일한 `Idempotency-Key`를 사용한다. Swagger는 HTTP 502였고, 같은 브랜치의 `RoomPlaceService`에는 코스 장소 가져오기(API-030)가 미구현으로 명시되어 있다.
+
+2026-11-09 사용자가 제공한 API-030 명세로 새 여행방 생성 후 공개 코스의 선택 방문을 가져오는 클라이언트와 MSW를 연결했다. 배포 서버의 API-030 구현 여부는 미확인이다.
 
 ### 3-2. 방문 분포도 API-046 — 백엔드 코드 대조 (2026-11-06)
 

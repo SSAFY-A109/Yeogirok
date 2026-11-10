@@ -16,6 +16,7 @@ export const tipFixture: TipDetailDto = {
 
 export type MockTip = {
   detail: TipDetailDto;
+  updatedAt: string;
   state: TipStatusDto;
   pending: CreateTipRequestDto | UpdateTipRequestDto | null;
   uploadIds: string[];
@@ -23,10 +24,19 @@ export type MockTip = {
 };
 
 export function createTipFixtures(): Map<number, MockTip> {
-  return new Map([1, 2].map((id) => {
-    const detail = { ...tipFixture, id, author: { id: id === 1 ? 2 : 1, nickname: id === 1 ? "여행자" : "나" }, reactions: { ...tipFixture.reactions } };
+  return new Map(["PHOTO", "PHOTO", "FOOD", "CAFE", "TIP"].map((category, index) => {
+    const id = index + 1;
+    const detail = {
+      ...tipFixture,
+      id,
+      category,
+      author: { id: id === 1 ? 2 : 1, nickname: id === 1 ? "여행자" : "나" },
+      location: id <= 2 ? { ...tipFixture.location } : { latitude: 37.77 + index * 0.01, longitude: 128.94 },
+      reactions: { ...tipFixture.reactions },
+    };
     return [id, {
       detail,
+      updatedAt: detail.createdAt,
       state: { tipId: id, status: "PUBLISHED", jobId: null, steps: { media: "SKIPPED", spatial: "SUCCEEDED", content: "SUCCEEDED" }, error: null, retryable: false, operation: null, operationStatus: null, version: 1 },
       pending: null, uploadIds: [], checks: 0,
     }];

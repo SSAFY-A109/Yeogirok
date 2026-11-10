@@ -2,8 +2,6 @@ import { infiniteQueryOptions, queryOptions, useInfiniteQuery, useQuery } from "
 
 import { getCourse, getCourseRecommendations, getPopularPlaces, searchCourses, type CourseSearchCondition } from "@/features/course/api/course.api";
 
-/** 검색 한 페이지의 코스 수. limit 상한은 DEC-20 미정이라 기본값을 쓴다(TBD). */
-const COURSE_SEARCH_PAGE_SIZE = 20;
 const COURSE_LIST_STALE_MS = 60_000;
 
 export const courseKeys = {
@@ -13,8 +11,8 @@ export const courseKeys = {
     return [...courseKeys.all, "search", condition] as const;
   },
 
-  recommendations: () => {
-    return [...courseKeys.all, "recommendations"] as const;
+  recommendations: (category: string | null) => {
+    return [...courseKeys.all, "recommendations", category] as const;
   },
 
   detail: (courseId: number) => {
@@ -31,7 +29,7 @@ export function courseSearchOptions(condition: CourseSearchCondition) {
     queryKey: courseKeys.search(condition),
 
     queryFn: ({ pageParam, signal }) => {
-      return searchCourses({ ...condition, cursor: pageParam, limit: COURSE_SEARCH_PAGE_SIZE }, signal);
+      return searchCourses({ ...condition, cursor: pageParam }, signal);
     },
 
     initialPageParam: null as string | null,
@@ -44,12 +42,18 @@ export function courseSearchOptions(condition: CourseSearchCondition) {
   });
 }
 
-export function courseRecommendationsOptions() {
-  return queryOptions({
-    queryKey: courseKeys.recommendations(),
+export function courseRecommendationsOptions(category: string | null) {
+  return infiniteQueryOptions({
+    queryKey: courseKeys.recommendations(category),
 
-    queryFn: ({ signal }) => {
-      return getCourseRecommendations(signal);
+    queryFn: ({ pageParam, signal }) => {
+      return getCourseRecommendations({ category: category ?? undefined, cursor: pageParam ?? undefined }, signal);
+    },
+
+    initialPageParam: null as string | null,
+
+    getNextPageParam: (lastPage) => {
+      return lastPage.nextCursor;
     },
 
     staleTime: COURSE_LIST_STALE_MS,
@@ -82,8 +86,8 @@ export function useCourseSearch(condition: CourseSearchCondition) {
   return useInfiniteQuery(courseSearchOptions(condition));
 }
 
-export function useCourseRecommendations() {
-  return useQuery(courseRecommendationsOptions());
+export function useCourseRecommendations(category: string | null) {
+  return useInfiniteQuery(courseRecommendationsOptions(category));
 }
 
 /** 라우트에서 받은 코스 id가 숫자가 아니면(`null`) 요청하지 않는다. */

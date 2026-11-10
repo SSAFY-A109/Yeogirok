@@ -105,7 +105,7 @@ async function check() {
       await api[method](path);
     }
 
-    for (const [code, status] of [["C007", 403], ["C008", 409], ["C014", 422], ["C002", 400]]) {
+    for (const [code, status] of [["A004", 403], ["C005", 409], ["C007", 403], ["C008", 409], ["C014", 422], ["C002", 400]]) {
       server.use(http.get(`${origin}/__client_check__`, () => {
         return failure(code, status);
       }));
@@ -164,7 +164,7 @@ async function check() {
           await delay(100);
         }
 
-        return failure("C005");
+        return failure("A002");
       }),
     );
 
@@ -219,7 +219,7 @@ async function check() {
     await assert.rejects(api.get("/__client_check__"), hasCode("CONTRACT_MISMATCH", 200));
     assert.equal(await getTokens(), null);
 
-    for (const code of ["C004", "C006"]) {
+    for (const code of ["A001", "A003", "C004", "C006"]) {
       await setTokens(oldTokens);
 
       server.use(http.get(`${origin}/__client_check__`, () => {

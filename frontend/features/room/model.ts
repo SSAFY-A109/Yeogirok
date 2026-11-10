@@ -1,3 +1,4 @@
+import type { MainPlaceDto } from "../course/model";
 import { toPlaceCategory, type PlaceCategory, type PlaceCategoryDto } from "../place/model";
 import { assertId, toKnownEnum } from "../../lib/contract";
 import {
@@ -8,7 +9,7 @@ import {
   type LocalDate,
 } from "../../lib/date";
 
-// 가정(TBD): API-020~025·028~032의 요청·응답 상세는 명세 미확정이다(2026-11-03 Swagger paths 비어 있음).
+// API-021·030 외의 DTO는 화면 선개발용 가정(TBD)이다.
 // 필드는 Figma "여행방 함께 장소 모으기" 섹션(W06~W12)에서 역산했다. 명세가 나오면 이름과 형식을 맞춘다.
 // 여행방 나가기는 API 목록에 없는 엔드포인트(DELETE /rooms/{roomId}/members/me)를 가정했다 — 백엔드 요청 필요.
 
@@ -52,14 +53,21 @@ export type RoomDetailDto = RoomSummaryDto & {
   schedule: { createdAt: string } | null;
 };
 
-export type CreateRoomRequestDto = {
+export type RoomFormValues = {
   name: string;
   startDate: string | null;
   endDate: string | null;
   transportMode: TransportModeDto;
 };
 
-export type UpdateRoomRequestDto = Partial<CreateRoomRequestDto>;
+export type CreateRoomRequestDto = Omit<RoomFormValues, "name" | "transportMode"> & {
+  title: string;
+  transportMode: "CAR" | "TRANSIT";
+};
+
+export type CreateRoomResponseDto = { id: number; version: number; isCreator: boolean };
+
+export type UpdateRoomRequestDto = Partial<RoomFormValues>;
 
 export type RoomInvitationDto = { invitationUrl: string; expiresAt: string | null };
 
@@ -82,6 +90,18 @@ export type AddRoomPlacesRequestDto = {
   source: "SEARCH" | "AI_RECOMMENDATION";
   recommendationRequestId: number | null;
 };
+
+export type ImportCoursePlacesRequestDto = { recordId: number; visitIds: number[] };
+
+export type ImportedCoursePlaceDto = {
+  id: number;
+  place: MainPlaceDto;
+  sourceType: "SEARCH" | "COURSE" | "AI" | "MANUAL";
+  sourceRecordId: number | null;
+  addedBy: number;
+};
+
+export type ImportCoursePlacesResponseDto = { added: ImportedCoursePlaceDto[]; version: number };
 
 export type LeaveRoomResponseDto = { roomDeleted: boolean };
 

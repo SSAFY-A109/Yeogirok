@@ -123,7 +123,7 @@ function roundCoordinate(value: number): number {
 
 /** 예시 묶음과 앱에서 남긴 발자취. 앱에서 남긴 발자취는 기간 조건으로 거른다(예시 묶음은 날짜가 없어 늘 센다). */
 function countedFootprints(from: string | null, to: string | null): MockFootprintSeed[] {
-  const saved = mockDb.footprints.filter((footprint) => {
+  const saved = [...mockDb.footprints.values()].filter((footprint) => {
     const day = footprint.visitedAt.slice(0, 10);
     return (from === null || day >= from) && (to === null || day <= to);
   }).map((footprint) => {

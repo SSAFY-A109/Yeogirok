@@ -9,6 +9,7 @@ import java.time.Instant
 class CloudAnchorExperiment {
     private var host: HostCloudAnchorFuture? = null
     private var resolve: ResolveCloudAnchorFuture? = null
+    private val resolveTimeout = ResolveTrackingTimeout()
     private var resolved: Anchor? = null
     private val gate = CloudQualityGate()
     private var lastQualityAt = 0L
@@ -62,6 +63,7 @@ class CloudAnchorExperiment {
     fun startResolve(session: Session, id: String) {
         if (attempted) return
         attempted = true; startedAt = SystemClock.elapsedRealtime()
+        resolveTimeout.reset()
         try {
             resolve = session.resolveCloudAnchorAsync(id, null)
             Log.i("YeogirokCloud", "RESOLVE_STARTED") // Never log the shared anchor ID.
@@ -108,18 +110,6 @@ class CloudAnchorExperiment {
             quality = nextQuality
             canHost = gate.update(now, value == Session.FeatureMapQuality.GOOD)
         }
-        if (busy && now - startedAt >= ArExperimentPolicy.CLOUD_TIMEOUT_MS) {
-            // Do not substitute a GPS/local pose after timeout.
-            host?.cancel(); host = null
-            resolve?.let {
-                if (it.state == FutureState.DONE && it.resultCloudAnchorState == Anchor.CloudAnchorState.SUCCESS)
-                    it.resultAnchor?.detach()
-                else it.cancel()
-            }
-            resolve = null
-            fail("60초 시간 초과. 다시 배치 또는 복원 재시도를 눌러 주세요.")
-            return
-        }
         host?.takeIf { it.state == FutureState.DONE }?.let {
             host = null; busy = false; durationMs = now - startedAt
             if (it.resultCloudAnchorState == Anchor.CloudAnchorState.SUCCESS && !it.resultCloudAnchorId.isNullOrBlank()) {
@@ -138,6 +128,14 @@ class CloudAnchorExperiment {
                 message = "복원 응답 완료. 실제 원래 지점을 터치해 차이를 비교하세요."
             } else fail("Cloud 복원 실패: ${it.resultCloudAnchorState}. 복원 재시도를 눌러 주세요.",
                 it.resultCloudAnchorState == Anchor.CloudAnchorState.ERROR_NOT_AUTHORIZED)
+        }
+        if (now - startedAt >= ArExperimentPolicy.CLOUD_TIMEOUT_MS && host?.cancel() == true) {
+            host = null
+            fail("공간 저장 시간이 초과됐어요. 다시 배치해 주세요.")
+        }
+        if (resolve != null && resolveTimeout.update(now, frame.camera.trackingState == TrackingState.TRACKING) && resolve?.cancel() == true) {
+            resolve = null
+            fail("공간 복원 시간이 초과됐어요. 복원 재시도를 눌러 주세요.")
         }
     }
 

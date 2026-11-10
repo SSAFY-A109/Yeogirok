@@ -168,6 +168,8 @@ export type FeaturedCourse = CourseLength & {
   previewPlaces: FeaturedPreviewPlace[];
 };
 
+export type CourseRecommendationsPage = { courses: FeaturedCourse[]; nextCursor: string | null };
+
 export type Coordinate = { latitude: number; longitude: number };
 
 export type CoursePlace = {
@@ -374,7 +376,9 @@ export function toPopularPlace(dto: PopularPlaceDto): PopularPlace {
   const provider = toKnownEnum(place.provider, PLACE_PROVIDERS);
 
   return {
-    key: [provider, place.providerPlaceId ?? place.name, place.latitude, place.longitude].join(":"),
+    key: place.providerPlaceId !== null
+      ? JSON.stringify([provider, place.providerPlaceId])
+      : JSON.stringify([provider, place.name, place.latitude, place.longitude, place.address]),
     rank: assertCount(dto.rank, "rank"),
     provider,
     providerPlaceId: place.providerPlaceId,

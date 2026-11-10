@@ -47,7 +47,7 @@ export function CourseDetailScreen({ courseId }: { courseId: number | null }) {
           }} testID="course-detail.error" />
         </View>
       )}
-      {course.data && <PlacePicker course={course.data} />}
+      {course.isSuccess && <PlacePicker course={course.data} />}
     </SafeAreaView>
   );
 }
@@ -61,7 +61,11 @@ function PlacePicker({ course }: { course: CourseDetail }) {
     return selected.has(place.id);
   });
 
-  const allSelected = course.places.length > 0 && selected.size === course.places.length;
+  const selectedNames = selectedPlaces.map((place) => {
+    return place.name;
+  });
+
+  const allSelected = course.places.length > 0 && selectedPlaces.length === course.places.length;
 
   function toggle(placeId: string) {
     const next = new Set(selected);
@@ -85,7 +89,7 @@ function PlacePicker({ course }: { course: CourseDetail }) {
       {notice !== "" && (
         <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="bg-brand-muted px-5 py-3 text-label text-primary" testID="course-detail.notice">{notice}</Text>
       )}
-      <SelectionBar count={selected.size} onAdd={() => {
+      <SelectionBar count={selectedPlaces.length} onAdd={() => {
         setNotice("");
         setSheetOpen(true);
       }} />
@@ -94,9 +98,7 @@ function PlacePicker({ course }: { course: CourseDetail }) {
         placeIds={selectedPlaces.map((place) => {
           return place.id;
         })}
-        placeNames={selectedPlaces.map((place) => {
-          return place.name;
-        })}
+        placeNames={selectedNames}
         onClose={() => {
           setSheetOpen(false);
         }}
@@ -104,6 +106,21 @@ function PlacePicker({ course }: { course: CourseDetail }) {
           setSheetOpen(false);
           setSelected(new Set());
           setNotice(`${result.roomName}에 ${result.addedCount}곳을 담았어요`);
+        }}
+        onCreateRoom={() => {
+          const visitIds = selectedPlaces.map((place) => {
+            return place.visitId;
+          });
+
+          setSheetOpen(false);
+          router.push({
+            pathname: "/rooms/new",
+            params: {
+              recordId: String(course.id),
+              visitIds: visitIds.join(","),
+              placeNames: selectedNames.join(", "),
+            },
+          });
         }}
       />
     </>

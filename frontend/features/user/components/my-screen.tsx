@@ -123,12 +123,13 @@ function MyRecords() {
   })}</View>;
 }
 
-function MenuRow({ icon, label, count, coral, destructive, divider, onPress, testID }: { icon: LucideIcon; label: string; count?: string; coral?: boolean; destructive?: boolean; divider?: boolean; onPress: () => void; testID: string }) {
+function MenuRow({ icon, label, count, coral, destructive, divider, chevron, onPress, testID }: { icon: LucideIcon; label: string; count?: string; coral?: boolean; destructive?: boolean; divider?: boolean; chevron?: boolean; onPress: () => void; testID: string }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${label}${count ? ` ${count}` : ""}`} className={cn("min-h-button-lg flex-row items-center gap-3 p-4 active:bg-muted", divider && "border-b border-border")} onPress={onPress} testID={testID}>
       <Icon as={icon} size={20} className={destructive ? "text-destructive" : coral ? "text-map-footprint" : "text-icon"} />
       <Text className={cn("flex-1 text-label", destructive && "text-destructive")}>{label}</Text>
-      {count && <><Text className="text-caption text-foreground-secondary">{count}</Text><Icon as={ChevronRight} size={18} className="text-icon" /></>}
+      {count && <Text className="text-caption text-foreground-secondary">{count}</Text>}
+      {chevron && <Icon as={ChevronRight} size={18} className="text-icon" />}
     </Pressable>
   );
 }

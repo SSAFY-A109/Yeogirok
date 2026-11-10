@@ -192,28 +192,28 @@
       "pencil": "없음",
       "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-1 (20:4915) · 클러스터는 지도 발자취 (20:4585), 큰 마커 (20:4602) 참고",
       "features": ["MY-02", "FPT-04"],
-      "note": "나만 보는 발자취 카카오 지도와 기간·카테고리 필터. 기존 KakaoMapView에 공개 장소 부근 mock 좌표와 발바닥 마커를 전달하며 핀 선택은 해당 방명록으로 연결한다. 필터별 표시 영역 맞춤, 로딩·오류·재시도 제공. 동선·위치 권한·방문 API 사용 없음. mock 기준일은 2026-11-10. Pencil 미대조."
+      "note": "내 발자취 API의 기간·카테고리·커서 조회 결과를 목록과 카카오 지도에 표시한다. 지도 핀과 목록 행은 해당 방명록으로 연결한다. Pencil 미대조."
     },
     "my/footprints/[footprintId]": {
       "route": "/my/footprints/[footprintId]",
       "pencil": "없음",
       "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-2 (20:4966)",
       "features": ["FPT-05", "FPT-08"],
-      "note": "카카오 지도에서 선택한 방문 위치 한 곳을 표시. 방명록 본문만 최대 200자 수정, 변경 없으면 저장 비활성. 위치·시각·카테고리·방문 횟수 유지. 실제 저장 없이 My mock 상태만 변경. Pencil 미대조."
+      "note": "상세 API의 방문 위치와 방명록을 표시한다. 본문은 최대 200자이며 상세 version으로 수정·삭제한다. 버전 충돌 시 최신 내용을 조회할 수 있다. Pencil 미대조."
     },
     "my/tips": {
       "route": "/my/tips",
       "pencil": "없음",
       "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-3 (50:3156), W25-3E (51:3254), W25-5 (52:3271), W25-5A (53:3483)",
       "features": ["MY-03", "TIP-09", "TIP-10"],
-      "note": "2026-11-06: API-053의 본인 팁 메타데이터와 커서 목록을 표시한다. API-090에서 최신 version 확인 후 API-055 원격 삭제. 로딩·빈 상태·오류·추가 페이지 재시도·삭제 확인 제공. Pencil 미대조."
+      "note": "내 팁 목록 API의 등록일·상태와 응답에 포함된 카테고리를 표시한다. 삭제는 상세 version을 조회한 뒤 확인 시 요청한다. Pencil 미대조."
     },
     "my/tips/[tipId]": {
       "route": "/my/tips/[tipId]",
       "pencil": "없음",
       "figma": "gzYo8vG6h2LrKGOa22UCFP · W25-4 (50:3241)",
       "features": ["TIP-09"],
-      "note": "2026-11-06: API-090·054 연결. 종류·본문 필수, 사진 선택, 공백 포함 최대 120자. 본문·사진·종류 원격 수정, 사진 제거는 빈 uploadIds. 사진은 시스템 촬영/선택·EXIF 위치 제거·S3 PUT·READY 후 연결한다. 수정 중 이전 공개본 유지·작업 조회/재시도·버전 충돌 대응. AR 재배치만 현장에서 진행. Pencil 미대조."
+      "note": "본문 최대 120자, 선택 사진 최대 1장. 카테고리·본문·사진 변경을 접수하고 작성자 상태 API에서 처리 결과를 확인한다. Pencil 미대조."
     },
     "my/withdrawal": {
       "route": "/my/withdrawal",
@@ -395,7 +395,7 @@
         "EXP-05",
         "EXP-07"
       ],
-      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 코스 장소 id가 MSW 장소 목록과 연결되지 않아 아직 비활성(메인 인기 장소만 연결). Pencil 미대조."
+      "note": "담기 버튼은 W05(20:4119) 바텀시트로 연결(room-select-sheet). 새 여행방 만들기(W06)는 선택한 공개 방문과 코스 ID를 넘겨 방 생성 후 API-030으로 가져온다. Pencil 미대조."
     }
   },
   "screensNote": "키는 라우트 기준 영문(예: rooms/[roomId]). 값은 { route, pencil: 'Wxx 화면명 (노드id)' 또는 '없음', figma: 'Wxx', features: [기능 ID] }. docs/frontend-spec.md §2와 같은 순서로 추가한다."

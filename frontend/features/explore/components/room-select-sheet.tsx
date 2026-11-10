@@ -30,6 +30,7 @@ export function RoomSelectSheet({ visible, placeNames, placeIds, onClose, onAdde
   const add = useAddPlacesToRoom();
   const [picked, setPicked] = useState<string>();
   const roomId = picked ?? rooms.data?.[0]?.id;
+  const canCreateRoom = onCreateRoom !== undefined && !add.isPending;
 
   function submit() {
     if (!roomId || add.isPending) {
@@ -89,27 +90,27 @@ export function RoomSelectSheet({ visible, placeNames, placeIds, onClose, onAdde
                   </Pressable>
                 );
               })}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={onCreateRoom ? "새 여행방 만들기" : "새 여행방 만들기, 준비 중"}
-                accessibilityHint={onCreateRoom ? "고른 장소를 담은 채로 새 여행방을 만들어요" : undefined}
-                accessibilityState={{ disabled: !onCreateRoom }}
-                disabled={!onCreateRoom}
-                onPress={onCreateRoom}
-                className={cn("flex-row items-center gap-3 rounded-md border border-dashed border-border p-4", onCreateRoom ? "active:bg-muted" : "opacity-50")}
-                testID="room-sheet.new-room"
-              >
-                <View className="items-center justify-center rounded-full bg-brand-muted" style={{ width: 22, height: 22 }}>
-                  <Icon as={Plus} size={16} className="text-primary" />
-                </View>
-                <View className="flex-1 gap-1">
-                  <Text className="text-label text-primary">새 여행방 만들기</Text>
-                  <Text className="text-caption text-foreground-secondary">고른 장소를 담은 채로 만들어요</Text>
-                </View>
-                <Icon as={ChevronRight} size={20} className="text-icon" />
-              </Pressable>
             </RadioGroup>
           )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={onCreateRoom ? "새 여행방 만들기" : "새 여행방 만들기, 준비 중"}
+            accessibilityHint={onCreateRoom ? "고른 장소를 담은 채로 새 여행방을 만들어요" : undefined}
+            accessibilityState={{ disabled: !canCreateRoom }}
+            disabled={!canCreateRoom}
+            onPress={onCreateRoom}
+            className={cn("flex-row items-center gap-3 rounded-md border border-dashed border-border p-4", canCreateRoom ? "active:bg-muted" : "opacity-50")}
+            testID="room-sheet.new-room"
+          >
+            <View className="items-center justify-center rounded-full bg-brand-muted" style={{ width: 22, height: 22 }}>
+              <Icon as={Plus} size={16} className="text-primary" />
+            </View>
+            <View className="flex-1 gap-1">
+              <Text className="text-label text-primary">새 여행방 만들기</Text>
+              <Text className="text-caption text-foreground-secondary">고른 장소를 담은 채로 만들어요</Text>
+            </View>
+            <Icon as={ChevronRight} size={20} className="text-icon" />
+          </Pressable>
         </View>
         {add.isError && (
           <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="text-caption text-destructive">장소를 담지 못했어요. 다시 시도해 주세요.</Text>

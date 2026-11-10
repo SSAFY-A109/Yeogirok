@@ -8,7 +8,7 @@ import { KakaoMapView, type MapCamera, type MapClusterBadge, type MapMarker } fr
 import { footprintPinImage } from "@/lib/native/map/footprint-pin";
 import { getColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import type { MyFootprint } from "../mocks/my-data";
+import type { Footprint } from "@/features/footprint/model";
 
 const javascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
 const colors = getColors("light");
@@ -16,7 +16,7 @@ const clusterBadge: MapClusterBadge = { background: colors["highlight-muted"], f
 const MAP_HEIGHT = 176 * 1.3;
 const GUESTBOOK_MAP_HEIGHT = 144 * 1.5;
 
-type MyFootprintMapProps = { footprints: MyFootprint[]; selected?: boolean; onSelect?: (id: string) => void };
+type MyFootprintMapProps = { footprints: Footprint[]; selected?: boolean; onSelect?: (id: string) => void };
 
 export function MyFootprintMap({ footprints, selected = false, onSelect }: MyFootprintMapProps) {
   const first = footprints[0];
@@ -32,7 +32,7 @@ export function MyFootprintMap({ footprints, selected = false, onSelect }: MyFoo
   );
 }
 
-function FootprintMapContent({ center, footprints, onSelect }: MyFootprintMapProps & { center: MyFootprint }) {
+function FootprintMapContent({ center, footprints, onSelect }: MyFootprintMapProps & { center: Footprint }) {
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const canLoad = Platform.OS !== "web" && Boolean(javascriptKey);
@@ -43,7 +43,7 @@ function FootprintMapContent({ center, footprints, onSelect }: MyFootprintMapPro
 
   const markers = useMemo<MapMarker[]>(() => {
     return footprints.map(({ id, lat, lng }) => {
-      return { id, lat, lng };
+      return { id: String(id), lat, lng };
     });
   }, [footprints]);
 
@@ -57,7 +57,7 @@ function FootprintMapContent({ center, footprints, onSelect }: MyFootprintMapPro
             setPhase("error");
           }} onPressPoint={(id) => {
             if (footprints.some((item) => {
-              return item.id === id;
+              return String(item.id) === id;
             })) {
               onSelect?.(id);
             }
