@@ -11,7 +11,7 @@ import lombok.Getter;
  * 오류 코드. 원천은 팀 Notion "API 명세"다. <b>코드 문자열을 바꾸면 앱 동작이 바뀐다</b> — 명세를 먼저 고친다.
  *
  * <p>접두어는 도메인을 뜻한다. {@code C} 공통, {@code A} 인증·인가, {@code J} 비동기 작업, {@code F} 발자취, {@code ST} 방문 통계, {@code RO} 여행방,
- * {@code RE} 여행 기록, {@code P} 장소, {@code M} 파일, {@code T} AR 팁, {@code SC} 계획 일정.
+ * {@code RE} 여행 기록, {@code CO} 공개 코스, {@code P} 장소, {@code M} 파일, {@code T} AR 팁, {@code SC} 계획 일정.
  *
  * <p>폐기한 코드는 지우지 말고 {@code @Deprecated} 로 남긴다(명세의 재사용 금지 규칙).
  *
@@ -113,11 +113,24 @@ public enum ExceptionType {
 		"여행기 완성 필수조건 미충족: 실제 방문 0개 또는 장소·날짜·방문 시각 미확인"),
 	RECORD_ALREADY_EXISTS(CONFLICT, "RE017", "해당 여행방에 여행 기록이 이미 존재함"),
 	VISIT_PLACE_MISSING(BAD_REQUEST, "RE018", "실제 방문 일정의 장소 입력 누락"),
+	RECORD_NOT_PUBLISHABLE(UNPROCESSABLE_CONTENT, "RE019", "여행기 완성이 필요한 공개 조건 미충족"),
 	VISIT_HAS_PHOTOS(CONFLICT, "RE020", "삭제 대상 방문에 연결된 사진이 남아 있음"),
 	VISIT_STORIES_NOT_CONFIRMED(CONFLICT, "RE023",
 		"삭제 대상 방문에 이야기가 있으나 confirmDeleteStories=true 확인이 없음"),
 	TRIP_NOT_ENDED(UNPROCESSABLE_CONTENT, "RE024",
 		"여행 종료 조건 미충족: 종료일 미정 또는 Asia/Seoul 기준 종료일이 오늘·미래"),
+
+	/* ── 공개 코스 CO (courseId = 기록 ID) ───────────────────── */
+
+	COURSE_NOT_MEMBER(FORBIDDEN, "CO008", "해당 여행 기록의 현재 참여자가 아님"),
+	/** 부분 선택 필드를 받던 계약의 오류. 지금은 전체 공개라 생기지 않는다(명세 course-publish-api.md 5절 7). */
+	COURSE_SELECTION_NOT_IN_RECORD(UNPROCESSABLE_CONTENT, "CO009", "공개 대상으로 선택한 자원이 원본 기록에 속하지 않음"),
+	COURSE_SELECTION_CHANGED(CONFLICT, "CO010", "공개 미리보기 이후 선택 내용·원본이 변경됨"),
+	COURSE_ALREADY_PUBLISHED(CONFLICT, "CO011", "해당 기록이 현재 게시 중임"),
+	/** 노션에 세부 공개 정책이 아직 없어 쓰지 않는다(명세 5절 7). */
+	COURSE_NOT_PUBLISHABLE(UNPROCESSABLE_CONTENT, "CO012", "공개 조건 미충족"),
+	/** 없는 기록과 방이 삭제된 기록을 구분하지 않는다. */
+	COURSE_NOT_FOUND(NOT_FOUND, "CO013", "공유 코스 없음"),
 
 	/* ── 장소 P ─────────────────────────────────────────────── */
 
