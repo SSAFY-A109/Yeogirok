@@ -4,13 +4,18 @@ import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDate;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.sql.DataSource;
 
@@ -33,17 +38,19 @@ import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.global.config.AsyncConfig;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import jakarta.persistence.EntityManager;
 
 /**
- * API-089 의 파일 삭제는 DB 커밋 뒤에만 한다. 커밋이 필요해 테스트 트랜잭션을 쓰지 않고, 만든 행은 끝나고 지운다.
+ * API-089 의 파일 삭제는 DB 커밋 뒤에, 요청 스레드 밖(@Async)에서만 한다. 커밋이 필요해 테스트 트랜잭션을 쓰지 않고,
+ * 만든 행은 끝나고 지운다.
  * 저장소는 RecordTestConfig 의 mock 이다.
  */
 @DataJpaTest
-@Import(RecordTestConfig.class)
+@Import({RecordTestConfig.class, AsyncConfig.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RecordPhotoDeleteCommitTest {
 
@@ -95,10 +102,17 @@ class RecordPhotoDeleteCommitTest {
 	}
 
 	@Test
-	void 커밋되면_사진_버킷의_그_파일을_지운다() {
+	void 커밋되면_요청_스레드_밖에서_사진_버킷의_그_파일을_지운다() {
+		AtomicReference<Thread> deleter = new AtomicReference<>();
+		willAnswer(invocation -> {
+			deleter.set(Thread.currentThread());
+			return null;
+		}).given(fileStorage).delete(anyString(), anyString());
+
 		visitPhotoService.delete(ME, recordId, imageId, 1);
 
-		verify(fileStorage).delete("photos", "record-photo/commit");
+		verify(fileStorage, timeout(2000)).delete("photos", "record-photo/commit");
+		assertThat(deleter.get()).isNotEqualTo(Thread.currentThread());
 	}
 
 	@Test
@@ -107,7 +121,7 @@ class RecordPhotoDeleteCommitTest {
 			.isInstanceOf(BusinessException.class).extracting("exceptionType")
 			.isEqualTo(ExceptionType.VERSION_MISMATCH);
 
-		verify(fileStorage, never()).delete(anyString(), anyString());
+		verify(fileStorage, after(500).never()).delete(anyString(), anyString());
 	}
 
 	@Test
