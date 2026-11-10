@@ -27,6 +27,7 @@ import com.ssafy.yeogirok.domain.record.service.RecordCompleteService;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder;
 import com.ssafy.yeogirok.domain.record.service.RecordPhotoFileCleaner;
+import com.ssafy.yeogirok.domain.record.service.RecordProgressReader;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.RecordVisitViews;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
@@ -52,7 +53,7 @@ import tools.jackson.databind.json.JsonMapper;
 	StoryService.class, RecordCompleteService.class, VisitPhotoService.class, RecordPhotoFileCleaner.class,
 	RecordAuthors.class, RecordFinder.class, RoomFinder.class, JobStore.class, RedisLock.class,
 	ReceiptMaterialStore.class, ReceiptMaterials.class, MaterialQueryService.class, RecordDraftStore.class,
-	DraftApplication.class})
+	DraftApplication.class, RecordProgressReader.class})
 public class RecordTestConfig {
 
 	/** 2026-11-09 00:30 Asia/Seoul. UTC 날짜(11/8)와 서울 날짜(11/9)가 다른 시각이다. */

@@ -2,6 +2,11 @@ package com.ssafy.yeogirok.domain.record.draft;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -50,6 +55,37 @@ public class RecordDraftStore {
 	public Optional<Pointer> findPointer(Long recordId) {
 		return Optional.ofNullable(redis.opsForValue().get(POINTER_PREFIX + recordId))
 			.map(value -> jsonMapper.readValue(value, Pointer.class));
+	}
+
+	/**
+	 * 여러 기록의 최근 초안을 한 번에(API-058·059 progress). 포인터 MGET 한 번, 초안 MGET 한 번.
+	 * @return 기록 ID → 최근 초안. 포인터나 초안이 만료된 기록은 빠진다
+	 */
+	public Map<Long, RecordDraft> findLatest(List<Long> recordIds) {
+		Map<Long, RecordDraft> latest = new HashMap<>();
+		if (recordIds.isEmpty()) {
+			return latest;
+		}
+		List<String> pointers = redis.opsForValue().multiGet(recordIds.stream().map(id -> POINTER_PREFIX + id).toList());
+		Map<String, Long> recordOf = new LinkedHashMap<>();
+		for (int i = 0; i < recordIds.size(); i++) {
+			String pointer = pointers == null ? null : pointers.get(i);
+			if (pointer != null) {
+				recordOf.put(jsonMapper.readValue(pointer, Pointer.class).draftKey(), recordIds.get(i));
+			}
+		}
+		if (recordOf.isEmpty()) {
+			return latest;
+		}
+		List<String> keys = new ArrayList<>(recordOf.keySet());
+		List<String> drafts = redis.opsForValue().multiGet(keys.stream().map(key -> PREFIX + key).toList());
+		for (int i = 0; i < keys.size(); i++) {
+			String draft = drafts == null ? null : drafts.get(i);
+			if (draft != null) {
+				latest.put(recordOf.get(keys.get(i)), jsonMapper.readValue(draft, RecordDraft.class));
+			}
+		}
+		return latest;
 	}
 
 	private Optional<Duration> remaining(RecordDraft draft) {

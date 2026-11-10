@@ -1,12 +1,16 @@
 package com.ssafy.yeogirok.domain.file.session;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -96,5 +100,41 @@ public class ReceiptMaterialStore {
 	public Optional<ReceiptMaterial> find(String materialId) {
 		return Optional.ofNullable(redis.opsForValue().get(PREFIX + materialId))
 			.map(value -> jsonMapper.readValue(value, ReceiptMaterial.class));
+	}
+
+	/**
+	 * 여러 기록의 그 사용자 자료를 한 번에(API-058 progress). 목록은 파이프라인 한 번, 자료는 MGET 한 번으로 읽는다. 만료된 자료는
+	 * 빼기만 하고 목록에서 지우지는 않는다.
+	 */
+	public Map<Long, List<ReceiptMaterialEntry>> indexedAll(List<Long> recordIds, Long userId) {
+		Map<Long, List<ReceiptMaterialEntry>> byRecord = new HashMap<>();
+		if (recordIds.isEmpty()) {
+			return byRecord;
+		}
+		List<Object> members = redis.executePipelined((RedisCallback<Object>)connection -> {
+			recordIds.forEach(recordId -> connection.setCommands()
+				.sMembers(indexKey(recordId, userId).getBytes(StandardCharsets.UTF_8)));
+			return null;
+		});
+		List<String> materialIds = new ArrayList<>();
+		Map<String, Long> recordOf = new HashMap<>();
+		for (int i = 0; i < recordIds.size(); i++) {
+			for (Object id : (Set<?>)members.get(i)) {
+				materialIds.add(id.toString());
+				recordOf.put(id.toString(), recordIds.get(i));
+			}
+		}
+		if (materialIds.isEmpty()) {
+			return byRecord;
+		}
+		List<String> values = redis.opsForValue().multiGet(materialIds.stream().map(id -> PREFIX + id).toList());
+		for (int i = 0; i < materialIds.size(); i++) {
+			String value = values == null ? null : values.get(i);
+			if (value != null) {
+				byRecord.computeIfAbsent(recordOf.get(materialIds.get(i)), key -> new ArrayList<>())
+					.add(new ReceiptMaterialEntry(materialIds.get(i), jsonMapper.readValue(value, ReceiptMaterial.class)));
+			}
+		}
+		return byRecord;
 	}
 }
