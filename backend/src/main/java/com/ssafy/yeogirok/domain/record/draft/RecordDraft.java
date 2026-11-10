@@ -77,6 +77,12 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 		return with(JobStatus.SUCCEEDED, 1, newItems, newWarnings, null);
 	}
 
+	/** API-066 반영 커밋 뒤. */
+	public RecordDraft markApplied() {
+		return new RecordDraft(draftKey, type, jobId, recordId, requestedBy, baseVersion, status, draftVersion,
+			sourceSnapshot, items, warnings, error, true, createdAt, deadline);
+	}
+
 	public RecordDraft failed(JobError failure) {
 		return with(JobStatus.FAILED, null, List.of(), List.of(), failure);
 	}

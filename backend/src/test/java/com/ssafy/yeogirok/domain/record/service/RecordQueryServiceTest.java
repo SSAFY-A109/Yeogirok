@@ -4,8 +4,6 @@ import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.SIGNED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -27,7 +25,7 @@ import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
 import com.ssafy.yeogirok.domain.record.dto.MaterialSummary;
-import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialStore;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress.Stage;
@@ -40,6 +38,7 @@ import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.TestRedis;
 import com.ssafy.yeogirok.support.TestUsers;
 
 /** API-059. 응답 조립(순서·사진 보관함·탈퇴자 익명화)과 권한. */
@@ -63,14 +62,14 @@ class RecordQueryServiceTest {
 	@Autowired
 	FileStorage fileStorage;
 	@Autowired
-	MaterialQueryService materialQueryService;
+	ReceiptMaterialStore materialStore;
 
 	TravelRoom room;
 	TravelRecord record;
 
 	@BeforeEach
 	void setUp() {
-		reset(materialQueryService);
+		TestRedis.flushAll();
 		TestUsers.insertActive(em.getEntityManager(), MEMBER, FRIEND, LEFT, STRANGER);
 		TestUsers.insert(em.getEntityManager(), WITHDRAWN, "WITHDRAWN");
 		room = em.persist(TravelRoom.builder().title("강릉 여행").startDate(DAY1).endDate(DAY2)
@@ -177,11 +176,16 @@ class RecordQueryServiceTest {
 
 	@Test
 	void materials_는_요청자_본인_자료_요약이다() {
-		List<MaterialSummary> mine = List.of(new MaterialSummary("m-1", 1, "RECEIPT", ReceiptMaterial.Status.UPLOADED,
-			ReceiptMaterial.ReviewStatus.PENDING, false, List.of(), false, null));
-		given(materialQueryService.summaries(record.getId(), MEMBER)).willReturn(mine);
+		ReceiptMaterial failed = ReceiptMaterial.uploaded(record.getId(), MEMBER, "receipt/u", NOW,
+			NOW.plus(Duration.ofHours(24))).linked("RECEIPT", "job-ocr", NOW)
+			.ocrFailed(new ReceiptMaterial.Error("M003", "읽을 수 없음"));
+		materialStore.save("m-1", failed);
+		materialStore.addToIndex(record.getId(), MEMBER, "m-1");
 
-		assertThat(recordQueryService.getDetail(MEMBER, record.getId()).materials()).isEqualTo(mine);
+		assertThat(recordQueryService.getDetail(MEMBER, record.getId()).materials()).containsExactly(
+			new MaterialSummary("m-1", 2, "RECEIPT", ReceiptMaterial.Status.FAILED, ReceiptMaterial.ReviewStatus.REQUIRED,
+				true, List.of("merchantName", "paidDate", "paidTime", "place"), false,
+				new ReceiptMaterial.Error("M003", "읽을 수 없음")));
 		assertThat(recordQueryService.getDetail(FRIEND, record.getId()).materials()).isEmpty();
 	}
 

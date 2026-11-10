@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
+import com.ssafy.yeogirok.domain.record.draft.DraftApplication;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
@@ -54,6 +55,7 @@ public class VisitCommandService {
 	private final RecordPlaceRepository recordPlaceRepository;
 	private final PlaceRepository placeRepository;
 	private final LegalDongResolver legalDongResolver;
+	private final DraftApplication draftApplication;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
@@ -61,7 +63,7 @@ public class VisitCommandService {
 		ActualVisitRepository actualVisitRepository,
 		VisitImageRepository visitImageRepository, VisitStoryRepository visitStoryRepository,
 		RecordPlaceRepository recordPlaceRepository, PlaceRepository placeRepository, LegalDongResolver legalDongResolver,
-		PlatformTransactionManager transactionManager, Clock clock) {
+		DraftApplication draftApplication, PlatformTransactionManager transactionManager, Clock clock) {
 		this.recordFinder = recordFinder;
 		this.recordVisitViews = recordVisitViews;
 		this.actualVisitRepository = actualVisitRepository;
@@ -70,23 +72,33 @@ public class VisitCommandService {
 		this.recordPlaceRepository = recordPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.legalDongResolver = legalDongResolver;
+		this.draftApplication = draftApplication;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 	}
 
-	/** API-066. 방문을 끼워 넣고 기록 version+1·DRAFT. 방문은 creation_type=USER, is_public_selected=TRUE 다. */
+	/**
+	 * API-066. 방문을 끼워 넣고 기록 version+1·DRAFT. 방문은 is_public_selected=TRUE 이고, 초안 항목(itemId)은
+	 * creation_type=AI·출처(draftKey·itemId), 직접 추가는 USER 다. 초안 검사는 기록 행 잠금 안에서, 반영 표시는 커밋 뒤에 한다.
+	 */
 	public VisitAddResponse add(Long userId, Long recordId, VisitAddCommand command) {
 		Map<VisitPlaceInput.CustomPlace, LegalDong> legalDongs = legalDongs(userId, recordId,
 			command.items().stream().map(VisitAddCommand.Item::place));
-		return transactionTemplate.execute(status -> {
+		VisitAddResponse response = transactionTemplate.execute(status -> {
 			TravelRecord record = lockAndCheckVersion(userId, recordId, command.version());
+			if (command.fromDraft()) {
+				draftApplication.check(recordId, command);
+			}
 			Instant now = clock.instant();
 			VisitLayout layout = new VisitLayout(
 				actualVisitRepository.findByRecordIdOrderByVisitDateAscPositionAsc(recordId));
 			List<ActualVisit> added = new ArrayList<>();
 			for (VisitAddCommand.Item item : command.items()) {
-				ActualVisit visit = ActualVisit.manual(recordId, placeId(item.place(), legalDongs, now),
-					item.visitDate(), item.visitedAt(), now);
+				Long placeId = placeId(item.place(), legalDongs, now);
+				ActualVisit visit = item.itemId() == null
+					? ActualVisit.manual(recordId, placeId, item.visitDate(), item.visitedAt(), now)
+					: ActualVisit.fromDraft(recordId, placeId, item.visitDate(), item.visitedAt(), command.draftKey(),
+						item.itemId(), now);
 				layout.insert(visit, item.order());
 				added.add(visit);
 			}
@@ -95,6 +107,10 @@ public class VisitCommandService {
 			return new VisitAddResponse(added.stream().map(ActualVisit::getId).toList(), record.getVersion(),
 				record.getStatus());
 		});
+		if (command.fromDraft()) {
+			draftApplication.markApplied(command.draftKey());
+		}
+		return response;
 	}
 
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 그때 만든 방문 ID 와 지금 기록 상태를 준다. */

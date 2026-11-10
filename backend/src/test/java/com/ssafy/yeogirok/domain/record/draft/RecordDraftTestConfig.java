@@ -1,7 +1,6 @@
 package com.ssafy.yeogirok.domain.record.draft;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -14,22 +13,12 @@ import com.ssafy.yeogirok.domain.record.material.MaterialTestConfig;
 import com.ssafy.yeogirok.domain.record.service.RecordAccess;
 
 /**
- * 통합 초안 서비스 @DataJpaTest 용 빈. 영수증 자료 빈(실제 Redis·작업 실행기)에 초안 빈을 더한다. EXIF 는 가짜 리더가 읽는다:
+ * 통합 초안 서비스 @DataJpaTest 용 빈. 영수증 자료 빈(실제 Redis·작업 실행기)에 초안 생성 빈을 더한다. EXIF 는 가짜 리더가 읽는다:
  * S3 mock 이 사진 경로를 바이트로 돌려주면 그 경로에 넣어 둔 값을 준다.
  */
 @TestConfiguration
-@Import({MaterialTestConfig.class, RecordAccess.class, RecordDraftStore.class, RecordDraftGenerator.class,
-	RecordDraftService.class})
+@Import({MaterialTestConfig.class, RecordAccess.class, RecordDraftGenerator.class, RecordDraftService.class})
 public class RecordDraftTestConfig {
-
-	/** application.yaml 과 같은 제안값. */
-	public static final RecordDraftProperties PROPERTIES = new RecordDraftProperties(Duration.ofHours(24),
-		new RecordDraftProperties.Draft(Duration.ofMinutes(60), 1000, Duration.ofMinutes(60), 500));
-
-	@Bean
-	RecordDraftProperties recordDraftProperties() {
-		return PROPERTIES;
-	}
 
 	@Bean
 	FakePhotoMetadataReader photoMetadataReader() {
