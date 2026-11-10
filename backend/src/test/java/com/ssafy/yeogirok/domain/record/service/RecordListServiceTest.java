@@ -129,6 +129,20 @@ class RecordListServiceTest {
 	}
 
 	@Test
+	void 장소_행이_없는_방문도_방문_수에_넣는다() {
+		Long recordId = record("가을 여행", true);
+		visit(recordId, DAY1, 1, "강문동");
+		em.flush();
+		em.getEntityManager().createNativeQuery("update actual_visits set place_id = place_id + 1000 where record_id = ?1")
+			.setParameter(1, recordId).executeUpdate();
+
+		RecordListResponse.Item item = list(null, null, null, null).items().getFirst();
+
+		assertThat(item.placeCount()).isEqualTo(1);
+		assertThat(item.regionName()).isNull();
+	}
+
+	@Test
 	void limit_만큼씩_주고_나머지는_nextCursor_로_이어_받는다() {
 		Long first = record("1", true);
 		Long second = record("2", true);

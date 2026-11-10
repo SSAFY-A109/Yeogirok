@@ -9,6 +9,7 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /**
  * 실제 방문 하나(노션 059·067 ActualVisit). photos 는 방문 안 순서, stories 는 작성 순서.
+ * place 는 장소 행을 찾지 못하면 null 이다(조회가 500 으로 깨지지 않게).
  *
  * @param order 그 날짜 안의 순서(actual_visits.position)
  */

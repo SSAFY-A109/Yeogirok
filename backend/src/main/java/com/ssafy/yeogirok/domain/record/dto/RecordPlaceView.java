@@ -18,7 +18,11 @@ public record RecordPlaceView(
 	String imageAttribution
 ) {
 
+	/** @return 장소 행이 없으면 null(FK 가 없어 지워진 행을 가리킬 수 있다. 071 은 이 방문을 RE016 으로 막는다) */
 	public static RecordPlaceView from(Place place) {
+		if (place == null) {
+			return null;
+		}
 		return new RecordPlaceView(place.getProvider(), place.getProviderPlaceId(), place.getName(),
 			place.getLatitude(), place.getLongitude(), place.getAddress(), place.getCategoryCode(),
 			place.getImageUrl(), place.getImageAttribution());

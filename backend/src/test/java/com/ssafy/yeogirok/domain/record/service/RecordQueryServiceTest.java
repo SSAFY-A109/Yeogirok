@@ -48,6 +48,7 @@ class RecordQueryServiceTest {
 	static final Long STRANGER = 5005L;
 	static final LocalDate DAY1 = LocalDate.parse("2026-11-01");
 	static final LocalDate DAY2 = LocalDate.parse("2026-11-02");
+	static final Instant AT_DAY1 = Instant.parse("2026-11-01T01:00:00Z");
 
 	@Autowired
 	RecordQueryService recordQueryService;
@@ -146,6 +147,23 @@ class RecordQueryServiceTest {
 		assertThat(detail.materials()).isEmpty();
 		assertThat(detail.publishedCourseId()).isNull();
 		assertThat(detail.version()).isEqualTo(1);
+	}
+
+	/** FK 가 없어 지워진 장소를 가리키는 방문이 있어도 상세가 깨지지 않는다(PR #77 리뷰). */
+	@Test
+	void 장소_행이_없는_방문은_place_가_null이다() {
+		ActualVisit lost = visit(place("사라진 장소"), DAY1, 1, AT_DAY1);
+		em.flush();
+		em.getEntityManager().createNativeQuery("update actual_visits set place_id = ?1 where id = ?2")
+			.setParameter(1, lost.getPlaceId() + 1000).setParameter(2, lost.getId()).executeUpdate();
+		em.clear();
+
+		RecordDetailResponse detail = recordQueryService.getDetail(MEMBER, record.getId());
+
+		assertThat(detail.actualVisits()).singleElement().satisfies(view -> {
+			assertThat(view.id()).isEqualTo(lost.getId());
+			assertThat(view.place()).isNull();
+		});
 	}
 
 	@Test

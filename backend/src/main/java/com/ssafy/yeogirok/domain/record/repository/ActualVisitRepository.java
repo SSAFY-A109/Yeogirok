@@ -26,9 +26,9 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 		+ " and not exists (select 1 from Place p where p.id = v.placeId)")
 	long countWithoutPlace(@Param("recordId") Long recordId);
 
-	/** 여러 기록의 실제 방문을 기록별 날짜·순서대로. 기록마다 첫 줄이 첫 방문이다. */
+	/** 여러 기록의 실제 방문을 기록별 날짜·순서대로. 기록마다 첫 줄이 첫 방문이다. 장소 행이 없으면 regionName 이 null(방문 수에는 넣는다). */
 	@Query("select new com.ssafy.yeogirok.domain.record.repository.VisitRegion(v.recordId, p.regionName)"
-		+ " from ActualVisit v, Place p where p.id = v.placeId and v.recordId in :recordIds"
+		+ " from ActualVisit v left join Place p on p.id = v.placeId where v.recordId in :recordIds"
 		+ " order by v.recordId, v.visitDate, v.position")
 	List<VisitRegion> findRegionsInOrder(@Param("recordIds") Collection<Long> recordIds);
 }
