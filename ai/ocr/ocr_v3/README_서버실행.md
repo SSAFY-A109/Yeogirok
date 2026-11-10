@@ -82,6 +82,10 @@ venv/bin/python classify_errors.py --results results_v3/dev2_raw --out results_v
 venv/bin/python ocr_v3/rescore_raw.py --labels real_new/dev2_labels.csv --runs results_v3/dev2_1280_raw results_v3/dev2_1280_rec_ft2_raw --set fields.date_lookalike_fix=fallback --out results_v3/rescore_datefix_20261104
 ```
 - `fields.date_lookalike_fix=fallback` (실험, 기본 `legacy` = 운영과 같음): 날짜를 못 찾았을 때만 날짜 모양 안의 O·o·C·c·D→0, I·l·|→1 로 바꿔 한 번 더 찾는다. 이미 찾은 날짜는 바꾸지 않는다
+- `fields.name_rule=v3` (실험, 11/09): 상호명 v2 + 카드 전표 '가맹점/사업자번호' 다음 줄의 상호, 사업자번호 뒤 상호, 합쳐진 두 칸 라벨, 안내 문구·번지 제외, '…점 + 한글 브랜드 한 단어' 유지 (`ocrlab/fields.py` `name_v3`)
+- `fields.addr_lookalike_fix=on` (실험, 11/09): 주소 추출 때만 '…로85일 25' → '…로85길 25' ('길'을 '일'로 읽은 경우)
+- `fields.line_group=v2` (실험, 11/09, 채택 보류): 실제 글자 높이·줄별 기울기로 줄 묶기 (`ocrlab/lines.py`). 다시 채점·평가 모두 이 설정을 따른다
+- 여러 값을 함께 바꾸려면 `--set` 을 여러 번 쓴다: `--set fields.name_rule=v3 --set fields.addr_lookalike_fix=on`
 - 출력·`rescore.json` 에는 정답 수와 판정 변화만 있다 (OCR 원문·추출값 없음). holdout 경로는 거부한다
 
 ## 5. 전처리·방향 설정 비교 (dev2, 모드마다 한 요소만 바꿈)

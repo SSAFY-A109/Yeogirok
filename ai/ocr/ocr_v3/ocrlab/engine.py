@@ -140,7 +140,7 @@ def convert_result(res, ms: float = 0.0, sync: str | None = None) -> OcrOutput:
     return OcrOutput(toks, ms, sync, angle)
 
 
-def to_lines(out: OcrOutput):
-    """기존 receipt_parser 의 줄 묶기를 그대로 쓴다."""
-    from receipt_parser import boxes_from_polys, group_lines
-    return group_lines(boxes_from_polys(*out.as_triplet()))
+def to_lines(out: OcrOutput, cfg: dict | None = None):
+    """줄 묶기. 기본(fields.line_group=legacy)은 기존 receipt_parser 의 줄 묶기를 그대로 쓴다 (ocrlab/lines.py)."""
+    from .lines import make_lines
+    return make_lines(*out.as_triplet(), cfg)

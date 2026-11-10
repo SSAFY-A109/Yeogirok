@@ -198,7 +198,7 @@ def run_eval(args) -> dict:
                 out, ometa = orient.run(engine, img, out, cfg["pre"]["orient_retry"])
         pmeta["orient"] = ometa
         t3 = time.perf_counter()
-        resp, diag = extract(to_lines(out), cfg)
+        resp, diag = extract(to_lines(out, cfg), cfg)
         t4 = time.perf_counter()
         tm = {"decode_ms": (t1 - t0) * 1000, "pre_ms": (t2 - t1) * 1000, "ocr_ms": (t3 - t2) * 1000,
               "post_ms": (t4 - t3) * 1000, "total_ms": (t4 - t0) * 1000}

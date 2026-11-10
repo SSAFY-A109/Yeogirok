@@ -21,8 +21,10 @@ ocr:
 fields:
   datetime_ambiguity: legacy   # [미합의] legacy | null_if_ambiguous
   date_validation: legacy      # [미합의] legacy | calendar
-  name_rule: legacy           # [실험] legacy(운영과 같음) | v2(상호 줄 자르기·고르기 개선)
+  name_rule: legacy           # [실험] legacy(운영과 같음) | v2(상호 줄 자르기·고르기 개선) | v3(v2 + 카드 전표·합쳐진 라벨 줄)
   date_lookalike_fix: legacy   # [실험] legacy(운영과 같음) | fallback(날짜를 못 찾았을 때만 날짜 자리 O·C→0, I·l→1 보정)
+  addr_lookalike_fix: legacy   # [실험] legacy(운영과 같음) | on(주소 추출 때만 '…로85일 25' → '…로85길 25')
+  line_group: legacy           # [실험] legacy(운영과 같음) | v2(실제 글자 높이·줄별 기울기로 줄 묶기)
 address:
   return_level: road           # [확정 v3] 도로명까지
   sido_style: as_printed       # [미합의] as_printed | full

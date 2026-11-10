@@ -27,6 +27,7 @@ sys.path.insert(0, HERE)                 # ocrlab, address_parser(v3), ocr_respo
 from ocrlab.evaluate import FIELDS, gold_values, judge_field, load_labels, summarize   # noqa: E402
 from ocrlab.fields import extract                                                       # noqa: E402
 from ocrlab.settings import DEFAULTS, _parse_value, load_config, set_key                # noqa: E402
+from ocrlab.lines import make_lines                                                     # noqa: E402
 
 KEYS = ("date", "time", "name", "address")
 
@@ -77,8 +78,6 @@ def main():
     if a.out and os.path.exists(a.out):
         sys.exit(f"[멈춤] {a.out} 이 이미 있어요 (덮어쓰지 않음).")
     gold, addr_given = load_labels([a.labels])
-    from receipt_parser import boxes_from_polys, group_lines
-
     report, ok_all = {"labels": a.labels, "set": a.set, "runs": {}}, True
     for run in a.runs:
         raw_dir = os.path.join(run, "raw")
@@ -92,17 +91,20 @@ def main():
             set_key(new, k.strip(), _parse_value(v))
         changed = {k: new[k.split(".")[0]][k.split(".")[1]] for k in (s.split("=")[0].strip() for s in a.set)}
 
-        lines_by_file = {}
+        raws = {}
         for f in sorted(os.listdir(raw_dir)):
             if f.endswith(".json"):
                 r = json.load(open(os.path.join(raw_dir, f), encoding="utf-8"))
-                lines_by_file[f[:-5]] = group_lines(boxes_from_polys(r["texts"], r["scores"], r["polys"]))
-        missing = [n for n in lines_by_file if n not in gold]
+                raws[f[:-5]] = (r["texts"], r["scores"], r["polys"])
+        missing = [n for n in raws if n not in gold]
         if missing:
             sys.exit(f"[멈춤] {run}: 정답표에 없는 사진 {len(missing)}장")
+        # 줄 묶기도 설정(fields.line_group)에 따른다. 기본 legacy = receipt_parser.group_lines (11/09)
+        lines0 = {n: make_lines(*v, base) for n, v in raws.items()}
+        lines1 = {n: make_lines(*v, new) for n, v in raws.items()}
 
-        rows0, _ = score(lines_by_file, gold, addr_given, base)
-        rows1, acts = score(lines_by_file, gold, addr_given, new)
+        rows0, _ = score(lines0, gold, addr_given, base)
+        rows1, acts = score(lines1, gold, addr_given, new)
 
         # 1) 재현 확인: rows.csv 판정과 사진·필드마다 같아야 한다
         saved_rows = {r["file"]: r for r in csv.DictReader(open(os.path.join(run, "rows.csv"), encoding="utf-8-sig"))

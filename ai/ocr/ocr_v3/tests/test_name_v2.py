@@ -75,7 +75,7 @@ def test_regression_fixtures_v2():
 
 def test_setting_values_checked():
     try:
-        load_config(sets=["fields.name_rule=v3"])
+        load_config(sets=["fields.name_rule=v9"])          # 11/09 v3 가 생겨 없는 값 예시를 v9 로 바꿈
     except ValueError:
         pass
     else:
