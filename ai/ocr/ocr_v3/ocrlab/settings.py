@@ -38,8 +38,11 @@ DEFAULTS = {
         "datetime_ambiguity": "legacy",   # [미합의] legacy: 기존 규칙대로 선택 / null_if_ambiguous: 근거 없이 후보가 여럿이면 null
         "date_validation": "legacy",      # [미합의] legacy: 월 1~12·일 1~31 / calendar: 실제 달력 날짜만 (2/30 제외)
         "name_rule": "legacy",            # [실험 11/05] legacy: 운영과 같음 / v2: 상호 줄 자르기·고르기 개선 (fields.name_v2, 찾았을 때만 바꿈)
+                                          #   / v3 [실험 11/09]: v2 + 카드 전표 가맹점 줄·합쳐진 라벨 줄 (fields.name_v3)
         "date_lookalike_fix": "legacy",   # [실험 11/04] legacy: 운영과 같음 / fallback: 날짜를 못 찾았을 때만 날짜 모양 안의
                                           #   혼동 문자(O·o·C·c·D→0, I·l·|→1)를 숫자로 바꿔 한 번 더 찾는다 (fields.py)
+        "addr_lookalike_fix": "legacy",   # [실험 11/09] legacy: 운영과 같음 / on: 주소 추출 때만 '…로85일 25' → '…로85길 25' (fields.py)
+        "line_group": "legacy",           # [실험 11/09] legacy: 운영과 같음(receipt_parser.group_lines) / v2: 실제 글자 높이·줄별 기울기로 묶기 (ocrlab/lines.py)
     },
     "address": {
         "return_level": "road",           # [확정 v3]
@@ -69,7 +72,9 @@ CHOICES = {
     "fields.datetime_ambiguity": ("legacy", "null_if_ambiguous"),
     "fields.date_validation": ("legacy", "calendar"),
     "fields.date_lookalike_fix": ("legacy", "fallback"),
-    "fields.name_rule": ("legacy", "v2"),
+    "fields.name_rule": ("legacy", "v2", "v3"),
+    "fields.addr_lookalike_fix": ("legacy", "on"),
+    "fields.line_group": ("legacy", "v2"),
     "pre.orient_retry": ("legacy", "auto", "fast"),
     "address.return_level": ("road", "building"),
     "address.sido_style": ("as_printed", "full"),

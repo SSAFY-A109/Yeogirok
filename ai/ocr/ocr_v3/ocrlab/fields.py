@@ -107,7 +107,7 @@ _V2_BRANCH_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}점(?:\b|[#()]|$)")          
 _V2_NOISE = ("영수증", "매출전표", "고객용", "가맹점용", "카드판매", "주문번", "대기번", "진동벨", "테이블")
 
 
-def _v2_clean(text: str) -> str:
+def _v2_clean(text: str, keep_brand_tail: bool = False) -> str:
     t = _V2_URL_RE.sub(" ", text)
     t = _V2_BIZ_HEAD_RE.sub("", t)
     m = _V2_SLASH_BIZ_RE.search(t)                     # 'OO초밥/123-45-67890/홍길동' (기존 v0r2 ②)
@@ -128,7 +128,7 @@ def _v2_clean(text: str) -> str:
         keep.append(x)
     t = " ".join(keep).strip(" -|,")
     m = _V2_BRANCH_CUT_RE.match(t)
-    if m and t[m.end():].strip():
+    if m and t[m.end():].strip() and not (keep_brand_tail and re.fullmatch(r"[가-힣]{2,}", t[m.end():].strip())):
         t = m.group(1)                                 # '세븐일레븐 역삼태광점#69042 T-ELEVEN' → 지점명까지
     for k in range(2, len(t)):                         # 'OO제과(OO)(OO제과(O' 반복 꼬리 (기존 v0r2 ④)
         if t[k] == "(" and len(t) - k - 1 >= 4 and t.startswith(t[k + 1:]):
@@ -170,6 +170,95 @@ def name_v2(lines, limit: int = 12):
     return cands[0], "첫 후보"
 
 
+# ---------- 상호명 v3 (실험 옵션 fields.name_rule=v3 = v2 + 아래, 기본 legacy = 운영과 같음) ----------
+# 근거: 11/09 dev3(구 holdout3, B30) 상호명 진단. 글자는 맞게 읽었는데 v2 가 못 고른 경우
+#   ① 카드 전표(KIS 등): '가맹점/사업자번호' 줄 다음 '대표자(TEL:…)' 뒤, 또는 그다음 줄이 상호
+#   ② '사업자번호 : 123-45-67890 상호' 처럼 사업자번호 뒤에 상호가 붙은 줄 (위아래 줄이 합쳐짐)
+#   ③ '상호 / 사업자번호 / 대표' 에서 사업자번호 자릿수를 덜 읽은 경우 ('629-2-01785')
+#   ④ '가맹점명 사업자NO 상호 1234567890 대표자명 : …' 처럼 두 칸 라벨이 한 줄로 합쳐진 경우
+#   + 상호가 될 수 없는 안내 문구(할부·승인·정보통신·여신금융·신고안내·교환권·상품명)와 '30-17' 같은 번지는 뺀다
+#   + '역삼언주로점 매머드익스프레스' 처럼 지점명 뒤에 한글 브랜드 한 단어가 오면 자르지 않는다 (v2 는 '…점' 까지만 남김)
+# v3 도 찾았을 때만 기존 값을 바꾼다. v2 동작은 그대로 둔다.
+_V3_CARD_HEAD_RE = re.compile(r"가맹점\s*/\s*사업자\s*번호")
+_V3_OWNER_TEL_RE = re.compile(r"^.{0,15}?\(\s*TEL\s*[:：]?[^)]*\)\s*", re.I)
+_V3_BIZ_LEAD_RE = re.compile(r"^\s*사업자\s*(?:등록)?\s*번호\s*[:：]?\s*\d{3}\s*-?\s*\d{2}\s*-?\s*\d{5}\s*")
+_V3_SLASH_BIZ_RE = re.compile(r"^(.*?)\s*/\s*\d{2,3}-\d{1,2}-\d{4,5}")
+_V3_LEAD_LABELS_RE = re.compile(r"^(?:\s*(?:가맹점명|상호명|매장명|사업자\s*(?:등록)?\s*(?:N[Oo]\.?|번호))\s*[:：]?)+")
+_V3_LOTNUM_RE = re.compile(r"(?<![\d-])\d{1,4}-\d{1,4}(?![\d-])")
+_V3_NOISE = _V2_NOISE + ("할부", "승인", "정보통신", "여신금융", "신고안내", "교환권", "상품명")
+
+
+def _v3_clean(text: str) -> str:
+    t = _V3_BIZ_LEAD_RE.sub("", text)                                  # ②
+    m = _V3_SLASH_BIZ_RE.search(t)
+    if m and not _V2_SLASH_BIZ_RE.search(t):                            # ③ (자릿수가 맞으면 v2 처리 그대로)
+        head = m.group(1).strip(" ,")
+        if rp._looks_like_name(head):
+            t = head
+    if _V3_LEAD_LABELS_RE.match(t):                                     # ④
+        rest = re.sub(r"(?<!\d)\d{6,}(?!\d)", " ", _V3_LEAD_LABELS_RE.sub("", t))
+        rest = re.split(r"대표", rest)[0]
+        if rest.strip():
+            t = rest
+    return _v2_clean(t, keep_brand_tail=True)
+
+
+def _v3_ok(t: str) -> bool:
+    if not _v2_ok(t) or _V3_LOTNUM_RE.search(t):
+        return False
+    flat = re.sub(r"\s+", "", t)
+    return not any(w in flat for w in _V3_NOISE)
+
+
+def name_v3(lines, limit: int = 12):
+    """(상호 | None, 이유). 카드 전표 가맹점 줄 → 라벨 뒤 값 → 지점명 줄 → 법인 표기 줄 → 첫 후보."""
+    texts = [t for t, _ in lines]
+    for k, t in enumerate(texts):                                       # ①
+        if _V3_CARD_HEAD_RE.search(t):
+            # 같은 줄 번호 뒤에 붙은 상호 (줄 묶기 v2 에서 '가맹점/사업자번호 …/123-45-67890 상호' 로 묶일 때) → 다음 줄들
+            tail = re.split(r"\d{3}-\d{2}-\d{5}|\d{6,}", t)[-1].strip(" /:")
+            nxt = ([tail] if tail and tail != t.strip(" /:") else []) + texts[k + 1:min(k + 4, len(texts))]
+            for s in nxt:
+                if rp.ADDR_RE.search(s):
+                    break
+                rest = _V3_OWNER_TEL_RE.sub("", s).strip()
+                if not rest:
+                    continue
+                v = _v2_clean(rest, keep_brand_tail=True)
+                if _v3_ok(v):
+                    return v, "카드전표 가맹점 줄"
+            break
+    for i, t in enumerate(texts):
+        m = _V2_LABEL_RE.search(t)
+        if m:
+            v = _v3_clean(rp._join_wrapped(m.group(2), lines, i))
+            if _v3_ok(v):
+                return v, "라벨 뒤 값"
+    stop = next((i for i, t in enumerate(texts) if _V2_HEADER_RE.search(t)), len(texts))
+    cands = []
+    for i, t in enumerate(texts[:min(limit, stop)]):
+        v = _v3_clean(rp._join_wrapped(t, lines, i))
+        if _v3_ok(v):
+            cands.append(v)
+    if not cands:
+        return None, "후보 없음"
+    for pat, why in ((_V2_BRANCH_RE, "지점명 줄"), (re.compile(r"\(주\)|㈜"), "법인 표기 줄")):
+        hit = [c for c in cands if pat.search(c)]
+        if hit:
+            return hit[0], why
+    return cands[0], "첫 후보"
+
+
+# ---------- 도로명 혼동 문자 보정 (실험 옵션 fields.addr_lookalike_fix=on, 기본 legacy = 운영과 같음) ----------
+# 근거: 11/09 dev3 '논현로85일 25' ('길'을 '일'로 읽음) → 도로명이 '논현로', 건물번호 85 로 잘못 잡힘.
+# '…로' 바로 뒤 숫자 + '일' + (띄어쓰기) 숫자 모양만 '…로 숫자 길' 로 바꾼다. 주소 추출에만 쓰고 상호·날짜에는 쓰지 않는다.
+_ROAD_GIL_RE = re.compile(r"([가-힣]로)(\d{1,3})일(?=\s*\d)")
+
+
+def fix_road_lookalikes(text: str) -> str:
+    return _ROAD_GIL_RE.sub(r"\1\2길", text)
+
+
 def calendar_ok(date: str | None) -> bool:
     if date is None:
         return True
@@ -204,7 +293,11 @@ def extract(lines, cfg: dict) -> tuple[dict, dict]:
     r = rp.parse_receipt(lines)
     d = r.to_dict()
     pol = address_policy(cfg)
-    addr = extract_address_detail(lines, pol)
+    f = cfg["fields"]
+    addr_lines = lines
+    if f.get("addr_lookalike_fix", "legacy") == "on":
+        addr_lines = [(fix_road_lookalikes(t), s) for t, s in lines]
+    addr = extract_address_detail(addr_lines, pol)
     d["address"], d["addressComplete"] = addr.address, addr.complete
 
     dt_c = datetime_candidates(lines)
@@ -213,12 +306,12 @@ def extract(lines, cfg: dict) -> tuple[dict, dict]:
                          "ambiguous_time": _ambiguous(dt_c, "time", d["time"]), "actions": []},
             "placeName": {"selected": d["placeName"], "candidates": name_candidates(lines)},
             "address": addr.diagnostics(), "policy": {"fields": dict(cfg["fields"]), "address": dict(cfg["address"])}}
-    f = cfg["fields"]
-    if f.get("name_rule", "legacy") == "v2":
-        n2, why = name_v2(lines)
-        diag["placeName"]["v2"] = {"value": n2, "reason": why}
+    rule = f.get("name_rule", "legacy")
+    if rule in ("v2", "v3"):
+        n2, why = (name_v2 if rule == "v2" else name_v3)(lines)
+        diag["placeName"][rule] = {"value": n2, "reason": why}
         if n2 and n2 != d["placeName"]:
-            diag["placeName"]["action"] = f"상호명 v2 ({why}) 로 변경"
+            diag["placeName"]["action"] = f"상호명 {rule} ({why}) 로 변경"
             d["placeName"] = n2
     if f.get("date_lookalike_fix", "legacy") == "fallback" and d["date"] is None:   # 이미 찾은 날짜는 바꾸지 않는다
         date2, time2, changed = lookalike_fallback(lines)
