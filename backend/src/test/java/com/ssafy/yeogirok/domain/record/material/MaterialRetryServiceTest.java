@@ -127,6 +127,9 @@ class MaterialRetryServiceTest {
 		assertThat(queued.jobId()).isEqualTo(response.jobId());
 		assertThat(queued.processStatus()).isEqualTo(ReceiptMaterial.Status.UPLOADED);
 		assertThat(queued.error()).isNull();
+		// 처리 중이라 보정 필요로 보이지 않는다(PR #84 리뷰).
+		assertThat(queued.reviewStatus()).isEqualTo(ReceiptMaterial.ReviewStatus.PENDING);
+		assertThat(queued.needsReview()).isFalse();
 		assertThat(jobStore.find(response.jobId()).orElseThrow().status()).isEqualTo(JobStatus.QUEUED);
 		executor.reset();
 	}
@@ -220,6 +223,7 @@ class MaterialRetryServiceTest {
 
 		assertThat(stored().reviewedValues()).isEqualTo(confirmed);
 		assertThat(stored().values()).isEqualTo(confirmed);
+		assertThat(stored().reviewStatus()).isEqualTo(ReceiptMaterial.ReviewStatus.CONFIRMED);
 		executor.reset();
 	}
 

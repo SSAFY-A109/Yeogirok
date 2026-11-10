@@ -129,9 +129,13 @@ public record ReceiptMaterial(
 		return with(jobId, Status.READY, version + 1, extracted, values, ReviewStatus.CONFIRMED, null);
 	}
 
-	/** API-092 재시도 접수. OCR 제안·사용자 확정 값은 그대로 둔다. */
+	/**
+	 * API-092 재시도 접수. OCR 제안·사용자 확정 값은 그대로 둔다. OCR 이 다시 끝나기 전이라 보정 상태는 확정 값이 있으면
+	 * CONFIRMED, 없으면 PENDING 으로 돌린다(처리 중인데 "보정 필요"로 보이지 않게, PR #84 리뷰).
+	 */
 	public ReceiptMaterial retryQueued(String newJobId) {
-		return with(newJobId, Status.UPLOADED, version + 1, extracted, reviewedValues, reviewStatus, null);
+		return with(newJobId, Status.UPLOADED, version + 1, extracted, reviewedValues,
+			reviewedValues != null ? ReviewStatus.CONFIRMED : ReviewStatus.PENDING, null);
 	}
 
 	/** 작업이 끊겨(만료·기한 초과) 실패로 보여 줄 때. 저장하지 않는 값이라 version 을 올리지 않는다. */
