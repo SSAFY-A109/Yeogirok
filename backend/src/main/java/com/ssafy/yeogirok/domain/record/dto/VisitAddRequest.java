@@ -19,7 +19,8 @@ import tools.jackson.databind.JsonNode;
  * API-066 요청(수동 추가 + AI 초안 반영, 명세 {@code specs/record-api-2.md} 4-9).
  * <ul>
  *   <li>version 생략 C001, null·정수 아님 C002. items 생략 C001, 배열 아님 C002, 빈 배열·50개 초과 C003</li>
- *   <li>draftKey 는 UUID(C002). 있으면 draftVersion 필수(C001). draftKey 없이 draftVersion·itemId 가 오면 C003.
+ *   <li>draftKey 는 UUID(C002). 있으면 draftVersion 필수(C001)이고 itemId 가 있는 항목이 하나 이상 있어야 한다(C003).
+ *   draftKey 없이 draftVersion·itemId 가 오면 C003.
  *   itemId 는 1 이상 정수(정수 아님 C002, 1 미만 C003)</li>
  *   <li>story·storyDraft 값은 C003. plannedItemId 는 계획 사본 전이라 값이 오면 C003, null 은 통과(명세 5절 8·12)</li>
  *   <li>장소: placeRef·customPlace 둘 다 C003, 둘 다 없으면 RE018</li>
@@ -56,6 +57,10 @@ public class VisitAddRequest {
 		List<VisitAddCommand.Item> parsed = new ArrayList<>();
 		for (JsonNode item : VisitRequestFields.requiredArray(items, "items", false, MAX_ITEMS)) {
 			parsed.add(item(VisitRequestFields.requiredObject(item, "items[]"), key != null));
+		}
+		// 반영할 초안 항목 없이 초안이 반영됨으로 표시되지 않게 한다(PR #84 리뷰).
+		if (key != null && parsed.stream().allMatch(item -> item.itemId() == null)) {
+			throw VisitRequestFields.notAllowed("items: draftKey 를 보내면 itemId 가 있는 항목이 하나 이상 있어야 합니다.");
 		}
 		return new VisitAddCommand(versionValue, key, draftVersionValue, parsed);
 	}

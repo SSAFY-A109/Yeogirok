@@ -199,12 +199,11 @@ class DraftApplyServiceTest {
 	}
 
 	@Test
-	void 근거_사진이_지워졌으면_C004_직접_추가만이면_사진을_보지_않는다() {
+	void 근거_사진이_지워졌으면_C004() {
 		em.getEntityManager().createNativeQuery("delete from visit_images where id = ?1").setParameter(1, imageId)
 			.executeUpdate();
 		em.clear();
 
 		assertError(() -> apply(1, draftKey, 1, draftItem(1, 1)), ExceptionType.VERSION_MISMATCH);
-		assertThat(apply(1, draftKey, 1, manualItem(1)).visitIds()).hasSize(1);
 	}
 }
