@@ -18,3 +18,14 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (provider, provider_subject)
 );
+
+-- 20. Android 푸시 토큰(API-095·096). 노션 ERD DDL 과 같다(H2 에 TIMESTAMPTZ 가 없어 풀어 쓴다).
+CREATE TABLE user_push_tokens (
+    token TEXT PRIMARY KEY CHECK (btrim(token) <> ''),
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL CHECK (platform = 'ANDROID'),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_user_push_tokens_user ON user_push_tokens (user_id);
