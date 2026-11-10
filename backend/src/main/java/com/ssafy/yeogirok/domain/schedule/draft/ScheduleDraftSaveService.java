@@ -265,6 +265,7 @@ public class ScheduleDraftSaveService {
 		// 방 필드가 바뀌어(lastApplied 가 늘 달라진다) flush 때 @Version 이 1 오른다.
 		room.updateScheduleOptions(applied.addTo(plan.options().withEndLeg(result.endLeg()).toMap()),
 			clock.instant());
+		room.markScheduleRecalculated(clock.instant());
 		entityManager.flush();
 		if (room.getVersion() != resultVersion) {
 			throw new IllegalStateException("일정 저장 뒤 방 version 이 예상과 다릅니다: " + room.getVersion());

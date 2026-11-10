@@ -371,6 +371,52 @@ class ScheduleServiceTest {
 			new ScheduleUpdateCommand(version(), List.of(), List.of(otherItem))), ExceptionType.NOT_ALLOWED_VALUE);
 	}
 
+	/* ── 재계산 필요(scheduleNeedsRecalculation) ───────────────── */
+
+	private boolean needsRecalculation() {
+		em.clear();
+		return em.find(TravelRoom.class, roomId).isScheduleNeedsRecalculation();
+	}
+
+	@Test
+	void 일정이_없으면_후보를_바꿔도_재계산_필요가_꺼져_있다() {
+		Long added = roomPlaceService.addCustomPlace(OWNER, roomId, new CustomPlaceCreateCommand("새 후보",
+			new BigDecimal("37.7"), new BigDecimal("128.8"), null)).roomPlace().id();
+		roomPlaceService.remove(OWNER, roomId, added, version());
+
+		assertThat(needsRecalculation()).isFalse();
+	}
+
+	@Test
+	void 일정이_있으면_후보를_담거나_빼거나_복원할_때_재계산_필요가_켜지고_version은_한_번만_오른다() {
+		update(newItem(placeA, DAY1, 1, 60));
+
+		int before = version();
+		addPlace("새 후보");
+		assertThat(version()).isEqualTo(before + 1);
+		assertThat(needsRecalculation()).isTrue();
+
+		var removed = roomPlaceService.remove(OWNER, roomId, placeB, version());
+		assertThat(removed.scheduleNeedsRecalculation()).isTrue();
+		var restored = roomPlaceService.restore(OWNER, roomId, placeB, version());
+		assertThat(restored.scheduleNeedsRecalculation()).isTrue();
+	}
+
+	@Test
+	void 일정을_직접_편집해_저장하면_재계산_필요가_꺼진다() {
+		Long itemId = items(update(newItem(placeA, DAY1, 1, 60)).schedule(), DAY1).getFirst().id();
+		roomPlaceService.remove(OWNER, roomId, placeB, version());
+		assertThat(needsRecalculation()).isTrue();
+		int before = version();
+
+		ScheduleUpdateResponse response = update(new ItemEdit(itemId, placeA, DAY1, 1, 90, null));
+
+		assertThat(response.needsRecalculation()).isFalse();
+		assertThat(response.version()).isEqualTo(before + 1);
+		assertThat(needsRecalculation()).isFalse();
+		assertThat(version()).isEqualTo(before + 1);
+	}
+
 	@Test
 	void 다른_방의_후보를_가리키는_일정_항목은_DB가_막는다() {
 		Long otherRoom = roomService.create(OWNER, new RoomCreateCommand("다른 방", DAY1, DAY2, TransportMode.CAR))

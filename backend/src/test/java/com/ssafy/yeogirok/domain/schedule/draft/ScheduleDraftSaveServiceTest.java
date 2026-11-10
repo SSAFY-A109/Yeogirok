@@ -237,6 +237,21 @@ class ScheduleDraftSaveServiceTest {
 	}
 
 	@Test
+	void 최종_저장하면_재계산_필요가_꺼진다() {
+		// 후보를 바꾸면 방 version 이 바뀌어 초안이 낡으므로, 켜진 상태만 직접 만든다.
+		em.getEntityManager().createNativeQuery(
+			"UPDATE travel_rooms SET schedule_needs_recalculation = TRUE WHERE id = :id")
+			.setParameter("id", roomId).executeUpdate();
+		em.clear();
+
+		save(asIs());
+		em.flush();
+		em.clear();
+
+		assertThat(em.find(TravelRoom.class, roomId).isScheduleNeedsRecalculation()).isFalse();
+	}
+
+	@Test
 	void 같은_요청을_다시_보내면_저장한_결과를_돌려주고_version이_그대로다() {
 		ScheduleResponse first = save(asIs());
 

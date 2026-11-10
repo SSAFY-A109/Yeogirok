@@ -41,6 +41,12 @@ public interface TravelRoomRepository extends JpaRepository<TravelRoom, Long> {
 	@Query("update TravelRoom r set r.version = r.version + 1, r.updatedAt = :now where r.id = :id")
 	int increaseVersion(@Param("id") Long id, @Param("now") Instant now);
 
+	/** 직접 부르지 않는다. {@code RoomVersions#increaseMarkingSchedule} 만 쓴다. version 을 올리고 재계산 필요를 켠다. */
+	@Modifying
+	@Query("update TravelRoom r set r.version = r.version + 1, r.updatedAt = :now,"
+		+ " r.scheduleNeedsRecalculation = true where r.id = :id")
+	int increaseVersionMarkingSchedule(@Param("id") Long id, @Param("now") Instant now);
+
 	/** API-020. 사용자가 현재 참여 중인 삭제되지 않은 방을 id 내림차순으로, {@code beforeId} 보다 작은 것만. */
 	@Query("select r from TravelRoom r, RoomMember m where m.roomId = r.id and m.userId = :userId"
 		+ " and m.leftAt is null and r.deletedAt is null and r.id < :beforeId order by r.id desc")

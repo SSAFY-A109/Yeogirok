@@ -41,4 +41,21 @@ public class RoomVersions {
 		entityManager.refresh(room);
 		return room.getVersion();
 	}
+
+	/**
+	 * {@link #increase} 와 같고, 확정 일정이 있으면 재계산 필요({@code schedule_needs_recalculation})도 켠다. 후보 목록을
+	 * 바꾼 요청(API-029·030·031·032·094)이 부른다. 한 번의 UPDATE 로 바꿔 version 은 한 번만 오른다.
+	 *
+	 * @param hasSchedule 확정 일정 항목이 있는지. 없으면 다시 계산할 일정이 없어 켜지 않는다
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public int increaseAfterPlacesChanged(TravelRoom room, boolean hasSchedule) {
+		if (!hasSchedule) {
+			return increase(room);
+		}
+		entityManager.flush();
+		travelRoomRepository.increaseVersionMarkingSchedule(room.getId(), clock.instant());
+		entityManager.refresh(room);
+		return room.getVersion();
+	}
 }

@@ -139,6 +139,15 @@ public class TravelRoom {
 		this.updatedAt = now;
 	}
 
+	/**
+	 * 일정을 새로 저장했다(API-039·040). 후보 목록이 바뀌어 켜진 재계산 필요를 끈다. 이미 꺼져 있으면 방 필드는 그대로라
+	 * version 이 오르지 않는다(부르는 쪽이 판단한다).
+	 */
+	public void markScheduleRecalculated(Instant now) {
+		this.scheduleNeedsRecalculation = false;
+		this.updatedAt = now;
+	}
+
 	/** API-024. 방당 한 번만 만든다. */
 	public void assignInviteToken(String encryptedToken, Instant now) {
 		if (this.inviteTokenEncrypted != null) {

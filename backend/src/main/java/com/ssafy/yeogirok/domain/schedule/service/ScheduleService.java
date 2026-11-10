@@ -200,11 +200,15 @@ public class ScheduleService {
 			: plan.options().toMap();
 
 		scheduleWriter.write(roomId, toDelete, placements);
-		if (newOptions.equals(room.getScheduleOptions())) {
+		boolean optionsChanged = !newOptions.equals(room.getScheduleOptions());
+		if (!optionsChanged && !room.isScheduleNeedsRecalculation()) {
 			roomVersions.increase(room);
 		} else {
-			// 방 필드가 바뀌어 flush 때 @Version 이 1 오른다.
-			room.updateScheduleOptions(newOptions, clock.instant());
+			// 방 필드(일정 옵션·재계산 필요)가 바뀌어 flush 때 @Version 이 1 오른다.
+			if (optionsChanged) {
+				room.updateScheduleOptions(newOptions, clock.instant());
+			}
+			room.markScheduleRecalculated(clock.instant());
 			entityManager.flush();
 		}
 		return response(room);

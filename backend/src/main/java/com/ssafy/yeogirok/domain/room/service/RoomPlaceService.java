@@ -24,6 +24,7 @@ import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
+import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.LegalDong;
@@ -52,18 +53,21 @@ public class RoomPlaceService {
 	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
+	private final ScheduleItemRepository scheduleItemRepository;
 	private final LegalDongResolver legalDongResolver;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
 	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
 		CategoryNames categoryNames, RoomFinder roomFinder, RoomVersions roomVersions,
-		LegalDongResolver legalDongResolver, PlatformTransactionManager transactionManager, Clock clock) {
+		ScheduleItemRepository scheduleItemRepository, LegalDongResolver legalDongResolver,
+		PlatformTransactionManager transactionManager, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.categoryNames = categoryNames;
 		this.roomFinder = roomFinder;
 		this.roomVersions = roomVersions;
+		this.scheduleItemRepository = scheduleItemRepository;
 		this.legalDongResolver = legalDongResolver;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 		this.clock = clock;
@@ -114,7 +118,7 @@ public class RoomPlaceService {
 	}
 
 	/**
-	 * API-032. removed_at 만 채운다. 일정 항목·재계산 필요 플래그는 그대로 둔다.
+	 * API-032. removed_at 만 채운다. 일정 항목은 그대로 두고, 확정 일정이 있으면 재계산 필요를 켠다.
 	 * 이미 뺀 후보면 version 과 상관없이 바꾸지 않고 성공한다.
 	 */
 	@Transactional
@@ -165,7 +169,8 @@ public class RoomPlaceService {
 		}
 	}
 
+	/** 후보 목록이 바뀌었다. 확정 일정이 있으면 재계산 필요도 켠다(같은 UPDATE 로 version 은 한 번만 오른다). */
 	private int increaseVersion(TravelRoom room) {
-		return roomVersions.increase(room);
+		return roomVersions.increaseAfterPlacesChanged(room, scheduleItemRepository.existsByRoomId(room.getId()));
 	}
 }
