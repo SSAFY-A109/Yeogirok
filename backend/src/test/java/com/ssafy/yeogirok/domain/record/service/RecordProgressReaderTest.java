@@ -125,10 +125,21 @@ class RecordProgressReaderTest {
 		draft("d-stuck", record);
 		em.flush();
 
+		assertThat(reader.read(ME, List.of(record), Map.of()).get(record.getId()).stage()).isEqualTo(Stage.PROCESSING);
+
 		clock.advance(Duration.ofMinutes(13));
 
-		assertThat(reader.read(ME, List.of(record), Map.of(record.getId(), 2)).get(record.getId()).stage())
-			.isEqualTo(Stage.EDIT);
+		assertThat(reader.read(ME, List.of(record), Map.of()).get(record.getId()).stage()).isEqualTo(Stage.UPLOAD);
+	}
+
+	@Test
+	void 방문이_있으면_반영_안_된_초안이_있어도_EDIT() {
+		TravelRecord record = record("초안 남음");
+		draftStore.save(draft("d-left", record).succeeded(List.of(), List.of()));
+		em.flush();
+
+		assertThat(reader.read(ME, List.of(record), Map.of(record.getId(), 1)).get(record.getId()))
+			.isEqualTo(new RecordProgress(Stage.EDIT, null, null));
 	}
 
 	@Test

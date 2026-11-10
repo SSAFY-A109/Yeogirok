@@ -25,14 +25,15 @@ public record RecordProgress(Stage stage, String draftKey, String jobId) {
 		if (status == RecordStatus.COMPLETED) {
 			return stage(Stage.COMPLETED);
 		}
+		// 프론트 기록 화면이 방문이 있으면 편집으로 보낸다. 반영 안 된 초안이 남아 있어도 EDIT(11/10 명세 개정).
+		if (visitCount > 0) {
+			return stage(Stage.EDIT);
+		}
 		if (latestDraft != null && !latestDraft.status().isFinished()) {
 			return new RecordProgress(Stage.PROCESSING, latestDraft.draftKey(), latestDraft.jobId());
 		}
 		if (latestDraft != null && latestDraft.status() == JobStatus.SUCCEEDED && !latestDraft.applied()) {
 			return new RecordProgress(Stage.REVIEW, latestDraft.draftKey(), latestDraft.jobId());
-		}
-		if (visitCount > 0) {
-			return stage(Stage.EDIT);
 		}
 		if (myMaterials.stream().anyMatch(ReceiptMaterial::needsReview)) {
 			return stage(Stage.RECEIPT_REVIEW);

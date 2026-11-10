@@ -51,27 +51,35 @@ class RecordProgressTest {
 	}
 
 	@Test
-	void 최근_초안이_진행_중이면_PROCESSING_이고_초안_키와_작업을_준다() {
-		assertThat(of(RecordStatus.DRAFT, 3, draft(), List.of(), 0))
-			.isEqualTo(new RecordProgress(Stage.PROCESSING, "d-1", "job-1"));
-		assertThat(of(RecordStatus.DRAFT, 3, draft().running(), List.of(), 0).stage()).isEqualTo(Stage.PROCESSING);
+	void 방문이_있으면_진행_중이거나_반영_안_된_초안이_있어도_EDIT() {
+		assertThat(of(RecordStatus.DRAFT, 1, draft(), List.of(NEEDS_REVIEW), 1))
+			.isEqualTo(new RecordProgress(Stage.EDIT, null, null));
+		assertThat(of(RecordStatus.DRAFT, 2, draft().succeeded(List.of(), List.of()), List.of(), 0))
+			.isEqualTo(new RecordProgress(Stage.EDIT, null, null));
 	}
 
 	@Test
-	void 성공했고_반영_전이면_REVIEW_반영했으면_다음_단계() {
+	void 방문이_없고_최근_초안이_진행_중이면_PROCESSING_이고_초안_키와_작업을_준다() {
+		assertThat(of(RecordStatus.DRAFT, 0, draft(), List.of(NEEDS_REVIEW), 1))
+			.isEqualTo(new RecordProgress(Stage.PROCESSING, "d-1", "job-1"));
+		assertThat(of(RecordStatus.DRAFT, 0, draft().running(), List.of(), 0).stage()).isEqualTo(Stage.PROCESSING);
+	}
+
+	@Test
+	void 방문이_없고_성공했고_반영_전이면_REVIEW_반영했으면_다음_단계() {
 		RecordDraft succeeded = draft().succeeded(List.of(), List.of());
 
 		assertThat(of(RecordStatus.DRAFT, 0, succeeded, List.of(), 0))
 			.isEqualTo(new RecordProgress(Stage.REVIEW, "d-1", "job-1"));
-		assertThat(of(RecordStatus.DRAFT, 2, succeeded.markApplied(), List.of(), 0).stage()).isEqualTo(Stage.EDIT);
+		assertThat(of(RecordStatus.DRAFT, 0, succeeded.markApplied(), List.of(USABLE), 1).stage())
+			.isEqualTo(Stage.READY_TO_GENERATE);
 	}
 
 	@Test
-	void 실패한_초안은_건너뛰고_방문이_있으면_EDIT() {
+	void 실패한_초안은_건너뛴다() {
 		RecordDraft failed = draft().failed(new JobError("C014", "x"));
 
-		assertThat(of(RecordStatus.DRAFT, 1, failed, List.of(NEEDS_REVIEW), 1))
-			.isEqualTo(new RecordProgress(Stage.EDIT, null, null));
+		assertThat(of(RecordStatus.DRAFT, 0, failed, List.of(NEEDS_REVIEW), 1).stage()).isEqualTo(Stage.RECEIPT_REVIEW);
 	}
 
 	@Test
@@ -91,5 +99,8 @@ class RecordProgressTest {
 		assertThat(of(RecordStatus.DRAFT, 0, null, List.of(USABLE), 0).stage()).isEqualTo(Stage.UPLOAD);
 		assertThat(of(RecordStatus.DRAFT, 0, null, List.of(IN_PROGRESS), 3).stage()).isEqualTo(Stage.UPLOAD);
 		assertThat(of(RecordStatus.DRAFT, 0, null, List.of(), 3)).isEqualTo(new RecordProgress(Stage.UPLOAD, null, null));
+		// 실패 뒤 092 로 다시 맡긴 자료도 처리 중이라 UPLOAD(PR #84 리뷰)
+		assertThat(of(RecordStatus.DRAFT, 0, null, List.of(NEEDS_REVIEW.retryQueued("job-2")), 3).stage())
+			.isEqualTo(Stage.UPLOAD);
 	}
 }
