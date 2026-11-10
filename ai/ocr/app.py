@@ -12,6 +12,7 @@ from receipt_parser import boxes_from_polys, group_lines, parse_receipt
 app = FastAPI(title="Receipt OCR")
 _run = None
 MAX_BYTES = 10 * 1024 * 1024
+OCR_MAX_SIDE = int(os.getenv("OCR_MAX_SIDE", "1280"))   # 사진 긴 변 상한(px). 0 = 줄이지 않음
 log = logging.getLogger("uvicorn.error")
 
 
@@ -28,6 +29,16 @@ def warmup():
     get_runner()
 
 
+def shrink(img: np.ndarray) -> np.ndarray:
+    """긴 변이 OCR_MAX_SIDE 보다 크면 비율을 유지해 줄인다 (평가 도구 ocr_v3 의 resize.max_side 와 같은 계산).
+    휴대폰 원본(예: 3024×4032)을 그대로 OCR 하면 메모리·시간이 크게 늘고, 평가에서도 1280 이 원본·1600 보다 정확도가 같거나 높았다."""
+    h, w = img.shape[:2]
+    if not OCR_MAX_SIDE or max(h, w) <= OCR_MAX_SIDE:
+        return img
+    s = OCR_MAX_SIDE / max(h, w)
+    return cv2.resize(img, (max(1, round(w * s)), max(1, round(h * s))), interpolation=cv2.INTER_AREA)
+
+
 def decode(raw: bytes) -> np.ndarray:
     try:
         img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
@@ -35,7 +46,7 @@ def decode(raw: bytes) -> np.ndarray:
         img = None
     if img is None:
         raise HTTPException(400, "이미지를 읽을 수 없습니다.")
-    return img
+    return shrink(img)                            # 긴 변 OCR_MAX_SIDE(기본 1280)로 축소
 
 
 @app.post("/ocr/receipt")
