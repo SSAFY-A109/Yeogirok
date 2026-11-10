@@ -8,6 +8,7 @@ import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -28,6 +29,8 @@ import tools.jackson.databind.JsonNode;
 final class VisitRequestFields {
 
 	private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern(ApiDateTime.PATTERN);
+	/** 방문 시각이 받는 유일한 오프셋(한국 시간). */
+	private static final ZoneOffset VISIT_OFFSET = ZoneOffset.ofHours(9);
 
 	private VisitRequestFields() {
 	}
@@ -121,22 +124,28 @@ final class VisitRequestFields {
 		throw invalidFormat(field, "형식은 YYYY-MM-DD 입니다.");
 	}
 
-	/** 생략·null C001, 형식·오프셋 오류 C002. 입력 오프셋을 남겨 날짜를 비교한다. */
+	/**
+	 * 생략·null C001, 형식 오류·+09 가 아닌 오프셋 C002. 오프셋은 저장되지 않고 응답은 +09 로 나가므로, +09 만 받아야
+	 * 받은 값을 그대로 다시 보낸 067 요청도 같은 날짜 검사를 통과한다(PR #77 리뷰, 11/10 사용자 결정).
+	 */
 	static OffsetDateTime dateTime(JsonNode value, String field) {
 		if (isAbsent(value)) {
 			throw missing(field);
 		}
 		if (value.isString()) {
 			try {
-				return OffsetDateTime.parse(value.stringValue(), DATE_TIME_FORMAT);
+				OffsetDateTime parsed = OffsetDateTime.parse(value.stringValue(), DATE_TIME_FORMAT);
+				if (parsed.getOffset().equals(VISIT_OFFSET)) {
+					return parsed;
+				}
 			} catch (DateTimeParseException ignored) {
 				// 아래에서 형식 오류로 알린다
 			}
 		}
-		throw invalidFormat(field, "형식은 YYYY-MM-DD HH:mm:ss+09 입니다.");
+		throw invalidFormat(field, "형식은 YYYY-MM-DD HH:mm:ss+09 입니다(시간대는 +09 만).");
 	}
 
-	/** 입력 오프셋 기준 visitedAt 의 날짜가 visitDate 와 다르면 C012. */
+	/** visitedAt(+09)의 날짜가 visitDate 와 다르면 C012. */
 	static void checkSameDate(LocalDate visitDate, OffsetDateTime visitedAt) {
 		if (!visitedAt.toLocalDate().equals(visitDate)) {
 			throw new BusinessException(ExceptionType.INVALID_DATE_RANGE, "visitedAt: visitDate 와 같은 날이어야 합니다.");

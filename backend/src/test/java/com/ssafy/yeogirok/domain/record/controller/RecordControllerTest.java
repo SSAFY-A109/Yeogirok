@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -202,13 +203,17 @@ class RecordControllerTest {
 		}
 
 		@Test
-		void 입력_오프셋_기준으로_날짜를_비교한다() throws Exception {
-			given(visitCommandService.add(eq(USER_ID), eq(9L), any()))
-				.willReturn(new VisitAddResponse(List.of(701L), 4, RecordStatus.DRAFT));
-			String utcSameDay = VALID_ITEM.replace("2026-11-01 09:30:00+09", "2026-11-01 23:30:00Z");
+		/** 오프셋은 저장되지 않고 응답은 +09 로 나가므로 +09 만 받는다(PR #77 리뷰). */
+		@ParameterizedTest
+		@ValueSource(strings = {"2026-11-01 00:30:00Z", "2026-11-01 09:30:00+08", "2026-11-01 09:30:00+0930"})
+		void 방문_시각_오프셋이_09가_아니면_C002(String visitedAt) throws Exception {
+			String item = VALID_ITEM.replace("2026-11-01 09:30:00+09", visitedAt);
 
-			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + utcSameDay + "}]}"))
-				.andExpect(status().isCreated());
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + item + "}]}"))
+				.andExpect(jsonPath("$.code").value("C002"));
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{\"visitId\": 701, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"" + visitedAt + "\"}]}"))
+				.andExpect(jsonPath("$.code").value("C002"));
+			verifyNoInteractions(visitCommandService);
 		}
 	}
 
