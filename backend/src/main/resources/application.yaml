@@ -22,6 +22,16 @@ yeogirok:
   footprint:
     # API-041 작성 제한(11/4 팀 결정): 같은 날(Asia/Seoul 04:00 기준) 이미 남긴 내 발자취와 이 거리 이내면 거부(F003).
     same-day-radius-meters: 500
+  job:
+    # 비동기 작업(API-011) 기록 보관 기간·대기 제한·실행 제한·실행 스레드 수. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
+    # 대기 제한 안에 시작하지 못한 작업은 실행하지 않고 실패로 끝낸다. 실행 제한은 시작한 때부터 센다.
+    retention: 24h
+    queue-timeout: 10m
+    run-timeout: 2m
+    threads: 2
+  schedule:
+    # 일정 초안(API-037~039·084) 보관 기간. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
+    draft-retention: 24h
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
@@ -67,6 +77,9 @@ yeogirok:
       # 멱등키 처리 중 표시 수명(30s)보다 충분히 짧게 둔다.
       connect-timeout: 2s
       read-timeout: 3s
+    mobility:
+      # 자동차 길찾기(일정 이동 시간). 키·제한 시간은 위 local 값을 같이 쓴다. 대중교통·도보는 local base-url(dapi)로 부른다.
+      base-url: https://apis-navi.kakaomobility.com
 auth:
   jwt:
     issuer: yeogirok

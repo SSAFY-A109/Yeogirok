@@ -165,8 +165,8 @@ class RoomControllerTest {
 	@Test
 	void 상세_응답_모양() throws Exception {
 		given(roomService.getRoom(USER_ID, 7L)).willReturn(new RoomDetailResponse(7L, "가을 여행", null, null,
-			TransportMode.TRANSIT, List.of(new RoomDetailResponse.Member(USER_ID, "여행자", true)), List.of(), null,
-			List.of(), 3, ChatReadState.of(5L)));
+			TransportMode.TRANSIT, List.of(new RoomDetailResponse.Member(USER_ID, "여행자", true)), List.of(),
+			List.of(), 3, ChatReadState.of(5L), null));
 
 		mockMvc.perform(get("/api/v1/rooms/7").with(asUser(USER_ID)))
 			.andExpect(status().isOk())
@@ -174,8 +174,9 @@ class RoomControllerTest {
 				{"success": true, "data": {
 				  "id": 7, "title": "가을 여행", "startDate": null, "endDate": null, "transportMode": "TRANSIT",
 				  "members": [{"userId": 1, "nickname": "여행자", "isCreator": true}],
-				  "places": [], "scheduleId": null, "recordIds": [], "version": 3,
-				  "chatReadState": {"lastReadMessageId": 5, "hasUnreadMessages": false}
+				  "places": [], "recordIds": [], "version": 3,
+				  "chatReadState": {"lastReadMessageId": 5, "hasUnreadMessages": false},
+				  "schedule": null
 				}}
 				""", JsonCompareMode.STRICT));
 	}

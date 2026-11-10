@@ -48,6 +48,7 @@ src/main/java/com/ssafy/yeogirok/
 | [docs/03-oidc-login.md](docs/03-oidc-login.md) | 구글·카카오 소셜 로그인(OIDC) 방식 선택과 설계 |
 | [docs/04-auth-api.md](docs/04-auth-api.md) | 인증 API 설계 — B안(네이티브 SDK + ID 토큰 검증) |
 | [docs/05-social-login-setup.md](docs/05-social-login-setup.md) | 구글·카카오 콘솔 설정과 서버 환경 변수 |
+| [docs/06-schedule.md](docs/06-schedule.md) | 계획 일정 흐름과 결정 사항(출발·도착지, 체류 시간, 식사 배치, 이동 시간) |
 
 ## 계약 원천
 

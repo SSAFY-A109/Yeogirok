@@ -66,7 +66,7 @@ public class TravelRoom {
 	@Column(nullable = false)
 	private Map<String, Object> preferences = new HashMap<>();
 
-	/** 일정 생성 옵션. 일정 API 에서 채운다. */
+	/** 일정 옵션. 구조는 {@code ScheduleOptions} 를 따른다. */
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "schedule_options", nullable = false)
 	private Map<String, Object> scheduleOptions = new HashMap<>();
@@ -127,6 +127,24 @@ public class TravelRoom {
 		this.startDate = startDate;
 		this.endDate = endDate;
 		this.transportMode = transportMode;
+		this.updatedAt = now;
+	}
+
+	/**
+	 * 일정 옵션(일차 조건·도착 지점 구간·미배치 항목)을 바꾼다. 값이 실제로 달라질 때만 부른다. 그러면 flush 때
+	 * version 이 1 오른다(updatedAt 만으로는 오르지 않으므로 같은 값이면 부르는 쪽이 RoomVersions 로 올린다).
+	 */
+	public void updateScheduleOptions(Map<String, Object> scheduleOptions, Instant now) {
+		this.scheduleOptions = new HashMap<>(scheduleOptions);
+		this.updatedAt = now;
+	}
+
+	/**
+	 * 일정을 새로 저장했다(API-039·040). 후보 목록이 바뀌어 켜진 재계산 필요를 끈다. 이미 꺼져 있으면 방 필드는 그대로라
+	 * version 이 오르지 않는다(부르는 쪽이 판단한다).
+	 */
+	public void markScheduleRecalculated(Instant now) {
+		this.scheduleNeedsRecalculation = false;
 		this.updatedAt = now;
 	}
 

@@ -14,15 +14,29 @@ import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.domain.room.service.RoomVersions;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleRoomChanges;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleService;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleWriter;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleReader;
 import com.ssafy.yeogirok.global.geo.LegalDong;
+import com.ssafy.yeogirok.support.FakeTravelTimeProvider;
 import com.ssafy.yeogirok.support.FixedLegalDongResolver;
 import com.ssafy.yeogirok.support.MutableClock;
 
 /** 여행방 서비스 @DataJpaTest 용 빈. */
 @TestConfiguration
 @Import({RoomService.class, RoomInvitationService.class, RoomPlaceService.class, RoomFinder.class,
-	RoomVersions.class, CategoryNames.class})
+	RoomVersions.class, CategoryNames.class, ScheduleService.class, ScheduleRoomChanges.class, ScheduleWriter.class,
+	ScheduleReader.class})
 public class RoomTestConfig {
+
+	/** 가짜 길찾기의 기본 구간 이동 시간(분). */
+	public static final int TRAVEL_MINUTES = 20;
+
+	@Bean
+	FakeTravelTimeProvider travelTimeProvider() {
+		return new FakeTravelTimeProvider(TRAVEL_MINUTES);
+	}
 
 	/** 직접 추가 후보의 기본 법정동. */
 	public static final LegalDong LEGAL_DONG = new LegalDong("4215010100", "강릉동");

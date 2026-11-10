@@ -24,6 +24,7 @@ import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
+import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.LegalDong;
@@ -43,6 +44,13 @@ import com.ssafy.yeogirok.global.geo.LegalDongResolver;
  *       불러 직접 추가와 같은 10자리 법정동 코드·읍·면·동 이름을 저장한다(region_code 단위가 섞이지 않게).</li>
  * </ul>
  * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
+ * <ul>
+ *   <li>원본 기록 행과 대상 방 행을 잠그고, 저장 직전에 게시 여부·원본 방 미삭제·방문 소속을 다시 확인한다.</li>
+ *   <li>선택한 방문의 place_id 를 새 후보에 연결하고 sourceType=COURSE, sourceRecordId=원본 기록 ID 를 남긴다.
+ *       API-028·방 상세의 sourceRecord 도 이때 채운다({@link com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse}).</li>
+ * </ul>
+ * 029·030 공통: Idempotency-Key 를 받고, 후보를 저장한 뒤 {@link #increaseVersion} 을 불러 방 version 과
+ * scheduleNeedsRecalculation(확정 일정이 있으면 true)을 한 번에 갱신한다.
  */
 @Service
 public class RoomPlaceService {
@@ -52,18 +60,21 @@ public class RoomPlaceService {
 	private final CategoryNames categoryNames;
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
+	private final ScheduleItemRepository scheduleItemRepository;
 	private final LegalDongResolver legalDongResolver;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
 	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
 		CategoryNames categoryNames, RoomFinder roomFinder, RoomVersions roomVersions,
-		LegalDongResolver legalDongResolver, PlatformTransactionManager transactionManager, Clock clock) {
+		ScheduleItemRepository scheduleItemRepository, LegalDongResolver legalDongResolver,
+		PlatformTransactionManager transactionManager, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.categoryNames = categoryNames;
 		this.roomFinder = roomFinder;
 		this.roomVersions = roomVersions;
+		this.scheduleItemRepository = scheduleItemRepository;
 		this.legalDongResolver = legalDongResolver;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 		this.clock = clock;
@@ -114,7 +125,7 @@ public class RoomPlaceService {
 	}
 
 	/**
-	 * API-032. removed_at 만 채운다. 일정 항목·재계산 필요 플래그는 그대로 둔다.
+	 * API-032. removed_at 만 채운다. 일정 항목은 그대로 두고, 확정 일정이 있으면 재계산 필요를 켠다.
 	 * 이미 뺀 후보면 version 과 상관없이 바꾸지 않고 성공한다.
 	 */
 	@Transactional
@@ -165,7 +176,8 @@ public class RoomPlaceService {
 		}
 	}
 
+	/** 후보 목록이 바뀌었다. 확정 일정이 있으면 재계산 필요도 켠다(같은 UPDATE 로 version 은 한 번만 오른다). */
 	private int increaseVersion(TravelRoom room) {
-		return roomVersions.increase(room);
+		return roomVersions.increaseAfterPlacesChanged(room, scheduleItemRepository.existsByRoomId(room.getId()));
 	}
 }
