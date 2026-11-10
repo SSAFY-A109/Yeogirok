@@ -208,7 +208,6 @@ class RecordControllerTest {
 			verifyNoInteractions(visitCommandService);
 		}
 
-		@Test
 		/** 오프셋은 저장되지 않고 응답은 +09 로 나가므로 +09 만 받는다(PR #77 리뷰). */
 		@ParameterizedTest
 		@ValueSource(strings = {"2026-11-01 00:30:00Z", "2026-11-01 09:30:00+08", "2026-11-01 09:30:00+0930"})
