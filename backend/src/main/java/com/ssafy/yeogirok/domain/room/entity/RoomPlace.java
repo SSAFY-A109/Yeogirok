@@ -16,6 +16,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -31,7 +32,10 @@ import lombok.NoArgsConstructor;
  */
 @Getter
 @Entity
-@Table(name = "room_places", indexes = {
+@Table(name = "room_places",
+	// schedule_items 의 (room_place_id, room_id) 복합 FK 가 가리킬 키(ERD).
+	uniqueConstraints = @UniqueConstraint(name = "uq_room_places_id_room", columnNames = {"id", "room_id"}),
+	indexes = {
 	@Index(name = "ix_room_places_active_place", columnList = "room_id, place_id"),
 	@Index(name = "ix_room_places_place_room", columnList = "place_id, room_id"),
 	@Index(name = "ix_room_places_active_source_record", columnList = "room_id, source_record_id"),

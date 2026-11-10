@@ -4,15 +4,21 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.schedule.travel.TravelLeg;
 
 import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinColumns;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -22,8 +28,7 @@ import lombok.NoArgsConstructor;
 /**
  * 확정한 계획 일정 항목. 노션 DDL {@code schedule_items} 와 맞춘다. 방마다 일정은 하나라 별도 일정 테이블은 없다.
  *
- * <p>DDL 과 다른 점: {@code (room_place_id, room_id) → room_places (id, room_id)} 복합 FK 는 room_places 에
- * {@code UNIQUE (id, room_id)} 가 아직 없어 걸지 않는다. 같은 방 후보인지는 서비스가 확인한다.
+ * <p>{@code (room_place_id, room_id) → room_places (id, room_id)} 복합 FK 로 같은 방의 후보만 가리킨다.
  * {@code UNIQUE (room_id, visit_date, position)} 는 DEFERRABLE 이 아니라서 순서를 바꿀 때는 임시 순서로 한 번 옮긴 뒤
  * 최종 순서를 넣는다({@link #TEMPORARY_POSITION_BASE}).
  *
@@ -66,6 +71,18 @@ public class ScheduleItem {
 
 	@Column(name = "room_place_id", nullable = false)
 	private Long roomPlaceId;
+
+	/**
+	 * {@code (room_place_id, room_id) → room_places (id, room_id)} 복합 FK(ERD). 다른 방의 후보를 가리키는 항목을 DB 가
+	 * 막는다. 값은 roomId·roomPlaceId 로만 쓰고 이 연관은 제약을 만드는 데만 둔다(읽지 않는다).
+	 */
+	@Getter(AccessLevel.NONE)
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumns(value = {
+		@JoinColumn(name = "room_place_id", referencedColumnName = "id", insertable = false, updatable = false),
+		@JoinColumn(name = "room_id", referencedColumnName = "room_id", insertable = false, updatable = false)
+	}, foreignKey = @ForeignKey(name = "fk_schedule_items_room_place_room"))
+	private RoomPlace roomPlace;
 
 	@Column(name = "visit_date", nullable = false)
 	private LocalDate visitDate;

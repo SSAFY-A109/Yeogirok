@@ -372,6 +372,17 @@ class ScheduleServiceTest {
 	}
 
 	@Test
+	void 다른_방의_후보를_가리키는_일정_항목은_DB가_막는다() {
+		Long otherRoom = roomService.create(OWNER, new RoomCreateCommand("다른 방", DAY1, DAY2, TransportMode.CAR))
+			.id();
+
+		// 서비스 확인을 거치지 않고 바로 넣어도 (room_place_id, room_id) 복합 FK 에 걸린다.
+		assertThatThrownBy(() -> em.persistAndFlush(
+			com.ssafy.yeogirok.domain.schedule.entity.ScheduleItem.create(otherRoom, placeA, DAY1, 1, 60, false)))
+			.isInstanceOf(jakarta.persistence.PersistenceException.class);
+	}
+
+	@Test
 	void 날짜가_없는_방에는_일정을_넣을_수_없다() {
 		Long undated = roomService.create(OWNER, new RoomCreateCommand("미정", null, null, TransportMode.CAR)).id();
 		Long place = roomPlaceService.addCustomPlace(OWNER, undated, new CustomPlaceCreateCommand("후보",
