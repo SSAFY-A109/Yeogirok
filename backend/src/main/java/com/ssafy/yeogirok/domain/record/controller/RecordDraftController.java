@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.record.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,8 +15,10 @@ import com.ssafy.yeogirok.domain.record.draft.RecordDraftService;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateRequest;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
+import com.ssafy.yeogirok.global.request.Uuids;
 import com.ssafy.yeogirok.global.response.ApiResponseBody;
 import com.ssafy.yeogirok.global.response.ApiResponseUtil;
 import com.ssafy.yeogirok.global.security.AuthenticatedUser;
@@ -50,5 +53,14 @@ public class RecordDraftController {
 			DraftJobResponse::draftKey,
 			draftKey -> recordDraftService.created(user.userId(), recordId, draftKey));
 		return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-065 통합 기록 초안 조회")
+	@GetMapping("/{draftKey}")
+	public ResponseEntity<ApiResponseBody<RecordDraftResponse>> get(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long recordId, @PathVariable String draftKey) {
+		Uuids.require(draftKey, "draftKey");
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			recordDraftService.get(user.userId(), recordId, draftKey)));
 	}
 }

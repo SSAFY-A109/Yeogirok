@@ -6,11 +6,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -29,9 +33,13 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.record.draft.RecordDraft;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftService;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -114,6 +122,45 @@ class RecordDraftControllerTest {
 		mockMvc.perform(json("{\"baseVersion\":1,\"imageIds\":[" + images + "]," + MATERIALS + "}"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("C003"));
+	}
+
+	@Test
+	void 조회_응답은_노션_065_모양이다() throws Exception {
+		String draftKey = "22222222-3333-4444-8555-666666666666";
+		RecordPlaceView cafe = new RecordPlaceView(PlaceProvider.MANUAL, null, "안목 카페", new BigDecimal("37.7700000"),
+			new BigDecimal("128.9470000"), null, null, null, null);
+		RecordDraft draft = RecordDraft.queued(draftKey, "job-1", 10L, USER_ID, 1,
+				new RecordDraft.SourceSnapshot(List.of(801L), List.of(), List.of()), Instant.EPOCH, Instant.EPOCH)
+			.succeeded(List.of(new RecordDraft.Item(1, List.of(MATERIAL_ID), List.of(cafe), LocalDate.of(2026, 11, 2),
+				Instant.parse("2026-11-02T03:00:00Z"), false, new RecordDraft.Evidence(
+				List.of(RecordDraft.SourceType.RECEIPT, RecordDraft.SourceType.PHOTO), new RecordDraft.FieldSources(
+				RecordDraft.SourceType.RECEIPT, RecordDraft.SourceType.RECEIPT, RecordDraft.SourceType.RECEIPT),
+				List.of()), List.of(801L), null, cafe)), List.of(RecordDraft.PHOTO_METADATA_MISSING));
+		given(recordDraftService.get(USER_ID, 10L, draftKey)).willReturn(RecordDraftResponse.of(draft));
+
+		String place = """
+			{"provider":"MANUAL","providerPlaceId":null,"name":"안목 카페","latitude":37.7700000,
+			 "longitude":128.9470000,"address":null,"categoryCode":null,"imageUrl":null,"imageAttribution":null}""";
+		mockMvc.perform(get(PATH + "/" + draftKey).with(asUser(USER_ID)))
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{"success":true,"data":{"draftKey":"22222222-3333-4444-8555-666666666666","status":"SUCCEEDED",
+				 "baseVersion":1,"items":[{"itemId":1,"sourceMaterialIds":["%s"],"placeCandidates":[%s],
+				   "visitDate":"2026-11-02","proposedVisitedAt":"2026-11-02 12:00:00+09","needsReview":false,
+				   "evidence":{"sourceTypes":["RECEIPT","PHOTO"],
+				     "fieldSources":{"place":"RECEIPT","visitDate":"RECEIPT","proposedVisitedAt":"RECEIPT"},"warnings":[]},
+				   "sourcePhotoIds":[801],"plannedItemId":null,"proposedPlace":%s}],
+				 "warnings":["PHOTO_METADATA_MISSING"],"error":null,"draftVersion":1,
+				 "sourcePriority":["MANUAL","RECEIPT","PHOTO","PLAN"]}}
+				""".formatted(MATERIAL_ID, place, place), JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 조회_draftKey_가_UUID_가_아니면_C002() throws Exception {
+		mockMvc.perform(get(PATH + "/not-uuid").with(asUser(USER_ID)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("C002"));
+		verifyNoInteractions(recordDraftService);
 	}
 
 	@Test

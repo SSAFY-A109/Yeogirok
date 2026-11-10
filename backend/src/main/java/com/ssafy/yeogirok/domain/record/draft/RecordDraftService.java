@@ -15,6 +15,7 @@ import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
@@ -80,6 +81,18 @@ public class RecordDraftService {
 			.filter(found -> found.recordId().equals(recordId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_DRAFT_NOT_FOUND));
 		return DraftJobResponse.queued(draft.draftKey(), draft.jobId());
+	}
+
+	/**
+	 * API-065. 현재 참여자면 누구나 본다(요청자가 아니어도). 기록 없음·방 삭제 RE001, 참여자 아님 RE002, 초안 없음·만료·다른
+	 * 기록 RE011. 진행 중인데 기한이 지났으면 실패로 보여 준다.
+	 */
+	public RecordDraftResponse get(Long userId, Long recordId, String draftKey) {
+		recordFinder.getReadable(recordId, userId);
+		return draftStore.find(draftKey)
+			.filter(draft -> draft.recordId().equals(recordId))
+			.map(draft -> RecordDraftResponse.of(draft.asOf(clock.instant())))
+			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_DRAFT_NOT_FOUND));
 	}
 
 	private RecordDraft.SnapshotMaterial usable(DraftCreateCommand.MaterialRef ref, Long recordId, Long userId) {

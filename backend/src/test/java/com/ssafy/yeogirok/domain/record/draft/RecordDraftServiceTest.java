@@ -35,6 +35,7 @@ import com.ssafy.yeogirok.domain.record.draft.RecordDraftTestConfig.FakePhotoMet
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand.MaterialRef;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
@@ -277,6 +278,78 @@ class RecordDraftServiceTest {
 
 		assertError(() -> draftService.create(ME, recordId, command(1, List.of(imageId), 2)),
 			ExceptionType.RECEIPT_NOT_READY);
+	}
+
+	@Test
+	void 조회는_요청자가_아니어도_현재_참여자면_본다() {
+		metadataReader.put("record-photo/a", new PhotoMetadata(PAID_AT.plusSeconds(600), null, null));
+		DraftJobResponse created = create();
+
+		RecordDraftResponse response = draftService.get(FRIEND, recordId, created.draftKey());
+
+		assertThat(response.status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(response.draftVersion()).isEqualTo(1);
+		assertThat(response.baseVersion()).isEqualTo(1);
+		assertThat(response.items()).singleElement().satisfies(item -> {
+			assertThat(item.itemId()).isEqualTo(1);
+			assertThat(item.proposedVisitedAt()).isEqualTo(PAID_AT);
+			assertThat(item.sourcePhotoIds()).containsExactly(imageId);
+		});
+		assertThat(response.sourcePriority()).containsExactly(RecordDraft.SourceType.MANUAL,
+			RecordDraft.SourceType.RECEIPT, RecordDraft.SourceType.PHOTO, RecordDraft.SourceType.PLAN);
+	}
+
+	@Test
+	void 진행_중이면_items_는_비고_draftVersion_은_null_기한이_지나면_실패로_보인다() {
+		executor.hold();
+		DraftJobResponse created = create();
+
+		RecordDraftResponse queued = draftService.get(ME, recordId, created.draftKey());
+		assertThat(queued.status()).isEqualTo(JobStatus.QUEUED);
+		assertThat(queued.items()).isEmpty();
+		assertThat(queued.draftVersion()).isNull();
+		assertThat(queued.error()).isNull();
+
+		clock.advance(Duration.ofMinutes(13));
+		RecordDraftResponse expired = draftService.get(ME, recordId, created.draftKey());
+		assertThat(expired.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(expired.error()).isEqualTo(Job.TIMED_OUT);
+		executor.reset();
+	}
+
+	@Test
+	void 실패한_초안은_오류를_주고_items_는_비어_있다() {
+		executor.hold();
+		DraftJobResponse created = create();
+		em.getEntityManager().createNativeQuery("update room_members set left_at = ?1 where room_id = ?2 and user_id = ?3")
+			.setParameter(1, NOW).setParameter(2, room.getId()).setParameter(3, ME).executeUpdate();
+		em.clear();
+		executor.runHeld();
+
+		RecordDraftResponse failed = draftService.get(FRIEND, recordId, created.draftKey());
+
+		assertThat(failed.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(failed.error().code()).isEqualTo("RE003");
+		assertThat(failed.items()).isEmpty();
+		assertThat(failed.draftVersion()).isNull();
+	}
+
+	@Test
+	void 조회_권한과_다른_기록의_초안() {
+		executor.hold();
+		DraftJobResponse created = create();
+		TravelRoom otherRoom = em.persist(TravelRoom.builder().title("다른 방").transportMode(TransportMode.CAR)
+			.createdAt(NOW).build());
+		em.persist(RoomMember.creator(otherRoom.getId(), ME, NOW));
+		Long otherRecordId = em.persist(TravelRecord.create(otherRoom.getId(), "다른 방", NOW)).getId();
+		em.flush();
+
+		assertError(() -> draftService.get(LEFT, recordId, created.draftKey()), ExceptionType.RECORD_NOT_MEMBER);
+		assertError(() -> draftService.get(ME, recordId + 9999, created.draftKey()), ExceptionType.RECORD_NOT_FOUND);
+		assertError(() -> draftService.get(ME, otherRecordId, created.draftKey()), ExceptionType.RECORD_DRAFT_NOT_FOUND);
+		assertError(() -> draftService.get(ME, recordId, "11111111-0000-4000-8000-000000000000"),
+			ExceptionType.RECORD_DRAFT_NOT_FOUND);
+		executor.reset();
 	}
 
 	@Test
