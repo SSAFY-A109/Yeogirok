@@ -266,6 +266,24 @@ sudo certbot renew --dry-run        # 자동 갱신이 되는지 시험
 
 - 프론트에 알릴 값: `EXPO_PUBLIC_API_URL=https://<도메인>`. 프론트는 `EXPO_PUBLIC_LIVE_DOMAINS`로 배포된 도메인(예: `auth`)부터 실서버로 바꿀 수 있습니다.
 
+### 5-1. 이미 HTTPS 를 붙인 서버에 채팅 WebSocket 설정 추가
+
+`yeogirok.conf`에 채팅용 `location /ws/` 블록이 추가됐습니다(채팅 API-077). 서버 파일은 certbot이 HTTPS 설정을 덧붙여 저장소 파일과 다르므로 **다시 복사하지 않습니다**(복사하면 HTTPS 설정이 사라집니다). 서버 파일을 직접 고칩니다.
+
+```bash
+sudo cp /etc/nginx/sites-available/yeogirok ~/yeogirok-nginx.bak   # 되돌릴 때 쓸 백업
+sudo nano /etc/nginx/sites-available/yeogirok
+```
+
+`listen 443 ssl` 이 들어 있는 `server { ... }` 안, `location / {` 바로 위에 저장소 `infra/nginx/yeogirok.conf`의 `location /ws/ { ... }` 블록을 그대로 붙여 넣습니다. 그다음 문법을 확인하고 다시 읽습니다.
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx   # "syntax is ok" 확인
+curl -s -o /dev/null -w '%{http_code}\n' https://<도메인>/ws/v1   # 400 (WebSocket 요청이 아니라서). 404·502 면 설정 확인
+```
+
+앱에서 API-077로 티켓을 받아 `wss://<도메인>/ws/v1`에 연결하고 AUTH를 보냈을 때 READY가 오면 정상입니다.
+
 ---
 
 ## 6단계. 자동 배포 (1시간)
