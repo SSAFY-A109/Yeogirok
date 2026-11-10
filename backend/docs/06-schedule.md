@@ -135,3 +135,11 @@
   - 그 밖의 실패(시간 초과·5xx)가 3번 이어지면 1분 동안 부르지 않는다. 성공하면 실패 횟수를 0 으로 되돌린다.
   - 쉬는 동안의 구간은 이동 시간 `null`, 사유 `KAKAO_SUSPENDED` 다.
   - 캐시 시간·쉬는 시간·횟수는 제안값이다.
+
+## 3. 남은 일
+
+- **API-029 검색·AI 추천 장소 담기**: 장소 조회(API-026·027)와 추천 기록이 생긴 뒤 만든다(`RoomPlaceService` TODO).
+- **API-030 공개 코스에서 가져오기**: 여행 기록·공개 코스가 생긴 뒤 만든다(`RoomPlaceService` TODO).
+  - 이때 `room_places.source_record_id` FK(`RoomPlace` TODO)를 걸고, API-028·022의 `sourceRecord` 도 채운다.
+- **API-011 기록 작업 권한**: `RECORD_GENERATION`·`RECEIPT_OCR` 조회 정책은 기록 도메인에서 추가한다(`JobAccessPolicy` TODO).
+- 029·030 도 후보를 바꾸면 `RoomVersions.increaseAfterPlacesChanged` 를 거쳐야 `scheduleNeedsRecalculation` 이 켜진다.

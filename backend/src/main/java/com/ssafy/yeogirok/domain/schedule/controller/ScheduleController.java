@@ -20,7 +20,7 @@ import com.ssafy.yeogirok.global.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 
-/** 여행방 확정 일정. 일정 초안(API-037·038·039)은 아직 없다. */
+/** 여행방 확정 일정 조회(API-036)·직접 편집(API-040). 초안 흐름(037·038·084·039)은 {@link ScheduleDraftController}. */
 @RestController
 @RequestMapping("/api/v1/rooms/{roomId}/schedule")
 @RequiredArgsConstructor

@@ -44,6 +44,13 @@ import com.ssafy.yeogirok.global.geo.LegalDongResolver;
  *       불러 직접 추가와 같은 10자리 법정동 코드·읍·면·동 이름을 저장한다(region_code 단위가 섞이지 않게).</li>
  * </ul>
  * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
+ * <ul>
+ *   <li>원본 기록 행과 대상 방 행을 잠그고, 저장 직전에 게시 여부·원본 방 미삭제·방문 소속을 다시 확인한다.</li>
+ *   <li>선택한 방문의 place_id 를 새 후보에 연결하고 sourceType=COURSE, sourceRecordId=원본 기록 ID 를 남긴다.
+ *       API-028·방 상세의 sourceRecord 도 이때 채운다({@link com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse}).</li>
+ * </ul>
+ * 029·030 공통: Idempotency-Key 를 받고, 후보를 저장한 뒤 {@link #increaseVersion} 을 불러 방 version 과
+ * scheduleNeedsRecalculation(확정 일정이 있으면 true)을 한 번에 갱신한다.
  */
 @Service
 public class RoomPlaceService {

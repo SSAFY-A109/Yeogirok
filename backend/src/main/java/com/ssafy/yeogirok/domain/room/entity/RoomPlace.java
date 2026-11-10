@@ -26,6 +26,7 @@ import lombok.NoArgsConstructor;
  * 이 행은 누가·어떤 경로로 담았는지와 삭제 상태만 갖는다. 같은 장소를 여러 번 담으면 후보도 여러 개다.
  *
  * <p>DDL 과 다른 점: travel_records 엔티티를 아직 참조하지 않아 {@code source_record_id} FK 를 걸지 않는다.
+ * TODO 기록 도메인이 들어오면 {@code source_record_id → travel_records(id)} FK 를 건다.
  * 부분 인덱스(WHERE removed_at IS NULL)·컬럼 기본값은 H2 비호환이라 일반 인덱스로 두고 Flyway V1 에 맡긴다.
  *
  * <p>후보를 빼면 {@code removed_at} 만 채우고 행은 지우지 않는다. 일정 항목이 이 행을 계속 참조하고, 언제든 복원할 수 있다.
