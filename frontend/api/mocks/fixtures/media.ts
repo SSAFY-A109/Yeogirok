@@ -4,6 +4,8 @@ export type MockUpload = {
   request: CreateUploadRequestDto;
   session: UploadSessionDto;
   transferredBytes: number | null;
+  bytes?: ArrayBuffer;
+  acceptedAt?: number;
   result: ReadyUploadDto | null;
 };
 

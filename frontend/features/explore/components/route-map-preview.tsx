@@ -15,7 +15,7 @@ const SEA_WIDTH = 90;
 const STREET_WIDTH = 20;
 
 // 지도 SDK를 쓰기 전의 코스 경로 미리보기. 선택 상태가 핀 색에 그대로 반영된다(EXP-07).
-export function RouteMapPreview({ pins, onPressPin }: { pins: MapPin[]; onPressPin: (id: string) => void }) {
+export function RouteMapPreview({ pins, onPressPin, connectPins = true }: { pins: MapPin[]; onPressPin?: (id: string) => void; connectPins?: boolean }) {
   const [width, setWidth] = useState(0);
   const colors = getColors("light");
 
@@ -42,19 +42,19 @@ export function RouteMapPreview({ pins, onPressPin }: { pins: MapPin[]; onPressP
             <Rect x={60} y={0} width={60} height={MAP_HEIGHT} fill={colors.background} />
             <Rect x={0} y={130} width={330} height={STREET_WIDTH} fill={colors.background} />
             <Rect x={210} y={0} width={40} height={MAP_HEIGHT} fill={colors.background} />
-            <Polyline points={points} fill="none" stroke={colors["map-route"]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            {connectPins && <Polyline points={points} fill="none" stroke={colors["map-route"]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />}
           </Svg>
           {pins.map((pin) => {
             return (
               <Pressable
                 key={pin.id}
-                accessibilityRole="button"
+                accessibilityRole={onPressPin ? "button" : undefined}
                 accessibilityLabel={`${pin.order}번 ${pin.label}`}
                 accessibilityState={{ selected: pin.selected }}
                 hitSlop={9}
-                onPress={() => {
-                  return onPressPin(pin.id);
-                }}
+                onPress={onPressPin ? () => {
+                  onPressPin(pin.id);
+                } : undefined}
                 className={cn("absolute items-center justify-center rounded-full border-2", pin.selected ? "border-card bg-primary" : "border-border-strong bg-card")}
                 style={{ width: PIN_SIZE, height: PIN_SIZE, left: pin.x * width - PIN_SIZE / 2, top: pin.y * MAP_HEIGHT - PIN_SIZE / 2 }}
               >

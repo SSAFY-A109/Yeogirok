@@ -15,15 +15,20 @@ const FALLBACK_PADDING = 0.12;
 const javascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
 
 type CourseRouteMapProps = {
-  places: CoursePlace[];
-  selectedIds: ReadonlySet<string>;
-  onPressPlace: (placeId: string) => void;
+  places: Pick<CoursePlace, "id" | "name" | "coordinate">[];
+  selectedIds?: ReadonlySet<string>;
+  connectPlaces?: boolean;
+  onPressPlace?: (placeId: string) => void;
+  testID?: string;
+  accessibilityLabel?: string;
 };
 
 type MapPhase = "loading" | "ready" | "error";
 
 // 코스 장소를 카카오맵에 번호 핀으로 찍고 순서대로 선으로 잇는다(EXP-05·07). 지도를 쓸 수 없으면 간략 경로로 대신한다.
-export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRouteMapProps) {
+export function CourseRouteMap({
+  places, selectedIds, connectPlaces = true, onPressPlace, testID = "course-detail.map", accessibilityLabel = "코스 장소를 순서대로 이은 지도",
+}: CourseRouteMapProps) {
   const [phase, setPhase] = useState<MapPhase>("loading");
   const [attempt, setAttempt] = useState(0);
   const canLoad = Platform.OS !== "web" && Boolean(javascriptKey);
@@ -32,8 +37,10 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
     const colors = getColors("light");
 
     return {
+      connectPoints: connectPlaces,
+
       points: places.map((place, index) => {
-        return { id: place.id, lat: place.coordinate.latitude, lng: place.coordinate.longitude, order: index + 1, selected: selectedIds.has(place.id) };
+        return { id: place.id, lat: place.coordinate.latitude, lng: place.coordinate.longitude, order: index + 1, selected: selectedIds?.has(place.id) ?? true };
       }),
 
       colors: {
@@ -46,20 +53,20 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
         pinBorder: colors["border-strong"],
       },
     };
-  }, [places, selectedIds]);
+  }, [places, selectedIds, connectPlaces]);
 
-  const initialCamera = useMemo<MapCamera>(() => {
+  const [initialCamera] = useState<MapCamera>(() => {
     const first = places[0];
 
     return { lat: first?.coordinate.latitude ?? 37.7519, lng: first?.coordinate.longitude ?? 128.8761, level: ROUTE_MAP_LEVEL };
-  }, [places]);
+  });
 
   if (canLoad && javascriptKey && phase !== "error") {
     return (
-      <View className="w-full overflow-hidden bg-brand-muted" style={{ height: MAP_HEIGHT }} testID="course-detail.map">
+      <View className="w-full overflow-hidden bg-brand-muted" style={{ height: MAP_HEIGHT }} testID={testID}>
         <KakaoMapView
           key={attempt}
-          accessibilityLabel="코스 장소를 순서대로 이은 지도"
+          accessibilityLabel={accessibilityLabel}
           javascriptKey={javascriptKey}
           initialCamera={initialCamera}
           route={route}
@@ -82,10 +89,10 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
   }
 
   return (
-    <View testID="course-detail.map-fallback">
-      <RouteMapPreview pins={toPreviewPins(places, selectedIds)} onPressPin={onPressPlace} />
+    <View testID={`${testID}-fallback`}>
+      <RouteMapPreview pins={toPreviewPins(places, selectedIds)} connectPins={connectPlaces} onPressPin={onPressPlace} />
       <View className="flex-row items-center justify-between gap-3 bg-brand-muted px-5 pb-3">
-        <Text className="flex-1 text-caption text-foreground-secondary">지도를 불러오지 못해 간략 경로로 보여 드려요</Text>
+        <Text className="flex-1 text-caption text-foreground-secondary">{connectPlaces ? "지도를 불러오지 못해 간략 경로로 보여 드려요" : "지도를 불러오지 못해 위치를 간략하게 표시해요"}</Text>
         {canLoad && (
           <Button
             variant="outline"
@@ -95,7 +102,7 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
               setPhase("loading");
               setAttempt(attempt + 1);
             }}
-            testID="course-detail.map-retry"
+            testID={`${testID}-retry`}
           >
             <Text>다시 시도</Text>
           </Button>
@@ -105,7 +112,7 @@ export function CourseRouteMap({ places, selectedIds, onPressPlace }: CourseRout
   );
 }
 
-function toPreviewPins(places: CoursePlace[], selectedIds: ReadonlySet<string>): MapPin[] {
+function toPreviewPins(places: CourseRouteMapProps["places"], selectedIds: CourseRouteMapProps["selectedIds"]): MapPin[] {
   const lats = places.map((place) => {
     return place.coordinate.latitude;
   });
@@ -127,7 +134,7 @@ function toPreviewPins(places: CoursePlace[], selectedIds: ReadonlySet<string>):
       label: place.name,
       x: FALLBACK_PADDING + ((place.coordinate.longitude - minLng) / lngRange) * span,
       y: FALLBACK_PADDING + (1 - (place.coordinate.latitude - minLat) / latRange) * span,
-      selected: selectedIds.has(place.id),
+      selected: selectedIds?.has(place.id) ?? true,
     };
   });
 }

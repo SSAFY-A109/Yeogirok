@@ -1,0 +1,54 @@
+appId: ${MAESTRO_APP_ID}
+name: 여행기를 다시 완성해 게시하고 내 기록에서 공개 코스를 확인한다
+---
+- launchApp:
+    clearState: false
+- runFlow:
+    when:
+      visible:
+        id: "login.screen"
+    commands:
+      - tapOn:
+          id: "login.kakao"
+      - assertVisible:
+          id: "home.screen"
+- tapOn:
+    id: "tabs.my"
+- tapOn:
+    id: "my.all-records"
+- assertVisible:
+    id: "memo.screen"
+- tapOn:
+    id: "memo.record-1"
+- tapOn:
+    id: "memo.edit"
+- tapOn: "이야기 쓰기"
+- tapOn:
+    id: "memo.story-body"
+- inputText: "Walked along the coast together."
+- hideKeyboard
+- tapOn:
+    id: "memo.save-story"
+- assertVisible: "Walked along the coast together."
+- tapOn:
+    id: "memo.complete"
+- assertVisible:
+    id: "memo.completed"
+- tapOn:
+    id: "memo.publish"
+- tapOn:
+    id: "memo.publish-preview"
+- assertVisible: "공개 미리보기"
+- assertVisible: "공개될 장소"
+- assertNotVisible: "여행방에 담기"
+- assertVisible:
+    id: "memo.publish-confirm"
+- tapOn:
+    id: "memo.publish-confirm"
+- tapOn:
+    id: "memo.view-published-course"
+- assertVisible: "공개된 장소"
+- assertNotVisible: "여행방에 담기"
+- back
+- assertVisible:
+    id: "memo.completed"

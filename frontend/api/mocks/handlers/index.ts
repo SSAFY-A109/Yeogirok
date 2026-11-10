@@ -11,6 +11,7 @@ import { scheduleHandlers } from "./schedule";
 import { tipHandlers } from "./tip";
 import { mediaHandlers } from "./media";
 import { statisticsHandlers } from "./statistics";
+import { recordHandlers } from "./record";
 
 export const handlers: RequestHandler[] = [
   ...authHandlers,
@@ -24,4 +25,5 @@ export const handlers: RequestHandler[] = [
   ...tipHandlers,
   ...mediaHandlers,
   ...statisticsHandlers,
+  ...recordHandlers,
 ];

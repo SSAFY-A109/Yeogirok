@@ -135,9 +135,9 @@ export function KakaoMapView({
   }, [markers, markerImage, sendMarkers]);
 
   function sendRoute(nextRoute: MapRoute) {
-    const signature = nextRoute.points.map(({ id }) => {
-      return id;
-    }).join(",");
+    const signature = JSON.stringify(nextRoute.points.map(({ id, lat, lng }) => {
+      return [id, lat, lng];
+    }));
 
     webViewRef.current?.injectJavaScript(buildSetRouteScript(nextRoute, signature !== routeSignature.current));
     routeSignature.current = signature;
