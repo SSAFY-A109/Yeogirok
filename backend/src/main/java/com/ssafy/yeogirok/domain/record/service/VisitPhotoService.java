@@ -34,7 +34,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 방문에 사진 연결·이동(API-068)과 기록 사진 삭제(API-089). 사진 한 장은 한 방문에만 연결되고, 연결 해제(보관함으로 되돌리기)는 없다.
- * 셋 다 방문 삭제(067)와 같은 기록 행 잠금 아래에서 처리해, 경합 중에 연결 사진을 놓치지 않는다.
+ * 연결·이동·삭제는 방문 삭제(067)와 같은 기록 행 잠금 아래에서 처리해, 경합 중에 연결 사진을 놓치지 않는다.
+ * 업로드 완료(086, RecordPhotoService)는 미연결 사진을 보관함에 넣기만 해 잠금·version 대상이 아니다.
  *
  * <p>{@code UNIQUE (visit_id, position) DEFERRABLE INITIALLY IMMEDIATE}(Flyway V1)는 문장마다 검사하므로, 자리가 바뀌는
  * 사진을 먼저 겹치지 않는 임시 값으로 옮긴 뒤 최종 값으로 바꾼다({@link VisitLayout} 과 같은 이유).
