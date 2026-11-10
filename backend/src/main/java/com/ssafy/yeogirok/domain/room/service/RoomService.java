@@ -136,7 +136,7 @@ public class RoomService {
 	/**
 	 * API-023. previewOnly=true 면 검증만 하고 아무것도 바꾸지 않는다(새 날짜 밖으로 빠질 일정 항목만 알려 준다).
 	 * 저장하면 새 날짜 밖 일정 항목을 지우고(후보 장소는 그대로), 날짜나 이동 수단을 바꿨으면 남은 일정의 이동 시간·
-	 * 시각을 다시 계산한다. 일정이 있는 방의 날짜를 지우면(null) C003. version 이 다르거나 동시 수정이 @Version 에 걸리면 C004.
+	 * 시각을 다시 계산한다. 일정이 있는 방의 날짜를 지우면(null) RO010. version 이 다르거나 동시 수정이 @Version 에 걸리면 C004.
 	 *
 	 * <p>재계산은 외부 호출이라 방 잠금 밖에서 먼저 하고, 방을 잠근 뒤 version 을 다시 확인하고 저장한다.
 	 */
@@ -178,8 +178,8 @@ public class RoomService {
 			? scheduleRoomChanges.affectedItems(roomId, startDate, endDate)
 			: List.of();
 		if (startDate == null && !affectedItems.isEmpty()) {
-			// 일정이 있는 방의 날짜를 지우는 처리는 정책이 정해지지 않았다(명세).
-			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "일정이 있는 여행방의 날짜는 지울 수 없습니다.");
+			// previewOnly 와 관계없이 거부하고 방·일정·version 을 그대로 둔다(명세).
+			throw new BusinessException(ExceptionType.ROOM_DATES_IN_USE);
 		}
 		if (command.previewOnly()) {
 			return RoomUpdateResponse.preview(room, affectedItems);

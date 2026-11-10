@@ -425,11 +425,16 @@ class ScheduleServiceTest {
 	}
 
 	@Test
-	void 일정이_있는_방의_날짜는_지울_수_없다() {
+	void 일정이_있는_방의_날짜를_지우면_미리보기와_저장_모두_RO010이고_아무것도_바뀌지_않는다() {
 		update(newItem(placeA, DAY1, 1, 60));
+		int version = version();
 
 		assertError(() -> roomService.update(OWNER, roomId,
-			new RoomUpdateCommand(version(), null, true, null, null, null, true)), ExceptionType.NOT_ALLOWED_VALUE);
+			new RoomUpdateCommand(version, null, true, null, null, null, true)), ExceptionType.ROOM_DATES_IN_USE);
+		assertError(() -> roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(version, null, true, null, null, null, false)), ExceptionType.ROOM_DATES_IN_USE);
+		assertThat(version()).isEqualTo(version);
+		assertThat(items(scheduleService.getSchedule(OWNER, roomId).schedule(), DAY1)).hasSize(1);
 	}
 
 	@Test
