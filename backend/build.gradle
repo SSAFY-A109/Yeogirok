@@ -22,6 +22,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
+	// 채팅(API-077): STOMP 없이 노션의 JSON 프레임 계약을 그대로 주고받는 WebSocket
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
 	/* 보안: 소셜 ID 토큰 검증과 서비스 JWT 발급·검증 모두 리소스 서버 + jose 로 처리한다 */
 	implementation 'org.springframework.boot:spring-boot-starter-security'

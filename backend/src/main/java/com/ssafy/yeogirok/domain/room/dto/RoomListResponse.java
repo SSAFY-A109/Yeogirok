@@ -29,8 +29,10 @@ public record RoomListResponse(List<Item> items, String nextCursor) {
 		/**
 		 * @param members    이 방의 현재 참여자(요청자 포함)
 		 * @param placeCount 빼지 않은 후보 수
+		 * @param hasUnread  요청자에게 안 읽은 타인 메시지가 있는지
 		 */
-		public static Item of(TravelRoom room, List<RoomMemberView> members, int placeCount, Long requesterId) {
+		public static Item of(TravelRoom room, List<RoomMemberView> members, int placeCount, Long requesterId,
+			boolean hasUnread) {
 			Long lastRead = members.stream()
 				.filter(member -> member.userId().equals(requesterId))
 				.findFirst()
@@ -38,7 +40,7 @@ public record RoomListResponse(List<Item> items, String nextCursor) {
 				.orElse(null);
 			return new Item(room.getId(), room.getTitle(), room.getStartDate(), room.getEndDate(),
 				room.getTransportMode(), members.size(), members.stream().map(Member::from).toList(), placeCount, List.of(),
-				ChatReadState.of(lastRead));
+				new ChatReadState(lastRead, hasUnread));
 		}
 	}
 
