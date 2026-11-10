@@ -1,10 +1,14 @@
 package com.ssafy.yeogirok.domain.record.controller;
 
 import static com.ssafy.yeogirok.support.WebMvcSecurity.asUser;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -26,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -60,6 +65,7 @@ import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
+import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
 
@@ -378,6 +384,26 @@ class RecordControllerTest {
 					.header("Idempotency-Key", "k"))
 				.andExpect(jsonPath("$.code").value("C002"));
 			verifyNoInteractions(visitPhotoService);
+		}
+	}
+
+	/** 하위 자원에 거는 멱등키는 기록 ID 까지 넣어, 같은 키를 다른 기록 경로로 보내면 다른 요청이 된다(PR #77 리뷰). */
+	@Nested
+	class 멱등키_대상 {
+
+		@Test
+		void 이야기_작성_사진_연결_사진_삭제는_기록_ID와_하위_자원_ID로_건다() throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/stories"), "{\"body\": \"좋았다\"}"));
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), "{\"imageIds\": [31]}"));
+			mockMvc.perform(delete("/api/v1/records/9/images/31").param("version", "3").with(asUser(USER_ID))
+				.header("Idempotency-Key", "key-1"));
+
+			ArgumentCaptor<IdempotencyKey> keys = ArgumentCaptor.forClass(IdempotencyKey.class);
+			verify(idempotencyService, times(3)).execute(keys.capture(), any(), any(), any(), any());
+			assertThat(keys.getAllValues()).extracting(IdempotencyKey::scope, IdempotencyKey::target).containsExactly(
+				tuple(RecordController.STORY_WRITE_SCOPE, "9-701"),
+				tuple(RecordController.PHOTO_LINK_SCOPE, "9-701"),
+				tuple(RecordController.PHOTO_DELETE_SCOPE, "9-31"));
 		}
 	}
 

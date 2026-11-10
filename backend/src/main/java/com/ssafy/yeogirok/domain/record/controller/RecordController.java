@@ -63,13 +63,13 @@ public class RecordController {
 	static final String CREATE_SCOPE = "record-create";
 	/** 멱등키 scope. 대상은 기록 ID 다. */
 	static final String VISIT_ADD_SCOPE = "record-visit-add";
-	/** 멱등키 scope. 대상은 방문 ID 다. */
+	/** 멱등키 scope. 대상은 "기록 ID-방문 ID" 다. */
 	static final String STORY_WRITE_SCOPE = "record-story-write";
 	/** 멱등키 scope. 대상은 기록 ID 다. */
 	static final String COMPLETE_SCOPE = "record-complete";
-	/** 멱등키 scope. 대상은 방문 ID 다. */
+	/** 멱등키 scope. 대상은 "기록 ID-방문 ID" 다. */
 	static final String PHOTO_LINK_SCOPE = "record-photo-link";
-	/** 멱등키 scope. 대상은 사진 ID 다. */
+	/** 멱등키 scope. 대상은 "기록 ID-사진 ID" 다. */
 	static final String PHOTO_DELETE_SCOPE = "record-photo-delete";
 
 	private final RecordCreateService recordCreateService;
@@ -155,7 +155,7 @@ public class RecordController {
 		@RequestBody StoryRequest request) {
 		String body = request.toBody();
 		StoryWriteResponse response = idempotencyService.execute(
-			new IdempotencyKey(user.userId(), STORY_WRITE_SCOPE, visitId.toString(), idempotencyKey),
+			new IdempotencyKey(user.userId(), STORY_WRITE_SCOPE, target(recordId, visitId), idempotencyKey),
 			body,
 			() -> storyService.write(user.userId(), recordId, visitId, body),
 			StoryWriteResponse::storyId,
@@ -184,7 +184,7 @@ public class RecordController {
 		@RequestBody PhotoLinkRequest request) {
 		List<Long> imageIds = request.toImageIds();
 		PhotoLinkResponse response = idempotencyService.execute(
-			new IdempotencyKey(user.userId(), PHOTO_LINK_SCOPE, visitId.toString(), idempotencyKey),
+			new IdempotencyKey(user.userId(), PHOTO_LINK_SCOPE, target(recordId, visitId), idempotencyKey),
 			imageIds,
 			() -> visitPhotoService.link(user.userId(), recordId, visitId, imageIds),
 			linked -> imageIds.isEmpty() ? "-" : String.join(",", imageIds.stream().map(String::valueOf).toList()),
@@ -201,7 +201,7 @@ public class RecordController {
 		@PathVariable Long recordId, @PathVariable Long imageId,
 		@Parameter(description = "현재 기록 version") @RequestParam int version) {
 		PhotoDeleteResponse response = idempotencyService.execute(
-			new IdempotencyKey(user.userId(), PHOTO_DELETE_SCOPE, imageId.toString(), idempotencyKey),
+			new IdempotencyKey(user.userId(), PHOTO_DELETE_SCOPE, target(recordId, imageId), idempotencyKey),
 			version,
 			() -> visitPhotoService.delete(user.userId(), recordId, imageId, version),
 			PhotoDeleteResponse::imageId,
@@ -224,6 +224,14 @@ public class RecordController {
 			RecordCompleteResponse::recordId,
 			id -> recordCompleteService.getCompleted(user.userId(), recordId));
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	/**
+	 * 하위 자원(방문·사진)에 거는 멱등키 대상. 기록 ID 를 함께 넣어, 같은 키를 다른 기록 경로로 보내면 다른 요청이 된다
+	 * (기록 ID 없이 걸면 다른 기록의 결과를 돌려줄 수 있었다, PR #77 리뷰).
+	 */
+	private static String target(Long recordId, Long childId) {
+		return recordId + "-" + childId;
 	}
 
 	/** 생략이면 null, DRAFT·COMPLETED 가 아니면 C002(노션 058). */
