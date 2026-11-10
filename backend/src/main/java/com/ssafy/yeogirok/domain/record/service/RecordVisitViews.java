@@ -6,11 +6,10 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 import org.springframework.stereotype.Component;
@@ -27,7 +26,6 @@ import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.record.entity.VisitStory;
-import com.ssafy.yeogirok.domain.record.repository.ActiveUserRepository;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitStoryRepository;
@@ -49,7 +47,7 @@ public class RecordVisitViews {
 	private final VisitImageRepository visitImageRepository;
 	private final VisitStoryRepository visitStoryRepository;
 	private final PlaceRepository placeRepository;
-	private final ActiveUserRepository activeUserRepository;
+	private final RecordAuthors recordAuthors;
 	private final FileStorage fileStorage;
 	private final FileProperties fileProperties;
 
@@ -61,7 +59,8 @@ public class RecordVisitViews {
 			: visitStoryRepository.findByVisitIdInOrderByIdAsc(visits.stream().map(ActualVisit::getId).toList());
 		Map<Long, Place> places = placeRepository.findAllById(visits.stream().map(ActualVisit::getPlaceId).toList())
 			.stream().collect(toMap(Place::getId, Function.identity()));
-		Function<Long, Long> shown = shownUserIds(images, stories);
+		UnaryOperator<Long> shown = recordAuthors.shownIds(Stream.concat(
+			images.stream().map(VisitImage::getUploadedBy), stories.stream().map(VisitStory::getAuthorId)).toList());
 		String bucket = fileProperties.bucketFor(FilePurpose.RECORD_PHOTO);
 		Map<Long, RecordPhotoView> photos = images.stream().collect(toMap(VisitImage::getId, image -> new RecordPhotoView(
 			image.getId(), fileStorage.presignGet(bucket, image.getImagePath(), fileProperties.downloadUrlTtl()), null,
@@ -82,14 +81,6 @@ public class RecordVisitViews {
 			visit.getVisitedAt(), visit.getPosition(), photosByVisit.getOrDefault(visit.getId(), List.of()),
 			storiesByVisit.getOrDefault(visit.getId(), List.of()))).toList();
 		return new Board(views, photoPool);
-	}
-
-	private Function<Long, Long> shownUserIds(List<VisitImage> images, List<VisitStory> stories) {
-		Set<Long> userIds = new HashSet<>();
-		Stream.concat(images.stream().map(VisitImage::getUploadedBy), stories.stream().map(VisitStory::getAuthorId))
-			.forEach(userIds::add);
-		Set<Long> active = userIds.isEmpty() ? Set.of() : new HashSet<>(activeUserRepository.findActiveIds(userIds));
-		return userId -> active.contains(userId) ? userId : null;
 	}
 
 

@@ -15,14 +15,10 @@ import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
  * 한 기록의 날짜별 방문 순서(명세 {@code specs/record-api.md} 5절 7). 메모리에서 끼워 넣고 뺀 뒤 {@link #apply} 로 position 을
  * 1부터 다시 매긴다.
  *
- * <p>{@code UNIQUE (record_id, visit_date, position) DEFERRABLE INITIALLY IMMEDIATE}(Flyway V1)는 문장마다 검사하므로,
- * 자리가 바뀌는 방문을 먼저 겹치지 않는 임시 값으로 옮긴 뒤 최종 값으로 바꾼다. 새 방문은 그다음에 넣는다
+ * <p>자리가 바뀌는 방문은 {@link TemporaryPositions} 로 옮긴다(순서 유니크 DEFERRABLE). 새 방문은 그다음에 넣는다
  * (IDENTITY 라 저장 즉시 INSERT 되고, Hibernate 는 한 번의 flush 에서 INSERT 를 UPDATE 보다 먼저 보낸다).
  */
 final class VisitLayout {
-
-	/** 임시 position. CHECK (position >= 1) 를 지키면서 실제 순서와 겹치지 않는 값. */
-	private static final int TEMP_BASE = 1_000_000;
 
 	private final Map<LocalDate, List<ActualVisit>> days = new TreeMap<>();
 	private final Map<ActualVisit, Slot> before = new IdentityHashMap<>();
@@ -70,15 +66,7 @@ final class VisitLayout {
 				}
 			}
 		}
-		if (!moved.isEmpty()) {
-			int temp = TEMP_BASE;
-			for (ActualVisit visit : moved.keySet()) {
-				visit.moveTo(temp++, now);
-			}
-			flush.run();
-			moved.forEach((visit, position) -> visit.moveTo(position, now));
-			flush.run();
-		}
+		TemporaryPositions.apply(moved.keySet(), (visit, position) -> visit.moveTo(position, now), moved::get, flush);
 		created.forEach(saveNew);
 		return !moved.isEmpty();
 	}

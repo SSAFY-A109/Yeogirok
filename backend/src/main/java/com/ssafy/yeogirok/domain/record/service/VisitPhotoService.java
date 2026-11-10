@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -23,7 +23,6 @@ import com.ssafy.yeogirok.domain.record.dto.PhotoDeleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
-import com.ssafy.yeogirok.domain.record.repository.ActiveUserRepository;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -36,20 +35,16 @@ import lombok.RequiredArgsConstructor;
  * 연결·이동·삭제는 방문 삭제(067)와 같은 기록 행 잠금 아래에서 처리해, 경합 중에 연결 사진을 놓치지 않는다.
  * 업로드 완료(086, RecordPhotoService)는 미연결 사진을 보관함에 넣기만 해 잠금·version 대상이 아니다.
  *
- * <p>{@code UNIQUE (visit_id, position) DEFERRABLE INITIALLY IMMEDIATE}(Flyway V1)는 문장마다 검사하므로, 자리가 바뀌는
- * 사진을 먼저 겹치지 않는 임시 값으로 옮긴 뒤 최종 값으로 바꾼다({@link VisitLayout} 과 같은 이유).
+ * <p>자리가 바뀌는 사진은 {@link TemporaryPositions} 로 옮긴다(방문 안 순서 유니크 DEFERRABLE).
  */
 @Service
 @RequiredArgsConstructor
 public class VisitPhotoService {
 
-	/** 임시 position. CHECK (position >= 1) 를 지키면서 실제 순서와 겹치지 않는 값. */
-	private static final int TEMP_BASE = 1_000_000;
-
 	private final RecordFinder recordFinder;
 	private final ActualVisitRepository actualVisitRepository;
 	private final VisitImageRepository visitImageRepository;
-	private final ActiveUserRepository activeUserRepository;
+	private final RecordAuthors recordAuthors;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
@@ -163,15 +158,8 @@ public class VisitPhotoService {
 		List<VisitImage> changed = finalPosition.keySet().stream()
 			.filter(image -> movedSet.contains(image) || !finalPosition.get(image).equals(before.get(image)))
 			.toList();
-		int temp = TEMP_BASE;
-		for (VisitImage image : changed) {
-			place(image, movedSet.contains(image), finalVisit.get(image), temp++);
-		}
-		visitImageRepository.flush();
-		for (VisitImage image : changed) {
-			place(image, movedSet.contains(image), finalVisit.get(image), finalPosition.get(image));
-		}
-		visitImageRepository.flush();
+		TemporaryPositions.apply(changed, (image, position) -> place(image, movedSet.contains(image),
+			finalVisit.get(image), position), finalPosition::get, visitImageRepository::flush);
 		return true;
 	}
 
@@ -184,11 +172,9 @@ public class VisitPhotoService {
 	}
 
 	private PhotoLinkResponse response(List<VisitImage> images, TravelRecord record) {
-		Set<Long> uploaders = new HashSet<>();
-		images.forEach(image -> uploaders.add(image.getUploadedBy()));
-		Set<Long> active = uploaders.isEmpty() ? Set.of() : new HashSet<>(activeUserRepository.findActiveIds(uploaders));
+		UnaryOperator<Long> shown = recordAuthors.shownIds(images.stream().map(VisitImage::getUploadedBy).toList());
 		return new PhotoLinkResponse(images.stream().map(image -> new PhotoLinkResponse.Photo(image.getId(),
-			image.getVisitId(), active.contains(image.getUploadedBy()) ? image.getUploadedBy() : null)).toList(),
+			image.getVisitId(), shown.apply(image.getUploadedBy()))).toList(),
 			record.getVersion(), record.getStatus());
 	}
 }
