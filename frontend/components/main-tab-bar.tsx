@@ -10,7 +10,7 @@ const items = [
   { key: "/map", label: "지도", icon: tabBarIcons.map, testID: "tabs.map" },
 ];
 
-const TAB_PATHS = ["/", "/ar-tip", "/rooms", "/my", "/map"];
+const TAB_PATHS = ["/", "/ar-tip", "/rooms", "/my", "/map", "/memo"];
 
 export function MainTabBar() {
   const pathname = usePathname();
@@ -24,7 +24,7 @@ export function MainTabBar() {
     return null;
   }
 
-  return <TabBar items={items} value={pathname} onValueChange={(value) => {
+  return <TabBar items={items} value={pathname === "/memo" ? "/my" : pathname} onValueChange={(value) => {
     if (value === "/") {
       router.navigate("/");
     }
