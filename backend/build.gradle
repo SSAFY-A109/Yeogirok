@@ -42,6 +42,12 @@ dependencies {
 	implementation platform('software.amazon.awssdk:bom:2.57.10')
 	implementation 'software.amazon.awssdk:s3'
 
+	/* 푸시: 채팅 앱 알림(노션 API-077)을 FCM HTTP v1 로 보낸다. 쓰지 않는 Firestore·Storage 는 뺀다 */
+	implementation('com.google.firebase:firebase-admin:9.11.0') {
+		exclude group: 'com.google.cloud', module: 'google-cloud-firestore'
+		exclude group: 'com.google.cloud', module: 'google-cloud-storage'
+	}
+
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

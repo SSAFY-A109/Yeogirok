@@ -87,6 +87,14 @@ yeogirok:
       preview-length: 40
       threads: 2
       queue-capacity: 1000
+  push:
+    fcm:
+      # Firebase 서비스 계정 키 JSON 파일 전체를 Base64 한 줄로 넣는다. 환경 변수로만 넣는다. 이 파일·Git 에 쓰지 않는다.
+      # 비어 있으면 채팅 푸시를 보내지 않고 앱은 그대로 뜬다(로컬·테스트).
+      # 만들기(한 줄로): base64 -w0 서비스계정.json   또는 openssl base64 -A -in 서비스계정.json
+      service-account-base64: ${FIREBASE_SERVICE_ACCOUNT_BASE64:}
+      connect-timeout: 5s
+      read-timeout: 10s
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.
