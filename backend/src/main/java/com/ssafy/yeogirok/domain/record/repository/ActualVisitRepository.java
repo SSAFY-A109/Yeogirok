@@ -17,6 +17,8 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 
 	Optional<ActualVisit> findByIdAndRecordId(Long id, Long recordId);
 
+	boolean existsByIdAndRecordId(Long id, Long recordId);
+
 	/** 여러 기록의 실제 방문을 기록별 날짜·순서대로. 기록마다 첫 줄이 첫 방문이다. */
 	@Query("select new com.ssafy.yeogirok.domain.record.repository.VisitRegion(v.recordId, p.regionName)"
 		+ " from ActualVisit v, Place p where p.id = v.placeId and v.recordId in :recordIds"

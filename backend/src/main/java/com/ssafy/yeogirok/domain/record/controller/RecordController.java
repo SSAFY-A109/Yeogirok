@@ -19,6 +19,9 @@ import com.ssafy.yeogirok.domain.record.dto.RecordCreateRequest;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
+import com.ssafy.yeogirok.domain.record.dto.StoryEditResponse;
+import com.ssafy.yeogirok.domain.record.dto.StoryRequest;
+import com.ssafy.yeogirok.domain.record.dto.StoryWriteResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddRequest;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
@@ -28,6 +31,7 @@ import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
+import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -50,10 +54,13 @@ public class RecordController {
 	static final String CREATE_SCOPE = "record-create";
 	/** 멱등키 scope. 대상은 기록 ID 다. */
 	static final String VISIT_ADD_SCOPE = "record-visit-add";
+	/** 멱등키 scope. 대상은 방문 ID 다. */
+	static final String STORY_WRITE_SCOPE = "record-story-write";
 
 	private final RecordCreateService recordCreateService;
 	private final RecordQueryService recordQueryService;
 	private final VisitCommandService visitCommandService;
+	private final StoryService storyService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-057 여행방에서 기록 공간 생성")
@@ -120,6 +127,34 @@ public class RecordController {
 		VisitUpdateCommand command = request.toCommand();
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			visitCommandService.update(user.userId(), recordId, command)));
+	}
+
+	@Operation(summary = "API-069 일정별 이야기 작성")
+	@PostMapping("/records/{recordId}/visits/{visitId}/stories")
+	public ResponseEntity<ApiResponseBody<StoryWriteResponse>> writeStory(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long recordId, @PathVariable Long visitId,
+		@RequestBody StoryRequest request) {
+		String body = request.toBody();
+		StoryWriteResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), STORY_WRITE_SCOPE, visitId.toString(), idempotencyKey),
+			body,
+			() -> storyService.write(user.userId(), recordId, visitId, body),
+			StoryWriteResponse::storyId,
+			id -> storyService.getWritten(user.userId(), recordId, Long.parseLong(id)));
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-070 일정별 이야기 수정")
+	@PatchMapping("/records/{recordId}/visits/{visitId}/stories/{storyId}")
+	public ResponseEntity<ApiResponseBody<StoryEditResponse>> editStory(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@PathVariable Long recordId, @PathVariable Long visitId, @PathVariable Long storyId,
+		@RequestBody StoryRequest request) {
+		String body = request.toBody();
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			storyService.edit(user.userId(), recordId, visitId, storyId, body)));
 	}
 
 	/** 생략이면 null, DRAFT·COMPLETED 가 아니면 C002(노션 058). */

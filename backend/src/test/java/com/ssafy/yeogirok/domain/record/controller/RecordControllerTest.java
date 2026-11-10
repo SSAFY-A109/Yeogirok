@@ -41,6 +41,8 @@ import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
+import com.ssafy.yeogirok.domain.record.dto.StoryEditResponse;
+import com.ssafy.yeogirok.domain.record.dto.StoryWriteResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
@@ -49,6 +51,7 @@ import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
+import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -68,6 +71,8 @@ class RecordControllerTest {
 	RecordQueryService recordQueryService;
 	@MockitoBean
 	VisitCommandService visitCommandService;
+	@MockitoBean
+	StoryService storyService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -244,6 +249,53 @@ class RecordControllerTest {
 			mockMvc.perform(json(patch("/api/v1/records/9/visits"), body.replace("ITEM", ITEM)))
 				.andExpect(jsonPath("$.code").value(code));
 			verifyNoInteractions(visitCommandService);
+		}
+	}
+
+	@Nested
+	class API_069_070 {
+
+		@Test
+		void 작성은_201이고_줄바꿈을_LF로_맞춰_넘긴다() throws Exception {
+			given(storyService.write(USER_ID, 9L, 701L, "첫 줄\n둘째 줄\n셋째 줄"))
+				.willReturn(new StoryWriteResponse(31L, USER_ID, "첫 줄\n둘째 줄\n셋째 줄", RecordStatus.DRAFT));
+
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/stories"),
+					"{\"body\": \"첫 줄\\r\\n둘째 줄\\r셋째 줄\"}"))
+				.andExpect(status().isCreated())
+				.andExpect(content().json("""
+					{"success": true, "data": {"storyId": 31, "authorId": 1, "body": "첫 줄\\n둘째 줄\\n셋째 줄",
+					  "status": "DRAFT"}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@Test
+		void 수정_응답_모양() throws Exception {
+			given(storyService.edit(USER_ID, 9L, 701L, 31L, "고친 글")).willReturn(
+				new StoryEditResponse(31L, "고친 글", Instant.parse("2026-11-01T00:30:00Z"), RecordStatus.DRAFT));
+
+			mockMvc.perform(json(patch("/api/v1/records/9/visits/701/stories/31"), "{\"body\": \"고친 글\"}"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"storyId": 31, "body": "고친 글",
+					  "updatedAt": "2026-11-01 09:30:00+09", "status": "DRAFT"}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"{}|C001",
+			"{\"body\": null}|C001",
+			"{\"body\": 3}|C002",
+			"{\"body\": \"\"}|C002",
+			"{\"body\": \" \\n \"}|C002"
+		})
+		void 본문_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/stories"), body))
+				.andExpect(jsonPath("$.code").value(code));
+			mockMvc.perform(json(patch("/api/v1/records/9/visits/701/stories/31"), body))
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(storyService);
 		}
 	}
 
