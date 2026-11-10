@@ -15,6 +15,10 @@ import java.util.stream.Stream;
 
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.domain.file.FileProperties;
+import com.ssafy.yeogirok.domain.file.FilePurpose;
+import com.ssafy.yeogirok.domain.file.storage.FileStorage;
+
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
@@ -33,6 +37,9 @@ import lombok.RequiredArgsConstructor;
 /**
  * 기록의 실제 방문·사진 보관함 응답 조립(API-059·067 이 같은 구조를 쓴다). 방문·사진·이야기·장소·회원 상태를 각각 한 번에 읽는다.
  * 탈퇴했거나 없는 회원의 uploadedBy·authorId 는 null 이다(노션 059).
+ *
+ * <p>사진 URL 은 부르는 쪽이 기록 참여 권한을 확인한 뒤 사진마다 서명만 해서 만든다. S3 HEAD 는 하지 않는다(사진 수만큼
+ * 외부 호출이 늘어나서다. 팁 048 과 같음). 지워진 객체면 앱이 URL 을 열 때 실패한다.
  */
 @Component
 @RequiredArgsConstructor
@@ -43,6 +50,8 @@ public class RecordVisitViews {
 	private final VisitStoryRepository visitStoryRepository;
 	private final PlaceRepository placeRepository;
 	private final ActiveUserRepository activeUserRepository;
+	private final FileStorage fileStorage;
+	private final FileProperties fileProperties;
 
 	/** 호출한 쪽 트랜잭션 안에서 부른다. */
 	public Board load(Long recordId) {
@@ -53,12 +62,16 @@ public class RecordVisitViews {
 		Map<Long, Place> places = placeRepository.findAllById(visits.stream().map(ActualVisit::getPlaceId).toList())
 			.stream().collect(toMap(Place::getId, Function.identity()));
 		Function<Long, Long> shown = shownUserIds(images, stories);
+		String bucket = fileProperties.bucketFor(FilePurpose.RECORD_PHOTO);
+		Map<Long, RecordPhotoView> photos = images.stream().collect(toMap(VisitImage::getId, image -> new RecordPhotoView(
+			image.getId(), fileStorage.presignGet(bucket, image.getImagePath(), fileProperties.downloadUrlTtl()), null,
+			shown.apply(image.getUploadedBy()), image.getVisitId())));
 
-		List<RecordPhotoView> photoPool = images.stream().map(image -> photo(image, shown)).toList();
+		List<RecordPhotoView> photoPool = images.stream().map(image -> photos.get(image.getId())).toList();
 		Map<Long, List<RecordPhotoView>> photosByVisit = images.stream()
 			.filter(image -> image.getVisitId() != null)
 			.sorted(Comparator.comparing(VisitImage::getPosition))
-			.collect(groupingBy(VisitImage::getVisitId, mapping(image -> photo(image, shown), toList())));
+			.collect(groupingBy(VisitImage::getVisitId, mapping(image -> photos.get(image.getId()), toList())));
 		Map<Long, List<ActualVisitView.Story>> storiesByVisit = stories.stream()
 			.collect(groupingBy(VisitStory::getVisitId,
 				mapping(story -> new ActualVisitView.Story(story.getId(), shown.apply(story.getAuthorId()),
@@ -79,9 +92,6 @@ public class RecordVisitViews {
 		return userId -> active.contains(userId) ? userId : null;
 	}
 
-	private static RecordPhotoView photo(VisitImage image, Function<Long, Long> shown) {
-		return new RecordPhotoView(image.getId(), null, shown.apply(image.getUploadedBy()), image.getVisitId());
-	}
 
 
 	/** 실제 방문(날짜·순서대로)과 기록 전체 사진(올린 순서). */

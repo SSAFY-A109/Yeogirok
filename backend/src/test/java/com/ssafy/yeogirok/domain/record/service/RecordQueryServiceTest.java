@@ -1,10 +1,13 @@
 package com.ssafy.yeogirok.domain.record.service;
 
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
+import static com.ssafy.yeogirok.domain.record.RecordTestConfig.SIGNED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 
@@ -15,6 +18,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
+import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
@@ -49,6 +53,8 @@ class RecordQueryServiceTest {
 	RecordQueryService recordQueryService;
 	@Autowired
 	TestEntityManager em;
+	@Autowired
+	FileStorage fileStorage;
 
 	TravelRoom room;
 	TravelRecord record;
@@ -125,13 +131,16 @@ class RecordQueryServiceTest {
 		assertThat(firstView.place().name()).isEqualTo("경포 해변");
 		assertThat(firstView.order()).isEqualTo(1);
 		assertThat(firstView.visitedAt()).isEqualTo(Instant.parse("2026-11-01T01:00:00Z"));
-		assertThat(firstView.photos()).containsExactly(new RecordPhotoView(firstInFirst, null, null, first.getId()),
-			new RecordPhotoView(secondInFirst, null, FRIEND, first.getId()));
+		assertThat(firstView.photos()).containsExactly(
+			new RecordPhotoView(firstInFirst, SIGNED + "record-photo/c", null, null, first.getId()),
+			new RecordPhotoView(secondInFirst, SIGNED + "record-photo/b", null, FRIEND, first.getId()));
 		assertThat(firstView.stories()).extracting(ActualVisitView.Story::authorId).containsExactly(null, FRIEND);
 		assertThat(detail.actualVisits().get(1).photos()).isEmpty();
 		assertThat(detail.photoPool()).extracting(RecordPhotoView::imageId)
 			.containsExactly(poolOnly, secondInFirst, firstInFirst);
 		assertThat(detail.photoPool().getFirst().visitId()).isNull();
+		assertThat(detail.photoPool().getFirst().url()).isEqualTo(SIGNED + "record-photo/a");
+		verify(fileStorage).presignGet("photos", "record-photo/a", Duration.ofMinutes(15));
 		assertThat(detail.plannedSchedule()).isNull();
 		assertThat(detail.uploads()).isEmpty();
 		assertThat(detail.materials()).isEmpty();

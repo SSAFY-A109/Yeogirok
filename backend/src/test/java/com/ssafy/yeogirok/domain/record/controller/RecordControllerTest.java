@@ -368,7 +368,7 @@ class RecordControllerTest {
 
 		@Test
 		void 상세_응답_모양() throws Exception {
-			RecordPhotoView photo = new RecordPhotoView(31L, null, null, 701L);
+			RecordPhotoView photo = new RecordPhotoView(31L, "https://signed/31", null, null, 701L);
 			ActualVisitView visit = new ActualVisitView(701L, new RecordPlaceView(PlaceProvider.MANUAL, null, "경포대",
 				new BigDecimal("37.7519000"), new BigDecimal("128.8761000"), null, null, null, null), null,
 				LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, List.of(photo),
@@ -388,7 +388,7 @@ class RecordControllerTest {
 					  "startDate": "2026-11-01", "endDate": "2026-11-02",
 					  "progress": {"stage": "EDIT", "draftKey": null, "jobId": null},
 					  "plannedSchedule": null, "uploads": [],
-					  "photoPool": [{"imageId": 31, "attribution": null, "uploadedBy": null, "visitId": 701}],
+					  "photoPool": [{"imageId": 31, "url": "https://signed/31", "attribution": null, "uploadedBy": null, "visitId": 701}],
 					  "actualVisits": [{
 					    "id": 701,
 					    "place": {"provider": "MANUAL", "providerPlaceId": null, "name": "경포대",
@@ -396,7 +396,7 @@ class RecordControllerTest {
 					      "imageUrl": null, "imageAttribution": null},
 					    "plannedItemId": null, "visitDate": "2026-11-01", "visitedAt": "2026-11-01 09:30:00+09",
 					    "order": 1,
-					    "photos": [{"imageId": 31, "attribution": null, "uploadedBy": null, "visitId": 701}],
+					    "photos": [{"imageId": 31, "url": "https://signed/31", "attribution": null, "uploadedBy": null, "visitId": 701}],
 					    "stories": [{"id": 41, "authorId": 2, "body": "좋았다"}]
 					  }],
 					  "materials": [], "publishedCourseId": null, "version": 3
