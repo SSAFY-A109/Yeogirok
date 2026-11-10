@@ -202,7 +202,11 @@ public record ScheduleOptions(List<DayOption> days, NamedPoint startPoint, Named
 		if (value == null) {
 			return null;
 		}
-		return value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE ? Integer.valueOf(value.intValue()) : value;
+		// 삼항 연산자로 쓰면 Integer·Long 이 long 으로 맞춰져 늘 Long 이 된다. if 로 나눈다.
+		if (value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+			return Integer.valueOf(value.intValue());
+		}
+		return value;
 	}
 
 	private static Double jsonDecimal(BigDecimal value) {
