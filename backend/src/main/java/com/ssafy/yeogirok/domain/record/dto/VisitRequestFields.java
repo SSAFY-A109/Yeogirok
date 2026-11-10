@@ -10,6 +10,10 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
@@ -41,16 +45,58 @@ final class VisitRequestFields {
 
 	/** 생략·null C001, 배열 아님 C002, 비었으면 C003. */
 	static JsonNode requiredArray(JsonNode value, String field) {
+		return requiredArray(value, field, false);
+	}
+
+	/** 생략·null C001, 배열 아님 C002, allowEmpty 가 아니면 빈 배열 C003. */
+	static JsonNode requiredArray(JsonNode value, String field, boolean allowEmpty) {
 		if (isAbsent(value)) {
 			throw missing(field);
 		}
 		if (!value.isArray()) {
 			throw invalidFormat(field, "배열이어야 합니다.");
 		}
-		if (value.isEmpty()) {
+		if (!allowEmpty && value.isEmpty()) {
 			throw notAllowed(field + ": 1개 이상이어야 합니다.");
 		}
 		return value;
+	}
+
+	/** 생략·null C001, 정수 아님 C002. */
+	static long requiredId(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			throw missing(field);
+		}
+		if (!value.isIntegralNumber() || !value.canConvertToLong()) {
+			throw invalidFormat(field, "정수여야 합니다.");
+		}
+		return value.longValue();
+	}
+
+	/** 생략·null 이면 빈 목록, 배열·정수 아님 C002. 같은 ID 는 한 번만 남긴다(보낸 순서 유지). */
+	static List<Long> optionalIds(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			return List.of();
+		}
+		if (!value.isArray()) {
+			throw invalidFormat(field, "배열이어야 합니다.");
+		}
+		Set<Long> ids = new LinkedHashSet<>();
+		for (JsonNode id : value) {
+			ids.add(requiredId(id, field + "[]"));
+		}
+		return new ArrayList<>(ids);
+	}
+
+	/** 생략·null 이면 false, boolean 아님 C002. */
+	static boolean optionalBoolean(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			return false;
+		}
+		if (!value.isBoolean()) {
+			throw invalidFormat(field, "true 또는 false 여야 합니다.");
+		}
+		return value.booleanValue();
 	}
 
 	/** 1차에서 받지 않는 값(초안 반영·AI 이야기·계획 연결)이 있으면 C003(명세 5절 8·12, 노션 066). */
@@ -174,7 +220,7 @@ final class VisitRequestFields {
 		return Coordinates.toDecimal(value);
 	}
 
-	private static BusinessException notAllowed(String message) {
+	static BusinessException notAllowed(String message) {
 		return new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, message);
 	}
 }

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -43,6 +44,8 @@ import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
+import com.ssafy.yeogirok.domain.record.dto.VisitUpdateCommand;
+import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
@@ -191,6 +194,56 @@ class RecordControllerTest {
 
 			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + utcSameDay + "}]}"))
 				.andExpect(status().isCreated());
+		}
+	}
+
+	@Nested
+	class API_067 {
+
+		static final String ITEM = "\"visitId\": 701, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\"";
+
+		@Test
+		void 수정_응답과_검사한_값() throws Exception {
+			VisitUpdateCommand expected = new VisitUpdateCommand(3, List.of(new VisitUpdateCommand.Item(701L, null,
+				LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 2)), List.of(702L, 703L), true);
+			given(visitCommandService.update(USER_ID, 9L, expected))
+				.willReturn(new VisitUpdateResponse(List.of(), 4, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + ITEM
+					+ ", \"order\": 2}], \"removeVisitIds\": [702, 703, 702], \"confirmDeleteStories\": true}"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"actualVisits": [], "version": 4, "status": "DRAFT"}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@Test
+		void 삭제만_하면_items_는_빈_배열이어도_된다() throws Exception {
+			given(visitCommandService.update(eq(USER_ID), eq(9L), any()))
+				.willReturn(new VisitUpdateResponse(List.of(), 4, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [], \"removeVisitIds\": [702]}"))
+				.andExpect(status().isOk());
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"{\"version\": 3}|C001",
+			"{\"version\": 3, \"items\": [{\"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\"}]}|C001",
+			"{\"version\": 3, \"items\": [{\"visitId\": \"a\", \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\"}]}|C002",
+			"{\"version\": 3, \"items\": [{ITEM}, {ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{ITEM}], \"removeVisitIds\": [701]}|C003",
+			"{\"version\": 3, \"items\": [], \"removeVisitIds\": 701}|C002",
+			"{\"version\": 3, \"items\": [], \"removeVisitIds\": [\"a\"]}|C002",
+			"{\"version\": 3, \"items\": [], \"confirmDeleteStories\": \"true\"}|C002",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 1, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"order\": 0, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"visitId\": 701, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-10-31 23:00:00+09\"}]}|C012"
+		})
+		void 요청_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), body.replace("ITEM", ITEM)))
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(visitCommandService);
 		}
 	}
 

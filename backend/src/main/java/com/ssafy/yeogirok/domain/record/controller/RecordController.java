@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,6 +22,9 @@ import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddRequest;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddResponse;
+import com.ssafy.yeogirok.domain.record.dto.VisitUpdateCommand;
+import com.ssafy.yeogirok.domain.record.dto.VisitUpdateRequest;
+import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.service.RecordCreateService;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
@@ -106,6 +110,16 @@ public class RecordController {
 			ids -> visitCommandService.getAdded(user.userId(), recordId,
 				Arrays.stream(ids.split(",")).map(Long::valueOf).toList()));
 		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-067 실제 방문 일정·시간·순서 수정·삭제")
+	@PatchMapping("/records/{recordId}/visits")
+	public ResponseEntity<ApiResponseBody<VisitUpdateResponse>> updateVisits(
+		@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long recordId,
+		@RequestBody VisitUpdateRequest request) {
+		VisitUpdateCommand command = request.toCommand();
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			visitCommandService.update(user.userId(), recordId, command)));
 	}
 
 	/** 생략이면 null, DRAFT·COMPLETED 가 아니면 C002(노션 058). */
