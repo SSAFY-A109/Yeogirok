@@ -210,16 +210,19 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 
 | 뮤테이션 | 무효화(invalidate) | 즉시 반영(setQueryData) |
 | --- | --- | --- |
-| `POST /footprints` (API-041) | `footprintKeys.all`, `statisticsKeys.all` | — |
+| `POST /footprints` (API-041) | `footprintKeys.all`, `statisticsKeys.all`, `userKeys.me()` | — |
+| `PATCH /footprints/{id}` (API-044) | `footprintKeys.lists`, `footprintKeys.detail(id)` | — |
+| `DELETE /footprints/{id}` (API-045) | `footprintKeys.lists`, `statisticsKeys.all`, `userKeys.me()` | 상세 캐시 제거 |
 | `PUT /tips/{id}/reaction` (API-052) | `tipKeys.detail(id)` stale 처리, 이전 위치로 자동 재조회하지 않음 | 선택 반응 낙관적 반영 → 실패 시 롤백, 성공 시 서버 집계 반영 |
-| `POST /tips` (API-049) | `tipKeys.mine()` | `tipId`로 API-050 진행 확인, 202를 게시 완료로 표시하지 않음 |
+| `POST /tips` (API-049) | `tipKeys.mine()`, `userKeys.me()` | `tipId`로 API-050 진행 확인, 202를 게시 완료로 표시하지 않음 |
 | `PATCH /tips/{id}` · `POST …/retry` (API-054·051) | `tipKeys.status(id)` 초기화 후 새 작업 확인, 수정 시 본인 상세 재조회 | 이전 성공 본문·사진은 작업 성공 전 유지 |
 | API-050에서 `operationStatus=SUCCEEDED` 확인 | `tipKeys.mine()`, 공개 상세·주변 검색 stale 처리 | `useTipPublicationRefresh` 호출 |
-| `DELETE /tips/{id}` (API-055) | 본인 목록, 주변 검색 stale 처리 | 본인 상세·공개 상세·상태 캐시 제거 |
-| `POST /rooms` (API-021) | `roomKeys.list()` | 응답 상세 → `roomKeys.detail(id)` |
+| `DELETE /tips/{id}` (API-055) | 본인 목록, `userKeys.me()`, 주변 검색 stale 처리 | 본인 상세·공개 상세·상태 캐시 제거 |
+| `POST /rooms` (API-021) | `roomKeys.list()` | 생성 응답의 ID로 이동. 상세는 API-022로 조회 |
 | `PATCH /rooms/{id}` (API-023) | `roomKeys.list()`, `roomKeys.places(roomId)`, `scheduleKeys.room(roomId)` | 응답 상세 → `roomKeys.detail(roomId)` |
 | `DELETE /rooms/{id}/members/me` (가정, TBD) | `roomKeys.list()` | — (나간 방의 캐시는 닫히는 화면이 다시 요청하지 않도록 바로 지우지 않고 gcTime에 맡긴다) |
-| `POST /rooms/{id}/places` · `place-imports` (API-029·030) | `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — |
+| `POST /rooms/{id}/places` (API-029) | `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — |
+| `POST /rooms/{id}/place-imports` (API-030) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)`, `roomKeys.list()`, `courseKeys.all` | — |
 | `DELETE /rooms/{id}/places/{roomPlaceId}` (API-032) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — (화면이 되돌리기 토스트 동안 행을 숨겼다가 확정 시 요청) |
 | `PUT /rooms/{id}/preferences` + `POST …/place-recommendations` (API-033·034) | `recommendationKeys.preference(roomId)` | — (추천 결과는 뮤테이션 `data`로만 쓴다) |
 | `POST /rooms/{id}/schedule-drafts` (API-037, 작업) | — (진행은 `scheduleKeys.draft(roomId, draftId)`를 끝날 때까지 확인. 끝난 초안은 다시 받지 않는다) | — |

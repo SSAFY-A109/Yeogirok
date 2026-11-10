@@ -8,14 +8,15 @@ import {
   getRoom,
   getRoomPlaces,
   getRooms,
+  importCoursePlaces,
   leaveRoom,
   updateRoom,
   type AddRoomPlacesInput,
   type DeleteRoomPlaceInput,
   type UpdateRoomInput,
 } from "@/features/room/api/room.api";
-import type { CreateRoomRequestDto } from "@/features/room/model";
 import { scheduleKeys } from "@/features/schedule/api/keys";
+import { courseKeys } from "@/features/course/api/queries";
 
 export const roomKeys = {
   all: ["room"] as const,
@@ -98,17 +99,15 @@ export function useRoomInvitation(roomId: number, { enabled = true }: { enabled?
   return useQuery({ ...roomInvitationOptions(roomId), enabled });
 }
 
-/** 생성한 여행방 상세를 캐시에 넣고 목록을 다시 받는다. */
+/** 생성한 여행방을 목록에 반영한다. 상세는 상세 화면에서 조회한다. */
 export function useCreateRoom() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: CreateRoomRequestDto) => {
-      return createRoom(request);
-    },
+    mutationFn: createRoom,
+    retry: false,
 
-    onSuccess: (room) => {
-      queryClient.setQueryData(roomKeys.detail(room.id), room);
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
     },
   });
@@ -161,6 +160,22 @@ export function useAddRoomPlaces() {
     onSuccess: (_places, { roomId }) => {
       void queryClient.invalidateQueries({ queryKey: roomKeys.places(roomId) });
       void queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) });
+    },
+  });
+}
+
+export function useImportCoursePlaces() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: importCoursePlaces,
+    retry: false,
+
+    onSettled: (_count, _error, { roomId }) => {
+      void queryClient.invalidateQueries({ queryKey: roomKeys.places(roomId) });
+      void queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) });
+      void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
+      void queryClient.invalidateQueries({ queryKey: courseKeys.all });
     },
   });
 }

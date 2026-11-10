@@ -7,6 +7,7 @@ import {
 } from "../../../features/tip/model";
 import { mockDb } from "../db";
 import { tipFixture, type MockTip } from "../fixtures/tip";
+import { formatServerDateTime } from "../../../lib/date";
 import { fail, ok, readId } from "./respond";
 
 function distance(location: LocationEvidenceDto, tip: MockTip): number {
@@ -64,6 +65,12 @@ function advance(tip: MockTip) {
 
   if (!pending || tip.state.status === "DELETED") {
     return;
+  }
+
+  tip.updatedAt = formatServerDateTime(new Date());
+
+  if (tip.state.operation === "CREATE") {
+    tip.detail.publishedAt = tip.updatedAt;
   }
 
   tip.detail.body = pending.body ?? tip.detail.body;
@@ -204,8 +211,10 @@ export const tipHandlers = [
         }
 
         const tipId = mockDb.nextTipId++;
+        const createdAt = formatServerDateTime(new Date());
         const tip: MockTip = {
-          detail: { ...tipFixture, id: tipId, category: body.category, body: body.body, author: { id: 1, nickname: "나" }, photos: [], location: body.location, spatialReference: body.spatialReference, placement: body.placement, reactions: { likes: 0, dislikes: 0, myReaction: null } },
+          detail: { ...tipFixture, id: tipId, createdAt, category: body.category, body: body.body, author: { id: 1, nickname: "나" }, photos: [], location: body.location, spatialReference: body.spatialReference, placement: body.placement, reactions: { likes: 0, dislikes: 0, myReaction: null } },
+          updatedAt: createdAt,
           state: { tipId, status: "REGISTERING", jobId: null, steps: { media: "SKIPPED", spatial: "QUEUED", content: "QUEUED" }, error: null, retryable: false, operation: null, operationStatus: null, version: 1 },
           pending: body, uploadIds: [], checks: 0,
         };
@@ -218,6 +227,11 @@ export const tipHandlers = [
   http.get("*/api/v1/tips/:tipId/status", ({ request, params }) => {
     return handle(request, async () => {
       const tip = find(params.tipId);
+
+      if (tip?.detail.author.id === 1 && tip.state.status === "DELETED") {
+        return ok(tip.state);
+      }
+
       const error = mine(tip);
 
       if (error || !tip) {
@@ -264,7 +278,7 @@ export const tipHandlers = [
       const items = [...mockDb.tips.values()].filter((tip) => {
         return tip.detail.author.id === 1 && tip.state.status !== "DELETED" && (!params.has("status") || params.get("status") === tip.state.status);
       }).map((tip) => {
-        return { id: tip.detail.id, status: tip.state.status, createdAt: tip.detail.createdAt, updatedAt: tip.detail.createdAt };
+        return { id: tip.detail.id, category: tip.detail.category, status: tip.state.status, createdAt: tip.detail.createdAt, updatedAt: tip.updatedAt };
       });
 
       return ok(paginate(items, params.get("cursor"), params.get("limit")));
@@ -285,7 +299,7 @@ export const tipHandlers = [
           return { imageId: photo.imageId, url: photo.url, expiresAt: "2100-01-01 00:00:00+09" };
         }),
 
-        category: tip.detail.category, status: tip.state.status, version: tip.state.version, publishedAt: tip.state.status === "PUBLISHED" ? tip.detail.publishedAt : null, createdAt: tip.detail.createdAt, updatedAt: tip.detail.createdAt });
+        category: tip.detail.category, status: tip.state.status, version: tip.state.version, publishedAt: tip.state.status === "PUBLISHED" ? tip.detail.publishedAt : null, createdAt: tip.detail.createdAt, updatedAt: tip.updatedAt });
     });
   }),
   http.patch<{ tipId: string }, UpdateTipRequestDto>("*/api/v1/tips/:tipId", ({ request, params }) => {

@@ -13,6 +13,19 @@ export function fail(status: number, code: string, message: string) {
   return HttpResponse.json({ success: false, code, message }, { status });
 }
 
+/** 목 서버는 테스트 계정 한 명으로 응답한다. 개인 조회에는 서비스 Bearer 헤더가 필요하다. */
+export function requireMockBearer(request: Request) {
+  const authorization = request.headers.get("Authorization");
+
+  if (authorization === null) {
+    return fail(401, "A001", "서비스 액세스 토큰이 없습니다.");
+  }
+
+  if (!/^Bearer \S+$/i.test(authorization)) {
+    return fail(401, "A003", "서비스 액세스 토큰이 유효하지 않습니다.");
+  }
+}
+
 /** 없는 여행방. 도메인 code는 명세 미확정이라 목 전용 값을 쓴다(TBD). */
 export function roomNotFound() {
   return fail(404, "RO404", "여행방을 찾을 수 없습니다.");

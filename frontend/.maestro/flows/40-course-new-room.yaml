@@ -1,0 +1,32 @@
+# 개발 빌드에서 메인 추천 코스의 장소를 새 여행방에 담는다.
+appId: ${MAESTRO_APP_ID}
+name: 40 코스 장소를 새 여행방에 담기
+---
+- runFlow: 00-app-launch.yaml
+- tapOn: "정동진 해돋이와 바다열차 자세히 보기"
+- scrollUntilVisible:
+    element:
+      id: "course-detail.place.731"
+    direction: DOWN
+- tapOn:
+    id: "course-detail.place.731"
+- tapOn:
+    id: "course-detail.add"
+- scrollUntilVisible:
+    element:
+      id: "room-sheet.new-room"
+    direction: DOWN
+- tapOn:
+    id: "room-sheet.new-room"
+- assertVisible:
+    id: "new-room.carry-over"
+- tapOn:
+    id: "new-room.name-input"
+- inputText: "Course room"
+- hideKeyboard
+- tapOn:
+    id: "new-room.submit"
+- assertVisible: "Course room에 1곳을 담았어요"
+- tapOn:
+    id: "toast.action"
+- assertVisible: "정동진역"

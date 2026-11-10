@@ -1,4 +1,4 @@
-import { getErrorMessage } from "@/api/errors";
+import { getErrorMessage, isApiError } from "@/api/errors";
 
 /** 여행방(RO) 도메인 code별 문구. 도메인 code는 명세 미확정이라 아직 없다(TBD). */
 const ROOM_ERROR_MESSAGES: Readonly<Record<string, string>> = {};
@@ -14,4 +14,20 @@ export const ROOM_ERROR_FALLBACK = {
 
 export function getRoomErrorMessage(error: unknown, fallback: string): string {
   return getErrorMessage(error, ROOM_ERROR_MESSAGES, fallback);
+}
+
+const COURSE_IMPORT_ERRORS: Readonly<Record<string, string>> = {
+  CO001: "이 코스는 더 이상 공개되어 있지 않아요.",
+  CO006: "담을 장소를 다시 골라 주세요.",
+  CO007: "코스 장소가 바뀌었어요. 코스에서 장소를 다시 골라 주세요.",
+  RO001: "장소를 담을 여행방을 찾을 수 없어요.",
+  RO002: "참여 중인 여행방에만 장소를 담을 수 있어요.",
+};
+
+export function getCourseImportErrorMessage(error: unknown): string {
+  if (isApiError(error) && COURSE_IMPORT_ERRORS[error.code]) {
+    return COURSE_IMPORT_ERRORS[error.code];
+  }
+
+  return "장소를 담았는지 확인할 수 없어요. 여행방의 장소 목록을 확인해 주세요.";
 }

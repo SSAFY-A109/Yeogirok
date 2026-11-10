@@ -3,7 +3,7 @@ import { useCallback } from "react";
 
 import { createIdempotencyKey } from "@/api/idempotency";
 import { isApiError } from "@/api/errors";
-import { meOptions } from "@/features/user/api/queries";
+import { meOptions, userKeys } from "@/features/user/api/queries";
 import { forgetPendingTip, getPendingTipIds, rememberPendingTip } from "@/features/tip/pending";
 import {
   createTip, deleteTip, getMyTip, getMyTips, getTipStatus, retryTip, searchTips, setTipReaction, updateTip, viewTip,
@@ -53,8 +53,9 @@ export const tipKeys = {
     return [...tipKeys.mine(), "detail", tipId] as const;
   },
 
-  status: (tipId: number) => {
-    return ["tip", "status", tipId] as const;
+  status: (tipId: number, jobId?: string) => {
+    const key = ["tip", "status", tipId] as const;
+    return jobId === undefined ? key : [...key, jobId] as const;
   },
 };
 
@@ -96,9 +97,9 @@ export function tipViewOptions(tipId: number, session: TipLocationSession) {
   });
 }
 
-export function tipStatusOptions(tipId: number) {
+export function tipStatusOptions(tipId: number, jobId?: string) {
   return queryOptions({
-    queryKey: tipKeys.status(tipId),
+    queryKey: tipKeys.status(tipId, jobId),
 
     queryFn: ({ signal }) => {
       return getTipStatus(tipId, signal);
@@ -112,7 +113,9 @@ export function tipStatusOptions(tipId: number) {
       }
 
       const checks = query.state.dataUpdateCount + query.state.errorUpdateCount;
-      const pending = query.state.data === undefined || isTipOperationPending(query.state.data);
+      const status = query.state.data;
+      const pending = status === undefined || isTipOperationPending(status) ||
+        (jobId !== undefined && status.jobId !== jobId && status.status !== "DELETED");
       return pending && checks < TIP_STATUS_MAX_WAIT_MS / TIP_STATUS_POLL_MS ? TIP_STATUS_POLL_MS : false;
     },
   });
@@ -153,8 +156,8 @@ export function useTipView(tipId: number, session: TipLocationSession) {
   return useQuery(tipViewOptions(tipId, session));
 }
 
-export function useTipStatus(tipId: number | null) {
-  return useQuery({ ...tipStatusOptions(tipId ?? 0), enabled: tipId !== null });
+export function useTipStatus(tipId: number | null, jobId?: string) {
+  return useQuery({ ...tipStatusOptions(tipId ?? 0, jobId), enabled: tipId !== null });
 }
 
 export function useMyTips(status?: string) {
@@ -252,6 +255,7 @@ export function useCreateTip() {
 
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: tipKeys.mine() });
+      void client.invalidateQueries({ queryKey: userKeys.me() });
     },
   });
 }
@@ -307,6 +311,7 @@ export function useDeleteTip() {
       client.removeQueries({ queryKey: tipKeys.detail(tipId) });
       client.removeQueries({ queryKey: tipKeys.status(tipId) });
       void client.invalidateQueries({ queryKey: tipKeys.mine() });
+      void client.invalidateQueries({ queryKey: userKeys.me() });
       void client.invalidateQueries({ queryKey: tipKeys.nearby(), refetchType: "none" });
     },
   });

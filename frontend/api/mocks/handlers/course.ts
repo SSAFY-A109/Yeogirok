@@ -50,9 +50,27 @@ function isUnknownCategory(category: string | null): boolean {
   return category !== null && findCategory(category) === null;
 }
 
+function getCourseAuthError(request: Request) {
+  const authorization = request.headers.get("Authorization");
+
+  if (authorization === null) {
+    return fail(401, "A001", "서비스 액세스 토큰이 없습니다.");
+  }
+
+  if (!/^Bearer \S+$/i.test(authorization)) {
+    return fail(401, "A003", "서비스 액세스 토큰이 유효하지 않습니다.");
+  }
+}
+
 export const courseHandlers = [
   http.get("*/api/v1/courses/recommendations", async ({ request }) => {
     await delay(MOCK_DELAY_MS);
+    const authError = getCourseAuthError(request);
+
+    if (authError) {
+      return authError;
+    }
+
     const url = new URL(request.url);
     const category = url.searchParams.get("category");
     const regionCode = url.searchParams.get("regionCode");
@@ -80,8 +98,14 @@ export const courseHandlers = [
     return ok({ ...page, basis: importCountBasisFixture });
   }),
 
-  http.get("*/api/v1/courses/:courseId", async ({ params }) => {
+  http.get("*/api/v1/courses/:courseId", async ({ params, request }) => {
     await delay(MOCK_DELAY_MS);
+    const authError = getCourseAuthError(request);
+
+    if (authError) {
+      return authError;
+    }
+
     const courseId = readId(params.courseId);
     const course = courseId === null ? null : findMockCourse(courseId);
 
@@ -94,6 +118,12 @@ export const courseHandlers = [
 
   http.get("*/api/v1/courses", async ({ request }) => {
     await delay(MOCK_DELAY_MS);
+    const authError = getCourseAuthError(request);
+
+    if (authError) {
+      return authError;
+    }
+
     const url = new URL(request.url);
     const keyword = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
     const regionCode = url.searchParams.get("regionCode");
@@ -135,6 +165,12 @@ export const courseHandlers = [
 
   http.get("*/api/v1/main/popular-places", async ({ request }) => {
     await delay(MOCK_DELAY_MS);
+    const authError = getCourseAuthError(request);
+
+    if (authError) {
+      return authError;
+    }
+
     const category = new URL(request.url).searchParams.get("category");
 
     if (isUnknownCategory(category)) {

@@ -63,6 +63,10 @@ export function getErrorMessage(error: unknown, domainMessages: Readonly<Record<
 }
 
 export const COMMON_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  A001: "로그인이 필요합니다.",
+  A002: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
+  A003: "다시 로그인해 주세요.",
+  A004: "접근 권한이 없습니다.",
   C001: "요청을 처리할 수 없습니다. 다시 시도해 주세요.",
   C002: "요청을 처리할 수 없습니다. 다시 시도해 주세요.",
   C003: "입력한 값을 확인해 주세요.",

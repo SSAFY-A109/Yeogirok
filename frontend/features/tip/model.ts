@@ -125,7 +125,7 @@ export type TipOperationResponseDto = {
   version?: number;
 };
 export type RetryTipResponseDto = TipOperationResponseDto | { tipId: number; status: "PUBLISHED" };
-export type MyTipSummaryDto = { id: number; status: string; createdAt: string; updatedAt: string };
+export type MyTipSummaryDto = { id: number; category?: string; status: string; createdAt: string; updatedAt: string };
 export type MyTipsResponseDto = { items: MyTipSummaryDto[]; nextCursor: string | null };
 export type MyTipDetailDto = {
   category: string;
@@ -351,7 +351,7 @@ export function toMyTipsPage(value: unknown) {
   return {
     items: dto.items.map((value: unknown) => {
       const item = object(value, "items");
-      return { id: assertId(item.id, "id"), status: status(item.status), createdAt: parseServerDateTime(item.createdAt, "createdAt"), updatedAt: parseServerDateTime(item.updatedAt, "updatedAt") };
+      return { id: assertId(item.id, "id"), tipType: toTipType(item.category), status: status(item.status), createdAt: parseServerDateTime(item.createdAt, "createdAt"), updatedAt: parseServerDateTime(item.updatedAt, "updatedAt") };
     }),
 
     nextCursor: cursor(dto.nextCursor),
@@ -491,6 +491,6 @@ export function toTipReactionResponse(value: unknown) {
 }
 
 export function isTipOperationPending(value: TipPublicationStatus | undefined): boolean {
-  return value !== undefined && (value.operationStatus === "QUEUED" || value.operationStatus === "RUNNING" ||
+  return value !== undefined && value.status !== "DELETED" && (value.operationStatus === "QUEUED" || value.operationStatus === "RUNNING" ||
     (value.status === "REGISTERING" && value.operationStatus === null));
 }

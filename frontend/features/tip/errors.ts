@@ -32,6 +32,10 @@ const TIP_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   M007: "팁용으로 업로드한 사진을 선택해 주세요.",
 };
 
+export function isTipUnavailable(error: unknown) {
+  return isApiError(error) && (error.status === 403 || error.status === 404);
+}
+
 export function getTipErrorMessage(error: unknown): string {
   if (isApiError(error) && error.status === 401) {
     return "로그인이 필요해요. 다시 로그인해 주세요.";

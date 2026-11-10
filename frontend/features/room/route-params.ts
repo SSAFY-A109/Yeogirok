@@ -20,8 +20,8 @@ export function parseRoomId(value: RouteParam): number | null {
   return toNumericId(firstValue(value));
 }
 
-/** 쉼표로 이은 장소 id 목록(`101,102`)을 검증한다. 하나라도 숫자 id가 아니면 빈 배열이다. */
-export function parsePlaceIds(value: RouteParam): number[] {
+/** 쉼표로 이은 id 목록(`101,102`)을 검증한다. 하나라도 숫자 id가 아니면 빈 배열이다. */
+export function parseIds(value: RouteParam): number[] {
   const raw = firstValue(value);
 
   if (raw === undefined || raw === "") {
@@ -37,12 +37,14 @@ export function parsePlaceIds(value: RouteParam): number[] {
       return [];
     }
 
-    if (!ids.includes(id)) {
-      ids.push(id);
-    }
+    ids.push(id);
   }
 
   return ids;
+}
+
+export function parsePlaceIds(value: RouteParam): number[] {
+  return [...new Set(parseIds(value))];
 }
 
 /** 여행방 상세 탭. 모르는 값이면 장소 탭이다. */

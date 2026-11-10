@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { FlatList, View } from "react-native";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useDeleteTip, useMyTips, useReadMyTip } from "@/features/tip/api/queries";
-import { getTipErrorMessage } from "@/features/tip/errors";
+import { getTipErrorMessage, isTipUnavailable } from "@/features/tip/errors";
+import { TIP_TYPE_LABELS } from "@/features/tip/model";
 import { formatMonthDay, toLocalDate } from "@/lib/date";
 import { MyLoading, MyPage, MyUnavailable } from "./my-page";
 
 export function MyTipsScreen() {
+  const insets = useSafeAreaInsets();
   const query = useMyTips();
   const read = useReadMyTip();
   const deletion = useDeleteTip();
@@ -23,18 +26,18 @@ export function MyTipsScreen() {
   }) ?? [];
 
   return <MyPage title="내 팁" testID="my-tips.screen">
-    {query.isPending ? <MyLoading /> : query.isError && !query.data ? <MyUnavailable title={getTipErrorMessage(query.error)} onRetry={() => {
+    {query.isPending ? <MyLoading /> : isTipUnavailable(query.error) || query.isError && !query.data ? <MyUnavailable title={getTipErrorMessage(query.error)} onRetry={() => {
       void query.refetch();
     }} /> : <FlatList
       data={items} keyExtractor={(item) => {
         return String(item.id);
-      }} contentContainerClassName="gap-3 px-5 py-4"
+      }} contentContainerClassName="gap-3 px-5 pt-4" contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       refreshing={query.isRefetching} onRefresh={() => {
         void query.refetch();
       }}
       onEndReached={() => {
         if (query.hasNextPage && !query.isFetchingNextPage && !query.isFetchNextPageError) {
-          void query.fetchNextPage();
+          void query.fetchNextPage({ cancelRefetch: false });
         }
       }}
       ListHeaderComponent={<View className="gap-3 pb-2"><Text className="text-h3">내가 남긴 AR 팁</Text><Text className="text-caption text-muted-foreground">본문과 사진은 원격으로 관리할 수 있어요. AR 위치 재배치는 현장에서 진행해요.</Text>{error && <Text accessibilityRole="alert" className="text-body-sm text-destructive">{error}</Text>}</View>}
@@ -46,7 +49,7 @@ export function MyTipsScreen() {
       }}><Text>목록 더 불러오기</Text></Button> : query.isFetchingNextPage ? <Text className="text-center text-caption">불러오는 중</Text> : undefined}
       renderItem={({ item }) => {
         return <View className="gap-3 rounded-md border border-border bg-card p-4" testID={`my-tips.card-${item.id}`}>
-          <Text className="text-label">팁 #{item.id} · {item.status === "PUBLISHED" ? "공개 중" : item.status === "REGISTERING" ? "등록 중" : item.status === "FAILED" ? "등록 실패" : "상태 확인 필요"}</Text>
+          <Text className="text-label">{item.tipType === "UNKNOWN" ? "AR 팁" : TIP_TYPE_LABELS[item.tipType]} · {item.status === "PUBLISHED" ? "공개 중" : item.status === "REGISTERING" ? "등록 중" : item.status === "FAILED" ? "등록 실패" : "상태 확인 필요"}</Text>
           <Text className="text-caption text-muted-foreground">{formatMonthDay(toLocalDate(item.createdAt))} 등록</Text>
           <View className="flex-row gap-2"><Button variant="outline" className="flex-1" testID={`my-tips.edit-${item.id}`} onPress={() => {
             router.push({ pathname: "/my/tips/[tipId]", params: { tipId: item.id } });

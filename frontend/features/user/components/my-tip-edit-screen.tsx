@@ -16,8 +16,8 @@ import type { UploadFile } from "@/features/media/upload";
 import { useMyTip, useReadMyTip, useUpdateTip } from "@/features/tip/api/queries";
 import type { UpdateTipInput } from "@/features/tip/api/tip.api";
 import { TipPublication } from "@/features/tip/components/tip-publication";
-import { getTipErrorMessage } from "@/features/tip/errors";
-import { normalizeTipBody, TIP_TYPE_LABELS, TIP_TYPE_VALUES, type MyTipDetail, type TipTypeDto } from "@/features/tip/model";
+import { getTipErrorMessage, isTipUnavailable } from "@/features/tip/errors";
+import { normalizeTipBody, TIP_BODY_MAX_LENGTH, TIP_TYPE_LABELS, TIP_TYPE_VALUES, type MyTipDetail, type TipTypeDto } from "@/features/tip/model";
 import { addTipPhoto, arErrorMessage } from "@/features/tip/native/ar";
 import type { TipPhoto } from "@/features/tip/native/ar/contracts";
 import { prepareTipPhotoUpload } from "@/features/tip/native/ar/public";
@@ -27,7 +27,7 @@ type Photo = { kind: "remote"; url: string; imageId: number } | { kind: "local";
 
 export function MyTipEditScreen() {
   const { tipId } = useLocalSearchParams<{ tipId?: string }>();
-  const id = Number(tipId);
+  const id = typeof tipId === "string" && /^\d+$/.test(tipId) ? Number(tipId) : 0;
   return <MyPage title="팁 수정" testID="my-tip-edit.screen">{Number.isSafeInteger(id) && id > 0 ? <TipEditor tipId={id} /> : <MyUnavailable />}</MyPage>;
 }
 
@@ -39,18 +39,24 @@ function TipEditor({ tipId }: { tipId: number }) {
     return <MyLoading />;
   }
 
-  if (!query.data || query.isError) {
+  if (isTipUnavailable(query.error)) {
+    return <MyUnavailable title={getTipErrorMessage(query.error)} />;
+  }
+
+  if (!query.data) {
     return <MyUnavailable title={getTipErrorMessage(query.error)} onRetry={() => {
       void query.refetch();
     }} />;
   }
 
   return <TipForm key={`${tipId}:${revision}`} tip={query.data} reload={async () => {
-    await query.refetch();
+    const latest = await query.refetch();
 
-    setRevision((value) => {
-      return value + 1;
-    });
+    if (latest.isSuccess) {
+      setRevision((value) => {
+        return value + 1;
+      });
+    }
   }} />;
 }
 
@@ -61,18 +67,23 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
   const [photo, setPhoto] = useState<Photo>(tip.photos[0] ? { kind: "remote", url: tip.photos[0].url, imageId: tip.photos[0].imageId } : null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const [job, setJob] = useState(false);
+  const [job, setJob] = useState<{ id?: string; recoveryStored?: boolean } | null>(null);
   const [uncertain, setUncertain] = useState(false);
-  const [recoveryStored, setRecoveryStored] = useState(true);
-  const [photoError, setPhotoError] = useState(false);
+
+  const [photoError, setPhotoError] = useState(() => {
+    return (tip.photos[0]?.expiresAt.getTime() ?? Infinity) <= Date.now();
+  });
+
   const photoRead = useReadMyTip();
   const file = useRef<{ name: string; file: UploadFile } | null>(null);
   const submission = useRef<UpdateTipInput | null>(null);
   const update = useUpdateTip();
   const upload = useUploadMedia();
   const changedPhoto = photo?.kind === "local" || (photo === null && tip.photos.length > 0);
-  const changed = body !== tip.body || tipType !== tip.tipType || changedPhoto;
+  const changed = body !== tip.body || (tipType !== null && tipType !== tip.tipType) || changedPhoto;
+  const bodyLength = body.length;
   const disabled = working || uncertain;
+  const conflicted = isApiError(update.error) && update.error.status === 409 && update.error.code === "C004";
 
   function choosePhoto() {
     Alert.alert("팁 사진", "사진의 위치 정보를 지우고 첨부해요.", (["camera", "library"] as const).map((source) => {
@@ -97,7 +108,7 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
   }
 
   async function save() {
-    if (working || !tipType) {
+    if (working || conflicted || !changed || !body.trim() || bodyLength > TIP_BODY_MAX_LENGTH) {
       return;
     }
 
@@ -111,7 +122,7 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
           request.body = normalizeTipBody(body);
         }
 
-        if (tipType !== tip.tipType) {
+        if (tipType !== null && tipType !== tip.tipType) {
           request.category = tipType;
         }
 
@@ -130,10 +141,9 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
       }
 
       const result = await update.mutateAsync(submission.current);
-      setRecoveryStored(result.recoveryStored);
-      setJob(true);
+      setJob({ id: result.jobId, recoveryStored: result.recoveryStored });
     } catch (cause) {
-      setError(isApiError(cause) ? getTipErrorMessage(cause) : arErrorMessage(cause));
+      setError(getTipErrorMessage(cause));
       const unknown = !isApiError(cause) || cause.status === 0 || cause.status >= 500;
       setUncertain(unknown && submission.current !== null);
 
@@ -145,9 +155,19 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
     }
   }
 
+  const unavailable = isTipUnavailable(update.error) ? update.error : isTipUnavailable(photoRead.error) ? photoRead.error : null;
+
+  if (unavailable) {
+    return <MyUnavailable title={getTipErrorMessage(unavailable)} />;
+  }
+
   if (job) {
-    return <TipPublication tipId={tip.tipId} recoveryStored={recoveryStored} onClose={() => {
-      router.back();
+    return <TipPublication tipId={tip.tipId} jobId={job.id} recoveryStored={job.recoveryStored} source="my" onClose={() => {
+      if (job.id) {
+        router.back();
+      } else {
+        setJob(null);
+      }
     }} />;
   }
 
@@ -189,21 +209,20 @@ function TipForm({ tip: initialTip, reload }: { tip: MyTipDetail; reload: () => 
     </View>
     <View className="gap-3"><Text className="text-label">내용 · 필수</Text><Textarea value={body} editable={!disabled} onChangeText={(value) => {
       setBody(value.replace(/\r\n?/g, "\n"));
-    }} maxLength={120} accessibilityLabel="팁 내용 (필수, 최대 120자)" testID="my-tip-edit.body" /><Text className="text-right text-caption text-muted-foreground">{body.length} / 120</Text></View>
+    }} accessibilityLabel="팁 내용 (필수, 최대 120자)" testID="my-tip-edit.body" /><Text className={bodyLength > TIP_BODY_MAX_LENGTH ? "text-right text-caption text-destructive" : "text-right text-caption text-muted-foreground"}>{bodyLength} / {TIP_BODY_MAX_LENGTH}</Text></View>
     <Text className="text-caption text-muted-foreground">수정이 완료될 때까지 이전 공개 내용이 유지돼요. 사진을 첨부하지 않아도 저장할 수 있어요.</Text>
-    <Button variant="outline" disabled={disabled || changed} onPress={() => {
-      setJob(true);
+    <Button variant="outline" disabled={working} onPress={() => {
+      setJob({});
     }}><Text>게시·수정 상태 확인</Text></Button>
     <Button variant="outline" disabled={disabled || changed} testID="my-tip-edit.reposition" onPress={() => {
       router.push({ pathname: "/ar-tip", params: { repositionTipId: tip.tipId } });
     }}><Text>현장에서 AR 위치 다시 놓기</Text></Button>
-    {changed && <Text className="text-caption text-muted-foreground">내용·사진 변경을 먼저 저장한 뒤 AR 위치를 바꿀 수 있어요.</Text>}
     {error && <Text accessibilityRole="alert" className="text-body-sm text-destructive">{error}</Text>}
-    {update.error && isApiError(update.error) && update.error.code === "C004" && <Button variant="outline" onPress={() => {
+    {conflicted && <Button variant="outline" onPress={() => {
       void reload();
     }}><Text>최신 내용으로 다시 작성</Text></Button>}
     {uncertain && <Text className="text-body-sm text-muted-foreground">수정 결과를 확인하지 못했어요. 다시 시도하면 같은 수정 요청의 결과를 확인해요.</Text>}
-  </ScrollView><BottomCta><Button size="lg" className="w-full" loading={working} disabled={working || !changed || !tipType || !body.trim() || body.length > 120} testID="my-tip-edit.save" onPress={() => {
+  </ScrollView><BottomCta><Button size="lg" className="w-full" loading={working} disabled={working || conflicted || !changed || !body.trim() || bodyLength > TIP_BODY_MAX_LENGTH} testID="my-tip-edit.save" onPress={() => {
     void save();
   }}><Text>{uncertain ? "수정 결과 다시 확인" : "수정 저장"}</Text></Button></BottomCta></>;
 }
