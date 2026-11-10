@@ -41,8 +41,7 @@ public class ExifPhotoMetadataReader implements PhotoMetadataReader {
 			}
 			LocalDateTime local = LocalDateTime.parse(exif.getString(ExifDirectoryBase.TAG_DATETIME_ORIGINAL).strip(),
 				EXIF_DATE_TIME);
-			String offset = exif.getString(ExifDirectoryBase.TAG_TIME_ZONE_ORIGINAL);
-			OffsetDateTime takenAt = local.atOffset(offset == null ? DEFAULT_OFFSET : ZoneOffset.of(offset.strip()));
+			OffsetDateTime takenAt = local.atOffset(offset(exif.getString(ExifDirectoryBase.TAG_TIME_ZONE_ORIGINAL)));
 			GpsDirectory gps = metadata.getFirstDirectoryOfType(GpsDirectory.class);
 			GeoLocation location = gps == null ? null : gps.getGeoLocation();
 			if (location == null || location.isZero()) {
@@ -51,12 +50,24 @@ public class ExifPhotoMetadataReader implements PhotoMetadataReader {
 			return Optional.of(new PhotoMetadata(takenAt.toInstant(), BigDecimal.valueOf(location.getLatitude()),
 				BigDecimal.valueOf(location.getLongitude())));
 		} catch (DateTimeException e) {
-			// 날짜·오프셋 형식이 틀린 EXIF
+			// 촬영 시각 형식이 틀린 EXIF
 			return Optional.empty();
 		} catch (Exception e) {
 			// 잘린 파일·모르는 형식. 사진 내용은 남기지 않는다.
 			log.debug("사진 EXIF 를 읽지 못했습니다: {}", e.getClass().getSimpleName());
 			return Optional.empty();
+		}
+	}
+
+	/** 오프셋이 없거나 "   :  " 같은 자리표시자처럼 깨졌으면 +09:00. 촬영 시각은 그대로 쓴다(PR #84 리뷰). */
+	private static ZoneOffset offset(String value) {
+		if (value == null || value.isBlank()) {
+			return DEFAULT_OFFSET;
+		}
+		try {
+			return ZoneOffset.of(value.strip());
+		} catch (DateTimeException e) {
+			return DEFAULT_OFFSET;
 		}
 	}
 }

@@ -37,6 +37,13 @@ class ExifPhotoMetadataReaderTest {
 	}
 
 	@Test
+	void 오프셋이_깨졌으면_촬영_시각은_쓰고_09_로_본다() {
+		byte[] jpeg = jpeg("2026:11:02 12:30:15", "   :  ", false);
+
+		assertThat(reader.read(jpeg)).contains(new PhotoMetadata(Instant.parse("2026-11-02T03:30:15Z"), null, null));
+	}
+
+	@Test
 	void 앞부분만_받아도_JPEG_EXIF_는_읽는다() {
 		byte[] jpeg = jpeg("2026:11:02 12:30:15", null, false);
 		byte[] withBody = Arrays.copyOf(jpeg, jpeg.length + 1000);
