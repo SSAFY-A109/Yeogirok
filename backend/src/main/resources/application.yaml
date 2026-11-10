@@ -79,6 +79,14 @@ yeogirok:
       due-interval: PT10M
       safety-scan-interval: PT1H
       batch-size: 500
+    # 앱 푸시(노션 API-077 채팅 푸시). 같은 수신자·같은 방은 3초에 한 번, 본문은 메시지 앞 40자.
+    # 접속 기록 수명은 무응답 기준(idle-timeout 60초)보다 길게 둔다. 연결이 닫히면 바로 지우므로 서버가 죽었을 때만 쓰인다.
+    push:
+      presence-ttl: PT90S
+      throttle: PT3S
+      preview-length: 40
+      threads: 2
+      queue-capacity: 1000
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.

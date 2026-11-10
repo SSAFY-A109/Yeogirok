@@ -11,6 +11,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.ssafy.yeogirok.domain.chat.dto.ChatMessage;
+import com.ssafy.yeogirok.domain.chat.push.ChatPresence;
 import com.ssafy.yeogirok.domain.chat.realtime.ChatTicketStore.TicketOwner;
 import com.ssafy.yeogirok.domain.chat.service.ChatMessageService;
 import com.ssafy.yeogirok.domain.chat.service.ChatMessageService.SendResult;
@@ -32,6 +33,7 @@ import tools.jackson.databind.json.JsonMapper;
  *       보낸다. 티켓이 없거나 쓸 수 없으면 ERROR 후 연결을 닫는다.</li>
  *   <li>SEND_MESSAGE: 매번 권한을 다시 확인하고 저장한다. 커밋 뒤 보낸 사람에게 MESSAGE_ACK, 방에 MESSAGE_CREATED.</li>
  *   <li>PING: 참여·방을 다시 확인하고 PONG 에 최신 저장 ID 를 담는다.</li>
+ *   <li>READY 부터 연결이 닫힐 때까지 Redis 에 접속 상태를 둔다({@link ChatPresence}, PING 마다 연장). 푸시 생략 기준이다.</li>
  * </ol>
  * 연결 이후 오류는 HTTP 상태가 아니라 ERROR 프레임으로 알린다. 방 없음·참여자 아님·계정 무효는 오류를 보낸 뒤 닫는다.
  */
@@ -48,6 +50,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 	private final ChatTicketStore ticketStore;
 	private final ChatMessageService chatMessageService;
 	private final ChatPublisher publisher;
+	private final ChatPresence presence;
 	private final JsonMapper jsonMapper;
 	private final Clock clock;
 
@@ -58,7 +61,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
 	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+		ChatConnection connection = hub.get(session.getId());
 		hub.closed(session.getId());
+		if (connection != null && connection.isAuthenticated()) {
+			presence.offline(connection.getRoomId(), connection.getUserId(), connection.id());
+		}
 	}
 
 	@Override
@@ -116,6 +123,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 			// 최신 ID 도 구독 뒤에 읽어 READY 와 실시간 사이 빈틈이 없다.
 			Long latestMessageId = chatMessageService.checkAccess(userId, roomId);
 			hub.ready(connection, new ChatFrames.Ready(roomId, userId, latestMessageId));
+			markOnline(connection);
 		} catch (BusinessException e) {
 			hub.reject(connection, roomId, null, e.getExceptionType(), e.getMessage());
 		} catch (RuntimeException e) {
@@ -185,6 +193,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 		try {
 			Long latest = chatMessageService.checkAccess(connection.getUserId(), connection.getRoomId());
 			hub.send(connection, new ChatFrames.Pong(connection.getRoomId(), latest));
+			markOnline(connection);
 		} catch (BusinessException e) {
 			handleFailure(connection, null, e);
 		} catch (RuntimeException e) {
@@ -194,6 +203,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 	}
 
 	/* ── 공통 ────────────────────────────────────────────── */
+
+	/**
+	 * READY 연결로 기록하거나 만료 시각을 늘린다(채팅 푸시 생략 대상). 기록하는 사이 연결이 닫혔으면 닫힘 처리가 먼저 지웠을 수
+	 * 있으므로 한 번 더 지운다. 남아 있으면 그 사용자는 기록이 만료될 때까지 푸시를 받지 못한다.
+	 */
+	private void markOnline(ChatConnection connection) {
+		presence.online(connection.getRoomId(), connection.getUserId(), connection.id());
+		if (!connection.getSession().isOpen()) {
+			presence.offline(connection.getRoomId(), connection.getUserId(), connection.id());
+		}
+	}
 
 	private void handleFailure(ChatConnection connection, String clientMessageId, BusinessException e) {
 		if (FATAL.contains(e.getExceptionType())) {
