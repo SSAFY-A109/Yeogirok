@@ -38,6 +38,7 @@ import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
@@ -68,6 +69,8 @@ class RecordDraftServiceTest {
 	RecordDraftStore draftStore;
 	@Autowired
 	ReceiptMaterialStore materialStore;
+	@Autowired
+	MaterialQueryService materialQueryService;
 	@Autowired
 	JobStore jobStore;
 	@Autowired
@@ -227,6 +230,20 @@ class RecordDraftServiceTest {
 
 		assertThat(stored(response.draftKey()).status()).isEqualTo(JobStatus.FAILED);
 		assertThat(stored(response.draftKey()).error().code()).isEqualTo("C014");
+	}
+
+	@Test
+	void 기록에_연결한_자료는_원본을_지운_뒤에도_063_에_남고_064_에_쓸_수_있다() {
+		materialStore.addToIndex(recordId, ME, MATERIAL_ID);
+		clock.set(NOW.plus(Duration.ofHours(25)));
+		materialStore.markOriginalDeleted(MATERIAL_ID);
+
+		assertThat(materialQueryService.list(ME, recordId).items()).singleElement().satisfies(view -> {
+			assertThat(view.originalAvailable()).isFalse();
+			assertThat(view.canUseForDraft()).isTrue();
+		});
+		DraftJobResponse response = create();
+		assertThat(stored(response.draftKey()).status()).isEqualTo(JobStatus.SUCCEEDED);
 	}
 
 	@Test

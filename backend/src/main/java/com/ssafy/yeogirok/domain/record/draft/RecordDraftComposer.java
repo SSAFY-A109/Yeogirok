@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
+import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.record.draft.PhotoMetadataReader.PhotoMetadata;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft.Evidence;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft.FieldSources;
@@ -34,7 +35,7 @@ final class RecordDraftComposer {
 	record Result(List<Item> items, List<String> warnings) {
 	}
 
-	static Result compose(List<SnapshotMaterial> receipts, List<Photo> photos, RecordDraftProperties.Draft rules) {
+	static Result compose(List<SnapshotMaterial> receipts, List<Photo> photos, RecordProperties.Draft rules) {
 		List<ItemBuilder> builders = new ArrayList<>(receipts.stream().map(ItemBuilder::receipt).toList());
 		List<String> warnings = new ArrayList<>();
 		if (photos.stream().anyMatch(photo -> photo.metadata().isEmpty())) {
@@ -61,7 +62,7 @@ final class RecordDraftComposer {
 
 	/** 같은 날이고 결제 시각 앞뒤 기준 안인 영수증 중 가장 가까운 것. 둘 다 좌표가 있고 기준보다 멀면 붙이지 않는다. */
 	private static Optional<ItemBuilder> nearestReceipt(List<ItemBuilder> builders, TimedPhoto photo,
-		RecordDraftProperties.Draft rules) {
+		RecordProperties.Draft rules) {
 		Instant takenAt = photo.metadata().takenAt();
 		return builders.stream()
 			.filter(builder -> builder.visitedAt != null && builder.visitDate.equals(seoulDate(takenAt)))
@@ -72,7 +73,7 @@ final class RecordDraftComposer {
 	}
 
 	/** 시각순 사진을 앞 사진과의 시간 차·거리로 끊는다. */
-	private static List<List<TimedPhoto>> groups(List<TimedPhoto> photos, RecordDraftProperties.Draft rules) {
+	private static List<List<TimedPhoto>> groups(List<TimedPhoto> photos, RecordProperties.Draft rules) {
 		List<List<TimedPhoto>> groups = new ArrayList<>();
 		TimedPhoto previous = null;
 		for (TimedPhoto photo : photos) {

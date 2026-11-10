@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.file.FileProperties;
 import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.job.Job;
@@ -40,7 +41,7 @@ public class RecordDraftGenerator {
 	private final FileStorage fileStorage;
 	private final FileProperties fileProperties;
 	private final PhotoMetadataReader metadataReader;
-	private final RecordDraftProperties properties;
+	private final RecordProperties properties;
 
 	public Map<String, Object> generate(String draftKey) {
 		try {

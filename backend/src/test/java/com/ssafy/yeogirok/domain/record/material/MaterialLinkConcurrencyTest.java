@@ -23,6 +23,7 @@ import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.job.JobProperties;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.job.service.JobStore;
+import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.dto.MaterialLinkCommand;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -53,9 +54,9 @@ class MaterialLinkConcurrencyTest {
 		JobProperties jobProperties = new JobProperties(Duration.ofHours(24), Duration.ofMinutes(10),
 			Duration.ofMinutes(2), 2);
 		JobStore jobStore = new JobStore(TestRedis.template(), json, jobProperties, clock);
-		ReceiptMaterialStore materialStore = new ReceiptMaterialStore(TestRedis.template(), json, idempotency);
-		ReceiptMaterials materials = new ReceiptMaterials(materialStore, jobStore, new RedisLock(TestRedis.template()),
-			clock);
+		ReceiptMaterialStore materialStore = new ReceiptMaterialStore(TestRedis.template(), json, idempotency,
+			RecordTestConfig.RECORD_PROPERTIES, new RedisLock(TestRedis.template()));
+		ReceiptMaterials materials = new ReceiptMaterials(materialStore, jobStore, clock);
 		List<Runnable> queued = Collections.synchronizedList(new ArrayList<>());
 		ReceiptOcrRunner runner = new ReceiptOcrRunner(new JobRunner(jobStore, queued::add, jobProperties, clock),
 			materials, mock(FileStorage.class), TestFileProperties.VALUE, mock(ReceiptOcrClient.class),

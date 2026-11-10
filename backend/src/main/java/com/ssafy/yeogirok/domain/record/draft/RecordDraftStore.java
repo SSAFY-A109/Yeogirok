@@ -12,6 +12,8 @@ import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.domain.record.RecordProperties;
+
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -28,7 +30,7 @@ public class RecordDraftStore {
 
 	private final StringRedisTemplate redis;
 	private final JsonMapper jsonMapper;
-	private final RecordDraftProperties properties;
+	private final RecordProperties properties;
 	private final Clock clock;
 
 	/** 최근 초안 포인터. 059 progress·앱 재시작 후 이어하기에 쓴다. */

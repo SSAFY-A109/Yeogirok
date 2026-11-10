@@ -1,21 +1,24 @@
-package com.ssafy.yeogirok.domain.record.draft;
+package com.ssafy.yeogirok.domain.record;
 
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 통합 기록 초안 설정. 기본값을 두지 않는다. 값이 없거나 0 이하면 앱이 시작할 때 실패한다. 값은 제안값이다(명세
+ * 여행 기록 설정(통합 초안·영수증 자료). 기본값을 두지 않는다. 값이 없거나 0 이하면 앱이 시작할 때 실패한다(명세
  * {@code specs/record-api-2.md} 5절 14·19).
  *
- * @param draftRetention 초안 보관 기간. 만든 시각부터 센다
- * @param draft          사진을 영수증 근거로 붙이고 사진끼리 묶는 기준
+ * @param draftRetention    초안 보관 기간. 만든 시각부터 센다
+ * @param materialRetention 기록에 연결한 영수증 자료를 원본 삭제 뒤 두는 기간(11/10 사용자 결정 30일). 연결하지 않은 자료는
+ *                          멱등키 보관 기간(24시간)만 둔다
+ * @param draft             사진을 영수증 근거로 붙이고 사진끼리 묶는 기준
  */
 @ConfigurationProperties("yeogirok.record")
-public record RecordDraftProperties(Duration draftRetention, Draft draft) {
+public record RecordProperties(Duration draftRetention, Duration materialRetention, Draft draft) {
 
-	public RecordDraftProperties {
+	public RecordProperties {
 		requirePositive(draftRetention, "draft-retention");
+		requirePositive(materialRetention, "material-retention");
 		if (draft == null) {
 			throw new IllegalArgumentException("yeogirok.record.draft 값이 필요합니다.");
 		}

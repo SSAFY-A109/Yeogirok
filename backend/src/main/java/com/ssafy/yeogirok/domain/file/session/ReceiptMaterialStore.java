@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.file.session;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -8,15 +9,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
+import com.ssafy.yeogirok.global.lock.RedisLock;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +30,11 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 영수증 자료 저장소(Redis {@code material:{materialId}}). 원본 삭제를 확인하기 전에는 수명을 걸지 않고(노션 Redis 4절),
- * 확인한 뒤에는 멱등키 보관 기간만큼 둔다. 그동안 OCR·보정 결과로 기록 초안을 만들 수 있다.
+ * 확인한 뒤에는 기록에 연결한 자료는 {@code yeogirok.record.material-retention}(30일), 연결 안 된 자료는 멱등키 보관 기간만큼
+ * 둔다(명세 {@code specs/record-api-2.md} 5절 19). 그동안 정제 값으로 기록 초안을 만들 수 있다.
+ *
+ * <p>바꾸는 쓰기는 모두 {@code material-lock:{materialId}} 잠금 안에서 읽기 → 검사 → 쓰기를 한다(API 쪽 쓰기와 원본 정리
+ * 작업이 서로 덮지 않게). 잠금을 못 잡으면 몇 번 다시 시도하고 그래도 안 되면 C018(명세 5절 20).
  */
 @Slf4j
 @Component
@@ -34,10 +44,17 @@ public class ReceiptMaterialStore {
 	private static final String PREFIX = "material:";
 	/** 기록·업로더별 연결한 자료 목록(API-063, 명세 {@code specs/record-api-2.md} 2-4). 수명 없음, 읽을 때 만료된 자료를 뺀다. */
 	private static final String INDEX_PREFIX = "material-index:";
+	private static final String LOCK_PREFIX = "material-lock:";
+	/** 잠금 수명. 잠금 안에서는 Redis 읽기·쓰기만 한다(OCR·S3 호출은 잠금 밖). */
+	private static final Duration LOCK_TTL = Duration.ofSeconds(5);
+	private static final int LOCK_ATTEMPTS = 5;
+	private static final long LOCK_RETRY_MILLIS = 100;
 
 	private final StringRedisTemplate redis;
 	private final JsonMapper jsonMapper;
 	private final IdempotencyProperties idempotencyProperties;
+	private final RecordProperties recordProperties;
+	private final RedisLock redisLock;
 
 	public void save(String materialId, ReceiptMaterial material) {
 		try {
@@ -49,10 +66,20 @@ public class ReceiptMaterialStore {
 	}
 
 	/**
-	 * 이미 있는 자료를 바꿔 저장한다. 원본 삭제 뒤 걸린 수명은 그대로 둔다(연결·OCR·보정이 수명을 없애지 않게).
-	 * 호출하는 쪽이 자료 잠금을 쥐고 부른다.
+	 * 잠금 안에서 {@code condition} 을 만족하는 자료를 바꿔 저장한다. {@code change} 가 예외를 던지면 저장하지 않는다.
+	 * @return 바꾼 자료. 자료가 없거나 조건이 맞지 않으면 empty
 	 */
-	public void replace(String materialId, ReceiptMaterial material) {
+	public Optional<ReceiptMaterial> update(String materialId, Predicate<ReceiptMaterial> condition,
+		UnaryOperator<ReceiptMaterial> change) {
+		return locked(materialId, () -> {
+			Optional<ReceiptMaterial> changed = find(materialId).filter(condition).map(change);
+			changed.ifPresent(material -> replace(materialId, material));
+			return changed;
+		});
+	}
+
+	/** 이미 있는 자료를 바꿔 저장한다. 원본 삭제 뒤 걸린 수명은 그대로 둔다(연결·OCR·보정이 수명을 없애지 않게). 잠금 안에서 부른다. */
+	private void replace(String materialId, ReceiptMaterial material) {
 		String key = PREFIX + materialId;
 		try {
 			Long ttl = redis.getExpire(key, TimeUnit.MILLISECONDS);
@@ -91,10 +118,50 @@ public class ReceiptMaterialStore {
 		return INDEX_PREFIX + recordId + ":" + userId;
 	}
 
-	/** 원본을 지웠다고 표시한다. 자료가 없으면(이미 만료) 아무것도 하지 않는다. */
+	/**
+	 * 원본을 지웠다고 표시하고 수명을 건다(기록에 연결한 자료 30일, 아니면 24시간). 자료가 없으면(이미 만료) 아무것도 하지 않는다.
+	 * 잠금 안에서 해 API 쓰기(OCR 결과·보정)와 서로 덮지 않는다.
+	 */
 	public void markOriginalDeleted(String materialId) {
-		find(materialId).ifPresent(material -> redis.opsForValue().set(PREFIX + materialId,
-			jsonMapper.writeValueAsString(material.deleted()), idempotencyProperties.retention()));
+		locked(materialId, () -> {
+			find(materialId).ifPresent(material -> redis.opsForValue().set(PREFIX + materialId,
+				jsonMapper.writeValueAsString(material.deleted()),
+				material.isLinked() ? recordProperties.materialRetention() : idempotencyProperties.retention()));
+			return null;
+		});
+	}
+
+	private <T> T locked(String materialId, Supplier<T> work) {
+		String lockKey = LOCK_PREFIX + materialId;
+		String token = acquire(lockKey);
+		try {
+			return work.get();
+		} finally {
+			redisLock.release(lockKey, token);
+		}
+	}
+
+	private String acquire(String lockKey) {
+		for (int attempt = 1; attempt <= LOCK_ATTEMPTS; attempt++) {
+			Optional<String> token = redisLock.tryAcquire(lockKey, LOCK_TTL);
+			if (token.isPresent()) {
+				return token.get();
+			}
+			if (attempt < LOCK_ATTEMPTS) {
+				pause();
+			}
+		}
+		throw new BusinessException(ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS,
+			"같은 자료를 처리하고 있습니다. 잠시 후 다시 시도해 주세요.");
+	}
+
+	private static void pause() {
+		try {
+			Thread.sleep(LOCK_RETRY_MILLIS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("자료 잠금을 기다리다 중단됐습니다.", e);
+		}
 	}
 
 	public Optional<ReceiptMaterial> find(String materialId) {

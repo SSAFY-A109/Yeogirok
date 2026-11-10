@@ -18,7 +18,7 @@ import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.job.JobProperties;
 import com.ssafy.yeogirok.domain.job.service.JobStore;
 import com.ssafy.yeogirok.domain.record.draft.DraftApplication;
-import com.ssafy.yeogirok.domain.record.draft.RecordDraftProperties;
+import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftStore;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
@@ -65,9 +65,9 @@ public class RecordTestConfig {
 	/** 작업 대기 제한. 실행 제한 2분을 더한 12분이 작업·초안 기한이다. */
 	public static final Duration QUEUE_TIMEOUT = Duration.ofMinutes(10);
 
-	/** application.yaml 과 같은 제안값. */
-	public static final RecordDraftProperties DRAFT_PROPERTIES = new RecordDraftProperties(Duration.ofHours(24),
-		new RecordDraftProperties.Draft(Duration.ofMinutes(60), 1000, Duration.ofMinutes(60), 500));
+	/** application.yaml 과 같은 값(초안 24시간, 연결한 영수증 자료 30일, 사진 묶음 기준). */
+	public static final RecordProperties RECORD_PROPERTIES = new RecordProperties(Duration.ofHours(24), Duration.ofDays(30),
+		new RecordProperties.Draft(Duration.ofMinutes(60), 1000, Duration.ofMinutes(60), 500));
 
 	@Bean
 	MutableClock clock() {
@@ -115,7 +115,7 @@ public class RecordTestConfig {
 	}
 
 	@Bean
-	RecordDraftProperties recordDraftProperties() {
-		return DRAFT_PROPERTIES;
+	RecordProperties recordDraftProperties() {
+		return RECORD_PROPERTIES;
 	}
 }

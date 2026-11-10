@@ -13,6 +13,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.draft.PhotoMetadataReader.PhotoMetadata;
@@ -28,7 +29,7 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
 /** 초안 항목 만들기 규칙(명세 specs/record-api-2.md 4-7 생성 규칙 1·2·4·5). 기준은 60분·1km·60분·500m. */
 class RecordDraftComposerTest {
 
-	static final RecordDraftProperties.Draft RULES = new RecordDraftProperties.Draft(Duration.ofMinutes(60), 1000,
+	static final RecordProperties.Draft RULES = new RecordProperties.Draft(Duration.ofMinutes(60), 1000,
 		Duration.ofMinutes(60), 500);
 	/** 경포대 근처. 위도 0.01도는 약 1.1km. */
 	static final BigDecimal LAT = new BigDecimal("37.7950000");
