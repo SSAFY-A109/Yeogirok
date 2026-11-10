@@ -45,8 +45,15 @@ export const placeHandlers = [
       return fail(400, "C006", "커서가 올바르지 않습니다.");
     }
 
+    const terms = query.normalize().toLowerCase().split(/\s+/);
+
     const matched = placeCatalog.filter((place) => {
-      const matchesQuery = place.name.includes(query) || (place.address?.includes(query) ?? false);
+      const searchableText = `${place.name.replace(/\s+/g, "")} ${place.address?.replace(/\s+/g, "") ?? ""}`.normalize().toLowerCase();
+
+      const matchesQuery = terms.every((term) => {
+        return searchableText.includes(term);
+      });
+
       const matchesRegion = regionCode === null || (place.regionCode?.startsWith(regionCode) ?? false);
       return matchesQuery && matchesRegion;
     });

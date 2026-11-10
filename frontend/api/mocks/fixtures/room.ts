@@ -139,6 +139,7 @@ function makeRoom(seed: RoomSeed, scheduleDays: ScheduleDaySeed[] | null = null)
 /**
  * 여행방 초기 상태(오늘 2026-11-03 기준).
  * 1 강릉: 일정 만들 준비됨(W09) · 2 제주: 날짜 미정·혼자(W06-L2) · 3 부산: 지난 여행·일정 있음 · 4 속초: 정원 가득·일정 있음(W08-F, W06-E2)
+ * 5·6: 초대 링크 확인용 · 7 속초 당일치기: 지난 여행·기록 없음
  */
 export function createRoomFixtures(): MockRoom[] {
   return [
@@ -228,6 +229,17 @@ export function createRoomFixtures(): MockRoom[] {
       endDate: "2026-12-12",
       transportMode: "TRANSIT",
       members: [{ ...others[0], isCreator: true }, ...others.slice(1, ROOM_MEMBER_LIMIT)],
+      recordIds: [],
+      places: [],
+    }),
+    // 7은 기록이 없는 지난 여행이다. 기록 만들기(API-057)를 확인한다.
+    makeRoom({
+      id: 7,
+      title: "속초 당일치기",
+      startDate: "2026-09-21",
+      endDate: "2026-09-21",
+      transportMode: "CAR",
+      members: [MOCK_ME],
       recordIds: [],
       places: [],
     }),

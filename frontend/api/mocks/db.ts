@@ -9,6 +9,7 @@ import type { MockScheduleDraft } from "./fixtures/schedule";
 import { createFootprintFixtures, type MockFootprint } from "./fixtures/footprint";
 import { createTipFixtures, type MockTip } from "./fixtures/tip";
 import type { MockIdempotentResponse, MockUpload } from "./fixtures/media";
+import { createRecordFixtures, type MockRecord } from "./fixtures/record";
 
 /** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
 type MockIdempotencyRecord = { requestHash: string; response: CreateFootprintResponseDto };
@@ -18,6 +19,9 @@ type MockDb = {
   uploads: Map<string, MockUpload>;
   tipIdempotency: Map<string, MockIdempotentResponse>;
   uploadIdempotency: Map<string, MockIdempotentResponse>;
+  records: Map<number, MockRecord>;
+  recordIdempotency: Map<string, MockIdempotentResponse>;
+  nextRecordEntityId: number;
   nextTipId: number;
   nextUploadId: number;
   rooms: Map<number, MockRoom>;
@@ -51,6 +55,9 @@ function createDb(): MockDb {
     uploads: new Map(),
     tipIdempotency: new Map(),
     uploadIdempotency: new Map(),
+    records: createRecordFixtures(rooms),
+    recordIdempotency: new Map(),
+    nextRecordEntityId: 2000,
     nextTipId: 100,
     nextUploadId: 1,
 

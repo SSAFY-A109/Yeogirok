@@ -10,6 +10,10 @@ import { Screen } from "@/components/ui/screen";
 import { HeaderIconButton, ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { useCreateRecord } from "@/features/record/api/queries";
+import { openRecord, RecordIssue } from "@/features/record/components/record-list-screen";
+import { recordError } from "@/features/record/errors";
+import { canCreateRecord } from "@/features/record/model";
 import { useRoom, useRoomPlaces } from "@/features/room/api/queries";
 import type { AddPlaceSource } from "@/features/room/components/add-place-options";
 import { AddPlaceSheet } from "@/features/room/components/add-place-sheet";
@@ -107,6 +111,7 @@ function RoomDetailQuery({ roomId, tab, onTabChange }: { roomId: number; tab: Pl
 function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: PlaceTab; onTabChange: (tab: PlaceTab) => void }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const placesQuery = useRoomPlaces(room.id);
+  const record = useCreateRecord(openRecord);
   const { hiddenIds, remove } = useRoomPlaceRemoval(room.id);
 
   const visiblePlaceCount = placesQuery.data ? getVisibleRoomPlaces(placesQuery.data, hiddenIds).length : room.placeCount;
@@ -148,6 +153,16 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
   const header = (
     <>
       <RoomInfo room={room} onInvite={goToInvite} />
+      {(room.recordId !== null || canCreateRecord(room.endDate)) && <View className="gap-2 px-5 pb-3">
+        <Button variant="secondary" loading={record.isPending} onPress={() => {
+          if (room.recordId !== null) {
+            openRecord(room.recordId);
+          } else {
+            record.mutate(room.id);
+          }
+        }} testID="room-detail.record"><Text>{room.recordId !== null ? "여행 기록 보기" : "기록 만들기"}</Text></Button>
+        {record.isError && <RecordIssue message={recordError(record.error)} />}
+      </View>}
       <PlaceTabs value={tab} onValueChange={onTabChange} placeCount={visiblePlaceCount} />
     </>
   );

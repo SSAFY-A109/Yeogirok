@@ -83,6 +83,8 @@ function RootNavigator() {
             <Stack.Screen name="map" options={{ headerShown: false }} />
             <Stack.Screen name="footprints/new" options={{ headerShown: false }} />
             <Stack.Screen name="my" options={{ headerShown: false }} />
+            <Stack.Screen name="memo/index" options={{ headerShown: false }} />
+            <Stack.Screen name="memo/[recordId]" options={{ headerShown: false }} />
             <Stack.Screen name="kakao-map-test" />
           </Stack.Protected>
           <Stack.Protected guard={!session.data} redirectTo="/">
