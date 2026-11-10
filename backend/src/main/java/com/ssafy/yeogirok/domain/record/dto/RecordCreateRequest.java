@@ -3,9 +3,6 @@ package com.ssafy.yeogirok.domain.record.dto;
 import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
-import com.ssafy.yeogirok.global.exception.BusinessException;
-import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import tools.jackson.databind.JsonNode;
 
@@ -21,16 +18,6 @@ public class RecordCreateRequest {
 	/** @return 정리한 제목, 생략이면 null */
 	public String toTitle() {
 		String value = optionalString(title, "title");
-		if (value == null) {
-			return null;
-		}
-		String trimmed = value.strip();
-		// DB VARCHAR 길이와 같게 코드 포인트로 센다.
-		int length = trimmed.codePointCount(0, trimmed.length());
-		if (length == 0 || length > TravelRecord.TITLE_MAX_LENGTH) {
-			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
-				"title: 1~%d자여야 합니다.".formatted(TravelRecord.TITLE_MAX_LENGTH));
-		}
-		return trimmed;
+		return value == null ? null : RecordTitle.normalize(value);
 	}
 }

@@ -53,11 +53,17 @@ public class RecordFinder {
 	 */
 	@Transactional(readOnly = true)
 	public TravelRecord checkWritable(Long recordId, Long userId) {
+		return getWritable(recordId, userId).record();
+	}
+
+	/** {@link #checkWritable} 과 같고 방도 돌려준다(코스 미리보기 API-072 의 일차 계산). */
+	@Transactional(readOnly = true)
+	public RecordRoom getWritable(Long recordId, Long userId) {
 		TravelRecord record = travelRecordRepository.findById(recordId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_NOT_FOUND));
-		liveRoom(record).filter(found -> isCurrentMember(found.getId(), userId))
+		TravelRoom room = liveRoom(record).filter(found -> isCurrentMember(found.getId(), userId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_EDIT_FORBIDDEN));
-		return record;
+		return new RecordRoom(record, room);
 	}
 
 	/** 기록 행을 잠그고 쓰기 권한을 확인한다. 호출한 트랜잭션 안에서만 쓴다. */
