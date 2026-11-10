@@ -124,6 +124,12 @@ public final class DraftPlanner {
 		}
 
 		Map<LocalDate, double[]> centers = seedCenters(input, fixedByDay, free);
+		// 날짜마다 쓸 수 있는 시간에 비례한 장소 수 상한. 가까운 곳이 한쪽에 몰려도 한 날에 다 넣지 않는다.
+		long totalCapacity = days.stream().mapToLong(DraftPlanner::capacity).sum();
+		Map<LocalDate, Integer> quota = new HashMap<>();
+		for (DayOption day : days) {
+			quota.put(day.date(), (int)Math.ceil((double)input.candidates().size() * capacity(day) / totalCapacity));
+		}
 		Map<LocalDate, List<Candidate>> byDay = new LinkedHashMap<>();
 		for (int round = 0; round < 10; round++) {
 			byDay = new LinkedHashMap<>();
@@ -138,8 +144,11 @@ public final class DraftPlanner {
 			List<Candidate> ordered = new ArrayList<>(free);
 			ordered.sort(Comparator.comparingDouble(c -> -nearestDistance(c.location(), currentCenters)));
 			for (Candidate candidate : ordered) {
-				LocalDate chosen = null;
-				double best = Double.MAX_VALUE;
+				// 1순위: 상한·시간 안에서 가장 가까운 날. 2순위: 시간 안에서 가장 가까운 날. 없으면 가장 가까운 날.
+				LocalDate withinQuota = null;
+				double withinQuotaDistance = Double.MAX_VALUE;
+				LocalDate fits = null;
+				double fitsDistance = Double.MAX_VALUE;
 				LocalDate nearest = null;
 				double nearestDistance = Double.MAX_VALUE;
 				for (DayOption day : days) {
@@ -148,12 +157,18 @@ public final class DraftPlanner {
 						nearestDistance = distance;
 						nearest = day.date();
 					}
-					if (load.get(day.date()) + cost(candidate) <= capacity(day) && distance < best) {
-						best = distance;
-						chosen = day.date();
+					boolean fitsTime = load.get(day.date()) + cost(candidate) <= capacity(day);
+					if (fitsTime && distance < fitsDistance) {
+						fitsDistance = distance;
+						fits = day.date();
+					}
+					if (fitsTime && byDay.get(day.date()).size() < quota.get(day.date())
+						&& distance < withinQuotaDistance) {
+						withinQuotaDistance = distance;
+						withinQuota = day.date();
 					}
 				}
-				LocalDate target = chosen != null ? chosen : nearest;
+				LocalDate target = withinQuota != null ? withinQuota : fits != null ? fits : nearest;
 				byDay.get(target).add(candidate);
 				load.merge(target, cost(candidate), Integer::sum);
 			}
@@ -325,65 +340,140 @@ public final class DraftPlanner {
 			return candidates.size() <= EXACT_LIMIT ? exact(candidates) : improved(candidates);
 		}
 
-		/* 모든 순서 비교(가지치기). 이동 합계가 지금까지 가장 좋은 비용 이상이면 더 보지 않는다(벌점은 0 이상). */
+		/*
+		 * 모든 순서 비교(분기 한정). 이동 시간은 먼저 번호 행렬로 만들어 두고 번호로만 찾는다. 근사 해로 처음 상한을 잡고,
+		 * "지금까지 이동 + 아직 놓지 않은 장소마다 가장 짧게 들어오는 이동"이 상한 이상이면 더 보지 않는다(벌점은 0 이상).
+		 */
 		private List<Candidate> exact(List<Candidate> candidates) {
 			int size = candidates.size();
-			Candidate[] slots = new Candidate[size];
-			List<Candidate> loose = new ArrayList<>();
-			for (Candidate candidate : candidates) {
-				int index = candidate.orderFixed() ? Math.min(candidate.fixedOrder(), size) - 1 : -1;
-				if (index >= 0 && slots[index] == null) {
-					slots[index] = candidate;
-				} else {
-					loose.add(candidate);
+			long[][] matrix = new long[size][size];
+			long[] fromStart = new long[size];
+			long[] toEnd = new long[size];
+			long[] stays = new long[size];
+			boolean[] foods = new boolean[size];
+			long[] minIn = new long[size];
+			for (int i = 0; i < size; i++) {
+				GeoPoint location = candidates.get(i).location();
+				fromStart[i] = travel(start, location);
+				toEnd[i] = travel(location, end);
+				stays[i] = candidates.get(i).stayMinutes();
+				foods[i] = candidates.get(i).food();
+				for (int j = 0; j < size; j++) {
+					matrix[i][j] = i == j ? 0 : travel(location, candidates.get(j).location());
 				}
 			}
-			Search search = new Search(slots, loose);
-			search.run(0, start, 0, new boolean[loose.size()]);
-			return search.best;
-		}
-
-		private final class Search {
-			final Candidate[] slots;
-			final List<Candidate> loose;
-			final Candidate[] current;
-			List<Candidate> best;
-			long bestCost = Long.MAX_VALUE;
-
-			Search(Candidate[] slots, List<Candidate> loose) {
-				this.slots = slots;
-				this.loose = loose;
-				this.current = new Candidate[slots.length];
+			long bound = 0;
+			for (int to = 0; to < size; to++) {
+				long min = start == null ? Long.MAX_VALUE : fromStart[to];
+				for (int from = 0; from < size; from++) {
+					if (from != to) {
+						min = Math.min(min, matrix[from][to]);
+					}
+				}
+				minIn[to] = min == Long.MAX_VALUE ? 0 : min;
+				bound += minIn[to];
 			}
 
-			void run(int index, GeoPoint previous, long travel, boolean[] used) {
-				if (travel >= bestCost) {
+			int[] slots = new int[size];
+			java.util.Arrays.fill(slots, -1);
+			List<Integer> loose = new ArrayList<>();
+			for (int i = 0; i < size; i++) {
+				Candidate candidate = candidates.get(i);
+				int index = candidate.orderFixed() ? Math.min(candidate.fixedOrder(), size) - 1 : -1;
+				if (index >= 0 && slots[index] < 0) {
+					slots[index] = i;
+				} else {
+					loose.add(i);
+				}
+			}
+
+			IndexSearch search = new IndexSearch(matrix, fromStart, toEnd, stays, foods, minIn, slots,
+				loose.stream().mapToInt(Integer::intValue).toArray());
+			List<Candidate> seed = improved(candidates);
+			search.best = seed.stream().mapToInt(candidates::indexOf).toArray();
+			search.bestCost = cost(seed);
+			search.run(0, -1, 0, bound, new boolean[search.loose.length]);
+			return java.util.Arrays.stream(search.best).mapToObj(candidates::get).toList();
+		}
+
+		private final class IndexSearch {
+			final long[][] matrix;
+			final long[] fromStart;
+			final long[] toEnd;
+			final long[] stays;
+			final boolean[] foods;
+			final long[] minIn;
+			final int[] slots;
+			final int[] loose;
+			final int[] current;
+			final long[] arrivals;
+			final boolean[] orderFoods;
+			int[] best;
+			long bestCost;
+
+			IndexSearch(long[][] matrix, long[] fromStart, long[] toEnd, long[] stays, boolean[] foods, long[] minIn,
+				int[] slots, int[] loose) {
+				this.matrix = matrix;
+				this.fromStart = fromStart;
+				this.toEnd = toEnd;
+				this.stays = stays;
+				this.foods = foods;
+				this.minIn = minIn;
+				this.slots = slots;
+				this.loose = loose;
+				this.current = new int[slots.length];
+				this.arrivals = new long[slots.length];
+				this.orderFoods = new boolean[slots.length];
+			}
+
+			void run(int index, int previous, long travel, long remaining, boolean[] used) {
+				if (travel + remaining >= bestCost) {
 					return;
 				}
 				if (index == current.length) {
-					List<Candidate> order = List.of(current);
-					long cost = cost(order);
+					long cost = leafCost();
 					if (cost < bestCost) {
 						bestCost = cost;
-						best = order;
+						best = current.clone();
 					}
 					return;
 				}
-				if (slots[index] != null) {
-					current[index] = slots[index];
-					run(index + 1, slots[index].location(), travel + travel(previous, slots[index].location()), used);
+				if (slots[index] >= 0) {
+					place(index, previous, travel, remaining, used, slots[index]);
 					return;
 				}
-				for (int i = 0; i < loose.size(); i++) {
+				for (int i = 0; i < loose.length; i++) {
 					if (used[i]) {
 						continue;
 					}
 					used[i] = true;
-					Candidate next = loose.get(i);
-					current[index] = next;
-					run(index + 1, next.location(), travel + travel(previous, next.location()), used);
+					place(index, previous, travel, remaining, used, loose[i]);
 					used[i] = false;
 				}
+			}
+
+			private void place(int index, int previous, long travel, long remaining, boolean[] used, int node) {
+				current[index] = node;
+				long leg = previous < 0 ? fromStart[node] : matrix[previous][node];
+				run(index + 1, node, travel + leg, remaining - minIn[node], used);
+			}
+
+			private long leafCost() {
+				long clock = startMinute;
+				long travel = 0;
+				int previous = -1;
+				for (int i = 0; i < current.length; i++) {
+					int node = current[i];
+					long leg = previous < 0 ? fromStart[node] : matrix[previous][node];
+					travel += leg;
+					clock += leg;
+					arrivals[i] = clock;
+					clock += stays[node];
+					orderFoods[i] = foods[node];
+					previous = node;
+				}
+				long tail = toEnd[previous];
+				return score(arrivals, orderFoods, travel + tail, clock + tail);
 			}
 		}
 
@@ -447,32 +537,41 @@ public final class DraftPlanner {
 		/** 이동 합계 + 식사 벌점 + 종료 시각 넘김 벌점. */
 		long cost(List<Candidate> order) {
 			Timeline timeline = timeline(order);
-			long cost = timeline.travel;
-			int foodCount = (int)order.stream().filter(Candidate::food).count();
+			boolean[] foods = new boolean[order.size()];
+			for (int i = 0; i < foods.length; i++) {
+				foods[i] = order.get(i).food();
+			}
+			return score(timeline.arrivals, foods, timeline.travel, timeline.finish);
+		}
+
+		/** 방문 순서대로의 도착 시각(분)·맛집 여부로 비용을 낸다. 모든 순서 비교와 근사 탐색이 같이 쓴다. */
+		long score(long[] arrivals, boolean[] foods, long travel, long finish) {
+			long cost = travel;
+			int foodCount = 0;
+			for (boolean food : foods) {
+				foodCount += food ? 1 : 0;
+			}
 			boolean needsLunch = foodCount >= 1 && overlaps(day, LUNCH_FROM, LUNCH_TO);
 			boolean needsDinner = overlaps(day, DINNER_FROM, DINNER_TO) && foodCount >= (needsLunch ? 2 : 1);
-			Long lunch = null;
-			Integer lunchIndex = null;
+			long lunch = -1;
+			int lunchIndex = -1;
 			if (needsLunch) {
-				for (int i = 0; i < order.size(); i++) {
-					long arrival = timeline.arrivals[i];
-					if (order.get(i).food() && within(arrival, LUNCH_FROM, LUNCH_TO)) {
-						lunch = arrival;
+				for (int i = 0; i < foods.length; i++) {
+					if (foods[i] && within(arrivals[i], LUNCH_FROM, LUNCH_TO)) {
+						lunch = arrivals[i];
 						lunchIndex = i;
 						break;
 					}
 				}
-				if (lunch == null) {
+				if (lunchIndex < 0) {
 					cost += LUNCH_MISSED;
 				}
 			}
 			if (needsDinner) {
 				boolean dinner = false;
-				for (int i = 0; i < order.size(); i++) {
-					long arrival = timeline.arrivals[i];
-					if (order.get(i).food() && (lunchIndex == null || i != lunchIndex)
-						&& within(arrival, DINNER_FROM, DINNER_TO)
-						&& (lunch == null || arrival >= lunch + MEAL_GAP.toMinutes())) {
+				for (int i = 0; i < foods.length; i++) {
+					if (foods[i] && i != lunchIndex && within(arrivals[i], DINNER_FROM, DINNER_TO)
+						&& (lunchIndex < 0 || arrivals[i] >= lunch + MEAL_GAP.toMinutes())) {
 						dinner = true;
 						break;
 					}
@@ -481,7 +580,7 @@ public final class DraftPlanner {
 					cost += DINNER_MISSED;
 				}
 			}
-			return cost + OVERFLOW_PER_MINUTE * Math.max(0, timeline.finish - endMinute);
+			return cost + OVERFLOW_PER_MINUTE * Math.max(0, finish - endMinute);
 		}
 
 		long overflow(List<Candidate> order) {

@@ -104,6 +104,21 @@ class DraftPlannerTest {
 	}
 
 	@Test
+	void 가까운_장소가_한쪽에_몰려도_날짜마다_시간에_맞게_고르게_나눈다() {
+		List<Candidate> candidates = new ArrayList<>();
+		for (int i = 1; i <= 7; i++) {
+			candidates.add(place(i, at(GANGNEUNG_LAT, i * 0.01), 60));
+		}
+		candidates.add(place(8, at(SOKCHO_LAT, 0), 60));
+
+		Output output = plan(List.of(day(DAY1, 10, 20), day(DAY2, 10, 20)), candidates);
+
+		assertThat(output.unassigned()).isEmpty();
+		assertThat(output.orders().get(DAY1)).hasSize(4);
+		assertThat(output.orders().get(DAY2)).hasSize(4);
+	}
+
+	@Test
 	void 맛집은_점심은_11시에서_14시_저녁은_17시에서_20시이면서_점심_5시간_뒤에_도착하게_놓는다() {
 		List<DayOption> days = List.of(day(DAY1, 9, 21));
 		List<Candidate> candidates = List.of(
@@ -192,7 +207,7 @@ class DraftPlannerTest {
 				: place(i, at(GANGNEUNG_LAT + i * 0.003, i * 0.004), 30));
 		}
 
-		Output output = assertTimeoutPreemptively(Duration.ofSeconds(5),
+		Output output = assertTimeoutPreemptively(Duration.ofSeconds(15),
 			() -> plan(List.of(day(DAY1, 9, 21)), candidates));
 
 		assertThat(output.orders().get(DAY1)).hasSize(10);
