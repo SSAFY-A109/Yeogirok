@@ -10,7 +10,10 @@ import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 업로드를 마친 기록 사진을 보관함(visit_images)에 넣는다(API-086). */
+/**
+ * 업로드를 마친 기록 사진을 보관함(visit_images)에 넣는다(API-086). 방문에 연결하지 않은 사진이라 기록 행을 잠그지 않고
+ * version·status 도 바꾸지 않는다(노션 059·066: DRAFT 전환은 실제 방문·연결 사진·이야기가 바뀔 때만).
+ */
 @Service
 @RequiredArgsConstructor
 public class RecordPhotoService {
