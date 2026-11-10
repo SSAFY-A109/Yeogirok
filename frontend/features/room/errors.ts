@@ -14,6 +14,9 @@ const ROOM_ERROR_MESSAGES: Readonly<Record<string, string>> = {
 /** 다른 일행이 먼저 바꿔 version이 달라졌을 때(409 C004). 공통 문구보다 여행방 상황에 맞춘다. */
 const ROOM_VERSION_MISMATCH_MESSAGE = "다른 일행이 여행방을 바꿨어요. 최신 내용으로 다시 시도해 주세요.";
 
+/** 여행방이 없거나(삭제됨) 내가 참여자가 아니라는 code. 다시 시도해도 풀리지 않아 안내와 돌아가기만 보여 준다. */
+export const ROOM_ACCESS_ERROR_CODES: readonly string[] = ["RO001", "RO002"];
+
 /** 정원이 찼다는 code. 초대 수락 화면이 정원 안내로 분기한다. */
 export const ROOM_FULL_CODE = "RO007";
 
@@ -35,6 +38,8 @@ export const ROOM_ERROR_FALLBACK = {
   addPlaces: "장소를 담지 못했어요. 다시 시도해 주세요.",
   deletePlace: "장소를 빼지 못했어요. 다시 시도해 주세요.",
   restorePlace: "장소를 되돌리지 못했어요. 다시 시도해 주세요.",
+  chat: "대화를 불러오지 못했어요.",
+  chatHistory: "이전 대화를 불러오지 못했어요.",
 } as const;
 
 export function getRoomErrorMessage(error: unknown, fallback: string): string {

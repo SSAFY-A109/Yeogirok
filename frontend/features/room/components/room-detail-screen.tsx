@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Pencil } from "lucide-react-native";
+import { MessageCircle, Pencil } from "lucide-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -121,6 +121,10 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
     router.push({ pathname: "/rooms/[roomId]/invite", params });
   };
 
+  const goToChat = () => {
+    router.push({ pathname: "/rooms/[roomId]/chat", params });
+  };
+
   const openSheet = () => {
     setSheetOpen(true);
   };
@@ -153,7 +157,12 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
       <ScreenHeader
         title={room.name}
         titleAlign="start"
-        trailing={<HeaderIconButton icon={Pencil} accessibilityLabel="여행방 정보 수정" onPress={goToEdit} testID="room-detail.edit" />}
+        trailing={(
+          <>
+            <HeaderIconButton icon={Pencil} accessibilityLabel="여행방 정보 수정" onPress={goToEdit} testID="room-detail.edit" />
+            <ChatButton hasUnread={room.hasUnreadChat} onPress={goToChat} />
+          </>
+        )}
         testID="room-detail.header"
       />
       <View className="flex-1">
@@ -189,6 +198,27 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
       )}
       <AddPlaceSheet open={sheetOpen} onOpenChange={setSheetOpen} onSelect={selectSource} />
     </Screen>
+  );
+}
+
+/** 헤더의 채팅 버튼(Figma W09). 안 읽은 메시지가 있으면 오른쪽 위에 점을 찍는다. */
+function ChatButton({ hasUnread, onPress }: { hasUnread: boolean; onPress: () => void }) {
+  return (
+    <View>
+      <HeaderIconButton
+        icon={MessageCircle}
+        accessibilityLabel={hasUnread ? "채팅, 안 읽은 메시지 있음" : "채팅"}
+        onPress={onPress}
+        testID="room-detail.chat"
+      />
+      {hasUnread ? (
+        <View
+          accessible={false}
+          className="pointer-events-none absolute right-1.5 top-2 h-2 w-2 rounded-full bg-highlight"
+          testID="room-detail.chat-unread"
+        />
+      ) : null}
+    </View>
   );
 }
 
