@@ -182,13 +182,13 @@ export type CoursePlace = {
   address: string | null;
   /** 첫 공개 사진, 없으면 장소 대표 이미지. */
   imageUrl: string | null;
+  photoUrls: string[];
   coordinate: Coordinate;
 };
 
 export type CourseDay = { day: number; places: CoursePlace[] };
 
-export type CourseDetail = CourseLength & {
-  id: number;
+export type CourseContent = CourseLength & {
   title: string;
   description: string;
   authors: CourseAuthor[];
@@ -197,8 +197,10 @@ export type CourseDetail = CourseLength & {
   /** 일차·방문 순서대로 펼친 장소. */
   places: CoursePlace[];
   transportMode: CourseTransportMode | null;
-  version: number;
 };
+
+export type CourseDetail = CourseContent & { id: number; version: number };
+export type CoursePreviewDto = Pick<CourseDetailDto, "title" | "description" | "authors" | "days">;
 
 export type PopularPlace = {
   /** 목록 키. provider와 장소 식별값으로 만든다. */
@@ -313,11 +315,16 @@ function toCoursePlace(day: number, dto: CourseVisitDto): CoursePlace {
     categoryName: dto.place.categoryName,
     address: dto.place.address,
     imageUrl: dto.photos[0]?.url ?? dto.place.imageUrl,
+
+    photoUrls: dto.photos.map((photo) => {
+      return photo.url;
+    }),
+
     coordinate: toCoordinate(dto.place.latitude, dto.place.longitude),
   };
 }
 
-export function toCourseDetail(dto: CourseDetailDto): CourseDetail {
+function toCourseContent(dto: CoursePreviewDto) {
   const days = [...dto.days].sort((a, b) => {
     return a.day - b.day;
   }).map((group) => {
@@ -335,8 +342,6 @@ export function toCourseDetail(dto: CourseDetailDto): CourseDetail {
   });
 
   return {
-    ...toCourseLength(dto),
-    id: assertId(dto.id, "id"),
     title: dto.title,
     description: dto.description,
     authors: dto.authors.map(toAuthor),
@@ -345,10 +350,23 @@ export function toCourseDetail(dto: CourseDetailDto): CourseDetail {
     places: days.flatMap((group) => {
       return group.places;
     }),
+  };
+}
 
+export function toCourseDetail(dto: CourseDetailDto): CourseDetail {
+  return {
+    ...toCourseContent(dto),
+    ...toCourseLength(dto),
+    id: assertId(dto.id, "id"),
     transportMode: toNullableTransportMode(dto.transportMode),
     version: assertCount(dto.version, "version"),
   };
+}
+
+export function toCoursePreview(dto: CoursePreviewDto): CourseContent {
+  const content = toCourseContent(dto);
+  const dayCount = content.days.at(-1)?.day ?? 0;
+  return { ...content, dayCount, nightCount: Math.max(0, dayCount - 1), transportMode: null };
 }
 
 export function toPopularPlace(dto: PopularPlaceDto): PopularPlace {
