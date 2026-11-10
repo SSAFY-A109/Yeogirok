@@ -46,13 +46,11 @@ final class VisitRequestFields {
 		return value;
 	}
 
-	/** 생략·null C001, 배열 아님 C002, 비었으면 C003. */
-	static JsonNode requiredArray(JsonNode value, String field) {
-		return requiredArray(value, field, false);
-	}
-
-	/** 생략·null C001, 배열 아님 C002, allowEmpty 가 아니면 빈 배열 C003. */
-	static JsonNode requiredArray(JsonNode value, String field, boolean allowEmpty) {
+	/**
+	 * 생략·null C001, 배열 아님 C002, allowEmpty 가 아니면 빈 배열 C003, maxSize 초과 C003.
+	 * 상한은 요청 하나가 기록 행 잠금을 쥔 채 끝없이 쓰지 않게 둔다(PR #77 리뷰, 노션에 없음 — 11/10 사용자 결정).
+	 */
+	static JsonNode requiredArray(JsonNode value, String field, boolean allowEmpty, int maxSize) {
 		if (isAbsent(value)) {
 			throw missing(field);
 		}
@@ -62,7 +60,14 @@ final class VisitRequestFields {
 		if (!allowEmpty && value.isEmpty()) {
 			throw notAllowed(field + ": 1개 이상이어야 합니다.");
 		}
+		checkMaxSize(value, field, maxSize);
 		return value;
+	}
+
+	private static void checkMaxSize(JsonNode array, String field, int maxSize) {
+		if (array.size() > maxSize) {
+			throw notAllowed(field + ": 최대 " + maxSize + "개까지 보낼 수 있습니다.");
+		}
 	}
 
 	/** 생략·null C001, 정수 아님 C002. */
@@ -76,14 +81,15 @@ final class VisitRequestFields {
 		return value.longValue();
 	}
 
-	/** 생략·null 이면 빈 목록, 배열·정수 아님 C002. 같은 ID 는 한 번만 남긴다(보낸 순서 유지). */
-	static List<Long> optionalIds(JsonNode value, String field) {
+	/** 생략·null 이면 빈 목록, 배열·정수 아님 C002, maxSize 초과 C003(중복을 빼기 전 개수). 같은 ID 는 한 번만 남긴다(보낸 순서 유지). */
+	static List<Long> optionalIds(JsonNode value, String field, int maxSize) {
 		if (isAbsent(value)) {
 			return List.of();
 		}
 		if (!value.isArray()) {
 			throw invalidFormat(field, "배열이어야 합니다.");
 		}
+		checkMaxSize(value, field, maxSize);
 		Set<Long> ids = new LinkedHashSet<>();
 		for (JsonNode id : value) {
 			ids.add(requiredId(id, field + "[]"));

@@ -17,13 +17,16 @@ import tools.jackson.databind.JsonNode;
 /**
  * API-066 요청(1차: 수동 추가만).
  * <ul>
- *   <li>version 생략 C001, null·정수 아님 C002. items 생략 C001, 배열 아님 C002, 빈 배열 C003</li>
+ *   <li>version 생략 C001, null·정수 아님 C002. items 생략 C001, 배열 아님 C002, 빈 배열·50개 초과 C003</li>
  *   <li>draftKey·draftVersion·items[].itemId(초안 반영), story·storyDraft, plannedItemId 값은 C003(명세 5절 8·12)</li>
  *   <li>장소: placeRef·customPlace 둘 다 C003, 둘 다 없으면 RE018</li>
  *   <li>visitDate·visitedAt·order: 명세 1-6, order 는 필수·1 이상</li>
  * </ul>
  */
 public class VisitAddRequest {
+
+	/** items 최대 개수(PR #77 리뷰, 11/10 사용자 결정). */
+	static final int MAX_ITEMS = 50;
 
 	@JsonProperty("version")
 	private JsonNode version;
@@ -42,7 +45,7 @@ public class VisitAddRequest {
 		reject(draftKey, "draftKey");
 		reject(draftVersion, "draftVersion");
 		List<VisitAddCommand.Item> parsed = new ArrayList<>();
-		for (JsonNode item : VisitRequestFields.requiredArray(items, "items")) {
+		for (JsonNode item : VisitRequestFields.requiredArray(items, "items", false, MAX_ITEMS)) {
 			parsed.add(item(VisitRequestFields.requiredObject(item, "items[]")));
 		}
 		return new VisitAddCommand(versionValue, parsed);

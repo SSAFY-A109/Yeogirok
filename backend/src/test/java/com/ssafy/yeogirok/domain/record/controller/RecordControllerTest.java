@@ -21,8 +21,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -383,6 +385,49 @@ class RecordControllerTest {
 					.header("Idempotency-Key", "k"))
 				.andExpect(jsonPath("$.code").value("C002"));
 			verifyNoInteractions(visitPhotoService);
+		}
+	}
+
+	/** 요청 하나가 기록 행 잠금을 쥔 채 끝없이 쓰지 않게 개수 상한을 둔다(PR #77 리뷰). 경계값까지는 받는다. */
+	@Nested
+	class 개수_상한 {
+
+		static String repeat(String element, int count) {
+			return String.join(",", Collections.nCopies(count, element));
+		}
+
+		static String ids(int count) {
+			return String.join(",", IntStream.rangeClosed(1, count).mapToObj(String::valueOf).toList());
+		}
+
+		@Test
+		void API_066_items_는_50개까지() throws Exception {
+			String item = "{" + API_066.VALID_ITEM + "}";
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [" + repeat(item, 50) + "]}"))
+				.andExpect(status().isCreated());
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [" + repeat(item, 51) + "]}"))
+				.andExpect(jsonPath("$.code").value("C003"));
+		}
+
+		@Test
+		void API_067_items_와_removeVisitIds_는_각각_50개까지() throws Exception {
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [], \"removeVisitIds\": ["
+					+ ids(50) + "]}"))
+				.andExpect(status().isOk());
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [], \"removeVisitIds\": ["
+					+ ids(51) + "]}"))
+				.andExpect(jsonPath("$.code").value("C003"));
+			String item = "{\"visitId\": 1, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\"}";
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [" + repeat(item, 51) + "]}"))
+				.andExpect(jsonPath("$.code").value("C003"));
+		}
+
+		@Test
+		void API_068_imageIds_는_100개까지() throws Exception {
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), "{\"imageIds\": [" + ids(100) + "]}"))
+				.andExpect(status().isCreated());
+			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), "{\"imageIds\": [" + ids(101) + "]}"))
+				.andExpect(jsonPath("$.code").value("C003"));
 		}
 	}
 
