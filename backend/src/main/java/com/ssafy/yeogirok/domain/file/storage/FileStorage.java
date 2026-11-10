@@ -113,14 +113,18 @@ public class FileStorage {
 
 	/**
 	 * 객체 전체(영수증 OCR). {@code maxBytes} 를 넘으면 받지 않고 M001, 없으면 M004, 그 밖의 실패는 M012.
+	 * 응답에 크기가 없어도 상한까지만 읽는다(PR #84 리뷰).
 	 */
 	public byte[] readAll(String bucket, String key, long maxBytes) {
 		try (ResponseInputStream<GetObjectResponse> object = s3Client.getObject(builder -> builder.bucket(bucket).key(key))) {
-			if (object.response().contentLength() > maxBytes) {
+			Long length = object.response().contentLength();
+			byte[] bytes = length != null && length > maxBytes ? null
+				: object.readNBytes((int)Math.min(maxBytes + 1, Integer.MAX_VALUE - 8));
+			if (bytes == null || bytes.length > maxBytes) {
 				object.abort();
 				throw new BusinessException(ExceptionType.FILE_TOO_LARGE);
 			}
-			return object.readAllBytes();
+			return bytes;
 		} catch (S3Exception e) {
 			if (e.statusCode() == NOT_FOUND) {
 				throw new BusinessException(ExceptionType.FILE_NOT_FOUND);

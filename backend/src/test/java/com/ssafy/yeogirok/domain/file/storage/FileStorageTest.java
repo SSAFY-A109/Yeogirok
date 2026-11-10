@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import java.io.ByteArrayInputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Consumer;
@@ -21,9 +22,12 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
@@ -146,6 +150,38 @@ class FileStorageTest {
 
 	private static S3Exception s3Error(int status) {
 		return (S3Exception)S3Exception.builder().statusCode(status).message("status " + status).build();
+	}
+
+	@SuppressWarnings("unchecked")
+	private void objectIs(byte[] body, Long contentLength) {
+		given(s3Client.getObject(any(Consumer.class))).willAnswer(invocation -> new ResponseInputStream<>(
+			GetObjectResponse.builder().contentLength(contentLength).build(),
+			AbortableInputStream.create(new ByteArrayInputStream(body))));
+	}
+
+	@Test
+	void 전체_읽기는_상한까지_받고_넘으면_M001_크기_값이_없어도_실제_바이트로_막는다() {
+		objectIs(new byte[] {1, 2, 3}, 3L);
+		assertThat(storage().readAll("receipts", "receipt/a", 3)).containsExactly(1, 2, 3);
+
+		objectIs(new byte[] {1, 2, 3, 4}, 4L);
+		assertError(() -> storage().readAll("receipts", "receipt/a", 3), ExceptionType.FILE_TOO_LARGE);
+
+		objectIs(new byte[] {1, 2, 3, 4}, null);
+		assertError(() -> storage().readAll("receipts", "receipt/a", 3), ExceptionType.FILE_TOO_LARGE);
+
+		objectIs(new byte[] {1, 2}, null);
+		assertThat(storage().readAll("receipts", "receipt/a", 3)).containsExactly(1, 2);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 전체_읽기에서_객체가_없으면_M004_그_밖은_M012() {
+		given(s3Client.getObject(any(Consumer.class))).willThrow(s3Error(404));
+		assertError(() -> storage().readAll("receipts", "receipt/a", 3), ExceptionType.FILE_NOT_FOUND);
+
+		given(s3Client.getObject(any(Consumer.class))).willThrow(s3Error(500));
+		assertError(() -> storage().readAll("receipts", "receipt/a", 3), ExceptionType.FILE_STORAGE_UNAVAILABLE);
 	}
 
 	private static void assertError(Runnable call, ExceptionType expected) {
