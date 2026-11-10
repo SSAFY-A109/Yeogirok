@@ -1,8 +1,20 @@
-import type { PlaceDto } from "../../../features/place/model";
+import type { RoomPlaceInfoDto } from "../../../features/room/model";
 
 import { findCategory } from "./common";
 
+/** 목 장소의 공급자. 외부 장소는 `provider`+`providerPlaceId`로 구별한다(API-026·029 명세). */
+export const MOCK_PLACE_PROVIDER = "TOUR_API";
+
 type PlaceSeed = [placeId: number, name: string, categoryCode: string | null, address: string, latitude: number, longitude: number];
+
+/** 주소 앞부분으로 고르는 시·군·구 코드(`fixtures/common.ts`의 지역 목록과 같은 값). */
+const REGION_CODES: readonly [prefix: string, code: string][] = [
+  ["강릉시", "51150"],
+  ["속초시", "51210"],
+  ["제주시", "50110"],
+  ["서귀포시", "50130"],
+  ["부산 영도구", "26200"],
+];
 
 /** 검색·추천·담기에 쓰는 공개 관광지 목록. 좌표는 공개 장소의 대략적인 값이다. 사진은 넣지 않는다. */
 const PLACE_SEEDS: PlaceSeed[] = [
@@ -40,25 +52,37 @@ const PLACE_SEEDS: PlaceSeed[] = [
   [403, "아바이마을", "CULTURE", "속초시 청호동", 38.2006, 128.5999],
 ];
 
-export const placeCatalog: PlaceDto[] = PLACE_SEEDS.map(([placeId, name, categoryCode, address, latitude, longitude]) => {
-  return {
-    placeId,
-    name,
-    category: categoryCode === null ? null : findCategory(categoryCode),
-    address,
-    photoUrl: null,
-    latitude,
-    longitude,
-  };
-});
-
-export function findCatalogPlace(placeId: number): PlaceDto | null {
-  return placeCatalog.find((place) => {
-    return place.placeId === placeId;
-  }) ?? null;
-}
-
 /** 주소의 마지막 단어(동·읍·면). 장소 행 보조 문구에 쓴다. */
 export function toAreaName(address: string | null): string | null {
   return address?.split(" ").at(-1) ?? null;
+}
+
+function toRegionCode(address: string): string | null {
+  return REGION_CODES.find(([prefix]) => {
+    return address.startsWith(prefix);
+  })?.[1] ?? null;
+}
+
+/** 서버 `PlaceInfo` 모양의 목 장소 목록. `providerPlaceId`는 위 표의 숫자를 문자열로 쓴다. 사진은 넣지 않는다. */
+export const placeCatalog: RoomPlaceInfoDto[] = PLACE_SEEDS.map(([placeId, name, categoryCode, address, latitude, longitude]) => {
+  return {
+    provider: MOCK_PLACE_PROVIDER,
+    providerPlaceId: String(placeId),
+    name,
+    latitude,
+    longitude,
+    address,
+    categoryCode,
+    categoryName: categoryCode === null ? null : findCategory(categoryCode)?.name ?? null,
+    regionCode: toRegionCode(address),
+    regionName: toAreaName(address),
+    imageUrl: null,
+    imageAttribution: null,
+  };
+});
+
+export function findCatalogPlace(providerPlaceId: string): RoomPlaceInfoDto | null {
+  return placeCatalog.find((place) => {
+    return place.providerPlaceId === providerPlaceId;
+  }) ?? null;
 }

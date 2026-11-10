@@ -17,7 +17,7 @@ type InviteLinkSectionProps = {
   isFull: boolean;
 };
 
-/** 화면에 보이는 초대 주소(`yeogirok.app/j/7KQ2`). 복사·공유에는 전체 URL을 쓴다. */
+/** 화면에 보이는 초대 주소(`https://`를 뺀 값). 복사·공유에는 서버가 준 전체 URL(`inviteUrl`)을 쓴다. */
 function toDisplayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "");
 }

@@ -99,7 +99,7 @@ async function checkRoomCourseImport(origin) {
   const invalidVisit = await importVisits([701, 731]);
   assert.equal(invalidVisit.status, 400);
   assert.equal((await invalidVisit.json()).code, "CO007");
-  assert.deepEqual((await (await fetch(placesUrl)).json()).data.places, []);
+  assert.deepEqual((await (await fetch(placesUrl)).json()).data.items, []);
 
   const imported = await importVisits([701, 702]);
   assert.equal(imported.status, 201);
@@ -112,7 +112,7 @@ async function checkRoomCourseImport(origin) {
   assert.deepEqual((await (await importVisits([701, 702])).json()).data, result);
   const repeatedVisit = await importVisits([701], { ...headers, "Idempotency-Key": "course-import-another-selection" });
   assert.equal(repeatedVisit.status, 201);
-  assert.equal((await (await fetch(placesUrl)).json()).data.places.length, 3);
+  assert.equal((await (await fetch(placesUrl)).json()).data.items.length, 3);
   console.info("여행방 생성·코스 가져오기 MSW: 응답 계약, 원본 방문 검증, 저장과 멱등성 확인");
 }
 

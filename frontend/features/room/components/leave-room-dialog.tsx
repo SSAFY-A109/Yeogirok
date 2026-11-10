@@ -34,7 +34,9 @@ type LeaveRoomDialogProps = {
 export function LeaveRoomDialog({ room, open, onOpenChange }: LeaveRoomDialogProps) {
   const toast = useToast();
   const leaveRoom = useLeaveRoom();
-  const copy = room.memberCount <= 1 ? LAST_MEMBER_COPY : LEAVE_COPY;
+  // 마지막 일행이 나가면 서버가 여행방을 지운다. 응답에는 삭제 여부가 없어 나가기 전 인원으로 판단한다.
+  const isLastMember = room.memberCount <= 1;
+  const copy = isLastMember ? LAST_MEMBER_COPY : LEAVE_COPY;
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {
@@ -46,10 +48,10 @@ export function LeaveRoomDialog({ room, open, onOpenChange }: LeaveRoomDialogPro
 
   const confirm = () => {
     leaveRoom.mutate(room.id, {
-      onSuccess: ({ roomDeleted }) => {
+      onSuccess: () => {
         onOpenChange(false);
         router.dismissTo("/rooms");
-        toast.show({ message: roomDeleted ? "여행방을 삭제했어요" : "여행방에서 나왔어요" });
+        toast.show({ message: isLastMember ? "여행방을 삭제했어요" : "여행방에서 나왔어요" });
       },
     });
   };

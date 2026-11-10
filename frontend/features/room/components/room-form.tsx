@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 /** 날짜를 정하지 않았을 때 날짜 필드에 보이는 문구. */
 const EMPTY_TRIP_DATE_TEXT = "날짜 미정";
 
-const TRANSPORT_ICON: Readonly<Record<TransportModeDto, LucideIcon>> = { CAR: Car, PUBLIC_TRANSIT: Bus };
-const TRANSPORT_TEST_ID: Readonly<Record<TransportModeDto, string>> = { CAR: "transport-car", PUBLIC_TRANSIT: "transport-public-transit" };
+const TRANSPORT_ICON: Readonly<Record<TransportModeDto, LucideIcon>> = { CAR: Car, TRANSIT: Bus };
+const TRANSPORT_TEST_ID: Readonly<Record<TransportModeDto, string>> = { CAR: "transport-car", TRANSIT: "transport-public-transit" };
 
 /** 여행방의 현재 기간. 날짜가 없으면 `null`. */
 export function toTripDateRange(room: Pick<RoomSummary, "startDate" | "endDate">): TripDateRange | null {

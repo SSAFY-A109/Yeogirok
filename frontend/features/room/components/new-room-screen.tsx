@@ -15,7 +15,7 @@ import { useAddRoomPlaces, useCreateRoom, useImportCoursePlaces } from "@/featur
 import { isValidRoomName, RoomNameField, TransportModeField, TripDateField } from "@/features/room/components/room-form";
 import type { TripDateRange } from "@/features/room/components/trip-date-sheet";
 import { getCourseImportErrorMessage, getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
-import type { TransportModeDto } from "@/features/room/model";
+import type { AddRoomPlaceItemDto, PlaceRefDto, TransportModeDto } from "@/features/room/model";
 
 /** 날짜 범위가 잘못됐다는 공통 오류 code. 날짜 필드 아래에 보여 준다. */
 const DATE_RANGE_ERROR_CODE = "C012";
@@ -28,7 +28,7 @@ const MAX_CARRY_OVER_THUMBS = 3;
 
 /** 담을 여행방 선택(W05)에서 넘겨받은 장소. 이름은 화면 표시용이다. */
 export type CarryOverPlaces = { placeNames: string | null } & (
-  | { kind: "search"; placeIds: number[] }
+  | { kind: "search"; placeRefs: PlaceRefDto[] }
   | { kind: "course"; recordId: number; visitIds: number[] }
 );
 
@@ -119,10 +119,14 @@ export function NewRoomScreen({ carryOver, invalidCourseImport }: NewRoomScreenP
       return;
     }
 
+    const items: AddRoomPlaceItemDto[] = places.placeRefs.map((placeRef) => {
+      return { placeRef, sourceType: "SEARCH" };
+    });
+
     addRoomPlaces.mutate(
-      { roomId, request: { placeIds: places.placeIds, source: "SEARCH", recommendationRequestId: null } },
+      { roomId, items, idempotencyKey: createIdempotencyKey() },
       {
-        onSuccess: (addedPlaces) => {
+        onSuccess: ({ places: addedPlaces }) => {
           showCarryOverSuccess(addedPlaces.length);
         },
 
@@ -230,9 +234,8 @@ export function NewRoomScreen({ carryOver, invalidCourseImport }: NewRoomScreenP
 
 /** 함께 담을 장소(Figma 진입 W06 `Field / 함께 담을 장소` 1:5939). 사진은 아직 받지 않아 자리만 보인다. */
 function CarryOverPlacesField({ carryOver }: { carryOver: CarryOverPlaces }) {
-  const ids = carryOver.kind === "course" ? carryOver.visitIds : carryOver.placeIds;
-  const count = ids.length;
-  const thumbnails = ids.slice(0, MAX_CARRY_OVER_THUMBS);
+  const count = carryOver.kind === "course" ? carryOver.visitIds.length : carryOver.placeRefs.length;
+  const thumbnailCount = Math.min(count, MAX_CARRY_OVER_THUMBS);
   const summary = `고른 ${count}곳을 담은 채로 만들어요`;
 
   return (
@@ -244,8 +247,8 @@ function CarryOverPlacesField({ carryOver }: { carryOver: CarryOverPlaces }) {
         className="gap-3 rounded-lg bg-muted p-4"
       >
         <View className="flex-row gap-2">
-          {thumbnails.map((id, index) => {
-            return <MediaPhoto key={`${id}-${index}`} uri={null} className="size-14" />;
+          {Array.from({ length: thumbnailCount }, (_, index) => {
+            return <MediaPhoto key={index} uri={null} className="size-14" />;
           })}
         </View>
         <Text className="text-label text-foreground">{summary}</Text>

@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronUp, GripVertical, Hourglass, Info, TriangleAlert, type LucideIcon } from "lucide-react-native";
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { BottomCta } from "@/components/ui/bottom-cta";
@@ -11,7 +11,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { TRANSPORT_MODE_LABEL, type RoomDetail } from "@/features/room/model";
-import { SCHEDULE_DRAFT_MAX_WAIT_MS, useApplyScheduleDraft, useCreateScheduleDraft, useRoomSchedule } from "@/features/schedule/api/queries";
+import { SCHEDULE_DRAFT_MAX_WAIT_MS, useAdjustScheduleDraft, useRoomSchedule, useSaveSchedule } from "@/features/schedule/api/queries";
 import { DayChips, type DayChipItem } from "@/features/schedule/components/day-chips";
 import { DayPickerSheet } from "@/features/schedule/components/day-picker-sheet";
 import { MoveStopSheet, type MoveDayOption, type MoveStopTarget } from "@/features/schedule/components/move-stop-sheet";
@@ -20,57 +20,65 @@ import { StayTimeSheet, type StayTarget } from "@/features/schedule/components/s
 import { getScheduleErrorMessage, isScheduleConflict, SCHEDULE_ERROR_FALLBACK } from "@/features/schedule/errors";
 import {
   formatDuration,
+  getEditedDates,
+  getItemTimeLabel,
+  getPlaceName,
   getScheduleChanges,
-  hasUnplacedStops,
+  getScheduleWarningMessage,
+  getTotalStayMinutes,
+  getTotalTravelMinutes,
   isSameLayoutOrder,
-  moveStopToDay,
-  moveStopWithinDay,
-  removeStop,
-  SCHEDULE_PACE_LABEL,
-  setStopStay,
-  toPaceRequest,
-  toRecalculationRequest,
-  toScheduleLayout,
-  type ScheduleBody,
+  moveItemToDay,
+  moveItemWithinDay,
+  setItemStay,
+  toAdjustDraftRequest,
+  toDraftLayout,
+  toSaveScheduleRequest,
+  toUncalculatedDay,
+  unassignItem,
+  type DraftLayout,
+  type DraftLayoutDay,
+  type DraftLayoutItem,
+  type ReadyScheduleDraft,
   type ScheduleDay,
-  type ScheduleLayoutDay,
-  type ScheduleStop,
-  type UnplacedStop,
+  type ScheduleItem,
+  type SchedulePlaceLookup,
+  type ScheduleWarning,
 } from "@/features/schedule/model";
-import { goToRoomSchedule, goToScheduleConditions, showSchedule } from "@/features/schedule/navigation";
-import type { ScheduleSource } from "@/features/schedule/route-params";
+import { goToRoomSchedule } from "@/features/schedule/navigation";
 import { useElapsedSeconds } from "@/hooks/use-elapsed-seconds";
-import { useIdempotencyKeyFor } from "@/hooks/use-idempotency-key";
 import { formatShortMonthDay, type LocalDate } from "@/lib/date";
 import { withDirectionParticle, withObjectParticle } from "@/lib/korean";
 import { cn } from "@/lib/utils";
 
 const MS_PER_SECOND = 1_000;
 
-/** 화면이 보여 주고 고치는 일정. 저장된 일정이면 `baseVersion`은 그 일정의 버전이다. */
-export type EditableSchedule = { schedule: ScheduleBody; source: ScheduleSource; baseVersion: number | null };
-
-/** 이 일정을 고쳐 다시 계산한 초안이 아직 처리 중일 때의 진행 확인 상태. */
+/** 다시 계산하는 동안의 진행 확인 상태. */
 export type RecalculationProgress = { checking: boolean; connectionTrouble: boolean; onCheckAgain: () => void };
 
 type ScheduleEditorProps = {
   roomId: number;
+  draftKey: string;
   room: RoomDetail | undefined;
-  editable: EditableSchedule;
-  /** 다시 계산 중이면 진행 상태. 그동안 고치기와 저장을 막는다. */
-  recalculation: RecalculationProgress | null;
+  /** 계산을 마친 내용이 있는 초안. 다시 계산하는 중이면 그동안 고치기와 저장을 막는다. */
+  draft: ReadyScheduleDraft;
+  /** 뺀 후보까지 포함한 여행방 후보. 장소 이름을 찾는다. */
+  places: SchedulePlaceLookup;
+  /** 저장된 일정에서 시작한 초안인지("일정 조정하기"). */
+  adjusting: boolean;
+  progress: RecalculationProgress;
+  /** 이 초안을 버리고 다시 만든다(그사이 여행방이 바뀌어 저장할 수 없을 때). */
+  onRecreate: () => void;
 };
 
-/** 다시 계산할 뼈대와 끝난 뒤 되돌리기 토스트 문구. 문구가 없으면 토스트를 띄우지 않는다. */
-type Recalculation = { layout: ScheduleLayoutDay[]; doneMessage: string | null };
+/** 화면에서 고친 배치. 받은 초안이 바뀌면(`draftVersion`) 버리고 새 초안을 따른다. */
+type LocalEdits = { draftVersion: number; layout: DraftLayout };
 
-/** 장소 카드와 넣지 못한 장소에서 하는 일. */
+/** 장소 카드에서 하는 일. */
 type DayActions = {
-  openMove: (stop: ScheduleStop, day: ScheduleDay) => void;
-  openStay: (stop: ScheduleStop) => void;
+  openMove: (item: ScheduleItem, name: string) => void;
+  openStay: (item: ScheduleItem, name: string) => void;
   startReorder: () => void;
-  moveUnplaced: (stop: UnplacedStop, toDate: LocalDate) => void;
-  openMoveUnplaced: (stop: UnplacedStop, day: ScheduleDay) => void;
 };
 
 function goBack() {
@@ -83,42 +91,61 @@ function dayLabelOf(index: number): string {
 
 /**
  * 일정 초안 검토·조정(Figma W14·W14-M·W14-T, TRP-08·09).
- * 다른 날로 옮기기·빼기·머무는 시간은 고르면 바로, 순서 바꾸기는 다 바꾼 뒤 "다시 계산"으로 새 초안을 만든다(API-037).
- * 저장(API-039)하기 전에는 여행방 일정을 바꾸지 않는다.
+ * 다른 날로 옮기기·빼기·머무는 시간·순서 바꾸기는 화면의 배치만 고친다(서버 호출 없음). 고친 날은 시각과 이동 시간이
+ * 낡으므로 보여 주지 않고, "다시 계산"(API-084)으로 서버 계산을 받는다. 저장(API-039)은 다시 계산하지 않아도 할 수 있다.
+ * 저장하기 전에는 여행방 일정을 바꾸지 않는다.
  */
-export function ScheduleEditor({ roomId, room, editable, recalculation }: ScheduleEditorProps) {
-  const { schedule, source, baseVersion } = editable;
-  const [selectedDate, setSelectedDate] = useState(schedule.days.at(0)?.date);
+export function ScheduleEditor({ roomId, draftKey, room, draft, places, adjusting, progress, onRecreate }: ScheduleEditorProps) {
+  const [selectedDate, setSelectedDate] = useState(draft.conditions.at(0)?.date);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [reorderLayout, setReorderLayout] = useState<ScheduleLayoutDay[] | null>(null);
+  const [edits, setEdits] = useState<LocalEdits | null>(null);
+  const [reorderLayout, setReorderLayout] = useState<DraftLayout | null>(null);
   const [moveTarget, setMoveTarget] = useState<MoveStopTarget | null>(null);
   const [stayTarget, setStayTarget] = useState<StayTarget | null>(null);
-  const createDraft = useCreateScheduleDraft();
-  const applyDraft = useApplyScheduleDraft();
-  const keyFor = useIdempotencyKeyFor();
-  const lastRecalculationRef = useRef<Recalculation | null>(null);
+  const [recalculatedFrom, setRecalculatedFrom] = useState<number | null>(null);
+  const adjustDraft = useAdjustScheduleDraft();
+  const saveDraft = useSaveSchedule();
   const toast = useToast();
 
-  const layout = toScheduleLayout(schedule);
-  const recalculating = recalculation !== null || createDraft.isPending;
-  const editingLocked = recalculating || applyDraft.isPending;
+  const serverLayout = toDraftLayout(draft);
+  const layout = edits !== null && edits.draftVersion === draft.draftVersion ? edits.layout : serverLayout;
+  const editedDates = getEditedDates(serverLayout, layout);
+  const recalculating = draft.recalculating || adjustDraft.isPending;
+  const editingLocked = recalculating || saveDraft.isPending;
+
+  // 다시 계산이 끝났는데 초안 버전이 그대로면 서버가 계산에 실패해 마지막 결과로 돌아간 것이다.
+  const recalculationFailed = recalculatedFrom === draft.draftVersion && !recalculating && !adjustDraft.isError;
 
   const selectedIndex = Math.max(
-    schedule.days.findIndex((day) => {
+    layout.days.findIndex((day) => {
       return day.date === selectedDate;
     }),
     0,
   );
 
-  const selectedDay = schedule.days.at(selectedIndex);
-  const chipItems = toDayChipItems(schedule.days);
+  const selectedLayoutDay = layout.days.at(selectedIndex);
+  const selectedEdited = selectedLayoutDay !== undefined && editedDates.includes(selectedLayoutDay.date);
 
-  const moveDays: MoveDayOption[] = schedule.days.map((day, index) => {
-    return { date: day.date, label: dayLabelOf(index), stopCount: day.stops.length };
+  const calculatedDay = selectedEdited ? undefined : draft.schedule.days.find((day) => {
+    return day.date === selectedLayoutDay?.date;
   });
 
-  const reorderDay = reorderLayout?.find((day) => {
-    return day.date === selectedDay?.date;
+  const selectedDay = selectedLayoutDay === undefined ? undefined : calculatedDay ?? toUncalculatedDay(selectedLayoutDay);
+
+  const chipItems: DayChipItem[] = layout.days.map((day, index) => {
+    const warnings = editedDates.includes(day.date) ? [] : draft.schedule.days.find((item) => {
+      return item.date === day.date;
+    })?.warnings ?? [];
+
+    return { date: day.date, label: dayLabelOf(index), caption: `${day.items.length}곳`, hasWarning: warnings.length > 0 };
+  });
+
+  const moveDays: MoveDayOption[] = layout.days.map((day, index) => {
+    return { date: day.date, label: dayLabelOf(index), stopCount: day.items.length };
+  });
+
+  const reorderDay = reorderLayout?.days.find((day) => {
+    return day.date === selectedLayoutDay?.date;
   });
 
   const labelOfDate = (date: LocalDate) => {
@@ -127,105 +154,65 @@ export function ScheduleEditor({ roomId, room, editable, recalculation }: Schedu
     })?.label ?? "";
   };
 
-  const recalculate = (run: Recalculation) => {
-    lastRecalculationRef.current = run;
-    applyDraft.reset();
-    const request = toRecalculationRequest(toPaceRequest(schedule.pace), run.layout);
+  const applyEdit = (next: DraftLayout) => {
+    adjustDraft.reset();
+    saveDraft.reset();
+    setRecalculatedFrom(null);
+    setEdits({ draftVersion: draft.draftVersion, layout: next });
+  };
 
-    createDraft.mutate(
-      { roomId, request, idempotencyKey: keyFor(JSON.stringify(request)) },
+  const applyUndoableEdit = (next: DraftLayout, message: string) => {
+    const previous = layout;
+    applyEdit(next);
+
+    toast.show({
+      message,
+
+      action: {
+        label: "되돌리기",
+
+        onPress: () => {
+          applyEdit(previous);
+        },
+      },
+    });
+  };
+
+  const moveItem = (target: MoveStopTarget, toDate: LocalDate) => {
+    setMoveTarget(null);
+    applyUndoableEdit(moveItemToDay(layout, target.itemId, toDate), `${withDirectionParticle(labelOfDate(toDate))} 옮겼어요`);
+  };
+
+  const removeFromSchedule = (target: MoveStopTarget) => {
+    setMoveTarget(null);
+    applyUndoableEdit(unassignItem(layout, target.itemId), `${withObjectParticle(target.name)} 후보 장소로 돌려보냈어요`);
+  };
+
+  const changeStay = (target: StayTarget, stayMinutes: number) => {
+    setStayTarget(null);
+    applyEdit(setItemStay(layout, target.itemId, stayMinutes));
+  };
+
+  const recalculate = () => {
+    saveDraft.reset();
+    setRecalculatedFrom(null);
+
+    adjustDraft.mutate(
+      { roomId, draftKey, request: toAdjustDraftRequest(draft, serverLayout, layout) },
       {
-        onSuccess: ({ draftId }) => {
-          setReorderLayout(null);
-          showSchedule({ kind: "draft", draftId }, source);
-
-          if (run.doneMessage !== null) {
-            toast.show({
-              message: run.doneMessage,
-
-              action: {
-                label: "되돌리기",
-
-                onPress: () => {
-                  showSchedule(source);
-                },
-              },
-            });
-          }
+        onSuccess: () => {
+          setRecalculatedFrom(draft.draftVersion);
         },
       },
     );
   };
 
-  const retryLastRecalculation = () => {
-    if (lastRecalculationRef.current !== null) {
-      recalculate(lastRecalculationRef.current);
-    }
-  };
-
-  const moveStop = (target: MoveStopTarget, toDate: LocalDate) => {
-    setMoveTarget(null);
-    recalculate({ layout: moveStopToDay(layout, target.stopId, toDate), doneMessage: `${withDirectionParticle(labelOfDate(toDate))} 옮겼어요` });
-  };
-
-  const removeFromSchedule = (target: MoveStopTarget) => {
-    setMoveTarget(null);
-    recalculate({ layout: removeStop(layout, target.stopId), doneMessage: `${withObjectParticle(target.name)} 후보 장소로 돌려보냈어요` });
-  };
-
-  const changeStay = (target: StayTarget, stayMinutes: number) => {
-    setStayTarget(null);
-    recalculate({ layout: setStopStay(layout, target.stopId, stayMinutes), doneMessage: null });
-  };
-
-  const dayActions: DayActions = {
-    openMove: (stop, day) => {
-      setMoveTarget({
-        stopId: stop.id,
-        name: stop.name,
-        fromDate: day.date,
-        detail: `지금 ${labelOfDate(day.date)} ${stop.arrivalTime} – ${stop.departureTime}`,
-        suggestedDate: null,
-      });
-    },
-
-    openStay: (stop) => {
-      setStayTarget({
-        stopId: stop.id,
-        name: stop.name,
-        stayMinutes: stop.stayMinutes,
-        defaultStayMinutes: stop.defaultStayMinutes,
-        categoryName: stop.category?.name ?? null,
-        detail: `지금 ${stop.arrivalTime} – ${stop.departureTime}`,
-      });
-    },
-
-    startReorder: () => {
-      setReorderLayout(layout);
-    },
-
-    moveUnplaced: (stop, toDate) => {
-      recalculate({ layout: moveStopToDay(layout, stop.id, toDate), doneMessage: `${withDirectionParticle(labelOfDate(toDate))} 옮겼어요` });
-    },
-
-    openMoveUnplaced: (stop, day) => {
-      setMoveTarget({
-        stopId: stop.id,
-        name: stop.name,
-        fromDate: day.date,
-        detail: `지금 ${labelOfDate(day.date)} · 시간 안에 넣지 못한 장소`,
-        suggestedDate: stop.suggestedDate,
-      });
-    },
-  };
-
   const save = () => {
-    if (source.kind !== "draft") {
-      return;
-    }
+    adjustDraft.reset();
+    setRecalculatedFrom(null);
 
-    applyDraft.mutate(
-      { roomId, draftId: source.draftId, baseVersion },
+    saveDraft.mutate(
+      { roomId, request: toSaveScheduleRequest(draftKey, draft, layout) },
       {
         onSuccess: () => {
           toast.show({ message: "일정을 저장했어요" });
@@ -235,79 +222,92 @@ export function ScheduleEditor({ roomId, room, editable, recalculation }: Schedu
     );
   };
 
-  const renderActions = () => {
-    if (isScheduleConflict(applyDraft.error)) {
-      return <ConflictActions roomId={roomId} />;
-    }
+  /** 서버가 계산한 시각. 고친 날이거나 서버가 모르면 `null`. */
+  const timeTextOf = (item: ScheduleItem) => {
+    return selectedEdited || item.arrivalTime === null ? null : getItemTimeLabel(item);
+  };
 
-    const recalculateError = createDraft.isError ? (
-      <ErrorLine
-        message={getScheduleErrorMessage(createDraft.error, SCHEDULE_ERROR_FALLBACK.recalculate)}
-        onRetry={retryLastRecalculation}
-        testID="schedule-draft.recalculate-error"
-      />
-    ) : null;
+  const dayActions: DayActions = {
+    openMove: (item, name) => {
+      if (selectedLayoutDay === undefined) {
+        return;
+      }
+
+      const position = [`지금 ${labelOfDate(selectedLayoutDay.date)}`, timeTextOf(item)].filter(Boolean).join(" ");
+      setMoveTarget({ itemId: item.id, name, fromDate: selectedLayoutDay.date, detail: position });
+    },
+
+    openStay: (item, name) => {
+      const timeText = timeTextOf(item);
+      setStayTarget({ itemId: item.id, name, stayMinutes: item.stayMinutes, detail: timeText === null ? null : `지금 ${timeText}` });
+    },
+
+    startReorder: () => {
+      setReorderLayout(layout);
+    },
+  };
+
+  const openMoveUnassigned = (item: DraftLayoutItem) => {
+    setMoveTarget({ itemId: item.itemId, name: getPlaceName(places, item.roomPlaceId), fromDate: null, detail: "지금 일정에 넣지 않은 장소" });
+  };
+
+  const renderActions = () => {
+    if (isScheduleConflict(saveDraft.error) || isScheduleConflict(adjustDraft.error)) {
+      return <ConflictActions roomId={roomId} onRecreate={onRecreate} />;
+    }
 
     if (reorderLayout !== null) {
       return (
-        <>
-          {recalculateError}
-          <View className="w-full flex-row gap-2">
-            <Button
-              variant="outline"
-              size="lg"
-              className="flex-1"
-              disabled={recalculating}
+        <View className="w-full flex-row gap-2">
+          <Button
+            variant="outline"
+            size="lg"
+            className="flex-1"
 
-              onPress={() => {
-                setReorderLayout(null);
-                createDraft.reset();
-              }}
+            onPress={() => {
+              setReorderLayout(null);
+            }}
 
-              testID="schedule-draft.reorder-cancel"
-            >
-              <Text>취소</Text>
-            </Button>
-            <Button
-              size="lg"
-              className="flex-1"
-              disabled={isSameLayoutOrder(reorderLayout, layout)}
-              loading={recalculating}
-              loadingLabel="계산하는 중"
+            testID="schedule-draft.reorder-cancel"
+          >
+            <Text>취소</Text>
+          </Button>
+          <Button
+            size="lg"
+            className="flex-1"
+            disabled={isSameLayoutOrder(reorderLayout, layout)}
 
-              onPress={() => {
-                recalculate({ layout: reorderLayout, doneMessage: null });
-              }}
+            onPress={() => {
+              applyEdit(reorderLayout);
+              setReorderLayout(null);
+            }}
 
-              testID="schedule-draft.reorder-recalculate"
-            >
-              <Text>다시 계산</Text>
-            </Button>
-          </View>
-        </>
+            testID="schedule-draft.reorder-apply"
+          >
+            <Text>순서 적용</Text>
+          </Button>
+        </View>
       );
     }
 
     return (
       <>
-        {recalculation === null ? null : <RecalculationNotice progress={recalculation} />}
-        {recalculateError}
-        {applyDraft.isError ? <ErrorLine message={getScheduleErrorMessage(applyDraft.error, SCHEDULE_ERROR_FALLBACK.save)} testID="schedule-draft.apply-error" /> : null}
-        {source.kind === "saved" && !recalculating && !createDraft.isError ? (
-          <Text className="text-center text-caption text-muted-foreground">일정을 고치거나 다시 계산하면 저장할 수 있어요</Text>
+        {draft.recalculating ? <RecalculationNotice progress={progress} /> : null}
+        {recalculationFailed ? (
+          <ErrorLine message="다시 계산하지 못했어요. 잠시 후 다시 시도해 주세요." onRetry={recalculate} testID="schedule-draft.recalculate-failed" />
         ) : null}
+        {adjustDraft.isError ? (
+          <ErrorLine message={getScheduleErrorMessage(adjustDraft.error, SCHEDULE_ERROR_FALLBACK.recalculate)} onRetry={recalculate} testID="schedule-draft.recalculate-error" />
+        ) : null}
+        {saveDraft.isError ? <ErrorLine message={getScheduleErrorMessage(saveDraft.error, SCHEDULE_ERROR_FALLBACK.save)} testID="schedule-draft.apply-error" /> : null}
         <View className="w-full flex-row gap-2">
           <Button
             variant="outline"
             size="lg"
-            disabled={applyDraft.isPending || selectedDay === undefined}
+            disabled={saveDraft.isPending || selectedDay === undefined}
             loading={recalculating}
             loadingLabel="계산하는 중"
-
-            onPress={() => {
-              recalculate({ layout, doneMessage: null });
-            }}
-
+            onPress={recalculate}
             testID="schedule-draft.recalculate"
           >
             <Text>다시 계산</Text>
@@ -315,8 +315,8 @@ export function ScheduleEditor({ roomId, room, editable, recalculation }: Schedu
           <Button
             size="lg"
             className="flex-1"
-            disabled={source.kind !== "draft" || recalculating || selectedDay === undefined}
-            loading={applyDraft.isPending}
+            disabled={recalculating || selectedDay === undefined}
+            loading={saveDraft.isPending}
             loadingLabel="저장하는 중"
             onPress={save}
             testID="schedule-draft.apply"
@@ -328,46 +328,62 @@ export function ScheduleEditor({ roomId, room, editable, recalculation }: Schedu
     );
   };
 
+  const renderDay = () => {
+    if (selectedDay === undefined) {
+      return <Text className="px-5 text-body-sm text-foreground-secondary">일정에 넣은 날이 없어요</Text>;
+    }
+
+    return (
+      <View>
+        <DayChips
+          items={chipItems}
+          selectedDate={selectedDay.date}
+          onSelect={setSelectedDate}
+
+          onOpenPicker={() => {
+            setPickerOpen(true);
+          }}
+
+          testID="schedule-draft.days"
+        />
+        {reorderDay === undefined ? (
+          <DraftDay
+            day={selectedDay}
+            dayNumber={selectedIndex + 1}
+            uncalculated={selectedEdited}
+            draft={draft}
+            places={places}
+            locked={editingLocked}
+            actions={dayActions}
+          />
+        ) : (
+          <ReorderDay
+            day={reorderDay}
+            dayNumber={selectedIndex + 1}
+            places={places}
+
+            onMove={(itemId, direction) => {
+              setReorderLayout((current) => {
+                return current === null ? current : moveItemWithinDay(current, itemId, direction);
+              });
+            }}
+          />
+        )}
+      </View>
+    );
+  };
+
   return (
     <Screen>
-      <ScreenHeader title={source.kind === "saved" ? "일정 조정" : "일정 초안"} onBack={goBack} testID="schedule-draft.header" />
+      <ScreenHeader title={adjusting ? "일정 조정" : "일정 초안"} onBack={goBack} testID="schedule-draft.header" />
       <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-6 pt-4" testID="schedule-draft.review">
-        <EditorIntro source={source} schedule={schedule} />
-        <TransportChangedNotice room={room} schedule={schedule} />
-        {source.kind === "draft" && baseVersion !== null ? <ScheduleChangesNotice roomId={roomId} schedule={schedule} /> : null}
-        {selectedDay === undefined ? (
-          <Text className="px-5 text-body-sm text-foreground-secondary">일정에 넣은 날이 없어요</Text>
-        ) : (
-          <View>
-            <DayChips
-              items={chipItems}
-              selectedDate={selectedDay.date}
-              onSelect={setSelectedDate}
-
-              onOpenPicker={() => {
-                setPickerOpen(true);
-              }}
-
-              testID="schedule-draft.days"
-            />
-            {reorderDay === undefined ? (
-              <DraftDay day={selectedDay} dayNumber={selectedIndex + 1} schedule={schedule} days={moveDays} locked={editingLocked} actions={dayActions} />
-            ) : (
-              <ReorderDay
-                day={reorderDay}
-                dayNumber={selectedIndex + 1}
-                unplaced={selectedDay.unplaced}
-                locked={recalculating}
-
-                onMove={(stopId, direction) => {
-                  setReorderLayout((current) => {
-                    return current === null ? current : moveStopWithinDay(current, stopId, direction);
-                  });
-                }}
-              />
-            )}
-          </View>
+        <EditorIntro adjusting={adjusting} draft={draft} />
+        {room?.hasSchedule ? <ScheduleChangesNotice roomId={roomId} layout={layout} places={places} /> : null}
+        {editedDates.length === 0 && draft.schedule.warnings.length > 0 ? <WarningList warnings={draft.schedule.warnings} testID="schedule-draft.warnings" /> : null}
+        {layout.unassigned.length === 0 || reorderLayout !== null ? null : (
+          <UnassignedItems items={layout.unassigned} places={places} locked={editingLocked} onMove={openMoveUnassigned} />
         )}
+        {renderDay()}
       </ScrollView>
       <BottomCta className="border-t border-border">{renderActions()}</BottomCta>
       {selectedDay === undefined ? null : (
@@ -383,7 +399,7 @@ export function ScheduleEditor({ roomId, room, editable, recalculation }: Schedu
       <MoveStopSheet
         target={moveTarget}
         days={moveDays}
-        onMove={moveStop}
+        onMove={moveItem}
         onRemove={removeFromSchedule}
 
         onClose={() => {
@@ -404,40 +420,18 @@ export function ScheduleEditor({ roomId, room, editable, recalculation }: Schedu
 
 // #region 안내
 
-function toDayChipItems(days: readonly ScheduleDay[]): DayChipItem[] {
-  return days.map((day, index) => {
-    return { date: day.date, label: dayLabelOf(index), caption: `${day.stops.length}곳`, hasWarning: hasUnplacedStops(day) };
-  });
-}
-
-/** `자차로 이동해요 · 하루 일정 보통`. 모르는 값은 뺀다. */
-function getDraftSummary(schedule: Pick<ScheduleBody, "transportMode" | "pace">): string | null {
-  const parts: string[] = [];
-
-  if (schedule.transportMode !== "UNKNOWN") {
-    parts.push(`${withDirectionParticle(TRANSPORT_MODE_LABEL[schedule.transportMode])} 이동해요`);
-  }
-
-  if (schedule.pace !== "UNKNOWN") {
-    parts.push(`하루 일정 ${SCHEDULE_PACE_LABEL[schedule.pace]}`);
-  }
-
-  return parts.length === 0 ? null : parts.join(" · ");
-}
-
-function EditorIntro({ source, schedule }: { source: ScheduleSource; schedule: ScheduleBody }) {
-  const summary = getDraftSummary(schedule);
-  const saved = source.kind === "saved";
-
+function EditorIntro({ adjusting, draft }: { adjusting: boolean; draft: ReadyScheduleDraft }) {
   return (
     <View className="gap-2 px-5">
-      <Text accessibilityRole="header" className="text-h2 text-foreground">{saved ? "지금 여행방 일정이에요" : "일정 초안이에요"}</Text>
+      <Text accessibilityRole="header" className="text-h2 text-foreground">{adjusting ? "지금 여행방 일정에서 시작했어요" : "일정 초안이에요"}</Text>
       <Text className="text-body-sm text-foreground-secondary">
-        {saved
-          ? "장소를 다른 날로 옮기거나 머무는 시간·순서를 바꾸면 다시 계산해요. 저장하기 전에는 여행방 일정이 바뀌지 않아요."
+        {adjusting
+          ? "장소를 다른 날로 옮기거나 머무는 시간·순서를 바꾼 뒤 저장해 주세요. 저장하기 전에는 여행방 일정이 바뀌지 않아요."
           : "저장하면 여행방 일정이 돼요. 저장하기 전에는 지금 일정이 바뀌지 않아요."}
       </Text>
-      {summary === null ? null : <Text className="text-caption text-muted-foreground">{summary}</Text>}
+      {draft.transportMode === "UNKNOWN" ? null : (
+        <Text className="text-caption text-muted-foreground">{`${withDirectionParticle(TRANSPORT_MODE_LABEL[draft.transportMode])} 이동해요`}</Text>
+      )}
     </View>
   );
 }
@@ -451,32 +445,17 @@ function Notice({ children, testID }: { children: ReactNode; testID: string }) {
   );
 }
 
-/** 일정을 만든 뒤 여행방 이동 수단이 바뀌면 이동 시간이 맞지 않는다(ScheduleTimeline 체크리스트). */
-function TransportChangedNotice({ room, schedule }: { room: RoomDetail | undefined; schedule: ScheduleBody }) {
-  if (room === undefined || room.transportMode === "UNKNOWN" || schedule.transportMode === "UNKNOWN" || room.transportMode === schedule.transportMode) {
-    return null;
-  }
-
-  return (
-    <Notice testID="schedule-draft.transport-changed">
-      <Text className="text-caption text-foreground-secondary">
-        {`여행방 이동 수단이 ${withDirectionParticle(TRANSPORT_MODE_LABEL[room.transportMode])} 바뀌었어요. 다시 계산하면 이동 시간이 맞춰져요.`}
-      </Text>
-    </Notice>
-  );
-}
-
-function dayLabelsOf(schedule: ScheduleBody, dates: readonly LocalDate[]): string {
-  return schedule.days.flatMap((day, index) => {
+function dayLabelsOf(layout: DraftLayout, dates: readonly LocalDate[]): string {
+  return layout.days.flatMap((day, index) => {
     return dates.includes(day.date) ? [dayLabelOf(index)] : [];
   }).join(", ");
 }
 
 /** 이미 일정이 있는 여행방이면 저장했을 때 달라지는 점을 알린다. 지금 일정을 못 받아도 검토는 막지 않는다. */
-function ScheduleChangesNotice({ roomId, schedule }: { roomId: number; schedule: ScheduleBody }) {
+function ScheduleChangesNotice({ roomId, layout, places }: { roomId: number; layout: DraftLayout; places: SchedulePlaceLookup }) {
   const currentQuery = useRoomSchedule(roomId);
   const current = currentQuery.data;
-  const changes = current ? getScheduleChanges(current, schedule) : null;
+  const changes = current ? getScheduleChanges(current, layout) : null;
 
   return (
     <Notice testID="schedule-draft.changes">
@@ -484,12 +463,12 @@ function ScheduleChangesNotice({ roomId, schedule }: { roomId: number; schedule:
       {changes === null ? null : (
         <>
           <Text className="text-caption text-foreground-secondary">
-            {changes.changedDates.length === 0 ? "지금 일정과 장소·순서가 같아요" : `장소나 순서가 바뀌는 날: ${dayLabelsOf(schedule, changes.changedDates)}`}
+            {changes.changedDates.length === 0 ? "지금 일정과 장소·순서가 같아요" : `장소나 순서가 바뀌는 날: ${dayLabelsOf(layout, changes.changedDates)}`}
           </Text>
-          {changes.droppedStops.length === 0 ? null : (
+          {changes.droppedPlaceIds.length === 0 ? null : (
             <Text className="text-caption text-foreground-secondary">
-              {`일정에서 빠지는 장소: ${changes.droppedStops.map((stop) => {
-                return stop.name;
+              {`일정에서 빠지는 장소: ${changes.droppedPlaceIds.map((roomPlaceId) => {
+                return getPlaceName(places, roomPlaceId);
               }).join(", ")}`}
             </Text>
           )}
@@ -499,44 +478,131 @@ function ScheduleChangesNotice({ roomId, schedule }: { roomId: number; schedule:
   );
 }
 
+/** 서버가 붙인 경고(이동 시간·도착 시각을 모름, 종료 시각을 넘김). */
+function WarningList({ warnings, testID }: { warnings: readonly ScheduleWarning[]; testID: string }) {
+  return (
+    <View className="mx-5 gap-1 rounded-md bg-highlight-muted p-3" testID={testID}>
+      {warnings.map((warning) => {
+        return (
+          <View key={warning} className="flex-row gap-2">
+            <Icon as={TriangleAlert} size={16} className="mt-0.5 text-highlight" />
+            <Text accessibilityRole="alert" className="flex-1 text-caption text-highlight">{getScheduleWarningMessage(warning)}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+type UnassignedItemsProps = {
+  items: readonly DraftLayoutItem[];
+  places: SchedulePlaceLookup;
+  locked: boolean;
+  onMove: (item: DraftLayoutItem) => void;
+};
+
+/** 일정에 넣지 않은 장소. 서버가 시간 안에 넣지 못했거나 사용자가 뺀 항목이다(서버는 이유를 주지 않는다). */
+function UnassignedItems({ items, places, locked, onMove }: UnassignedItemsProps) {
+  return (
+    <View className="mx-5 gap-3 rounded-md bg-highlight-muted p-3" testID="schedule-draft.unplaced">
+      <View className="flex-row items-center gap-2">
+        <Icon as={TriangleAlert} size={16} className="text-highlight" />
+        <Text accessibilityRole="alert" className="flex-1 text-label text-highlight">{`일정에 넣지 않은 장소 ${items.length}곳`}</Text>
+      </View>
+      <Text className="pl-6 text-caption text-foreground-secondary">시간 안에 넣지 못했거나 일정에서 뺀 장소예요. 넣을 날을 고를 수 있어요.</Text>
+      {items.map((item) => {
+        const name = getPlaceName(places, item.roomPlaceId);
+
+        return (
+          <View key={item.itemId} className="gap-0.5 pl-6">
+            <Text className="text-label text-foreground">{name}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${name}, 넣을 날 고르기`}
+              accessibilityState={{ disabled: locked }}
+              disabled={locked}
+              className="h-touch flex-row items-center gap-1 self-start"
+
+              onPress={() => {
+                onMove(item);
+              }}
+
+              testID={`schedule-draft.unplaced-move-${item.itemId}`}
+            >
+              <Text className={cn("text-label", locked ? "text-disabled-foreground" : "text-primary")}>넣을 날 고르기</Text>
+              <Icon as={ChevronRight} size={16} className={locked ? "text-disabled-foreground" : "text-primary"} />
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // #endregion
 
 // #region 하루 일정과 조정
 
-/** `10:00–18:00 · 5곳 · 머무는 시간 4시간 30분 · 이동 1시간 10분`. 이동 시간을 모르면 "정보 없음". */
-function getDaySummary(day: ScheduleDay): string {
-  const travel = day.totalTravelMinutes === null ? "이동 시간 정보 없음" : `이동 ${formatDuration(day.totalTravelMinutes)}`;
-  return `${day.startTime}–${day.endTime} · ${day.stops.length}곳 · 머무는 시간 ${formatDuration(day.totalStayMinutes)} · ${travel}`;
+/** `10:00–18:00 · 5곳 · 머무는 시간 4시간 30분 · 이동 1시간 10분`. 고친 날은 이동 시간을 빼고, 서버가 모르는 구간이 있으면 "정보 없음". */
+function getDaySummary(day: ScheduleDay, uncalculated: boolean): string {
+  const parts: string[] = [];
+
+  if (day.startTime !== null && day.endTime !== null) {
+    parts.push(`${day.startTime}–${day.endTime}`);
+  }
+
+  parts.push(`${day.items.length}곳`);
+
+  if (day.items.length > 0) {
+    parts.push(`머무는 시간 ${formatDuration(getTotalStayMinutes(day.items))}`);
+  }
+
+  if (!uncalculated && day.legs.length > 0) {
+    const travel = getTotalTravelMinutes(day.legs);
+    parts.push(travel === null ? "이동 시간 정보 없음" : `이동 ${formatDuration(travel)}`);
+  }
+
+  return parts.join(" · ");
 }
 
 type DraftDayProps = {
   day: ScheduleDay;
   dayNumber: number;
-  schedule: ScheduleBody;
-  days: readonly MoveDayOption[];
+  /** 고친 뒤 다시 계산하지 않은 날. */
+  uncalculated: boolean;
+  draft: ReadyScheduleDraft;
+  places: SchedulePlaceLookup;
   locked: boolean;
   actions: DayActions;
 };
 
-function DraftDay({ day, dayNumber, schedule, days, locked, actions }: DraftDayProps) {
+function DraftDay({ day, dayNumber, uncalculated, draft, places, locked, actions }: DraftDayProps) {
   return (
     <View className="gap-3" testID={`schedule-draft.day-${day.date}`}>
       <View className="gap-1 px-5">
         <Text accessibilityRole="header" className="text-label text-foreground">{`${dayNumber}일차 ${formatShortMonthDay(day.date)}`}</Text>
-        <Text className="text-caption text-foreground-secondary tabular-nums">{getDaySummary(day)}</Text>
+        <Text className="text-caption text-foreground-secondary tabular-nums">{getDaySummary(day, uncalculated)}</Text>
       </View>
-      {hasUnplacedStops(day) ? <UnplacedStops day={day} days={days} locked={locked} actions={actions} /> : null}
-      {day.stops.length === 0 ? (
+      {uncalculated ? (
+        <Notice testID="schedule-draft.uncalculated">
+          <Text className="text-caption text-foreground-secondary">이날은 고친 뒤 아직 계산하지 않았어요. 다시 계산하면 도착·출발 시각과 이동 시간을 볼 수 있어요.</Text>
+        </Notice>
+      ) : null}
+      {day.warnings.length === 0 ? null : <WarningList warnings={day.warnings} testID="schedule-draft.day-warnings" />}
+      {day.items.length === 0 ? (
         <Text className="px-5 text-caption text-muted-foreground">이날은 넣은 장소가 없어요</Text>
       ) : (
         <>
           <ActionLegend />
           <ScheduleDayTimeline
             day={day}
-            transportMode={schedule.transportMode}
+            places={places}
+            startPoint={draft.startPoint}
+            endPoint={draft.endPoint}
+            uncalculated={uncalculated}
 
-            renderStopActions={(stop) => {
-              return <StopActions stop={stop} day={day} locked={locked} actions={actions} />;
+            renderItemActions={(item, name) => {
+              return <StopActions item={item} name={name} locked={locked} actions={actions} />;
             }}
 
             testID="schedule-draft.timeline"
@@ -589,146 +655,91 @@ function IconAction({ icon, label, disabled, onPress, testID }: IconActionProps)
   );
 }
 
-function StopActions({ stop, day, locked, actions }: { stop: ScheduleStop; day: ScheduleDay; locked: boolean; actions: DayActions }) {
+function StopActions({ item, name, locked, actions }: { item: ScheduleItem; name: string; locked: boolean; actions: DayActions }) {
   return (
     <View className="flex-row items-center gap-2">
       <IconAction
         icon={ArrowLeftRight}
-        label={`${stop.name} 다른 날로 옮기기`}
+        label={`${name} 다른 날로 옮기기`}
         disabled={locked}
 
         onPress={() => {
-          actions.openMove(stop, day);
+          actions.openMove(item, name);
         }}
 
-        testID={`schedule-draft.move-${stop.id}`}
+        testID={`schedule-draft.move-${item.id}`}
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${stop.name} 머무는 시간 ${formatDuration(stop.stayMinutes)}, 바꾸기`}
+        accessibilityLabel={`${name} 머무는 시간 ${formatDuration(item.stayMinutes)}, 바꾸기`}
         accessibilityState={{ disabled: locked }}
         disabled={locked}
         hitSlop={{ top: 6, bottom: 6 }}
         className="h-8 flex-row items-center gap-1 rounded-sm bg-muted px-2 active:bg-accent"
 
         onPress={() => {
-          actions.openStay(stop);
+          actions.openStay(item, name);
         }}
 
-        testID={`schedule-draft.stay-${stop.id}`}
+        testID={`schedule-draft.stay-${item.id}`}
       >
         <Icon as={Hourglass} size={14} className={locked ? "text-disabled-foreground" : "text-icon"} />
-        <Text className="text-label-sm text-foreground tabular-nums">{`${stop.stayMinutes}분`}</Text>
+        <Text className="text-label-sm text-foreground tabular-nums">{`${item.stayMinutes}분`}</Text>
       </Pressable>
-      <IconAction icon={GripVertical} label={`${stop.name} 순서 바꾸기`} disabled={locked} onPress={actions.startReorder} testID={`schedule-draft.reorder-${stop.id}`} />
-    </View>
-  );
-}
-
-/** 시간 안에 다 넣지 못한 장소와 서버가 정한 이유(명세 §7). 서버가 권한 날이 있으면 바로 옮기고, 없으면 날을 고르게 한다. */
-function UnplacedStops({ day, days, locked, actions }: { day: ScheduleDay; days: readonly MoveDayOption[]; locked: boolean; actions: DayActions }) {
-  return (
-    <View className="mx-5 gap-3 rounded-md bg-highlight-muted p-3" testID="schedule-draft.unplaced">
-      <View className="flex-row items-center gap-2">
-        <Icon as={TriangleAlert} size={16} className="text-highlight" />
-        <Text accessibilityRole="alert" className="flex-1 text-label text-highlight">{`시간 안에 넣지 못한 장소 ${day.unplaced.length}곳`}</Text>
-      </View>
-      {day.unplaced.map((stop) => {
-        const suggested = days.find((option) => {
-          return option.date === stop.suggestedDate && option.date !== day.date;
-        });
-
-        const label = suggested === undefined ? "다른 날로 옮기기" : `${withDirectionParticle(suggested.label)} 옮기기`;
-
-        return (
-          <View key={stop.id} className="gap-0.5 pl-6">
-            <Text className="text-label text-foreground">{stop.name}</Text>
-            <Text className="text-caption text-foreground-secondary">{stop.reason}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${stop.name}, ${label}`}
-              accessibilityState={{ disabled: locked }}
-              disabled={locked}
-              className="h-touch flex-row items-center gap-1 self-start"
-
-              onPress={() => {
-                if (suggested === undefined) {
-                  actions.openMoveUnplaced(stop, day);
-                  return;
-                }
-
-                actions.moveUnplaced(stop, suggested.date);
-              }}
-
-              testID={`schedule-draft.unplaced-move-${stop.id}`}
-            >
-              <Text className={cn("text-label", locked ? "text-disabled-foreground" : "text-primary")}>{label}</Text>
-              <Icon as={ChevronRight} size={16} className={locked ? "text-disabled-foreground" : "text-primary"} />
-            </Pressable>
-          </View>
-        );
-      })}
+      <IconAction icon={GripVertical} label={`${name} 순서 바꾸기`} disabled={locked} onPress={actions.startReorder} testID={`schedule-draft.reorder-${item.id}`} />
     </View>
   );
 }
 
 type ReorderDayProps = {
-  day: ScheduleLayoutDay;
+  day: DraftLayoutDay;
   dayNumber: number;
-  unplaced: readonly UnplacedStop[];
-  locked: boolean;
-  onMove: (stopId: number, direction: -1 | 1) => void;
+  places: SchedulePlaceLookup;
+  onMove: (itemId: number, direction: -1 | 1) => void;
 };
 
-/**
- * 순서 바꾸기(W14 ⠿). 드래그 대신 위·아래 버튼으로 옮긴다. 시각은 다시 계산해야 맞으므로 이 동안에는 보여 주지 않는다.
- * 넣지 못한 장소도 뼈대 끝에 있어 함께 옮길 수 있다.
- */
-function ReorderDay({ day, dayNumber, unplaced, locked, onMove }: ReorderDayProps) {
-  const unplacedIds = new Set(unplaced.map((stop) => {
-    return stop.id;
-  }));
-
+/** 순서 바꾸기(W14 ⠿). 드래그 대신 위·아래 버튼으로 옮긴다. 시각은 다시 계산해야 맞으므로 이 동안에는 보여 주지 않는다. */
+function ReorderDay({ day, dayNumber, places, onMove }: ReorderDayProps) {
   return (
     <View className="gap-3 px-5" testID="schedule-draft.reorder">
       <View className="gap-1">
         <Text accessibilityRole="header" className="text-label text-foreground">{`${dayNumber}일차 순서 바꾸기`}</Text>
-        <Text className="text-caption text-foreground-secondary">위·아래 버튼으로 순서를 바꾼 뒤 다시 계산하면 시각과 이동 시간이 맞춰져요.</Text>
+        <Text className="text-caption text-foreground-secondary">위·아래 버튼으로 순서를 바꿔 적용한 뒤 다시 계산하면 시각과 이동 시간이 맞춰져요.</Text>
       </View>
-      {day.stops.length === 0 ? <Text className="text-caption text-muted-foreground">이날은 넣은 장소가 없어요</Text> : null}
-      {day.stops.map((stop, index) => {
-        const stayLabel = `머무는 시간 ${formatDuration(stop.stayMinutes)}`;
+      {day.items.length === 0 ? <Text className="text-caption text-muted-foreground">이날은 넣은 장소가 없어요</Text> : null}
+      {day.items.map((item, index) => {
+        const name = getPlaceName(places, item.roomPlaceId);
 
         return (
-          <View key={stop.id} className="flex-row items-center gap-3 rounded-md border border-border bg-card py-1 pl-3 pr-1" testID={`schedule-draft.reorder-row-${stop.id}`}>
+          <View key={item.itemId} className="flex-row items-center gap-3 rounded-md border border-border bg-card py-1 pl-3 pr-1" testID={`schedule-draft.reorder-row-${item.itemId}`}>
             <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
               <Text className="text-micro text-primary-foreground">{index + 1}</Text>
             </View>
             <View className="flex-1 gap-0.5 py-2">
-              <Text className="text-label text-foreground">{stop.name}</Text>
-              <Text className="text-caption text-foreground-secondary">{unplacedIds.has(stop.id) ? `${stayLabel} · 시간 안에 넣지 못한 장소` : stayLabel}</Text>
+              <Text className="text-label text-foreground">{name}</Text>
+              <Text className="text-caption text-foreground-secondary">{`머무는 시간 ${formatDuration(item.stayMinutes)}`}</Text>
             </View>
             <IconAction
               icon={ChevronUp}
-              label={`${stop.name} 앞으로`}
-              disabled={locked || index === 0}
+              label={`${name} 앞으로`}
+              disabled={index === 0}
 
               onPress={() => {
-                onMove(stop.id, -1);
+                onMove(item.itemId, -1);
               }}
 
-              testID={`schedule-draft.reorder-up-${stop.id}`}
+              testID={`schedule-draft.reorder-up-${item.itemId}`}
             />
             <IconAction
               icon={ChevronDown}
-              label={`${stop.name} 뒤로`}
-              disabled={locked || index === day.stops.length - 1}
+              label={`${name} 뒤로`}
+              disabled={index === day.items.length - 1}
 
               onPress={() => {
-                onMove(stop.id, 1);
+                onMove(item.itemId, 1);
               }}
 
-              testID={`schedule-draft.reorder-down-${stop.id}`}
+              testID={`schedule-draft.reorder-down-${item.itemId}`}
             />
           </View>
         );
@@ -777,12 +788,15 @@ function RecalculationNotice({ progress }: { progress: RecalculationProgress }) 
   );
 }
 
-/** 그사이 일행이 일정을 바꿔 저장이 거절됐다(409 C008). 덮어쓰지 않고 바뀐 일정을 보거나 다시 만들게 한다. */
-function ConflictActions({ roomId }: { roomId: number }) {
+/**
+ * 그사이 여행방(정보·후보·일정)이나 초안이 바뀌어 다시 계산·저장이 거절됐다(409 C004).
+ * 덮어쓰지 않고, 반영되지 않았다는 것을 알린 뒤 바뀐 일정을 보거나 지금 여행방으로 초안을 다시 만들게 한다.
+ */
+function ConflictActions({ roomId, onRecreate }: { roomId: number; onRecreate: () => void }) {
   return (
     <>
       <Text accessibilityRole="alert" className="text-center text-caption text-destructive" testID="schedule-draft.conflict">
-        그사이 일행이 일정을 바꿔서 이 초안을 저장하지 못했어요. 바뀐 일정을 보고 다시 만들어 주세요.
+        그사이 일행이 여행방을 바꿔서 이 초안을 반영하지 못했어요. 바뀐 일정을 보고 다시 만들어 주세요.
       </Text>
       <View className="w-full flex-row gap-2">
         <Button
@@ -798,16 +812,7 @@ function ConflictActions({ roomId }: { roomId: number }) {
         >
           <Text>바뀐 일정 보기</Text>
         </Button>
-        <Button
-          size="lg"
-          className="flex-1"
-
-          onPress={() => {
-            goToScheduleConditions(roomId);
-          }}
-
-          testID="schedule-draft.recreate"
-        >
+        <Button size="lg" className="flex-1" onPress={onRecreate} testID="schedule-draft.recreate">
           <Text>다시 만들기</Text>
         </Button>
       </View>

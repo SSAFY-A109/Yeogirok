@@ -6,11 +6,14 @@ import { FilterChip } from "@/components/ui/filter-chip";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import type { Category, Region } from "@/features/common/model";
-import type { RecommendationPreference, RecommendationPreferenceDto } from "@/features/recommendation/model";
+import type { RecommendationConditions, RecommendationPreference } from "@/features/recommendation/model";
 import { hasTripDates, TRANSPORT_MODE_LABEL, type RoomDetail } from "@/features/room/model";
 import { formatDateRange } from "@/lib/date";
 
-/** 추천 조건 입력값. 지역은 시/도 → 시/군/구 2단으로 고른다(시/도를 고르기 전에는 시/군/구를 고를 수 없다). */
+/**
+ * 추천 조건 입력값. 지역은 시/도 → 시/군/구 2단으로 고른다(시/도를 고르기 전에는 시/군/구를 고를 수 없다).
+ * 지역은 사용자가 직접 고른다(팀 확정 정책). 담은 장소로 미리 골라 두지 않고, 전에 저장한 값만 되살린다.
+ */
 export type RecommendConditionsValue = {
   categoryCodes: string[];
   provinceCode: string | null;
@@ -65,12 +68,37 @@ export function getInitialConditions(
   };
 }
 
-/** 시/군/구를 골랐으면 그 코드, 시/도만 골랐으면 시/도 코드, 아니면 `null`을 보낸다. */
-export function toRecommendationRequest(conditions: RecommendConditionsValue): RecommendationPreferenceDto {
-  return {
-    categoryCodes: conditions.categoryCodes,
-    regionCode: conditions.districtCode ?? conditions.provinceCode ?? null,
-  };
+/** 추천을 받으려면 더 골라야 하는 것의 안내 문구. 카테고리 1개 이상과 시/군/구를 모두 골랐으면 `null`. */
+export function getMissingConditionMessage(conditions: RecommendConditionsValue): string | null {
+  if (conditions.categoryCodes.length === 0) {
+    return "좋아하는 곳을 1개 이상 골라 주세요.";
+  }
+
+  if (conditions.districtCode === null) {
+    return "추천받을 지역을 시/군/구까지 골라 주세요.";
+  }
+
+  return null;
+}
+
+/** 추천에 보낼 조건(카테고리 1개 이상 + 시/군/구 코드). 아직 다 고르지 않았으면 `null`. */
+export function toRecommendationConditions(conditions: RecommendConditionsValue): RecommendationConditions | null {
+  if (conditions.categoryCodes.length === 0 || conditions.districtCode === null) {
+    return null;
+  }
+
+  return { categoryCodes: conditions.categoryCodes, regionCode: conditions.districtCode };
+}
+
+/** 고른 카테고리의 이름(공통 카테고리 목록 순서). 결과 화면의 "○○ 기준" 줄에 쓴다. */
+export function getSelectedCategoryNames(conditions: RecommendConditionsValue, categories: readonly Category[]): string[] {
+  return categories
+    .filter((category) => {
+      return conditions.categoryCodes.includes(category.code);
+    })
+    .map((category) => {
+      return category.name;
+    });
 }
 
 /** 처리 중 화면의 "고른 조건" 칩 문구(카테고리 이름, 지역 이름). */
@@ -79,13 +107,7 @@ export function getConditionLabels(
   categories: readonly Category[],
   regions: readonly Region[],
 ): string[] {
-  const categoryLabels = categories
-    .filter((category) => {
-      return conditions.categoryCodes.includes(category.code);
-    })
-    .map((category) => {
-      return category.name;
-    });
+  const categoryLabels = getSelectedCategoryNames(conditions, categories);
 
   const province = regions.find((region) => {
     return region.code === conditions.provinceCode;
@@ -113,7 +135,7 @@ type RecommendConditionsProps = {
 /** AI 추천 조건 입력(Figma W10). 지역·기간·이동 수단은 여행방 값을 보여 준다. */
 export function RecommendConditions({ room, placeCount, categories, regions, value, onChange }: RecommendConditionsProps) {
   const dateLabel = hasTripDates(room) ? formatDateRange(room.startDate, room.endDate, { weekday: false }) : "날짜 미정";
-  const transportIcon = room.transportMode === "PUBLIC_TRANSIT" ? Bus : Car;
+  const transportIcon = room.transportMode === "TRANSIT" ? Bus : Car;
 
   const selectedProvince = regions.find((region) => {
     return region.code === value.provinceCode;

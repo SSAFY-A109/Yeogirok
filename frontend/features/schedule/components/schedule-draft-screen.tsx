@@ -1,24 +1,23 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
-import { isApiError } from "@/api/errors";
 import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useRoom } from "@/features/room/api/queries";
-import { useRoomSchedule, useScheduleDraft } from "@/features/schedule/api/queries";
-import { ScheduleEditor, type EditableSchedule, type RecalculationProgress } from "@/features/schedule/components/schedule-editor";
+import { useAllRoomPlaces, useRoom } from "@/features/room/api/queries";
+import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
+import { useSavedScheduleDraft, useScheduleDraft } from "@/features/schedule/api/queries";
+import { ScheduleEditor } from "@/features/schedule/components/schedule-editor";
 import { ScheduleProcessing } from "@/features/schedule/components/schedule-processing";
-import { getDraftFailureMessage, getScheduleErrorMessage } from "@/features/schedule/errors";
-import type { RoomSchedule, ScheduleDraft } from "@/features/schedule/model";
-import { goToScheduleConditions, showSchedule } from "@/features/schedule/navigation";
-import type { ScheduleSource } from "@/features/schedule/route-params";
+import { getDraftFailureMessage, getScheduleErrorMessage, isDraftNotFound, SCHEDULE_ERROR_FALLBACK } from "@/features/schedule/errors";
+import { toPlaceLookup } from "@/features/schedule/model";
+import { goToScheduleConditions } from "@/features/schedule/navigation";
+import { KEEP_SAVED_PARAM, type ScheduleSource } from "@/features/schedule/route-params";
 
 const TITLE = "일정 초안";
-const NOT_FOUND_STATUS = 404;
 
 function goBack() {
   router.back();
@@ -27,132 +26,65 @@ function goBack() {
 type ScheduleDraftScreenProps = {
   /** 검증한 라우트 파라미터. 잘못된 id면 `null`. */
   roomId: number | null;
-  /** 보여 줄 일정. 잘못된 초안 id면 `null`. */
+  /** 보여 줄 일정. 잘못된 초안 키면 `null`. */
   source: ScheduleSource | null;
-  /** 다시 계산하기 전에 보던 일정. 새 초안이 끝날 때까지 이 일정을 대신 보여 준다. */
-  from: ScheduleSource | null;
 };
 
 /**
- * 일정 초안(Figma W14, TRP-08·09·COM-05). AI가 만든 초안을 보거나("AI로 일정 만들기"),
- * 저장된 일정에서 시작해 고친다("일정 조정하기", `draftId` 없음). 저장하기 전에는 여행방 일정을 바꾸지 않는다.
+ * 일정 초안(Figma W14, TRP-08·09·COM-05). 만든 초안을 검토·조정하거나("AI로 일정 만들기"),
+ * 저장된 일정을 이어받은 초안을 만들어 고친다("일정 조정하기", `draftKey` 없음). 저장하기 전에는 여행방 일정을 바꾸지 않는다.
  */
-export function ScheduleDraftScreen({ roomId, source, from }: ScheduleDraftScreenProps) {
+export function ScheduleDraftScreen({ roomId, source }: ScheduleDraftScreenProps) {
   if (roomId === null || source === null) {
     return <DraftNotFound />;
   }
 
-  return <ScheduleDraftContent roomId={roomId} source={source} from={from} />;
-}
-
-// #region 보여 줄 상태
-
-type ScheduleView =
-  | { kind: "loading" }
-  | { kind: "not-found" }
-  | { kind: "error"; error: unknown; retrying: boolean; retry: () => void }
-  | { kind: "no-schedule" }
-  | { kind: "processing"; checking: boolean; connectionTrouble: boolean; checkAgain: () => void }
-  | { kind: "failed"; failureCode: string | null; from: ScheduleSource | null }
-  | { kind: "unknown"; checking: boolean; checkAgain: () => void }
-  | { kind: "ready"; editable: EditableSchedule; recalculation: RecalculationProgress | null };
-
-function toSavedEditable(schedule: RoomSchedule | null | undefined): EditableSchedule | null {
-  return schedule ? { schedule, source: { kind: "saved" }, baseVersion: schedule.version } : null;
-}
-
-function toDraftEditable(draft: ScheduleDraft | undefined): EditableSchedule | null {
-  return draft?.status === "COMPLETED" ? { schedule: draft.schedule, source: { kind: "draft", draftId: draft.id }, baseVersion: draft.baseVersion } : null;
-}
-
-/**
- * 보여 줄 상태를 정한다. 다시 계산한 초안(`from`이 있음)이 처리 중이면 처리 중 화면 대신
- * 이전 일정을 그대로 두고 진행만 알려, 고치던 화면(고른 날·스크롤)이 유지되게 한다.
- */
-function useScheduleView(roomId: number, source: ScheduleSource, from: ScheduleSource | null): ScheduleView {
-  const savedQuery = useRoomSchedule(roomId, { enabled: source.kind === "saved" || from?.kind === "saved" });
-  const draftQuery = useScheduleDraft(roomId, source.kind === "draft" ? source.draftId : null);
-  const fromDraftQuery = useScheduleDraft(roomId, from?.kind === "draft" ? from.draftId : null);
-  const savedEditable = toSavedEditable(savedQuery.data);
-
   if (source.kind === "saved") {
-    if (savedQuery.data === null) {
-      return { kind: "no-schedule" };
-    }
-
-    if (savedEditable !== null) {
-      return { kind: "ready", editable: savedEditable, recalculation: null };
-    }
-
-    if (savedQuery.isError) {
-      return {
-        kind: "error",
-        error: savedQuery.error,
-        retrying: savedQuery.isFetching,
-
-        retry: () => {
-          void savedQuery.refetch();
-        },
-      };
-    }
-
-    return { kind: "loading" };
+    return <SavedScheduleAdjustment roomId={roomId} />;
   }
 
-  const draft = draftQuery.data;
+  return (
+    <ScheduleDraftContent
+      roomId={roomId}
+      draftKey={source.draftKey}
+      adjusting={false}
 
-  const checkAgain = () => {
-    void draftQuery.refetch();
+      onRecreate={() => {
+        goToScheduleConditions(roomId);
+      }}
+    />
+  );
+}
+
+/** "일정 조정하기". 저장된 일정을 이어받는 초안을 만들고(API-037 `fixedItems`) 같은 편집기로 고친다. */
+function SavedScheduleAdjustment({ roomId }: { roomId: number }) {
+  const startQuery = useSavedScheduleDraft(roomId);
+  const start = startQuery.data;
+
+  const restart = () => {
+    void startQuery.refetch();
   };
 
-  if (draft === undefined && draftQuery.isError) {
-    return isApiError(draftQuery.error) && draftQuery.error.status === NOT_FOUND_STATUS
-      ? { kind: "not-found" }
-      : { kind: "error", error: draftQuery.error, retrying: draftQuery.isFetching, retry: checkAgain };
+  if (startQuery.isFetching) {
+    return <DraftLoading />;
   }
 
-  if (draft === undefined || draft.status === "PROCESSING") {
-    const previous = from === null ? null : from.kind === "saved" ? savedEditable : toDraftEditable(fromDraftQuery.data);
-
-    if (previous !== null) {
-      return { kind: "ready", editable: previous, recalculation: { checking: draftQuery.isFetching, connectionTrouble: draftQuery.isError, onCheckAgain: checkAgain } };
-    }
-
-    return draft === undefined ? { kind: "loading" } : { kind: "processing", checking: draftQuery.isFetching, connectionTrouble: draftQuery.isError, checkAgain };
+  if (start === undefined) {
+    return (
+      <DraftMessage message={getScheduleErrorMessage(startQuery.error, SCHEDULE_ERROR_FALLBACK.draft)}>
+        <Button variant="outline" onPress={restart} testID="schedule-draft.retry">
+          <Text>다시 시도</Text>
+        </Button>
+      </DraftMessage>
+    );
   }
 
-  switch (draft.status) {
-    case "FAILED":
-      return { kind: "failed", failureCode: draft.failureCode, from };
-    case "COMPLETED":
-      return { kind: "ready", editable: { schedule: draft.schedule, source, baseVersion: draft.baseVersion }, recalculation: null };
-    case "UNKNOWN":
-      return { kind: "unknown", checking: draftQuery.isFetching, checkAgain };
-  }
-}
-
-// #endregion
-
-function ScheduleDraftContent({ roomId, source, from }: { roomId: number; source: ScheduleSource; from: ScheduleSource | null }) {
-  const view = useScheduleView(roomId, source, from);
-  const roomQuery = useRoom(roomId);
-
-  switch (view.kind) {
-    case "ready":
-      return <ScheduleEditor roomId={roomId} room={roomQuery.data} editable={view.editable} recalculation={view.recalculation} />;
-    case "loading":
-      return <DraftLoading />;
-    case "not-found":
-      return <DraftNotFound />;
-    case "error":
-      return (
-        <DraftMessage message={getScheduleErrorMessage(view.error)}>
-          <Button variant="outline" loading={view.retrying} loadingLabel="불러오는 중" onPress={view.retry} testID="schedule-draft.retry">
-            <Text>다시 시도</Text>
-          </Button>
-        </DraftMessage>
-      );
-    case "no-schedule":
+  switch (start.kind) {
+    case "DRAFT":
+      return <ScheduleDraftContent roomId={roomId} draftKey={start.draftKey} adjusting onRecreate={restart} />;
+    case "NEEDS_CONDITIONS":
+      return <Redirect href={{ pathname: "/rooms/[roomId]/schedule/new", params: { roomId: String(roomId), keep: KEEP_SAVED_PARAM } }} />;
+    case "NO_SCHEDULE":
       return (
         <DraftMessage message="아직 정한 일정이 없어요. AI로 일정 초안을 먼저 만들어 주세요.">
           <Button
@@ -168,64 +100,126 @@ function ScheduleDraftContent({ roomId, source, from }: { roomId: number; source
           </Button>
         </DraftMessage>
       );
-    case "processing":
+  }
+}
+
+type ScheduleDraftContentProps = {
+  roomId: number;
+  draftKey: string;
+  /** 저장된 일정에서 시작한 초안인지. */
+  adjusting: boolean;
+  /** 이 초안을 버리고 다시 만든다. */
+  onRecreate: () => void;
+};
+
+/**
+ * 초안 상태에 따라 처리 중·실패·편집기를 보여 준다. 다시 계산하는 중에는 서버가 마지막 계산 결과를 함께 주므로
+ * 처리 중 화면으로 바꾸지 않고 편집기를 그대로 둔다(고른 날·스크롤 유지).
+ */
+function ScheduleDraftContent({ roomId, draftKey, adjusting, onRecreate }: ScheduleDraftContentProps) {
+  const draftQuery = useScheduleDraft(roomId, draftKey);
+  const placesQuery = useAllRoomPlaces(roomId);
+  const roomQuery = useRoom(roomId);
+  const draft = draftQuery.data;
+
+  const checkAgain = () => {
+    void draftQuery.refetch();
+  };
+
+  if (draft === undefined) {
+    if (!draftQuery.isError) {
+      return <DraftLoading />;
+    }
+
+    if (isDraftNotFound(draftQuery.error)) {
+      return <DraftNotFound />;
+    }
+
+    return (
+      <DraftMessage message={getScheduleErrorMessage(draftQuery.error)}>
+        <Button variant="outline" loading={draftQuery.isFetching} loadingLabel="불러오는 중" onPress={checkAgain} testID="schedule-draft.retry">
+          <Text>다시 시도</Text>
+        </Button>
+      </DraftMessage>
+    );
+  }
+
+  switch (draft.status) {
+    case "PROCESSING":
       return (
         <DraftFrame>
           <ScheduleProcessing
             placeCount={roomQuery.data?.placeCount ?? null}
-            checking={view.checking}
-            connectionTrouble={view.connectionTrouble}
-            onCheckAgain={view.checkAgain}
+            checking={draftQuery.isFetching}
+            connectionTrouble={draftQuery.isError}
+            onCheckAgain={checkAgain}
           />
         </DraftFrame>
       );
-    case "failed":
-      return <DraftFailed roomId={roomId} failureCode={view.failureCode} from={view.from} />;
-    case "unknown":
+    case "FAILED":
+      return (
+        <DraftMessage message={getDraftFailureMessage(draft.errorCode)}>
+          <Button
+            variant="outline"
+
+            onPress={() => {
+              goToScheduleConditions(roomId, { keepSaved: adjusting });
+            }}
+
+            testID="schedule-draft.retry-conditions"
+          >
+            <Text>조건 다시 정하기</Text>
+          </Button>
+        </DraftMessage>
+      );
+    case "UNKNOWN":
       return (
         <DraftMessage message="일정 초안 상태를 확인하지 못했어요. 잠시 후 다시 확인해 주세요.">
-          <Button variant="outline" loading={view.checking} loadingLabel="확인하는 중" onPress={view.checkAgain} testID="schedule-draft.check-status">
+          <Button variant="outline" loading={draftQuery.isFetching} loadingLabel="확인하는 중" onPress={checkAgain} testID="schedule-draft.check-status">
             <Text>다시 확인</Text>
           </Button>
         </DraftMessage>
       );
+    case "READY":
+      break;
   }
-}
 
-/** 초안 작업 실패. 다시 계산하다 실패했으면 고치던 일정으로, 처음 만들다 실패했으면 조건 화면으로 보낸다. */
-function DraftFailed({ roomId, failureCode, from }: { roomId: number; failureCode: string | null; from: ScheduleSource | null }) {
-  if (from !== null) {
+  if (placesQuery.data === undefined) {
+    if (!placesQuery.isError) {
+      return <DraftLoading />;
+    }
+
     return (
-      <DraftMessage message={getDraftFailureMessage(failureCode)}>
+      <DraftMessage message={getRoomErrorMessage(placesQuery.error, ROOM_ERROR_FALLBACK.load)}>
         <Button
           variant="outline"
+          loading={placesQuery.isFetching}
+          loadingLabel="불러오는 중"
 
           onPress={() => {
-            showSchedule(from);
+            void placesQuery.refetch();
           }}
 
-          testID="schedule-draft.back-to-previous"
+          testID="schedule-draft.places-retry"
         >
-          <Text>고치던 일정으로 돌아가기</Text>
+          <Text>다시 시도</Text>
         </Button>
       </DraftMessage>
     );
   }
 
   return (
-    <DraftMessage message={getDraftFailureMessage(failureCode)}>
-      <Button
-        variant="outline"
-
-        onPress={() => {
-          goToScheduleConditions(roomId);
-        }}
-
-        testID="schedule-draft.retry-conditions"
-      >
-        <Text>조건 다시 정하기</Text>
-      </Button>
-    </DraftMessage>
+    <ScheduleEditor
+      key={draftKey}
+      roomId={roomId}
+      draftKey={draftKey}
+      room={roomQuery.data}
+      draft={draft}
+      places={toPlaceLookup(placesQuery.data)}
+      adjusting={adjusting}
+      progress={{ checking: draftQuery.isFetching, connectionTrouble: draftQuery.isError, onCheckAgain: checkAgain }}
+      onRecreate={onRecreate}
+    />
   );
 }
 

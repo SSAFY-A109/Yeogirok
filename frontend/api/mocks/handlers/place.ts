@@ -1,37 +1,65 @@
 import { delay, http } from "msw";
 
+import type { PlaceDto, SearchPlacesResponseDto } from "../../../features/place/model";
+import type { RoomPlaceInfoDto } from "../../../features/room/model";
+
 import { placeCatalog } from "../fixtures/place";
 import { fail, MOCK_DELAY_MS, ok } from "./respond";
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 
+/** 검색(API-026)·추천(API-034) 응답의 장소 모양. 카테고리 이름과 지역은 주지 않는다. */
+export function toPlaceDto(place: RoomPlaceInfoDto): PlaceDto {
+  return {
+    provider: place.provider,
+    providerPlaceId: place.providerPlaceId,
+    name: place.name,
+    latitude: place.latitude,
+    longitude: place.longitude,
+    address: place.address,
+    categoryCode: place.categoryCode,
+    imageUrl: place.imageUrl,
+    imageAttribution: place.imageAttribution,
+  };
+}
+
 export const placeHandlers = [
   http.get("*/api/v1/places", async ({ request }) => {
     await delay(MOCK_DELAY_MS);
     const url = new URL(request.url);
-    const keyword = url.searchParams.get("keyword")?.trim() ?? "";
-    const size = Number(url.searchParams.get("size") ?? DEFAULT_PAGE_SIZE);
+    const query = url.searchParams.get("q")?.trim() ?? "";
+    const regionCode = url.searchParams.get("regionCode");
+    const limit = Number(url.searchParams.get("limit") ?? DEFAULT_PAGE_SIZE);
     const offset = Number(url.searchParams.get("cursor") ?? 0);
 
-    if (keyword === "") {
-      return fail(400, "C001", "keyword는 필수입니다.");
+    if (query === "") {
+      return fail(400, "P002", "장소 검색어 조건이 올바르지 않습니다.");
     }
 
-    if (!Number.isInteger(size) || size < 1 || size > MAX_PAGE_SIZE) {
-      return fail(400, "C011", "페이지 크기 범위를 벗어났습니다.");
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
+      return fail(400, "C007", "페이지 크기 범위를 벗어났습니다.");
     }
 
     if (!Number.isInteger(offset) || offset < 0) {
-      return fail(400, "C010", "커서가 올바르지 않습니다.");
+      return fail(400, "C006", "커서가 올바르지 않습니다.");
     }
 
     const matched = placeCatalog.filter((place) => {
-      return place.name.includes(keyword) || (place.address?.includes(keyword) ?? false);
+      const matchesQuery = place.name.includes(query) || (place.address?.includes(query) ?? false);
+      const matchesRegion = regionCode === null || (place.regionCode?.startsWith(regionCode) ?? false);
+      return matchesQuery && matchesRegion;
     });
 
-    const items = matched.slice(offset, offset + size);
+    const items = matched.slice(offset, offset + limit).map(toPlaceDto);
     const nextOffset = offset + items.length;
-    return ok({ items, nextCursor: nextOffset < matched.length ? String(nextOffset) : null });
+
+    const response: SearchPlacesResponseDto = {
+      items,
+      nextCursor: nextOffset < matched.length ? String(nextOffset) : null,
+      totalCount: matched.length,
+    };
+
+    return ok(response);
   }),
 ];

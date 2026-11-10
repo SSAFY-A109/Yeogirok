@@ -1,48 +1,29 @@
 type RouteParam = string | string[] | undefined;
 
-/** 라우트 파라미터의 일정 초안 id를 검증한다. 숫자 id가 아니면 `null`. */
-export function parseDraftId(value: RouteParam): number | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-
-  if (raw === undefined || !/^\d+$/.test(raw)) {
-    return null;
-  }
-
-  const id = Number(raw);
-  return Number.isSafeInteger(id) ? id : null;
+function firstValue(value: RouteParam): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
-/** 일정 초안 화면(W14)이 보여 주는 일정. 여행방에 저장된 일정이거나 초안이다. */
-export type ScheduleSource = { kind: "saved" } | { kind: "draft"; draftId: number };
+/** 초안 키로 받을 수 있는 글자와 길이. 서버가 만든 문자열(UUID)이며 서버가 다시 확인한다(SC001). */
+const DRAFT_KEY_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
-const SAVED_PARAM = "saved";
+/** 일정 초안 화면(W14)이 보여 주는 일정. 저장된 일정에서 시작하거나("일정 조정하기") 만든 초안이다. */
+export type ScheduleSource = { kind: "saved" } | { kind: "draft"; draftKey: string };
 
-/** `draftId` 파라미터. 없으면 저장된 일정을 고친다("일정 조정하기"). 숫자 id가 아니면 `null`. */
-export function parseScheduleSource(draftId: RouteParam): ScheduleSource | null {
-  if (draftId === undefined) {
+/** `draftKey` 파라미터. 없으면 저장된 일정에서 시작한다. 허용하지 않는 글자가 있으면 `null`. */
+export function parseScheduleSource(draftKey: RouteParam): ScheduleSource | null {
+  const raw = firstValue(draftKey);
+
+  if (raw === undefined) {
     return { kind: "saved" };
   }
 
-  const id = parseDraftId(draftId);
-  return id === null ? null : { kind: "draft", draftId: id };
+  return DRAFT_KEY_PATTERN.test(raw) ? { kind: "draft", draftKey: raw } : null;
 }
 
-/** `from` 파라미터. 다시 계산하기 전에 보던 일정이다. 없거나 알 수 없는 값이면 `null`. */
-export function parseRecalculatedFrom(from: RouteParam): ScheduleSource | null {
-  const raw = Array.isArray(from) ? from[0] : from;
+/** 일정 조건 화면(W13)의 `keep` 파라미터 값. 저장된 일정의 날짜별 장소를 이어받는 초안을 만든다. */
+export const KEEP_SAVED_PARAM = "saved";
 
-  if (raw === SAVED_PARAM) {
-    return { kind: "saved" };
-  }
-
-  const id = parseDraftId(raw);
-  return id === null ? null : { kind: "draft", draftId: id };
-}
-
-/** 일정을 라우트 파라미터로. 저장된 일정은 `draftId`를 비운다. */
-export function toScheduleParams(source: ScheduleSource, from: ScheduleSource | null = null): { draftId: string | undefined; from: string | undefined } {
-  return {
-    draftId: source.kind === "draft" ? String(source.draftId) : undefined,
-    from: from === null ? undefined : from.kind === "draft" ? String(from.draftId) : SAVED_PARAM,
-  };
+export function parseKeepSaved(keep: RouteParam): boolean {
+  return firstValue(keep) === KEEP_SAVED_PARAM;
 }

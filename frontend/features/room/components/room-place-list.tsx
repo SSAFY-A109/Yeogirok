@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 const DELETE_BUTTON_HIT_SLOP = { left: 6, right: 6 };
 const LOADING_ROW_COUNT = 3;
 
-/** 장소 행 보조 줄. `카페 강문동 해솔님 코스`(카테고리 이름 + 동네 + 담은 경로). */
+/** 장소 행 보조 줄. `카페 강문동 AI 추천`(카테고리 이름 + 지역 + 담은 경로). */
 function getPlaceMeta(place: RoomPlace): string {
   return [place.category?.name, place.areaName, getRoomPlaceSourceLabel(place)].filter(Boolean).join(" ");
 }
@@ -31,6 +31,13 @@ function getAddedByToneIndex(members: RoomMember[], userId: number): number {
   });
 
   return index === -1 ? userId : index;
+}
+
+/** 후보를 담은 일행. 그사이 나간 사람이면 `null`이다(서버는 담은 사람의 id만 준다). */
+function findAddedBy(members: RoomMember[], userId: number): RoomMember | null {
+  return members.find((member) => {
+    return member.id === userId;
+  }) ?? null;
 }
 
 type RoomPlaceListProps = {
@@ -104,7 +111,8 @@ export function RoomPlaceList({ roomId, members, hiddenIds, header, onDeletePlac
         return (
           <RoomPlaceRow
             place={item}
-            toneIndex={item.addedBy ? getAddedByToneIndex(members, item.addedBy.id) : 0}
+            addedBy={findAddedBy(members, item.addedById)}
+            toneIndex={getAddedByToneIndex(members, item.addedById)}
             showDivider={index < places.length - 1}
 
             onDelete={() => {
@@ -141,14 +149,15 @@ function RoomPlaceListHeader({ count, onAddPlace }: { count: number; onAddPlace:
 
 type RoomPlaceRowProps = {
   place: RoomPlace;
+  addedBy: RoomMember | null;
   toneIndex: number;
   showDivider: boolean;
   onDelete: () => void;
 };
 
-function RoomPlaceRow({ place, toneIndex, showDivider, onDelete }: RoomPlaceRowProps) {
+function RoomPlaceRow({ place, addedBy, toneIndex, showDivider, onDelete }: RoomPlaceRowProps) {
   const meta = getPlaceMeta(place);
-  const addedByLabel = place.addedBy ? `${place.addedBy.nickname}님이 담음` : null;
+  const addedByLabel = addedBy ? `${addedBy.nickname}님이 담음` : null;
 
   return (
     <View className="px-5">
@@ -169,7 +178,7 @@ function RoomPlaceRow({ place, toneIndex, showDivider, onDelete }: RoomPlaceRowP
               </Text>
             ) : null}
           </View>
-          {place.addedBy ? <MemberAvatar initial={place.addedBy.initial} toneIndex={toneIndex} size="sm" /> : null}
+          {addedBy ? <MemberAvatar initial={addedBy.initial} toneIndex={toneIndex} size="sm" /> : null}
         </View>
         <Pressable
           accessibilityRole="button"
