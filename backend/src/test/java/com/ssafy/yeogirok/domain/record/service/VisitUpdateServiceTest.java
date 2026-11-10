@@ -33,6 +33,7 @@ import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.record.entity.VisitStory;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
+import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -114,6 +115,22 @@ class VisitUpdateServiceTest {
 			.map(v -> v.getVisitDate() + ":" + v.getPosition() + ":" + v.getId()).toList();
 	}
 
+	/** 방문에 그 방문만 쓰는 직접 입력 장소를 붙인다. @return 장소 ID */
+	private Long ownPlace(ActualVisit visit) {
+		Long id = em.persist(Place.manual("혼자 쓰는 곳", new BigDecimal("37.7000000"), new BigDecimal("128.9000000"),
+			null, null, null, NOW)).getId();
+		em.flush();
+		em.getEntityManager().createNativeQuery("update actual_visits set place_id = ?1 where id = ?2")
+			.setParameter(1, id).setParameter(2, visit.getId()).executeUpdate();
+		em.clear();
+		return id;
+	}
+
+	private long placeCount() {
+		em.flush();
+		return em.getEntityManager().createQuery("select count(p) from Place p", Long.class).getSingleResult();
+	}
+
 	private int version() {
 		return em.find(TravelRecord.class, recordId).getVersion();
 	}
@@ -142,6 +159,50 @@ class VisitUpdateServiceTest {
 		assertThat(changed.visitedAt()).isEqualTo(later);
 		assertThat(changed.order()).isEqualTo(2);
 		assertThat(em.find(Place.class, placeId).getName()).isEqualTo("경포대");
+	}
+
+	/** 059 응답을 그대로 돌려보낸 요청이 새 장소 행을 만들거나 완성을 풀지 않는다(PR #77 리뷰). */
+	@Test
+	void 같은_직접_입력_장소를_다시_보내면_장소_행도_version도_그대로다() {
+		em.find(TravelRecord.class, recordId).complete(NOW);
+		em.flush();
+		long placesBefore = placeCount();
+		VisitPlaceInput.CustomPlace same = new VisitPlaceInput.CustomPlace("경포대", new BigDecimal("37.7951000"),
+			new BigDecimal("128.9087000"), null);
+
+		VisitUpdateResponse response = update(2,
+			List.of(new VisitUpdateCommand.Item(b.getId(), same, DAY1, AT1, null)), List.of(), false);
+
+		assertThat(response.version()).isEqualTo(2);
+		assertThat(response.status()).isEqualTo(RecordStatus.COMPLETED);
+		assertThat(placeCount()).isEqualTo(placesBefore);
+	}
+
+	@Test
+	void 장소를_바꾸거나_방문을_지워_아무도_쓰지_않게_된_직접_입력_장소는_지운다() {
+		Long ownA = ownPlace(a);
+		Long ownC = ownPlace(c);
+		VisitPlaceInput.CustomPlace other = new VisitPlaceInput.CustomPlace("안목 카페", new BigDecimal("37.7720000"),
+			new BigDecimal("128.9470000"), null);
+
+		update(1, List.of(new VisitUpdateCommand.Item(a.getId(), other, DAY1, AT1, null)), List.of(c.getId()), false);
+
+		assertThat(em.find(Place.class, ownA)).isNull();
+		assertThat(em.find(Place.class, ownC)).isNull();
+		assertThat(em.find(Place.class, placeId)).isNotNull();
+	}
+
+	@Test
+	void 다른_방문이나_여행방_후보가_쓰는_장소는_지우지_않는다() {
+		Long roomId = em.find(TravelRecord.class, recordId).getRoomId();
+		Long candidate = ownPlace(a);
+		em.persist(RoomPlace.manual(roomId, em.find(Place.class, candidate), MEMBER, NOW));
+		em.flush();
+
+		update(1, List.of(), List.of(a.getId(), b.getId()), false);
+
+		assertThat(em.find(Place.class, candidate)).isNotNull();
+		assertThat(em.find(Place.class, placeId)).isNotNull();
 	}
 
 	@Test

@@ -6,8 +6,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -26,7 +29,7 @@ import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
-import com.ssafy.yeogirok.domain.record.repository.TourPlaceRepository;
+import com.ssafy.yeogirok.domain.record.repository.RecordPlaceRepository;
 import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitStoryRepository;
@@ -50,7 +53,7 @@ public class VisitCommandService {
 	private final ActualVisitRepository actualVisitRepository;
 	private final VisitImageRepository visitImageRepository;
 	private final VisitStoryRepository visitStoryRepository;
-	private final TourPlaceRepository tourPlaceRepository;
+	private final RecordPlaceRepository recordPlaceRepository;
 	private final PlaceRepository placeRepository;
 	private final LegalDongResolver legalDongResolver;
 	private final TransactionTemplate transactionTemplate;
@@ -59,7 +62,7 @@ public class VisitCommandService {
 	public VisitCommandService(RecordFinder recordFinder, RecordVisitViews recordVisitViews,
 		TravelRecordRepository travelRecordRepository, ActualVisitRepository actualVisitRepository,
 		VisitImageRepository visitImageRepository, VisitStoryRepository visitStoryRepository,
-		TourPlaceRepository tourPlaceRepository, PlaceRepository placeRepository, LegalDongResolver legalDongResolver,
+		RecordPlaceRepository recordPlaceRepository, PlaceRepository placeRepository, LegalDongResolver legalDongResolver,
 		PlatformTransactionManager transactionManager, Clock clock) {
 		this.recordFinder = recordFinder;
 		this.recordVisitViews = recordVisitViews;
@@ -67,7 +70,7 @@ public class VisitCommandService {
 		this.actualVisitRepository = actualVisitRepository;
 		this.visitImageRepository = visitImageRepository;
 		this.visitStoryRepository = visitStoryRepository;
-		this.tourPlaceRepository = tourPlaceRepository;
+		this.recordPlaceRepository = recordPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.legalDongResolver = legalDongResolver;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -108,6 +111,7 @@ public class VisitCommandService {
 	 * API-067. 수정·삭제 대상이 모두 이 기록의 방문인지(RE013) 먼저 본다. 삭제할 방문에 사진이 하나라도 있으면 RE020,
 	 * 사진은 없고 이야기가 있는데 confirmDeleteStories 가 아니면 RE023 으로 요청 전체를 거부한다. 확인하면 이야기 → 방문 순서로
 	 * 지우고(CASCADE 없음) 남은 순서를 다시 매긴다. 실제로 바뀐 것이 있을 때만 기록 version+1·DRAFT.
+	 * 지우거나 장소를 바꿔 아무도 쓰지 않게 된 직접 입력(MANUAL) 장소 행은 같이 지운다.
 	 */
 	public VisitUpdateResponse update(Long userId, Long recordId, VisitUpdateCommand command) {
 		Map<VisitPlaceInput.CustomPlace, LegalDong> legalDongs = legalDongs(userId, recordId,
@@ -122,10 +126,14 @@ public class VisitCommandService {
 				throw new BusinessException(ExceptionType.VISIT_NOT_FOUND);
 			}
 			VisitLayout layout = new VisitLayout(visits);
-			boolean changed = remove(command, byId, layout);
+			Set<Long> released = new HashSet<>();
+			boolean changed = remove(command, byId, layout, released);
 			for (VisitUpdateCommand.Item item : command.items()) {
 				ActualVisit visit = byId.get(item.visitId());
-				Long placeId = item.place() == null ? visit.getPlaceId() : placeId(item.place(), legalDongs, now);
+				Long placeId = placeIdFor(visit, item.place(), legalDongs, now);
+				if (!placeId.equals(visit.getPlaceId())) {
+					released.add(visit.getPlaceId());
+				}
 				boolean dateChanged = !visit.getVisitDate().equals(item.visitDate());
 				changed |= visit.change(placeId, item.visitDate(), item.visitedAt(), now);
 				if (item.order() != null || dateChanged) {
@@ -137,13 +145,15 @@ public class VisitCommandService {
 				record.markEdited(now);
 			}
 			actualVisitRepository.flush();
+			deleteUnusedManualPlaces(released);
 			return new VisitUpdateResponse(recordVisitViews.load(recordId).visits(), record.getVersion(),
 				record.getStatus());
 		});
 	}
 
 	/** @return 지운 방문이 있으면 true */
-	private boolean remove(VisitUpdateCommand command, Map<Long, ActualVisit> byId, VisitLayout layout) {
+	private boolean remove(VisitUpdateCommand command, Map<Long, ActualVisit> byId, VisitLayout layout,
+		Set<Long> released) {
 		List<Long> removeIds = command.removeVisitIds();
 		if (removeIds.isEmpty()) {
 			return false;
@@ -157,12 +167,50 @@ public class VisitCommandService {
 		visitStoryRepository.deleteByVisitIdIn(removeIds);
 		for (Long id : removeIds) {
 			ActualVisit visit = byId.remove(id);
+			released.add(visit.getPlaceId());
 			layout.remove(visit);
 			actualVisitRepository.delete(visit);
 		}
 		// 남은 방문의 순서를 당기기 전에 지운 자리를 비운다.
 		actualVisitRepository.flush();
 		return true;
+	}
+
+	/**
+	 * 067 의 새 장소. 생략이면 지금 장소. 지금 장소가 직접 입력이고 이름·좌표·주소가 같으면 새 행을 만들지 않고 그대로 쓴다
+	 * (059 응답을 그대로 돌려보낸 요청이 version 을 올리고 완성을 풀지 않게, PR #77 리뷰).
+	 */
+	private Long placeIdFor(ActualVisit visit, VisitPlaceInput input,
+		Map<VisitPlaceInput.CustomPlace, LegalDong> legalDongs, Instant now) {
+		if (input == null) {
+			return visit.getPlaceId();
+		}
+		if (input instanceof VisitPlaceInput.CustomPlace custom && placeRepository.findById(visit.getPlaceId())
+			.filter(current -> sameManualPlace(current, custom)).isPresent()) {
+			return visit.getPlaceId();
+		}
+		return placeId(input, legalDongs, now);
+	}
+
+	private static boolean sameManualPlace(Place place, VisitPlaceInput.CustomPlace custom) {
+		return place.getProvider() == PlaceProvider.MANUAL && place.getName().equals(custom.name())
+			&& place.getLatitude().compareTo(custom.latitude()) == 0
+			&& place.getLongitude().compareTo(custom.longitude()) == 0
+			&& Objects.equals(place.getAddress(), custom.address());
+	}
+
+	/**
+	 * 방문 삭제·장소 교체로 놓인 장소 중, 직접 입력(MANUAL)이고 실제 방문·여행방 후보 어디에서도 가리키지 않는 행을 지운다.
+	 * FK 가 없어 DB 가 막아 주지 않는다. 투어API 장소는 여러 곳이 같이 쓰는 행이라 지우지 않는다.
+	 */
+	private void deleteUnusedManualPlaces(Set<Long> placeIds) {
+		for (Long placeId : placeIds) {
+			placeRepository.findById(placeId)
+				.filter(place -> place.getProvider() == PlaceProvider.MANUAL)
+				.filter(place -> !recordPlaceRepository.isUsedByVisit(placeId)
+					&& !recordPlaceRepository.isUsedByRoomPlace(placeId))
+				.ifPresent(placeRepository::delete);
+		}
 	}
 
 	private TravelRecord lockAndCheckVersion(Long userId, Long recordId, int version) {
@@ -196,7 +244,7 @@ public class VisitCommandService {
 	 */
 	private Long placeId(VisitPlaceInput input, Map<VisitPlaceInput.CustomPlace, LegalDong> legalDongs, Instant now) {
 		return switch (input) {
-			case VisitPlaceInput.TourPlace tour -> tourPlaceRepository
+			case VisitPlaceInput.TourPlace tour -> recordPlaceRepository
 				.findByProviderAndProviderPlaceId(PlaceProvider.TOUR_API, tour.providerPlaceId())
 				.orElseThrow(() -> new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
 					"placeRef: 아직 저장되지 않은 투어API 장소입니다."))
