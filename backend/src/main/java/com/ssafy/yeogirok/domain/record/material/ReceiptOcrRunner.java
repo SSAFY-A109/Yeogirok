@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
 public class ReceiptOcrRunner {
 
 	public static final String TYPE = "RECEIPT_OCR";
+	/** 다시 시도하면 될 수 있는 업무 오류(PR #84 리뷰). 작업에는 C014·retryable 로 남긴다. */
+	private static final Set<ExceptionType> TRANSIENT = Set.of(ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS,
+		ExceptionType.FILE_STORAGE_UNAVAILABLE);
 
 	private final JobRunner jobRunner;
 	private final ReceiptMaterials materials;
@@ -84,6 +88,11 @@ public class ReceiptOcrRunner {
 				.map(saved -> result(materialId, saved.version()))
 				.orElseGet(() -> staleResult(materialId));
 		} catch (BusinessException e) {
+			if (TRANSIENT.contains(e.getExceptionType())) {
+				// 자료 잠금 대기 초과·저장소 일시 장애는 다시 시도할 수 있게 일반 오류로 넘긴다(C014, retryable).
+				fail(materialId, jobId, Job.TIMED_OUT.code(), ExceptionType.SERVER_ERROR.getMessage());
+				throw new IllegalStateException("영수증 OCR 작업이 일시 오류로 끝났습니다.", e);
+			}
 			fail(materialId, jobId, e.getExceptionType().getCode(), e.getMessage());
 			throw e;
 		} catch (RuntimeException e) {
@@ -93,22 +102,14 @@ public class ReceiptOcrRunner {
 	}
 
 	private byte[] readOriginal(ReceiptMaterial material) {
-		try {
-			return fileStorage.readAll(fileProperties.receiptBucket(), material.objectKey(),
-				fileProperties.maxBytesOf(FilePurpose.RECEIPT));
-		} catch (BusinessException e) {
-			if (e.getExceptionType() == ExceptionType.FILE_STORAGE_UNAVAILABLE) {
-				// 저장소 일시 장애는 다시 시도할 수 있게 일반 오류로 넘긴다(C014, retryable).
-				throw new IllegalStateException("영수증 원본을 읽지 못했습니다.", e);
-			}
-			throw e;
-		}
+		return fileStorage.readAll(fileProperties.receiptBucket(), material.objectKey(),
+			fileProperties.maxBytesOf(FilePurpose.RECEIPT));
 	}
 
 	private OcrResult callOcr(byte[] image) {
 		boolean acquired;
 		try {
-			acquired = ocrSlot.tryAcquire(ocrProperties.readTimeout().toMillis(), TimeUnit.MILLISECONDS);
+			acquired = ocrSlot.tryAcquire(ocrProperties.slotWait().toMillis(), TimeUnit.MILLISECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException("OCR 차례를 기다리다 중단됐습니다.", e);

@@ -30,7 +30,8 @@ public class MaterialTestConfig {
 
 	@Bean
 	OcrProperties ocrProperties() {
-		return new OcrProperties("http://ocr.test", Duration.ofSeconds(2), Duration.ofSeconds(45));
+		return new OcrProperties("http://ocr.test", Duration.ofSeconds(2), Duration.ofSeconds(20),
+			Duration.ofSeconds(30));
 	}
 
 	@Bean

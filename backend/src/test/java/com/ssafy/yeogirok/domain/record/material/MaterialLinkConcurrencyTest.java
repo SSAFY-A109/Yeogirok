@@ -60,7 +60,7 @@ class MaterialLinkConcurrencyTest {
 		List<Runnable> queued = Collections.synchronizedList(new ArrayList<>());
 		ReceiptOcrRunner runner = new ReceiptOcrRunner(new JobRunner(jobStore, queued::add, jobProperties, clock),
 			materials, mock(FileStorage.class), TestFileProperties.VALUE, mock(ReceiptOcrClient.class),
-			new OcrProperties("http://ocr.test", Duration.ofSeconds(2), Duration.ofSeconds(45)), clock);
+			new OcrProperties("http://ocr.test", Duration.ofSeconds(2), Duration.ofSeconds(20), Duration.ofSeconds(30)), clock);
 		MaterialLinkService service = new MaterialLinkService(mock(RecordFinder.class), materials, materialStore,
 			new UploadSessionStore(TestRedis.template(), json, idempotency, clock), runner, clock);
 		String materialId = ReceiptMaterial.idOf(UPLOAD_ID);

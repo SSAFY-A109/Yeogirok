@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,8 +84,12 @@ class ReceiptOcrRunnerTest {
 	}
 
 	ReceiptOcrRunner runnerWith(JobRunner jobRunner) {
+		return runnerWith(jobRunner, Duration.ofSeconds(20), Duration.ofSeconds(30));
+	}
+
+	ReceiptOcrRunner runnerWith(JobRunner jobRunner, Duration readTimeout, Duration slotWait) {
 		return new ReceiptOcrRunner(jobRunner, materials, fileStorage, TestFileProperties.VALUE, ocrClient,
-			new OcrProperties("http://ocr.test", Duration.ofSeconds(2), Duration.ofSeconds(45)), clock);
+			new OcrProperties("http://ocr.test", Duration.ofSeconds(2), readTimeout, slotWait), clock);
 	}
 
 	ReceiptMaterial linkedMaterial(String materialId, String jobId) {
@@ -261,6 +266,29 @@ class ReceiptOcrRunnerTest {
 	}
 
 	@Test
+	void 앞_OCR_이_응답_제한_가까이_걸려도_뒤_OCR_이_차례_대기로_실패하지_않는다() throws Exception {
+		// 응답 제한 200ms, 차례 대기 2s. 앞 건이 응답 제한보다 오래(300ms) 걸려도 뒤 건은 차례를 기다려 끝난다.
+		ReceiptOcrRunner slow = runnerWith(new JobRunner(jobStore, executor, JOB_PROPERTIES, clock),
+			Duration.ofMillis(200), Duration.ofSeconds(2));
+		linkedMaterial(JOB_ID);
+		linkedMaterial("m-2", "job-2");
+		CountDownLatch firstStarted = new CountDownLatch(1);
+		when(ocrClient.recognize(IMAGE)).thenAnswer(invocation -> {
+			firstStarted.countDown();
+			Thread.sleep(300);
+			return new OcrResult(null, null, null);
+		});
+
+		CompletableFuture<?> first = CompletableFuture.runAsync(() -> slow.recognize(MATERIAL_ID, JOB_ID));
+		firstStarted.await(5, TimeUnit.SECONDS);
+		CompletableFuture<?> second = CompletableFuture.runAsync(() -> slow.recognize("m-2", "job-2"));
+		CompletableFuture.allOf(first, second).get(10, TimeUnit.SECONDS);
+
+		assertThat(stored().processStatus()).isEqualTo(ReceiptMaterial.Status.READY);
+		assertThat(materialStore.find("m-2").orElseThrow().processStatus()).isEqualTo(ReceiptMaterial.Status.READY);
+	}
+
+	@Test
 	void 실행기에_맡기지_못하면_자료를_바로_실패로_바꾼다() {
 		JobRunner rejecting = new JobRunner(jobStore, task -> {
 			throw new RejectedExecutionException();
@@ -308,6 +336,20 @@ class ReceiptOcrRunnerTest {
 
 		assertThat(materials.current(stored()).processStatus()).isEqualTo(ReceiptMaterial.Status.FAILED);
 		executor.reset();
+	}
+
+	@Test
+	void 작업_안에서_자료_잠금을_못_잡으면_C014_로_끝나고_다시_시도_가능() {
+		linkedMaterial(JOB_ID);
+		new RedisLock(TestRedis.template()).tryAcquire("material-lock:" + MATERIAL_ID, Duration.ofSeconds(30));
+
+		runner.submit(MATERIAL_ID, JOB_ID, stored());
+
+		Job job = job(JOB_ID);
+		assertThat(job.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(job.error().code()).isEqualTo("C014");
+		assertThat(job.retryable()).isTrue();
+		verify(ocrClient, never()).recognize(any());
 	}
 
 	@Test

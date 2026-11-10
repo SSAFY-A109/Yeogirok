@@ -30,7 +30,7 @@ class ReceiptOcrClientTest {
 
 	static final String URL = "http://ocr.test/ocr/receipt";
 	static final OcrProperties PROPERTIES = new OcrProperties("http://ocr.test", Duration.ofSeconds(2),
-		Duration.ofSeconds(45));
+		Duration.ofSeconds(20), Duration.ofSeconds(30));
 
 	MockRestServiceServer server;
 
@@ -100,8 +100,19 @@ class ReceiptOcrClientTest {
 	}
 
 	@Test
+	void 주소_끝의_슬래시는_지운다() {
+		ReceiptOcrClient client = client(new OcrProperties("http://ocr.test/ ", Duration.ofSeconds(2),
+			Duration.ofSeconds(20), Duration.ofSeconds(30)));
+		server.expect(requestTo(URL)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+		client.recognize(new byte[] {1});
+
+		server.verify();
+	}
+
+	@Test
 	void 주소가_없으면_부르지_않고_일시_오류() {
-		ReceiptOcrClient client = client(new OcrProperties(" ", Duration.ofSeconds(2), Duration.ofSeconds(45)));
+		ReceiptOcrClient client = client(new OcrProperties(" ", Duration.ofSeconds(2), Duration.ofSeconds(20), Duration.ofSeconds(30)));
 
 		assertThatThrownBy(() -> client.recognize(new byte[] {1})).isInstanceOf(IllegalStateException.class);
 		server.verify();
