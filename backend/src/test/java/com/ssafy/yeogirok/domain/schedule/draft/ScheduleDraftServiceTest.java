@@ -42,6 +42,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 import com.ssafy.yeogirok.support.FakeTravelTimeProvider;
 import com.ssafy.yeogirok.support.FixedLegalDongResolver;
+import com.ssafy.yeogirok.support.HoldableExecutor;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestRedis;
 import com.ssafy.yeogirok.support.TestUsers;
@@ -79,6 +80,8 @@ class ScheduleDraftServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	HoldableExecutor executor;
 
 	Long roomId;
 	List<Long> places;
@@ -86,6 +89,7 @@ class ScheduleDraftServiceTest {
 	@BeforeEach
 	void setUp() {
 		TestRedis.flushAll();
+		executor.reset();
 		clock.set(NOW);
 		legalDongResolver.willReturn(LEGAL_DONG);
 		travelTimeProvider.willReturn(TRAVEL_MINUTES);
@@ -285,6 +289,34 @@ class ScheduleDraftServiceTest {
 		assertThat(response.schedule()).isNull();
 		assertThat(response.travelDataSource()).isNull();
 		assertThat(response.error().code()).isEqualTo("SC002");
+	}
+
+	@Test
+	void 대기_제한_시간이_지나_시작하지_못한_초안은_계산하지_않고_실패로_남는다() {
+		executor.hold();
+		DraftJobResponse created = create(command(places, nineToSix(), Map.of(), List.of()));
+
+		clock.advance(DraftTestConfig.QUEUE_TIMEOUT.plusSeconds(1));
+		assertThat(jobService.get(OWNER, created.jobId()).status()).isEqualTo(JobStatus.FAILED);
+		executor.runHeld();
+
+		assertThat(jobService.get(OWNER, created.jobId()).status()).isEqualTo(JobStatus.FAILED);
+		DraftResponse response = draftService.get(OWNER, roomId, created.draftKey());
+		assertThat(response.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(response.error().code()).isEqualTo("C014");
+		assertThat(response.schedule()).isNull();
+	}
+
+	@Test
+	void 대기한_시간은_초안_계산의_실행_제한_시간에_넣지_않는다() {
+		executor.hold();
+		DraftJobResponse created = create(command(places, nineToSix(), Map.of(), List.of()));
+
+		clock.advance(DraftTestConfig.QUEUE_TIMEOUT.minusSeconds(1));
+		executor.runHeld();
+
+		assertThat(jobService.get(OWNER, created.jobId()).status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(draftService.get(OWNER, roomId, created.draftKey()).status()).isEqualTo(JobStatus.SUCCEEDED);
 	}
 
 	@Test

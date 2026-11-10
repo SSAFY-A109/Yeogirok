@@ -47,7 +47,7 @@ class ScheduleDraftStoreTest {
 		store = new ScheduleDraftStore(TestRedis.template(), JsonMapper.builder().build(),
 			new ScheduleProperties(Duration.ofHours(24)), clock);
 		lock = new ScheduleDraftLock(TestRedis.template(),
-			new JobProperties(Duration.ofHours(24), RUN_TIMEOUT, 1));
+			new JobProperties(Duration.ofHours(24), Duration.ofMinutes(10), RUN_TIMEOUT, 1));
 	}
 
 	private static ScheduleDraft started() {

@@ -16,6 +16,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ssafy.yeogirok.domain.category.TravelCategory;
+import com.ssafy.yeogirok.domain.job.Job;
 import com.ssafy.yeogirok.domain.job.JobError;
 import com.ssafy.yeogirok.domain.job.JobProperties;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
@@ -87,9 +88,11 @@ public class ScheduleDraftService {
 		String jobId = JobRunner.newId();
 		draftStore.save(ScheduleDraft.start(draftKey, jobId, roomId, userId, generation.baseVersion(),
 			generation.mode(), generation.days(), generation.startPoint(), generation.endPoint(), generation.items(),
-			clock.instant(), jobProperties.runTimeout()));
+			clock.instant(), jobProperties.maxLifetime()));
 		jobRunner.submit(jobId, ScheduleDraftJobPolicy.TYPE, userId, roomId.toString(),
-			() -> generate(draftKey, generation));
+			() -> generate(draftKey, generation),
+			() -> draftStore.find(draftKey)
+				.ifPresent(draft -> draftStore.save(draft.failed(Job.TIMED_OUT, clock.instant()))));
 		return DraftJobResponse.queued(jobId, draftKey);
 	}
 
@@ -201,6 +204,7 @@ public class ScheduleDraftService {
 
 	private Map<String, Object> generate(String draftKey, Generation generation) {
 		try {
+			draftStore.save(current(draftKey).started(clock.instant(), jobProperties.runTimeout()));
 			DraftPlanner.Output output = DraftPlanner.plan(new DraftPlanner.Input(generation.days(),
 				point(generation.startPoint()), point(generation.endPoint()), generation.candidates(),
 				generation.mode()), travelTimeProvider);

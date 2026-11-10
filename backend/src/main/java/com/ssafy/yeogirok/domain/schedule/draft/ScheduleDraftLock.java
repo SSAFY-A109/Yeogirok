@@ -15,7 +15,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 초안별 처리 잠금(Redis {@code schedule-draft-lock:{draftKey}}, SET NX). 같은 초안의 재계산(API-084)과 최종 저장(039)이
- * 겹치지 않게 한다. 이미 잠겨 있으면 SC003. 수명은 작업 제한 시간과 같다(서버가 처리 도중 재시작돼도 풀린다).
+ * 겹치지 않게 한다. 이미 잠겨 있으면 SC003. 수명은 작업 대기 + 실행 제한 시간이다. 084 작업이 대기열에서 기다리는 동안에도
+ * 풀리지 않고, 서버가 처리 도중 재시작돼도 결국 풀린다.
  */
 @Component
 @RequiredArgsConstructor
@@ -38,7 +39,7 @@ public class ScheduleDraftLock {
 	public String acquire(String draftKey) {
 		String token = UUID.randomUUID().toString();
 		if (!Boolean.TRUE.equals(redis.opsForValue()
-			.setIfAbsent(PREFIX + draftKey, token, jobProperties.runTimeout()))) {
+			.setIfAbsent(PREFIX + draftKey, token, jobProperties.maxLifetime()))) {
 			throw new BusinessException(ExceptionType.SCHEDULE_DRAFT_IN_PROGRESS);
 		}
 		return token;

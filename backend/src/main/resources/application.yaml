@@ -23,8 +23,10 @@ yeogirok:
     # API-041 작성 제한(11/4 팀 결정): 같은 날(Asia/Seoul 04:00 기준) 이미 남긴 내 발자취와 이 거리 이내면 거부(F003).
     same-day-radius-meters: 500
   job:
-    # 비동기 작업(API-011) 기록 보관 기간·제한 시간·실행 스레드 수. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
+    # 비동기 작업(API-011) 기록 보관 기간·대기 제한·실행 제한·실행 스레드 수. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
+    # 대기 제한 안에 시작하지 못한 작업은 실행하지 않고 실패로 끝낸다. 실행 제한은 시작한 때부터 센다.
     retention: 24h
+    queue-timeout: 10m
     run-timeout: 2m
     threads: 2
   schedule:

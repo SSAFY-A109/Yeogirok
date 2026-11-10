@@ -45,12 +45,22 @@ public record ScheduleDraft(String draftKey, String jobId, Long roomId, Long req
 		items = items == null ? List.of() : List.copyOf(items);
 	}
 
-	/** 계산 전 초안. 조건과 미배치 항목만 담는다. */
+	/**
+	 * 계산 전 초안. 조건과 미배치 항목만 담는다.
+	 *
+	 * @param timeout 작업이 대기열에서 기다리는 시간까지 넣은 기한(대기 + 실행). 실행을 시작하면 {@link #started} 로 다시 잡는다
+	 */
 	public static ScheduleDraft start(String draftKey, String jobId, Long roomId, Long requesterId, int baseVersion,
 		TransportMode transportMode, List<DayOption> days, NamedPoint startPoint, NamedPoint endPoint,
-		List<DraftItem> items, Instant now, Duration runTimeout) {
+		List<DraftItem> items, Instant now, Duration timeout) {
 		return new ScheduleDraft(draftKey, jobId, roomId, requesterId, JobStatus.RUNNING, baseVersion, 0,
-			transportMode, days, startPoint, endPoint, items, null, null, now, now, now.plus(runTimeout));
+			transportMode, days, startPoint, endPoint, items, null, null, now, now, now.plus(timeout));
+	}
+
+	/** 작업 스레드가 계산을 시작했다. 기한을 지금부터 실행 제한 시간으로 다시 잡는다(작업 기한과 맞춘다). */
+	public ScheduleDraft started(Instant now, Duration runTimeout) {
+		return new ScheduleDraft(draftKey, jobId, roomId, requesterId, status, baseVersion, draftVersion,
+			transportMode, days, startPoint, endPoint, items, endLeg, error, createdAt, now, now.plus(runTimeout));
 	}
 
 	/** 계산을 마친 새 내용. draftVersion 이 1 오른다. */
@@ -60,10 +70,10 @@ public record ScheduleDraft(String draftKey, String jobId, Long roomId, Long req
 			draftVersion + 1, transportMode, newDays, newStart, newEnd, newItems, newEndLeg, null, createdAt, now, null);
 	}
 
-	/** 다시 계산을 시작한다(API-084). 내용은 마지막 성공 그대로 둔다. */
-	public ScheduleDraft recalculating(String newJobId, Instant now, Duration runTimeout) {
+	/** 다시 계산을 맡긴다(API-084). 내용은 마지막 성공 그대로 둔다. timeout 은 {@link #start} 와 같다. */
+	public ScheduleDraft recalculating(String newJobId, Instant now, Duration timeout) {
 		return new ScheduleDraft(draftKey, newJobId, roomId, requesterId, JobStatus.RUNNING, baseVersion, draftVersion,
-			transportMode, days, startPoint, endPoint, items, endLeg, null, createdAt, now, now.plus(runTimeout));
+			transportMode, days, startPoint, endPoint, items, endLeg, null, createdAt, now, now.plus(timeout));
 	}
 
 	/** 처음 만들기에 실패했다. */

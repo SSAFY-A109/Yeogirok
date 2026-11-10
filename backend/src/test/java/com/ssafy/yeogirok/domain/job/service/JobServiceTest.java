@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +32,9 @@ import tools.jackson.databind.json.JsonMapper;
 class JobServiceTest {
 
 	static final Instant NOW = Instant.parse("2026-11-06T00:00:00Z");
-	static final JobProperties PROPERTIES = new JobProperties(Duration.ofHours(24), Duration.ofMinutes(2), 1);
+	static final Duration QUEUE_TIMEOUT = Duration.ofMinutes(10);
+	static final Duration RUN_TIMEOUT = Duration.ofMinutes(2);
+	static final JobProperties PROPERTIES = new JobProperties(Duration.ofHours(24), QUEUE_TIMEOUT, RUN_TIMEOUT, 1);
 	static final Long REQUESTER = 1L;
 	static final Long OTHER = 2L;
 	static final String GUARDED = "GUARDED";
@@ -124,18 +128,69 @@ class JobServiceTest {
 	}
 
 	@Test
-	void 기한_안에_끝나지_않은_작업은_실패로_보여_준다() {
+	void 대기_제한_시간_안에_시작하지_못한_작업은_실패로_보여_준다() {
 		String jobId = JobRunner.newId();
 		runner(task -> {
 			// 실행하지 않는다(서버가 재시작된 경우).
 		}).submit(jobId, "ANY", REQUESTER, null, Map::of);
 
+		clock.advance(QUEUE_TIMEOUT.minusSeconds(1));
 		assertThat(service.get(REQUESTER, jobId).status()).isEqualTo(JobStatus.QUEUED);
-		clock.advance(Duration.ofMinutes(3));
+		clock.advance(Duration.ofSeconds(2));
 		JobResponse response = service.get(REQUESTER, jobId);
 		assertThat(response.status()).isEqualTo(JobStatus.FAILED);
 		assertThat(response.error()).isEqualTo(Job.TIMED_OUT);
 		assertThat(response.retryable()).isTrue();
+	}
+
+	@Test
+	void 대기_제한_시간이_지난_뒤_차례가_오면_실행하지_않고_실패로_끝낸다() {
+		String jobId = JobRunner.newId();
+		List<Runnable> waiting = new ArrayList<>();
+		AtomicBoolean worked = new AtomicBoolean();
+		AtomicBoolean expired = new AtomicBoolean();
+		runner(waiting::add).submit(jobId, "ANY", REQUESTER, null, () -> {
+			worked.set(true);
+			return Map.of();
+		}, () -> expired.set(true));
+
+		clock.advance(QUEUE_TIMEOUT.plusSeconds(1));
+		waiting.forEach(Runnable::run);
+
+		assertThat(worked).isFalse();
+		assertThat(expired).isTrue();
+		assertThat(store.find(jobId)).get().satisfies(job -> {
+			assertThat(job.status()).isEqualTo(JobStatus.FAILED);
+			assertThat(job.error()).isEqualTo(Job.TIMED_OUT);
+			assertThat(job.retryable()).isTrue();
+		});
+	}
+
+	@Test
+	void 대기한_시간은_실행_제한_시간에_넣지_않는다() {
+		String jobId = JobRunner.newId();
+		List<Runnable> waiting = new ArrayList<>();
+		runner(waiting::add).submit(jobId, "ANY", REQUESTER, null, () -> {
+			// 시작은 대기 제한 직전, 실행은 실행 제한 직전까지 걸린다.
+			clock.advance(RUN_TIMEOUT.minusSeconds(1));
+			assertThat(service.get(REQUESTER, jobId).status()).isEqualTo(JobStatus.RUNNING);
+			return Map.of("type", "ANY_RESULT");
+		});
+
+		clock.advance(QUEUE_TIMEOUT.minusSeconds(1));
+		waiting.forEach(Runnable::run);
+
+		assertThat(service.get(REQUESTER, jobId).status()).isEqualTo(JobStatus.SUCCEEDED);
+	}
+
+	@Test
+	void 실행을_시작한_뒤_실행_제한_시간_안에_끝나지_않으면_실패로_보여_준다() {
+		String jobId = JobRunner.newId();
+		runner(Runnable::run).submit(jobId, "ANY", REQUESTER, null, () -> {
+			clock.advance(RUN_TIMEOUT.plusSeconds(1));
+			assertThat(service.get(REQUESTER, jobId).status()).isEqualTo(JobStatus.FAILED);
+			return Map.of();
+		});
 	}
 
 	@Test

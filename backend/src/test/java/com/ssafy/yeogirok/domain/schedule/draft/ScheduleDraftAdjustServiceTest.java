@@ -41,6 +41,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 import com.ssafy.yeogirok.support.FakeTravelTimeProvider;
 import com.ssafy.yeogirok.support.FixedLegalDongResolver;
+import com.ssafy.yeogirok.support.HoldableExecutor;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestRedis;
 import com.ssafy.yeogirok.support.TestUsers;
@@ -78,6 +79,8 @@ class ScheduleDraftAdjustServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	HoldableExecutor executor;
 
 	Long roomId;
 	ScheduleDraft draft;
@@ -85,6 +88,7 @@ class ScheduleDraftAdjustServiceTest {
 	@BeforeEach
 	void setUp() {
 		TestRedis.flushAll();
+		executor.reset();
 		clock.set(NOW);
 		legalDongResolver.willReturn(LEGAL_DONG);
 		travelTimeProvider.willReturn(TRAVEL_MINUTES);
@@ -165,6 +169,35 @@ class ScheduleDraftAdjustServiceTest {
 		assertThat(day(after, DAY1)).extracting(DraftItem::order)
 			.containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, day(after, DAY1).size()).boxed()
 				.toList());
+	}
+
+	@Test
+	void 대기열에서_기다리는_동안에도_초안_잠금은_대기와_실행_제한을_합친_만큼_유지한다() {
+		executor.hold();
+		adjust(command(List.of(move(placed(0), placed(0).visitDate(), placed(0).order(), 90)), List.of()));
+
+		Long ttlSeconds = TestRedis.template().getExpire("schedule-draft-lock:" + draft.draftKey());
+		long lifetime = DraftTestConfig.QUEUE_TIMEOUT.plus(DraftTestConfig.RUN_TIMEOUT).toSeconds();
+		assertThat(ttlSeconds).isBetween(lifetime - 5, lifetime);
+	}
+
+	@Test
+	void 대기_제한_시간이_지나_시작하지_못한_재계산은_마지막_성공으로_돌아가고_잠금을_푼다() {
+		executor.hold();
+		DraftItem target = placed(0);
+		DraftJobResponse response = adjust(command(List.of(move(target, target.visitDate(), target.order(), 90)),
+			List.of()));
+
+		clock.advance(DraftTestConfig.QUEUE_TIMEOUT.plusSeconds(1));
+		executor.runHeld();
+
+		assertThat(jobService.get(OWNER, response.jobId()).status()).isEqualTo(JobStatus.FAILED);
+		ScheduleDraft after = current();
+		assertThat(after.status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(after.draftVersion()).isEqualTo(draft.draftVersion());
+		assertThat(after.items()).isEqualTo(draft.items());
+		String token = draftLock.acquire(draft.draftKey());
+		draftLock.release(draft.draftKey(), token);
 	}
 
 	@Test

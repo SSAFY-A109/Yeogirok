@@ -84,9 +84,10 @@ public class ScheduleDraftAdjustService {
 		try {
 			Adjustment adjustment = readOnly.execute(status -> prepare(userId, roomId, draftKey, command));
 			String jobId = JobRunner.newId();
-			draftStore.save(adjustment.draft().recalculating(jobId, clock.instant(), jobProperties.runTimeout()));
+			draftStore.save(adjustment.draft().recalculating(jobId, clock.instant(), jobProperties.maxLifetime()));
 			Job job = jobRunner.submit(jobId, ScheduleDraftJobPolicy.TYPE, userId, roomId.toString(),
-				() -> recalculate(draftKey, token, adjustment));
+				() -> recalculate(draftKey, token, adjustment),
+				() -> expire(draftKey, token));
 			submitted = job.status() != JobStatus.FAILED;
 			if (!submitted) {
 				draftStore.find(draftKey)
@@ -218,8 +219,19 @@ public class ScheduleDraftAdjustService {
 
 	/* ── 작업 스레드 ─────────────────────────────────────────── */
 
+	/** 대기 제한 시간이 지나 계산하지 않는다. 마지막 성공 초안으로 돌리고 잠금을 푼다. */
+	private void expire(String draftKey, String token) {
+		try {
+			draftStore.find(draftKey).ifPresent(draft -> draftStore.save(draft.recalculationFailed(clock.instant())));
+		} finally {
+			draftLock.release(draftKey, token);
+		}
+	}
+
 	private Map<String, Object> recalculate(String draftKey, String token, Adjustment adjustment) {
 		try {
+			draftStore.find(draftKey)
+				.ifPresent(draft -> draftStore.save(draft.started(clock.instant(), jobProperties.runTimeout())));
 			List<DraftItem> items = adjustment.items();
 			DraftTimings.Result timings;
 			while (true) {

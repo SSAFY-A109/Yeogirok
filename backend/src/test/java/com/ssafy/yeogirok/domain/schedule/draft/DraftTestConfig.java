@@ -1,7 +1,6 @@
 package com.ssafy.yeogirok.domain.schedule.draft;
 
 import java.time.Duration;
-import java.util.concurrent.Executor;
 
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -15,13 +14,14 @@ import com.ssafy.yeogirok.domain.job.service.JobService;
 import com.ssafy.yeogirok.domain.job.service.JobStore;
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.domain.schedule.ScheduleProperties;
+import com.ssafy.yeogirok.support.HoldableExecutor;
 import com.ssafy.yeogirok.support.TestRedis;
 
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 초안 서비스 @DataJpaTest 용 빈. 여행방 빈(RoomTestConfig)에 실제 Redis(Testcontainers)와 작업 실행기를 더한다.
- * 작업은 요청한 스레드에서 바로 실행해 create 가 끝나면 초안 계산도 끝나 있다.
+ * 작업은 요청한 스레드에서 바로 실행해 create 가 끝나면 초안 계산도 끝나 있다. 대기열을 흉내 내려면 {@link HoldableExecutor#hold()}.
  */
 @TestConfiguration
 @Import({RoomTestConfig.class, JobStore.class, JobRunner.class, JobService.class, ScheduleDraftStore.class,
@@ -29,6 +29,7 @@ import tools.jackson.databind.json.JsonMapper;
 	ScheduleDraftAdjustService.class})
 public class DraftTestConfig {
 
+	public static final Duration QUEUE_TIMEOUT = Duration.ofMinutes(10);
 	public static final Duration RUN_TIMEOUT = Duration.ofMinutes(2);
 
 	@Bean
@@ -43,7 +44,7 @@ public class DraftTestConfig {
 
 	@Bean
 	JobProperties jobProperties() {
-		return new JobProperties(Duration.ofHours(24), RUN_TIMEOUT, 1);
+		return new JobProperties(Duration.ofHours(24), QUEUE_TIMEOUT, RUN_TIMEOUT, 1);
 	}
 
 	@Bean
@@ -52,7 +53,7 @@ public class DraftTestConfig {
 	}
 
 	@Bean(JobConfig.EXECUTOR)
-	Executor jobExecutor() {
-		return Runnable::run;
+	HoldableExecutor jobExecutor() {
+		return new HoldableExecutor();
 	}
 }
