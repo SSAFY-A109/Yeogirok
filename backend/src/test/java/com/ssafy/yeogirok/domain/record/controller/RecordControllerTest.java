@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -35,6 +36,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
+import com.ssafy.yeogirok.domain.record.dto.PhotoDeleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
@@ -340,6 +342,36 @@ class RecordControllerTest {
 		void 요청_형식_오류(String body, String code) throws Exception {
 			mockMvc.perform(json(post("/api/v1/records/9/visits/701/photos"), body))
 				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(visitPhotoService);
+		}
+	}
+
+	@Nested
+	class API_089 {
+
+		@Test
+		void 삭제_응답은_200() throws Exception {
+			given(visitPhotoService.delete(USER_ID, 9L, 31L, 3))
+				.willReturn(new PhotoDeleteResponse(9L, 31L, true, RecordStatus.DRAFT, 4));
+
+			mockMvc.perform(delete("/api/v1/records/9/images/31").param("version", "3").with(asUser(USER_ID))
+					.header("Idempotency-Key", "key-1"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"recordId": 9, "imageId": 31, "deleted": true, "status": "DRAFT",
+					  "version": 4}}
+					""", JsonCompareMode.STRICT));
+		}
+
+		@Test
+		void version_이나_멱등키가_없으면_C001_version_형식_오류는_C002() throws Exception {
+			mockMvc.perform(delete("/api/v1/records/9/images/31").with(asUser(USER_ID)).header("Idempotency-Key", "k"))
+				.andExpect(jsonPath("$.code").value("C001"));
+			mockMvc.perform(delete("/api/v1/records/9/images/31").param("version", "3").with(asUser(USER_ID)))
+				.andExpect(jsonPath("$.code").value("C001"));
+			mockMvc.perform(delete("/api/v1/records/9/images/31").param("version", "x").with(asUser(USER_ID))
+					.header("Idempotency-Key", "k"))
+				.andExpect(jsonPath("$.code").value("C002"));
 			verifyNoInteractions(visitPhotoService);
 		}
 	}

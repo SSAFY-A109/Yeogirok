@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.record.dto.PhotoDeleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.PhotoLinkRequest;
 import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteRequest;
@@ -67,6 +69,8 @@ public class RecordController {
 	static final String COMPLETE_SCOPE = "record-complete";
 	/** 멱등키 scope. 대상은 방문 ID 다. */
 	static final String PHOTO_LINK_SCOPE = "record-photo-link";
+	/** 멱등키 scope. 대상은 사진 ID 다. */
+	static final String PHOTO_DELETE_SCOPE = "record-photo-delete";
 
 	private final RecordCreateService recordCreateService;
 	private final RecordQueryService recordQueryService;
@@ -187,6 +191,22 @@ public class RecordController {
 			ids -> visitPhotoService.getLinked(user.userId(), recordId,
 				"-".equals(ids) ? List.of() : Arrays.stream(ids.split(",")).map(Long::valueOf).toList()));
 		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-089 기록 사진 삭제")
+	@DeleteMapping("/records/{recordId}/images/{imageId}")
+	public ResponseEntity<ApiResponseBody<PhotoDeleteResponse>> deletePhoto(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long recordId, @PathVariable Long imageId,
+		@Parameter(description = "현재 기록 version") @RequestParam int version) {
+		PhotoDeleteResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), PHOTO_DELETE_SCOPE, imageId.toString(), idempotencyKey),
+			version,
+			() -> visitPhotoService.delete(user.userId(), recordId, imageId, version),
+			PhotoDeleteResponse::imageId,
+			id -> visitPhotoService.getDeleted(user.userId(), recordId, imageId));
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(response));
 	}
 
 	@Operation(summary = "API-071 여행기 완성 처리")
