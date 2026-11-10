@@ -89,9 +89,11 @@ public class ChatHub implements MessageListener {
 		synchronized (lockOf(roomId)) {
 			Set<ChatConnection> members = rooms.get(roomId);
 			if (members == null) {
+				// 구독에 성공한 뒤에만 방을 맵에 넣는다. 실패한 채 빈 방이 남으면 다음 연결이 구독을 건너뛰어
+				// 이 서버에서 그 방의 실시간 메시지가 끊긴다. 실패하면 예외가 그대로 나가 이 연결은 C014 로 닫힌다.
+				chatListenerContainer.addMessageListener(this, roomTopic(roomId));
 				members = ConcurrentHashMap.newKeySet();
 				rooms.put(roomId, members);
-				chatListenerContainer.addMessageListener(this, roomTopic(roomId));
 			}
 			members.add(connection);
 		}

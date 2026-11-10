@@ -54,16 +54,22 @@ public interface RoomMessageRepository extends JpaRepository<RoomMessage, Long> 
 
 	/**
 	 * 안 읽음 점. {@code afterId}(읽은 위치, 이력이 없으면 0)보다 큰 타인 메시지가 하나라도 있는지.
-	 * ID 차이를 개수로 쓰지 않는다.
+	 * 첫 한 건만 찾고 멈춘다(개수를 세지 않는다). ID 차이를 개수로 쓰지 않는다.
 	 */
-	@Query("select count(m) > 0 from RoomMessage m"
-		+ " where m.roomId = :roomId and m.senderId <> :userId and m.id > :afterId")
-	boolean existsUnread(@Param("roomId") Long roomId, @Param("userId") Long userId, @Param("afterId") Long afterId);
+	default boolean existsUnread(Long roomId, Long userId, Long afterId) {
+		return existsByRoomIdAndSenderIdNotAndIdGreaterThan(roomId, userId, afterId);
+	}
 
-	/** API-020 목록용 안 읽음 점. 주어진 방 중 요청자에게 안 읽은 타인 메시지가 있는 방. */
-	@Query("select distinct m.roomId from RoomMessage m, RoomMember rm"
-		+ " where rm.userId = :userId and rm.roomId in :roomIds and m.roomId = rm.roomId"
-		+ " and m.senderId <> :userId and m.id > coalesce(rm.lastReadMessageId, 0)")
+	/** {@link #existsUnread} 용. 직접 부르지 않는다. */
+	boolean existsByRoomIdAndSenderIdNotAndIdGreaterThan(Long roomId, Long senderId, Long id);
+
+	/**
+	 * API-020 목록용 안 읽음 점. 주어진 방 중 요청자에게 안 읽은 타인 메시지가 있는 방.
+	 * 방마다 EXISTS 로 첫 한 건만 본다(안 읽은 메시지를 모두 읽지 않는다).
+	 */
+	@Query("select rm.roomId from RoomMember rm where rm.userId = :userId and rm.roomId in :roomIds"
+		+ " and exists (select m.id from RoomMessage m where m.roomId = rm.roomId and m.senderId <> :userId"
+		+ " and m.id > coalesce(rm.lastReadMessageId, 0))")
 	List<Long> findRoomIdsWithUnread(@Param("userId") Long userId, @Param("roomIds") Collection<Long> roomIds);
 
 	/** 삭제된 방 정리. 한 번에 지울 만큼만 ID 를 읽는다. */
