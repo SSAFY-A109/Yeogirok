@@ -86,6 +86,21 @@ public class FileStorage {
 		}
 	}
 
+	/** 앞부분 최대 {@code length} 바이트(사진 EXIF). 객체가 더 작으면 전체. 없으면 M004, 그 밖의 실패는 M012. */
+	public byte[] readPrefix(String bucket, String key, int length) {
+		try {
+			return s3Client.getObjectAsBytes(builder -> builder.bucket(bucket).key(key)
+				.range("bytes=0-" + (length - 1))).asByteArray();
+		} catch (S3Exception e) {
+			if (e.statusCode() == NOT_FOUND) {
+				throw new BusinessException(ExceptionType.FILE_NOT_FOUND);
+			}
+			throw unavailable(e);
+		} catch (SdkException e) {
+			throw unavailable(e);
+		}
+	}
+
 	/** 앞부분 {@code length} 바이트. {@code eTag} 가 아닌 객체로 바뀌었으면 M003. */
 	public byte[] readHeader(String bucket, String key, int length, String eTag) {
 		try {

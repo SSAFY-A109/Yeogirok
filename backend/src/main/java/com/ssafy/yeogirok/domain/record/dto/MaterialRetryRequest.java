@@ -11,6 +11,6 @@ public class MaterialRetryRequest {
 	private JsonNode version;
 
 	public int toVersion() {
-		return MaterialReviewRequest.materialVersion(version);
+		return VisitRequestFields.requiredInt(version, "version");
 	}
 }

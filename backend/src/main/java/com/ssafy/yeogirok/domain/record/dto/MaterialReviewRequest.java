@@ -1,7 +1,5 @@
 package com.ssafy.yeogirok.domain.record.dto;
 
-import static com.ssafy.yeogirok.global.request.JsonFields.invalidFormat;
-import static com.ssafy.yeogirok.global.request.JsonFields.isAbsent;
 import static com.ssafy.yeogirok.global.request.JsonFields.missing;
 import static com.ssafy.yeogirok.global.request.JsonFields.nonNullString;
 
@@ -27,7 +25,7 @@ public class MaterialReviewRequest {
 	private JsonNode customPlace;
 
 	public MaterialReviewCommand toCommand() {
-		int expectedVersion = materialVersion(version);
+		int expectedVersion = VisitRequestFields.requiredInt(version, "version");
 		String merchant = nonNullString(merchantName, "merchantName").strip();
 		if (merchant.isEmpty()) {
 			throw VisitRequestFields.notAllowed("merchantName: 비어 있을 수 없습니다.");
@@ -38,16 +36,5 @@ public class MaterialReviewRequest {
 			throw missing("placeRef 또는 customPlace");
 		}
 		return new MaterialReviewCommand(expectedVersion, merchant, paid, place);
-	}
-
-	/** 자료 version(API-091·092). 생략·null C001, 정수 아님 C002. */
-	static int materialVersion(JsonNode version) {
-		if (isAbsent(version)) {
-			throw missing("version");
-		}
-		if (!version.isIntegralNumber() || !version.canConvertToInt()) {
-			throw invalidFormat("version", "정수여야 합니다.");
-		}
-		return version.intValue();
 	}
 }
