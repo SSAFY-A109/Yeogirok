@@ -32,14 +32,13 @@ public class CoursePreviewService {
 		if (record.getVersion() != input.version()) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH);
 		}
-		String description = input.description() == null ? record.getDescription() : input.description();
+		String description = SelectionHash.description(record, input.description());
 		boolean includePhotos = input.includePhotos();
 		CourseSnapshot snapshot = publicCourseReader.snapshot(recordId);
 		CoursePreviewResponse.Preview preview = new CoursePreviewResponse.Preview(input.title(),
 			courseAuthors.of(found.room().getId()), description, publicCourseReader.days(snapshot,
 				found.room().getStartDate(), includePhotos ? PhotoScope.LINKED : PhotoScope.NONE));
-		String hash = SelectionHash.of(recordId, record.getVersion(), input.title(), description, includePhotos,
-			snapshot);
+		String hash = SelectionHash.of(record, input.title(), description, includePhotos, snapshot);
 		return new CoursePreviewResponse(preview, hash, List.of(), List.of());
 	}
 }
