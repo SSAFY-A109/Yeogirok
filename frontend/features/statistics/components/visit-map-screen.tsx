@@ -19,12 +19,12 @@ import type { MapCurrentLocation, MapFocusRequest, MapRegion } from "@/lib/nativ
 import { getColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { VisitAreaCard } from "./visit-area-card";
-import { VisitDistributionMap } from "./visit-distribution-map";
+import { MY_LOCATION_LEVEL, VisitDistributionMap } from "./visit-distribution-map";
 
 /** 지도가 멈춘 뒤 이만큼 더 움직이지 않으면 그 영역을 조회한다(규칙 20 디바운스). */
 const MAP_SETTLE_MS = 400;
-/** 내 위치 버튼을 누르면 이 확대 단계까지 당긴다(카카오 지도 level, 작을수록 가깝다). */
-const LOCATE_ME_LEVEL = 5;
+/** 처음 잰 내 위치로 지도를 알아서 옮기는 요청의 id. 내 위치 버튼이 만드는 요청은 이보다 큰 id를 쓴다. */
+const FIRST_FIX_FOCUS_ID = 1;
 /** 상태바와 지도 필터 사이 간격(Figma `Map filters` y=58, 상태바 54). */
 const MAP_FILTERS_TOP_GAP = 4;
 const NO_CELLS: readonly VisitCell[] = [];
@@ -43,7 +43,7 @@ export function VisitMapScreen() {
   const cells = statistics.data?.cells ?? NO_CELLS;
   const categories = useCategories();
   const location = useCurrentLocation();
-  const { focusRequest, locateMe } = useLocateMe(location);
+  const { focusRequest, locateMe, stopFollowingFirstFix } = useLocateMe(location);
   const [isPermissionCardHidden, setIsPermissionCardHidden] = useState(false);
   const isPermissionPromptHidden = location.permission !== "granted" && isPermissionCardHidden;
 
@@ -84,6 +84,7 @@ export function VisitMapScreen() {
         focusRequest={focusRequest}
         onPressCell={setSelectedCellId}
         onPressMap={closeCell}
+        onTouchMap={stopFollowingFirstFix}
         onRegionChange={handleRegionChange}
       />
       <MapFilters
@@ -145,15 +146,30 @@ export function VisitMapScreen() {
 // --- 내 위치
 
 /**
- * 내 위치 버튼. 이미 잰 위치로 먼저 옮기고, 다시 재서 새 위치로 한 번 더 옮긴다.
+ * 지도를 내 위치로 옮기는 요청. 화면에 들어와 처음 잰 위치로 한 번 알아서 옮기고(2026-11-11 사용자 요청),
+ * 그 전에 사용자가 지도에 손을 댔으면 보던 곳을 그대로 둔다. 지도는 같은 id의 요청을 한 번만 따르므로 다시 재도 또 옮기지 않는다.
+ * 내 위치 버튼은 이미 잰 위치로 먼저 옮기고, 다시 재서 새 위치로 한 번 더 옮긴다.
  * 지도를 옮기면 그 영역의 분포를 다시 조회한다(디바운스 그대로).
  */
 function useLocateMe(location: CurrentLocation) {
-  const [focusRequest, setFocusRequest] = useState<MapFocusRequest | null>(null);
+  const [buttonRequest, setButtonRequest] = useState<MapFocusRequest | null>(null);
+  const [isFollowingFirstFix, setIsFollowingFirstFix] = useState(true);
+  const firstFix = isFollowingFirstFix ? location.position : null;
+
+  const firstFixRequest: MapFocusRequest | null = firstFix === null ? null : {
+    id: FIRST_FIX_FOCUS_ID,
+    lat: firstFix.latitude,
+    lng: firstFix.longitude,
+    level: MY_LOCATION_LEVEL,
+  };
+
+  const stopFollowingFirstFix = () => {
+    setIsFollowingFirstFix(false);
+  };
 
   const focusOn = (position: MeasuredPosition) => {
-    setFocusRequest((previous) => {
-      return { id: (previous?.id ?? 0) + 1, lat: position.latitude, lng: position.longitude, level: LOCATE_ME_LEVEL };
+    setButtonRequest((previous) => {
+      return { id: (previous?.id ?? FIRST_FIX_FOCUS_ID) + 1, lat: position.latitude, lng: position.longitude, level: MY_LOCATION_LEVEL };
     });
   };
 
@@ -169,7 +185,7 @@ function useLocateMe(location: CurrentLocation) {
     }
   };
 
-  return { focusRequest, locateMe };
+  return { focusRequest: buttonRequest ?? firstFixRequest, locateMe, stopFollowingFirstFix };
 }
 
 type LocateMeButtonProps = {

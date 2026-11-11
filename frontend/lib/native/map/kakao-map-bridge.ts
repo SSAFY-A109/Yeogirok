@@ -82,12 +82,14 @@ export type MapFootprintStyle = {
 /**
  * 내 위치 표시(Figma W15 `Current location`, W16 `Accuracy`). 정확도(m)가 있으면 반경 원을 함께 그린다.
  * `showDot`이 false면 점 없이 원만 그린다(그 자리에 발바닥 마커를 따로 그릴 때).
+ * `rangeMeters`를 주면 내 위치에서 그 거리까지를 점과 같은 색의 테두리 원으로 그린다(발자취 위치를 고칠 수 있는 범위).
  */
 export type MapCurrentLocation = {
   lat: number;
   lng: number;
   accuracyMeters: number | null;
   showDot: boolean;
+  rangeMeters?: number;
 };
 
 /** 내 위치 색. className이 닿지 않으므로 `lib/theme.ts` 값을 넘긴다. */
@@ -175,6 +177,7 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   var footprintOverlays = [];
   var currentLocationOverlay = null;
   var accuracyCircle = null;
+  var rangeCircle = null;
   var overlayPressedAt = 0;
   var anchor = null;
 
@@ -457,10 +460,23 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
     if (!map) return;
     if (currentLocationOverlay) currentLocationOverlay.setMap(null);
     if (accuracyCircle) accuracyCircle.setMap(null);
+    if (rangeCircle) rangeCircle.setMap(null);
     currentLocationOverlay = null;
     accuracyCircle = null;
+    rangeCircle = null;
     if (!location) return;
     var position = new kakao.maps.LatLng(location.lat, location.lng);
+    if (location.rangeMeters !== null && location.rangeMeters > 0) {
+      rangeCircle = new kakao.maps.Circle({
+        center: position,
+        radius: location.rangeMeters,
+        strokeWeight: 2,
+        strokeColor: style.dot,
+        strokeOpacity: 0.8,
+        fillOpacity: 0
+      });
+      rangeCircle.setMap(map);
+    }
     if (location.accuracyMeters !== null && location.accuracyMeters > 0) {
       accuracyCircle = new kakao.maps.Circle({
         center: position,
@@ -607,6 +623,7 @@ export function buildSetCurrentLocationScript(location: MapCurrentLocation | nul
     lng: location.lng,
     accuracyMeters: location.accuracyMeters,
     showDot: location.showDot,
+    rangeMeters: location.rangeMeters ?? null,
   };
 
   return `window.yeogirokMap && window.yeogirokMap.setCurrentLocation && window.yeogirokMap.setCurrentLocation(${toScriptLiteral(point)}, ${toScriptLiteral(style)}); true;`;

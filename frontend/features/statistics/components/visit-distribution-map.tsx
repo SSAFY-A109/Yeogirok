@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Platform, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import type { VisitCell } from "@/features/statistics/model";
+import { getLastKnownPosition } from "@/lib/native/location";
 import {
   footprintPinImage,
   KakaoMapView,
@@ -20,8 +21,48 @@ import { getColors } from "@/lib/theme";
 
 const kakaoJavascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
 
-/** 현재 위치를 쓰기 전(발자취 남기기 단계)까지 처음 보여 줄 곳. 시연 지역인 강릉 해변 일대다(TBD). */
-const INITIAL_CAMERA: MapCamera = { lat: 37.7801, lng: 128.9205, level: 7 };
+/** 내 위치를 알 수 없을 때(위치 권한이 없거나 기기가 아는 위치가 없을 때) 처음 보여 줄 곳. 시연 지역인 강릉 해변 일대다(TBD). */
+const FALLBACK_CAMERA: MapCamera = { lat: 37.7801, lng: 128.9205, level: 7 };
+/** 내 위치에서 지도를 열 때의 확대 단계(카카오 지도 level, 작을수록 가깝다). 내 위치 버튼과 같다. */
+export const MY_LOCATION_LEVEL = 5;
+/** 기기가 마지막으로 알던 위치를 이 시간 안에 못 읽으면 기본 지역에서 연다. 지도가 뜨지 않은 채 기다리지 않게 한다. */
+const LAST_KNOWN_WAIT_MS = 1_500;
+
+/**
+ * 지도를 처음 어디에서 열지 정한다. 위치 권한이 있으면 기기가 마지막으로 알던 위치, 없으면 기본 지역이다.
+ * 새로 잰 위치는 몇 초 뒤에 오므로 기다리지 않는다. 정해지기 전에는 `null`이고, 한 번 정한 뒤에는 바꾸지 않는다(바꾸면 지도를 다시 불러온다).
+ */
+function useInitialCamera(): MapCamera | null {
+  const [camera, setCamera] = useState<MapCamera | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const settle = (next: MapCamera) => {
+      if (isActive) {
+        setCamera((current) => {
+          return current ?? next;
+        });
+      }
+    };
+
+    const timer = setTimeout(() => {
+      settle(FALLBACK_CAMERA);
+    }, LAST_KNOWN_WAIT_MS);
+
+    void getLastKnownPosition().then((position) => {
+      clearTimeout(timer);
+      settle(position === null ? FALLBACK_CAMERA : { lat: position.latitude, lng: position.longitude, level: MY_LOCATION_LEVEL });
+    });
+
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  return camera;
+}
 
 /** 발바닥 크기 배율. 화면에서 발자취가 가장 많은 칸이 1.25배, 거의 없는 칸이 0.75배이고 사이는 발자취 수에 비례한다(Figma W15). */
 const MIN_FOOTPRINT_SCALE = 0.75;
@@ -94,12 +135,17 @@ type VisitDistributionMapProps = {
   focusRequest: MapFocusRequest | null;
   onPressCell: (cellId: string) => void;
   onPressMap: () => void;
+  /** 사용자가 지도에 손을 댔을 때. 그 뒤로는 지도를 내 위치로 알아서 옮기지 않게 하는 데 쓴다. */
+  onTouchMap: () => void;
   onRegionChange: (region: MapRegion) => void;
 };
 
 type MapPhase = "loading" | "ready" | "error";
 
-/** 서버가 묶은 격자 칸을 발바닥 마커로 그리는 카카오 지도(EXP-01·02). 웹이거나 지도 키가 없으면 안내만 보여 준다. */
+/**
+ * 서버가 묶은 격자 칸을 발바닥 마커로 그리는 카카오 지도(EXP-01·02). 웹이거나 지도 키가 없으면 안내만 보여 준다.
+ * 위치 권한이 있으면 내 위치에서 연다(2026-11-11 사용자 요청).
+ */
 export function VisitDistributionMap(props: VisitDistributionMapProps) {
   if (Platform.OS === "web") {
     return <MapNotice message="지도는 Android·iOS 앱에서 볼 수 있어요." />;
@@ -120,10 +166,12 @@ function VisitDistributionMapView({
   focusRequest,
   onPressCell,
   onPressMap,
+  onTouchMap,
   onRegionChange,
 }: VisitDistributionMapProps & { javascriptKey: string }) {
   const [phase, setPhase] = useState<MapPhase>("loading");
   const [attempt, setAttempt] = useState(0);
+  const initialCamera = useInitialCamera();
 
   const footprints = useMemo(() => {
     return toFootprints(cells, selectedCellId);
@@ -151,27 +199,29 @@ function VisitDistributionMapView({
   }
 
   return (
-    <View className="flex-1 bg-brand-muted">
-      <KakaoMapView
-        key={attempt}
-        accessibilityLabel="발자취가 많을수록 발바닥이 큰 방문 분포 지도"
-        javascriptKey={javascriptKey}
-        initialCamera={INITIAL_CAMERA}
-        footprints={footprints}
-        footprintStyle={FOOTPRINT_STYLE}
-        currentLocation={currentLocation}
-        currentLocationStyle={CURRENT_LOCATION_STYLE}
-        focusRequest={focusRequest}
-        onPressPoint={onPressCell}
-        onPressMap={onPressMap}
-        onRegionChange={onRegionChange}
-        onReady={() => {
-          setPhase("ready");
-        }}
-        onError={() => {
-          setPhase("error");
-        }}
-      />
+    <View className="flex-1 bg-brand-muted" onTouchStart={phase === "ready" ? onTouchMap : undefined}>
+      {initialCamera === null ? null : (
+        <KakaoMapView
+          key={attempt}
+          accessibilityLabel="발자취가 많을수록 발바닥이 큰 방문 분포 지도"
+          javascriptKey={javascriptKey}
+          initialCamera={initialCamera}
+          footprints={footprints}
+          footprintStyle={FOOTPRINT_STYLE}
+          currentLocation={currentLocation}
+          currentLocationStyle={CURRENT_LOCATION_STYLE}
+          focusRequest={focusRequest}
+          onPressPoint={onPressCell}
+          onPressMap={onPressMap}
+          onRegionChange={onRegionChange}
+          onReady={() => {
+            setPhase("ready");
+          }}
+          onError={() => {
+            setPhase("error");
+          }}
+        />
+      )}
       {phase === "loading" ? (
         <View accessibilityLabel="지도 불러오는 중" className="absolute inset-0 items-center justify-center gap-2 bg-brand-muted">
           <Spinner tone="brand" accessible={false} />

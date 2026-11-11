@@ -1,5 +1,6 @@
 import {
   getForegroundPermissionsAsync,
+  getLastKnownPositionAsync,
   hasServicesEnabledAsync,
   LocationAccuracy,
   requestForegroundPermissionsAsync,
@@ -192,6 +193,25 @@ export async function measureCurrentPosition(): Promise<MeasuredPosition> {
       finish(toFailure(error));
     });
   });
+}
+
+/**
+ * 기기가 마지막으로 알던 위치. 새로 재지 않아 바로 돌아오지만 오래된 값일 수 있어, 지도를 처음 어디에서 열지 정하는 데만 쓴다.
+ * 위치 증거로는 쓰지 않는다(규칙 80). 권한이 없거나 기기가 아는 위치가 없거나 읽지 못하면 `null`이고, OS 대화상자는 띄우지 않는다.
+ */
+export async function getLastKnownPosition(): Promise<MeasuredPosition | null> {
+  try {
+    const access = await getForegroundPermissionsAsync();
+
+    if (!access.granted) {
+      return null;
+    }
+
+    const location = await getLastKnownPositionAsync();
+    return location === null ? null : toMeasuredPosition(location);
+  } catch {
+    return null;
+  }
 }
 
 function toPlaceLabel(address: LocationGeocodedAddress): string | null {

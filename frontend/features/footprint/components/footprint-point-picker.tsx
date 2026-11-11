@@ -15,7 +15,7 @@ import {
   KAKAO_JAVASCRIPT_KEY,
   PawImage,
 } from "@/features/footprint/components/footprint-location-map";
-import type { FootprintPoint, FootprintPosition } from "@/features/footprint/model";
+import { FOOTPRINT_ADJUST_RADIUS_METERS, isWithinAdjustRadius, type FootprintPoint, type FootprintPosition } from "@/features/footprint/model";
 import { KakaoMapView, type MapCamera, type MapCurrentLocation, type MapFocusRequest, type MapRegion } from "@/lib/native/map";
 
 /** 위치를 고를 때의 확대 단계. 골목 단위로 맞출 수 있게 가깝게 본다. */
@@ -25,17 +25,18 @@ type MapPhase = "loading" | "ready" | "error";
 
 type FootprintPointPickerProps = {
   visible: boolean;
-  /** 기기가 잰 위치. 파란 점과 정확도 원으로 보여 준다. */
+  /** 기기가 잰 위치. 파란 점과 정확도 원, 고칠 수 있는 범위 원으로 보여 준다. */
   measured: FootprintPosition;
-  /** 처음 맞출 곳. 이미 고른 위치가 있으면 그곳, 없으면 잰 위치다. */
+  /** 처음 맞출 곳. 이미 고른 위치가 있으면 그곳, 없으면 잰 위치다. 범위 안이어야 한다. */
   initialPoint: FootprintPoint;
   onConfirm: (point: FootprintPoint) => void;
   onClose: () => void;
 };
 
 /**
- * 발자취를 남길 위치를 지도에서 직접 고르는 화면(2026-11-06 사용자 결정, 거리 제한 없음, Figma 시안 없음).
+ * 발자취를 남길 위치를 지도에서 직접 고르는 화면(2026-11-06 사용자 결정, Figma 시안 없음).
  * 지도 가운데 고정된 발바닥에 맞춰 지도를 움직이고, 기기가 잰 위치는 파란 점과 정확도 원으로 함께 보여 준다.
+ * 잰 위치에서 `FOOTPRINT_ADJUST_RADIUS_METERS` 안에서만 정할 수 있다(2026-11-11 사용자 결정). 그 범위를 테두리 원으로 그리고, 벗어나면 정하기 버튼을 막는다.
  * Modal은 새 창이라 바깥 화면의 안전 영역 값이 맞지 않는다. 창 안에 SafeAreaProvider를 따로 두어
  * 상태 바·내비게이션 바 높이를 이 창 기준으로 재고, 헤더와 아래 버튼이 그 밑에 가리지 않게 한다.
  */
@@ -60,8 +61,16 @@ function PickerContent({ measured, initialPoint, onConfirm, onClose }: Omit<Foot
   });
 
   const currentLocation = useMemo<MapCurrentLocation>(() => {
-    return { lat: measured.latitude, lng: measured.longitude, accuracyMeters: measured.accuracyMeters, showDot: true };
+    return {
+      lat: measured.latitude,
+      lng: measured.longitude,
+      accuracyMeters: measured.accuracyMeters,
+      showDot: true,
+      rangeMeters: FOOTPRINT_ADJUST_RADIUS_METERS,
+    };
   }, [measured]);
+
+  const isInRange = isWithinAdjustRadius(measured, center);
 
   const followMapCenter = ({ south, west, north, east }: MapRegion) => {
     setCenter({ latitude: (south + north) / 2, longitude: (west + east) / 2 });
@@ -129,7 +138,15 @@ function PickerContent({ measured, initialPoint, onConfirm, onClose }: Omit<Foot
         )}
       </View>
       <BottomCta className="items-stretch">
-        <Text className="text-caption text-foreground-secondary">지도를 움직여 발바닥을 실제로 있는 곳에 맞춰 주세요. 파란 점이 기기가 잰 위치예요.</Text>
+        {isInRange ? (
+          <Text className="text-caption text-foreground-secondary">
+            {`지도를 움직여 발바닥을 실제로 있는 곳에 맞춰 주세요. 파란 점이 기기가 잰 위치이고, 원 안(${FOOTPRINT_ADJUST_RADIUS_METERS}m)에서만 정할 수 있어요.`}
+          </Text>
+        ) : (
+          <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="text-caption text-destructive" testID="footprint-picker.out-of-range">
+            {`잰 위치에서 ${FOOTPRINT_ADJUST_RADIUS_METERS}m 넘게 벗어났어요. 발바닥을 원 안으로 옮겨 주세요.`}
+          </Text>
+        )}
         <View className="flex-row gap-3">
           <Button
             size="lg"
@@ -145,7 +162,7 @@ function PickerContent({ measured, initialPoint, onConfirm, onClose }: Omit<Foot
           <Button
             size="lg"
             className="flex-1"
-            disabled={phase !== "ready"}
+            disabled={phase !== "ready" || !isInRange}
             onPress={() => {
               onConfirm(center);
             }}

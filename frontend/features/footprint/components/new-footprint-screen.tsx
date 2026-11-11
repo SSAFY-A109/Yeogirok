@@ -27,10 +27,12 @@ import { useKeyboardFollowingScroll } from "@/features/footprint/components/use-
 import { getFootprintErrorMessage, getLocationFailureMessage, isLocationEvidenceError } from "@/features/footprint/errors";
 import {
   countFootprintBody,
+  FOOTPRINT_ADJUST_RADIUS_METERS,
   FOOTPRINT_BODY_MAX_LENGTH,
   FOOTPRINT_CATEGORY_MAX_COUNT,
   FOOTPRINT_CATEGORY_MIN_COUNT,
   formatLocationEvidence,
+  isWithinAdjustRadius,
   toCreateFootprintRequest,
   type ChosenFootprintPoint,
   type CreateFootprintRequestDto,
@@ -74,7 +76,10 @@ function useIdempotencyKey() {
 /** 지도에서 직접 고친 위치, 확정한 시각, 그 근처 주소(기기 지오코더, 찾는 중이거나 못 찾으면 `null`). */
 type ChosenPlace = ChosenFootprintPoint & { label: string | null };
 
-/** 직접 고친 위치. 잰 위치를 다시 재도 사용자가 고친 곳은 그대로 둔다. */
+/**
+ * 직접 고친 위치. 잰 위치를 다시 재도 사용자가 고친 곳은 그대로 둔다.
+ * 다시 잰 위치에서 고칠 수 있는 범위를 벗어나면 저장을 막고, 잰 위치로 되돌리거나 다시 고치게 안내한다.
+ */
 function useChosenPlace() {
   const [chosen, setChosen] = useState<ChosenPlace | null>(null);
   const latestPoint = useRef<FootprintPoint | null>(null);
@@ -132,6 +137,14 @@ export function NewFootprintScreen() {
   });
   const saveError = createFootprint.error;
   const isSaving = createFootprint.isPending;
+
+  const isChosenOutOfRange = location.position !== null && chosenPlace.chosen !== null &&
+    !isWithinAdjustRadius(location.position, chosenPlace.chosen.point);
+
+  const resetToMeasured = () => {
+    chosenPlace.clear();
+    clearSaveError();
+  };
 
   const clearSaveError = () => {
     if (createFootprint.error !== null) {
@@ -201,10 +214,7 @@ export function NewFootprintScreen() {
             onPick={() => {
               setIsPickerOpen(true);
             }}
-            onResetToMeasured={() => {
-              chosenPlace.clear();
-              clearSaveError();
-            }}
+            onResetToMeasured={resetToMeasured}
           />
           <View className="gap-6 px-5 pt-4">
             <CategoryField
@@ -226,6 +236,16 @@ export function NewFootprintScreen() {
           </View>
         </ScrollView>
         <BottomCta>
+          {isChosenOutOfRange ? (
+            <View className="w-full flex-row items-center gap-3" testID="footprint.chosen-out-of-range">
+              <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="flex-1 text-caption text-destructive">
+                {`직접 고친 위치가 다시 잰 위치에서 ${FOOTPRINT_ADJUST_RADIUS_METERS}m 넘게 떨어져 있어요. 잰 위치로 되돌리거나 위치를 다시 고쳐 주세요.`}
+              </Text>
+              <Button variant="outline" onPress={resetToMeasured} testID="footprint.chosen-reset">
+                <Text>잰 위치로</Text>
+              </Button>
+            </View>
+          ) : null}
           {saveError !== null ? (
             <View className="w-full flex-row items-center gap-3" testID="footprint.error">
               <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="flex-1 text-caption text-destructive">
@@ -264,7 +284,7 @@ export function NewFootprintScreen() {
         <FootprintPointPicker
           visible={isPickerOpen}
           measured={location.position}
-          initialPoint={chosenPlace.chosen?.point ?? location.position}
+          initialPoint={chosenPlace.chosen === null || isChosenOutOfRange ? location.position : chosenPlace.chosen.point}
           onConfirm={(point) => {
             chosenPlace.choose(point);
             clearSaveError();
@@ -302,7 +322,7 @@ type LocationSectionProps = {
 
 /**
  * 발자취를 남길 곳(Figma W16 `Location map`·`Location`). 권한·측정 상태에 따라 안내를 바꾼다.
- * 잰 위치가 빗나가면 지도에서 직접 고를 수 있고(거리 제한 없음), 언제든 잰 위치로 되돌릴 수 있다.
+ * 잰 위치가 빗나가면 지도에서 직접 고를 수 있고(잰 위치에서 `FOOTPRINT_ADJUST_RADIUS_METERS` 안), 언제든 잰 위치로 되돌릴 수 있다.
  */
 function LocationSection({ location, chosen, onRemeasure, onPick, onResetToMeasured }: LocationSectionProps) {
   const remeasure = () => {
