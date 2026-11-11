@@ -107,7 +107,8 @@ export function RoomDetailSchedule({ room, header }: RoomDetailScheduleProps) {
 
 type DaySection = { key: LocalDate; day: ScheduleDay; dayNumber: number; data: ScheduleItem[] };
 
-function toDayChipItems(days: readonly ScheduleDay[]): DayChipItem[] {
+/** 일차 칩. `1일차`와 그날 날짜(`11/8 일`)를 보여 준다. 여행방 지도 화면도 같은 칩을 쓴다. */
+export function toDayChipItems(days: readonly ScheduleDay[]): DayChipItem[] {
   return days.map((day, index) => {
     return { date: day.date, label: `${index + 1}일차`, caption: formatShortMonthDay(day.date, { parens: false }), hasWarning: day.warnings.length > 0 };
   });
@@ -160,7 +161,7 @@ function ScheduleTimeline({ schedule, places, header }: { schedule: RoomSchedule
         sections={sections}
         stickySectionHeadersEnabled
         initialNumToRender={Math.min(rowCount, MAX_INITIAL_ROWS)}
-        contentContainerClassName="pb-6"
+        contentContainerClassName="pb-16"
         viewabilityConfig={VIEWABILITY_CONFIG}
         onViewableItemsChanged={handleViewableItemsChanged}
 

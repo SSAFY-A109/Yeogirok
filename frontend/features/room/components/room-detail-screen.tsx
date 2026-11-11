@@ -17,6 +17,7 @@ import { canCreateRecord } from "@/features/record/model";
 import { useRoom, useRoomPlaces } from "@/features/room/api/queries";
 import type { AddPlaceSource } from "@/features/room/components/add-place-options";
 import { AddPlaceSheet } from "@/features/room/components/add-place-sheet";
+import { MapViewToggle } from "@/features/room/components/map-view-toggle";
 import { PlaceTabs, type PlaceTab } from "@/features/room/components/place-tabs";
 import { RoomDetailSchedule } from "@/features/room/components/room-detail-schedule";
 import { RoomInfo } from "@/features/room/components/room-info";
@@ -150,6 +151,13 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
 
   const showAdjustButton = tab === "schedule" && room.hasSchedule;
 
+  /** 지금 탭의 내용(후보 장소 또는 일정)을 지도로 본다(TRP-07). */
+  const goToMap = () => {
+    router.push({ pathname: "/rooms/[roomId]/map", params: { ...params, view: tab } });
+  };
+
+  const showMapToggle = tab === "places" ? visiblePlaceCount > 0 : room.hasSchedule;
+
   const header = (
     <>
       <RoomInfo room={room} onInvite={goToInvite} />
@@ -194,6 +202,11 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
         ) : (
           <RoomDetailSchedule room={room} header={header} />
         )}
+        {showMapToggle ? (
+          <View pointerEvents="box-none" className="absolute bottom-3 left-0 right-0 items-center">
+            <MapViewToggle target="map" onPress={goToMap} testID="room-detail.map-toggle" />
+          </View>
+        ) : null}
       </View>
       {showAdjustButton ? (
         <BottomCta className="border-t border-border">
