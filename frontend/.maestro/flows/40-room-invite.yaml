@@ -1,0 +1,18 @@
+# 개발 빌드에서 초대 토큰이 로그인 후에도 유지되는지 확인한다.
+appId: ${MAESTRO_APP_ID}
+name: 40 초대 링크로 여행방 참여
+---
+- launchApp:
+    clearState: true
+- openLink: yeogirokfe:///invite/mock-invite-5
+- assertVisible:
+    id: "login.screen"
+- assertNotVisible:
+    id: "join-room.submit"
+- tapOn:
+    id: "login.kakao"
+- assertVisible:
+    id: "join-room.confirm"
+- tapOn:
+    id: "join-room.submit"
+- assertVisible: "여수 밤바다 여행"

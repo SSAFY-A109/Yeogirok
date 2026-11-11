@@ -337,7 +337,8 @@ Swagger는 요청 필드 이름과 헤더·쿼리만 보여 주고 응답은 `{ 
 | 077 `POST /realtime/tickets` | 헤더 `Idempotency-Key`, `{ roomId }` | 201 `{ ticket, expiresAt, connectPath: "/ws/v1", roomId }` | `backend/dev` 12211b2 기준(2026-11-11). 티켓은 30초 안에 한 번만 쓸 수 있다. 같은 멱등키로 다시 요청하면 처음 티켓이 오므로 연결할 때마다 새 키를 쓴다. 참여자 아님 RO002, 여행방 없음 RO001 |
 
 - 여행방 `version`은 `features/room/api/queries.ts`의 `resolveRoomVersion`·`storeRoomVersion`이 캐시에서 읽고 쓴다. version을 싣는 변경 요청은 같은 scope로 차례로 보낸다.
-- 초대 주소(`inviteUrl`)는 서버 설정 `ROOM_INVITE_URL_BASE` + `/{inviteToken}`이다. 앱이 이 주소를 직접 여는 설정(앱 링크·유니버설 링크)은 아직 없다(`TBD`).
+- 서버의 `ROOM_INVITE_URL_BASE`는 `https://k15a109.p.ssafy.io/invite`로 설정한다. 앱은 이 주소의 `/invite/{inviteToken}`을 열고, 로그인한 사용자가 참여를 확인한 뒤 API-025를 호출한다.
+- 도메인은 `/.well-known/assetlinks.json`에 Android 패키지 `com.ssafya109.yeogirok`와 배포 서명 인증서의 SHA-256 지문을 제공한다. `/.well-known/apple-app-site-association`에는 `<Team ID>.com.ssafya109.yeogirok`와 `/invite/*`를 등록한다. 두 파일을 HTTPS에서 인증과 리디렉션 없이 제공한 뒤 네이티브 앱을 다시 빌드해 확인한다. 앱이 설치되지 않은 사용자를 위한 설치 안내는 같은 초대 주소에서 제공할 수 있다.
 - 지도 핀으로 장소 직접 추가(031)와 기록 공간 생성(057)은 서버에 있지만 화면이 없다.
 
 ### 3-3. 여행방 채팅 WebSocket (2026-11-11, backend/dev 12211b2)
