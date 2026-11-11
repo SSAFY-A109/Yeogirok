@@ -30,6 +30,7 @@ import com.ssafy.yeogirok.domain.job.Job;
 import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobStore;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.draft.PhotoMetadataReader.PhotoMetadata;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftTestConfig.FakePhotoMetadataReader;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
@@ -236,7 +237,7 @@ class RecordDraftServiceTest {
 	void 기록에_연결한_자료는_원본을_지운_뒤에도_063_에_남고_064_에_쓸_수_있다() {
 		materialStore.addToIndex(recordId, ME, MATERIAL_ID);
 		clock.set(NOW.plus(Duration.ofHours(25)));
-		materialStore.markOriginalDeleted(MATERIAL_ID);
+		materialStore.markOriginalDeleted(MATERIAL_ID, RecordTestConfig.RECORD_PROPERTIES.materialRetention());
 
 		assertThat(materialQueryService.list(ME, recordId).items()).singleElement().satisfies(view -> {
 			assertThat(view.originalAvailable()).isFalse();

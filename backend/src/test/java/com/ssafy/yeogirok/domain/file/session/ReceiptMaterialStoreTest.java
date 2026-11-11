@@ -5,11 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
@@ -24,6 +25,7 @@ class ReceiptMaterialStoreTest {
 
 	static final JsonMapper JSON = JsonMapper.builder().build();
 	static final Instant ACCEPTED = Instant.parse("2026-11-06T00:00:00Z");
+	static final Duration LINKED_RETENTION = Duration.ofDays(30);
 
 	ReceiptMaterialStore store;
 
@@ -31,8 +33,7 @@ class ReceiptMaterialStoreTest {
 	void setUp() {
 		TestRedis.flushAll();
 		store = new ReceiptMaterialStore(TestRedis.template(), JSON,
-			new IdempotencyProperties(Duration.ofHours(24), Duration.ofSeconds(30)), RecordTestConfig.RECORD_PROPERTIES,
-			new RedisLock(TestRedis.template()));
+			new IdempotencyProperties(Duration.ofHours(24), Duration.ofSeconds(30)), new RedisLock(TestRedis.template()));
 	}
 
 	@Test
@@ -57,7 +58,7 @@ class ReceiptMaterialStoreTest {
 			ACCEPTED.plusSeconds(86_400));
 		store.save("m-1", material);
 
-		store.markOriginalDeleted("m-1");
+		store.markOriginalDeleted("m-1", LINKED_RETENTION);
 
 		ReceiptMaterial deleted = store.find("m-1").orElseThrow();
 		assertThat(deleted.objectKey()).isNull();
@@ -71,10 +72,48 @@ class ReceiptMaterialStoreTest {
 		store.save("m-1", ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED, ACCEPTED.plusSeconds(86_400))
 			.linked("RECEIPT", "job-1", ACCEPTED));
 
-		store.markOriginalDeleted("m-1");
+		store.markOriginalDeleted("m-1", LINKED_RETENTION);
 
 		assertThat(store.find("m-1").orElseThrow().deleteStatus()).isEqualTo("DELETED");
 		assertThat(TestRedis.template().getExpire("material:m-1")).isBetween(30L * 86_400 - 5, 30L * 86_400);
+	}
+
+	@Test
+	void 연결한_자료의_원본을_지우면_색인에도_같은_수명을_걸고_새로_연결하면_수명을_없앤다() {
+		store.save("m-1", ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED, ACCEPTED.plusSeconds(86_400))
+			.linked("RECEIPT", "job-1", ACCEPTED));
+		store.addToIndex(100L, 7L, "m-1");
+		assertThat(TestRedis.template().getExpire("material-index:100:7")).isEqualTo(-1L);
+
+		store.markOriginalDeleted("m-1", LINKED_RETENTION);
+
+		assertThat(TestRedis.template().getExpire("material-index:100:7")).isBetween(30L * 86_400 - 5, 30L * 86_400);
+
+		store.addToIndex(100L, 7L, "m-2");
+
+		assertThat(TestRedis.template().getExpire("material-index:100:7")).isEqualTo(-1L);
+	}
+
+	@Test
+	void 연결_안_된_자료의_원본을_지워도_색인은_건드리지_않는다() {
+		store.save("m-1", ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED, ACCEPTED.plusSeconds(86_400)));
+
+		store.markOriginalDeleted("m-1", LINKED_RETENTION);
+
+		assertThat(TestRedis.template().hasKey("material-index:100:7")).isFalse();
+	}
+
+	@Test
+	void 여러_기록을_한_번에_읽을_때도_만료된_자료는_색인에서_지운다() {
+		ReceiptMaterial material = ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED,
+			ACCEPTED.plusSeconds(86_400));
+		store.save("m-1", material);
+		store.addToIndex(100L, 7L, "m-1");
+		store.addToIndex(101L, 7L, "gone");
+
+		assertThat(store.indexedAll(List.of(100L, 101L), 7L))
+			.containsExactly(Map.entry(100L, List.of(new ReceiptMaterialEntry("m-1", material))));
+		assertThat(TestRedis.template().hasKey("material-index:101:7")).isFalse();
 	}
 
 	@Test
@@ -82,7 +121,7 @@ class ReceiptMaterialStoreTest {
 		store.save("m-1", ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED, ACCEPTED.plusSeconds(86_400)));
 		new RedisLock(TestRedis.template()).tryAcquire("material-lock:m-1", Duration.ofSeconds(30));
 
-		assertThatThrownBy(() -> store.markOriginalDeleted("m-1")).isInstanceOfSatisfying(BusinessException.class,
+		assertThatThrownBy(() -> store.markOriginalDeleted("m-1", LINKED_RETENTION)).isInstanceOfSatisfying(BusinessException.class,
 			e -> assertThat(e.getExceptionType()).isEqualTo(ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS));
 		assertThat(store.find("m-1").orElseThrow().objectKey()).isEqualTo("receipt/abc");
 		assertThat(TestRedis.template().getExpire("material:m-1")).isEqualTo(-1L);
@@ -90,7 +129,7 @@ class ReceiptMaterialStoreTest {
 
 	@Test
 	void 이미_없는_자료는_만들지_않는다() {
-		store.markOriginalDeleted("missing");
+		store.markOriginalDeleted("missing", LINKED_RETENTION);
 
 		assertThat(TestRedis.template().hasKey("material:missing")).isFalse();
 	}
@@ -98,7 +137,7 @@ class ReceiptMaterialStoreTest {
 	@Test
 	void 바꿔_저장해도_원본_삭제_뒤_걸린_수명은_남는다() {
 		store.save("m-1", ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED, ACCEPTED.plusSeconds(86_400)));
-		store.markOriginalDeleted("m-1");
+		store.markOriginalDeleted("m-1", LINKED_RETENTION);
 
 		store.update("m-1", material -> true, material -> material.linked("RECEIPT", "job-1", ACCEPTED));
 

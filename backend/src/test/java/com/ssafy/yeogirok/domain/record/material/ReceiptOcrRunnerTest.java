@@ -32,7 +32,6 @@ import com.ssafy.yeogirok.domain.job.JobProperties;
 import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.job.service.JobStore;
-import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
@@ -74,7 +73,7 @@ class ReceiptOcrRunnerTest {
 		JsonMapper json = JsonMapper.builder().build();
 		jobStore = new JobStore(TestRedis.template(), json, JOB_PROPERTIES, clock);
 		materialStore = new ReceiptMaterialStore(TestRedis.template(), json,
-			new IdempotencyProperties(Duration.ofHours(24), Duration.ofSeconds(30)), RecordTestConfig.RECORD_PROPERTIES,
+			new IdempotencyProperties(Duration.ofHours(24), Duration.ofSeconds(30)),
 			new RedisLock(TestRedis.template()));
 		materials = new ReceiptMaterials(materialStore, jobStore, clock);
 		fileStorage = mock(FileStorage.class);

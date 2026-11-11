@@ -18,7 +18,6 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
@@ -30,8 +29,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 영수증 자료 저장소(Redis {@code material:{materialId}}). 원본 삭제를 확인하기 전에는 수명을 걸지 않고(노션 Redis 4절),
- * 확인한 뒤에는 기록에 연결한 자료는 {@code yeogirok.record.material-retention}(30일), 연결 안 된 자료는 멱등키 보관 기간만큼
- * 둔다(명세 {@code specs/record-api-2.md} 5절 19). 그동안 정제 값으로 기록 초안을 만들 수 있다.
+ * 확인한 뒤에는 기록에 연결한 자료는 부르는 쪽이 넘긴 기간({@code yeogirok.record.material-retention}, 30일), 연결 안 된 자료는
+ * 멱등키 보관 기간만큼 둔다(명세 {@code specs/record-api-2.md} 5절 19). 그동안 정제 값으로 기록 초안을 만들 수 있다.
  *
  * <p>바꾸는 쓰기는 모두 {@code material-lock:{materialId}} 잠금 안에서 읽기 → 검사 → 쓰기를 한다(API 쪽 쓰기와 원본 정리
  * 작업이 서로 덮지 않게). 잠금을 못 잡으면 몇 번 다시 시도하고 그래도 안 되면 C018(명세 5절 20).
@@ -42,7 +41,10 @@ import tools.jackson.databind.json.JsonMapper;
 public class ReceiptMaterialStore {
 
 	private static final String PREFIX = "material:";
-	/** 기록·업로더별 연결한 자료 목록(API-063, 명세 {@code specs/record-api-2.md} 2-4). 수명 없음, 읽을 때 만료된 자료를 뺀다. */
+	/**
+	 * 기록·업로더별 연결한 자료 목록(API-063, 명세 {@code specs/record-api-2.md} 2-4). 읽을 때 만료된 자료를 빼고, 자료 원본을
+	 * 지우면 자료와 같은 기간의 수명을 건다(새로 연결하면 수명을 없앤다). 그래서 아무도 안 읽어도 마지막 자료와 함께 사라진다.
+	 */
 	private static final String INDEX_PREFIX = "material-index:";
 	private static final String LOCK_PREFIX = "material-lock:";
 	/** 잠금 수명. 잠금 안에서는 Redis 읽기·쓰기만 한다(OCR·S3 호출은 잠금 밖). */
@@ -53,7 +55,6 @@ public class ReceiptMaterialStore {
 	private final StringRedisTemplate redis;
 	private final JsonMapper jsonMapper;
 	private final IdempotencyProperties idempotencyProperties;
-	private final RecordProperties recordProperties;
 	private final RedisLock redisLock;
 
 	public void save(String materialId, ReceiptMaterial material) {
@@ -95,23 +96,16 @@ public class ReceiptMaterialStore {
 		}
 	}
 
+	/** 새 자료의 원본은 아직 안 지웠으니 앞 자료 때 걸린 수명을 없앤다(새 자료보다 목록이 먼저 만료되지 않게). */
 	public void addToIndex(Long recordId, Long userId, String materialId) {
-		redis.opsForSet().add(indexKey(recordId, userId), materialId);
+		String indexKey = indexKey(recordId, userId);
+		redis.opsForSet().add(indexKey, materialId);
+		redis.persist(indexKey);
 	}
 
-	/** 그 기록에 그 사용자가 연결한 자료. 키가 만료된 자료는 목록에서 빼고 지운다. */
+	/** 그 기록에 그 사용자가 연결한 자료. */
 	public List<ReceiptMaterialEntry> indexed(Long recordId, Long userId) {
-		String indexKey = indexKey(recordId, userId);
-		Set<String> ids = redis.opsForSet().members(indexKey);
-		List<ReceiptMaterialEntry> found = new ArrayList<>();
-		if (ids == null) {
-			return found;
-		}
-		for (String id : ids) {
-			find(id).ifPresentOrElse(material -> found.add(new ReceiptMaterialEntry(id, material)),
-				() -> redis.opsForSet().remove(indexKey, id));
-		}
-		return found;
+		return indexedAll(List.of(recordId), userId).getOrDefault(recordId, List.of());
 	}
 
 	private static String indexKey(Long recordId, Long userId) {
@@ -119,14 +113,19 @@ public class ReceiptMaterialStore {
 	}
 
 	/**
-	 * 원본을 지웠다고 표시하고 수명을 건다(기록에 연결한 자료 30일, 아니면 24시간). 자료가 없으면(이미 만료) 아무것도 하지 않는다.
-	 * 잠금 안에서 해 API 쓰기(OCR 결과·보정)와 서로 덮지 않는다.
+	 * 원본을 지웠다고 표시하고 수명을 건다(기록에 연결한 자료 {@code linkedRetention}, 아니면 멱등키 보관 기간). 연결한 자료면
+	 * 목록에도 같은 수명을 건다. 자료가 없으면(이미 만료) 아무것도 하지 않는다. 잠금 안에서 해 API 쓰기(OCR 결과·보정)와 서로
+	 * 덮지 않는다.
 	 */
-	public void markOriginalDeleted(String materialId) {
+	public void markOriginalDeleted(String materialId, Duration linkedRetention) {
 		locked(materialId, () -> {
-			find(materialId).ifPresent(material -> redis.opsForValue().set(PREFIX + materialId,
-				jsonMapper.writeValueAsString(material.deleted()),
-				material.isLinked() ? recordProperties.materialRetention() : idempotencyProperties.retention()));
+			find(materialId).ifPresent(material -> {
+				Duration retention = material.isLinked() ? linkedRetention : idempotencyProperties.retention();
+				redis.opsForValue().set(PREFIX + materialId, jsonMapper.writeValueAsString(material.deleted()), retention);
+				if (material.isLinked()) {
+					redis.expire(indexKey(material.recordId(), material.uploadedBy()), retention);
+				}
+			});
 			return null;
 		});
 	}
@@ -170,8 +169,8 @@ public class ReceiptMaterialStore {
 	}
 
 	/**
-	 * 여러 기록의 그 사용자 자료를 한 번에(API-058 progress). 목록은 파이프라인 한 번, 자료는 MGET 한 번으로 읽는다. 만료된 자료는
-	 * 빼기만 하고 목록에서 지우지는 않는다.
+	 * 여러 기록의 그 사용자 자료를 한 번에(API-058·059·063). 목록은 파이프라인 한 번, 자료는 MGET 한 번으로 읽는다. 만료된 자료는
+	 * 빼고 목록에서도 지운다.
 	 */
 	public Map<Long, List<ReceiptMaterialEntry>> indexedAll(List<Long> recordIds, Long userId) {
 		Map<Long, List<ReceiptMaterialEntry>> byRecord = new HashMap<>();
@@ -196,10 +195,13 @@ public class ReceiptMaterialStore {
 		}
 		List<String> values = redis.opsForValue().multiGet(materialIds.stream().map(id -> PREFIX + id).toList());
 		for (int i = 0; i < materialIds.size(); i++) {
+			String id = materialIds.get(i);
 			String value = values == null ? null : values.get(i);
 			if (value != null) {
-				byRecord.computeIfAbsent(recordOf.get(materialIds.get(i)), key -> new ArrayList<>())
-					.add(new ReceiptMaterialEntry(materialIds.get(i), jsonMapper.readValue(value, ReceiptMaterial.class)));
+				byRecord.computeIfAbsent(recordOf.get(id), key -> new ArrayList<>())
+					.add(new ReceiptMaterialEntry(id, jsonMapper.readValue(value, ReceiptMaterial.class)));
+			} else if (values != null) {
+				redis.opsForSet().remove(indexKey(recordOf.get(id), userId), id);
 			}
 		}
 		return byRecord;
