@@ -19,9 +19,4 @@ public record CourseSnapshot(List<ActualVisit> visits, Map<Long, List<VisitImage
 	public List<VisitImage> photosOf(Long visitId) {
 		return photosByVisit.getOrDefault(visitId, List.of());
 	}
-
-	/** API-075 에서 includePhotos 를 생략했을 때 지금 사진을 공개하고 있는지. */
-	public boolean hasPublicPhoto() {
-		return linkedPhotos().stream().anyMatch(VisitImage::isPublicSelected);
-	}
 }

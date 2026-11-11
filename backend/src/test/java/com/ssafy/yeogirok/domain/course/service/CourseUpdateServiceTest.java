@@ -86,10 +86,15 @@ class CourseUpdateServiceTest {
 	}
 
 	private CoursePublicationResponse update(String title, Boolean includePhotos, String hash, Boolean published) {
+		return update(title, null, includePhotos, hash, published);
+	}
+
+	private CoursePublicationResponse update(String title, String description, Boolean includePhotos, String hash,
+		Boolean published) {
 		int version = record().getVersion();
 		em.clear();
 		CoursePublicationResponse response = courseUpdateService.update(ME, courseId,
-			new CourseInput(version, title, null, includePhotos, hash, published));
+			new CourseInput(version, title, description, includePhotos, hash, published));
 		flush();
 		return response;
 	}
@@ -115,11 +120,10 @@ class CourseUpdateServiceTest {
 
 	@Test
 	void 해제_뒤_새_해시로_다시_게시하면_새_게시시각() {
-		// 해제해도 사진 공개 선택은 남아, includePhotos 를 생략하면 사진 포함으로 해시를 맞춘다.
 		update(null, null, null, false);
 		clock.advance(Duration.ofHours(1));
 
-		CoursePublicationResponse response = update(null, null, hash("강릉 1박", "", true), true);
+		CoursePublicationResponse response = update(null, true, hash("강릉 1박", "", true), true);
 
 		assertThat(response.publishedAt()).isEqualTo(NOW.plus(Duration.ofHours(1)));
 		assertThat(response.version()).isEqualTo(5);
@@ -131,20 +135,41 @@ class CourseUpdateServiceTest {
 		record().markEdited(NOW);
 		flush();
 
-		assertError(() -> update(null, null, hash("강릉 1박", "", true), true), ExceptionType.RECORD_NOT_PUBLISHABLE);
+		assertError(() -> update(null, true, hash("강릉 1박", "", true), true), ExceptionType.RECORD_NOT_PUBLISHABLE);
 	}
 
 	@Test
-	void 제목만_바꾸면_해시가_필요하고_게시시각은_그대로() {
-		assertError(() -> update("새 제목", null, null, null), ExceptionType.REQUIRED_VALUE_MISSING);
-		assertError(() -> update("새 제목", null, hash("강릉 1박", "", true), null), ExceptionType.COURSE_SELECTION_CHANGED);
+	void 제목만_바꿔도_해시와_사진_포함_여부가_필요하고_게시시각은_그대로() {
+		assertError(() -> update("새 제목", true, null, null), ExceptionType.REQUIRED_VALUE_MISSING);
+		assertError(() -> update("새 제목", null, hash("새 제목", "", true), null), ExceptionType.REQUIRED_VALUE_MISSING);
+		assertError(() -> update("새 제목", true, hash("강릉 1박", "", true), null), ExceptionType.COURSE_SELECTION_CHANGED);
 
-		// includePhotos 를 생략하면 지금 사진 공개 여부(true)로 해시를 맞춘다.
-		CoursePublicationResponse response = update("새 제목", null, hash("새 제목", "", true), null);
+		CoursePublicationResponse response = update("새 제목", true, hash("새 제목", "", true), null);
 
 		assertThat(response).isEqualTo(new CoursePublicationResponse(courseId, NOW, 4));
 		assertThat(record().getTitle()).isEqualTo("새 제목");
 		assertThat(em.find(VisitImage.class, linked.getId()).isPublicSelected()).isTrue();
+	}
+
+	@Test
+	void 설명을_바꾸거나_빈_문자열로_비운다() {
+		update(null, "바다 코스", true, hash("강릉 1박", "바다 코스", true), null);
+		assertThat(record().getDescription()).isEqualTo("바다 코스");
+
+		CoursePublicationResponse response = update(null, "", true, hash("강릉 1박", "", true), null);
+
+		assertThat(record().getDescription()).isEmpty();
+		assertThat(response.version()).isEqualTo(5);
+	}
+
+	@Test
+	void 해제한_코스를_내용과_함께_다시_게시해도_version은_한_번만_오른다() {
+		update(null, null, null, false);
+
+		CoursePublicationResponse response = update("새 제목", true, hash("새 제목", "", true), true);
+
+		assertThat(response).isEqualTo(new CoursePublicationResponse(courseId, NOW, 5));
+		assertThat(record().getTitle()).isEqualTo("새 제목");
 	}
 
 	@Test
@@ -175,7 +200,7 @@ class CourseUpdateServiceTest {
 	}
 
 	@Test
-	void 게시_중인_기록을_1차_API로_편집해_DRAFT가_돼도_게시시각은_남는다() {
+	void 게시_중인_기록이_편집으로_DRAFT가_돼도_게시시각은_남는다() {
 		record().markEdited(NOW);
 		flush();
 
