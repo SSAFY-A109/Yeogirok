@@ -111,7 +111,10 @@ public record ReceiptMaterial(
 		return with(jobId, Status.EXTRACTING, version, extracted, reviewedValues, reviewStatus, error);
 	}
 
-	/** OCR 성공. 사용자가 이미 확정했으면 그 값을 그대로 쓴다. */
+	/**
+	 * OCR 성공. 사용자가 이미 확정했으면 그 값을 그대로 쓴다. OCR 제안에는 장소가 없어(TourAPI 후보 전까지, {@link #values}) 지금은
+	 * NOT_REQUIRED 가 나오지 않고 모든 영수증이 091 확인을 거친다(의도). 후보가 붙으면 이 분기가 쓰인다.
+	 */
 	public ReceiptMaterial ocrSucceeded(Extracted result) {
 		ReceiptMaterial next = with(jobId, Status.READY, version + 1, result, reviewedValues, reviewStatus, null);
 		return next.withReviewStatus(reviewedValues != null ? ReviewStatus.CONFIRMED

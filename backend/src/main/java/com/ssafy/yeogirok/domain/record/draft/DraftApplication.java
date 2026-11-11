@@ -61,7 +61,11 @@ public class DraftApplication {
 		}
 	}
 
-	/** 커밋 뒤. Redis 갱신이 실패해도 방문은 DB 제약으로 중복되지 않아 로그만 남긴다. */
+	/**
+	 * 커밋 뒤. Redis 갱신이 실패해도 방문은 DB 제약으로 중복되지 않아 로그만 남긴다. 남은 한계: 이 표시가 실패한 뒤 사용자가 이
+	 * 초안의 방문을 모두 지우면 초안 보관 기간 안에 같은 초안을 다시 반영할 수 있다(RE012 대신 성공). 지운 방문이 다시 생길 뿐이라
+	 * 다시 시도·DB 이력(ERD 변경)은 넣지 않았다(PR #84 리뷰).
+	 */
 	public void markApplied(String draftKey) {
 		try {
 			draftStore.find(draftKey).ifPresent(draft -> draftStore.save(draft.markApplied()));
