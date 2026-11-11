@@ -22,6 +22,9 @@ if (
   throw new Error("EXPO_PUBLIC_API_URL에는 경로 없는 HTTPS 호스트만 설정해야 합니다.");
 }
 
+/** 실시간 연결(WebSocket `/ws/v1`)의 호스트 주소. API 호스트와 같고 스킴만 `wss`다. */
+export const REALTIME_BASE_URL = API_BASE_URL.replace(/^https:/i, "wss:");
+
 /** 조회 요청의 기본 제한 시간(밀리초). */
 export const TIMEOUT_QUERY_MS = 10_000;
 /** 생성·변경·삭제 요청에서 `config.timeout`으로 지정할 제한 시간(밀리초). */

@@ -4,7 +4,7 @@ import { Pressable, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
-import type { ChatConnectionStatus } from "@/features/room/api/chat-connection";
+import type { ChatConnectionStatus } from "@/features/room/api/chat-session";
 import { CHAT_BODY_MAX_LENGTH, isSendableChatBody, limitChatBody } from "@/features/room/chat-model";
 import { getColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 const MIN_BOTTOM_PADDING = 12;
 
 const READY_PLACEHOLDER = "메시지 보내기";
-const NOT_READY_PLACEHOLDER = "실시간 연결을 준비하고 있어요";
+const NOT_READY_PLACEHOLDER = "대화에 연결하고 있어요";
 
 type ChatComposerProps = {
   status: ChatConnectionStatus;
@@ -21,7 +21,10 @@ type ChatComposerProps = {
   onSend: (body: string) => void;
 };
 
-/** 채팅 입력창(Figma W09-2 `Composer`). 실시간 연결이 준비됐을 때만 입력하고 보낼 수 있다. */
+/**
+ * 채팅 입력창(Figma W09-2 `Composer`). 글은 언제든 쓸 수 있고, 보내기는 실시간 연결이 준비됐을 때만 된다.
+ * 연결이 잠깐 끊겨도 쓰던 글과 키보드를 그대로 둔다.
+ */
 export function ChatComposer({ status, onSend }: ChatComposerProps) {
   const insets = useSafeAreaInsets();
   const [body, setBody] = useState("");
@@ -45,7 +48,7 @@ export function ChatComposer({ status, onSend }: ChatComposerProps) {
     >
       <TextInput
         textAlignVertical="center"
-        className={cn("h-touch min-w-0 flex-1 rounded-full bg-muted px-4 py-0 font-sans text-body-sm text-foreground", !ready && "text-muted-foreground")}
+        className="h-touch min-w-0 flex-1 rounded-full bg-muted px-4 py-0 font-sans text-body-sm text-foreground"
         value={body}
 
         onChangeText={(text) => {
@@ -56,8 +59,6 @@ export function ChatComposer({ status, onSend }: ChatComposerProps) {
         placeholderTextColor={getColors("light")["muted-foreground"]}
         accessibilityLabel="메시지 입력"
         accessibilityHint={ready ? `최대 ${CHAT_BODY_MAX_LENGTH}자까지 보낼 수 있어요` : NOT_READY_PLACEHOLDER}
-        accessibilityState={{ disabled: !ready }}
-        editable={ready}
         returnKeyType="send"
         submitBehavior="submit"
         onSubmitEditing={send}

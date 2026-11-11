@@ -42,6 +42,11 @@ export const ROOM_ERROR_FALLBACK = {
   chatHistory: "이전 대화를 불러오지 못했어요.",
 } as const;
 
+/** 실시간 연결의 오류 프레임처럼 HTTP 오류가 아닌 곳에서 받은 여행방 code의 문구. */
+export function getRoomCodeMessage(code: string | null, fallback: string): string {
+  return code === null ? fallback : ROOM_ERROR_MESSAGES[code] ?? fallback;
+}
+
 export function getRoomErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error) && error.status === 409 && error.code === "C004") {
     return ROOM_VERSION_MISMATCH_MESSAGE;

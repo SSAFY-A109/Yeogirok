@@ -1,15 +1,20 @@
 import { delay, http } from "msw";
 
-import type { ChatMessageDto, ChatMessagePageDto, ChatReadResponseDto } from "../../../features/room/chat-model";
+import type { ChatMessageDto, ChatMessagePageDto, ChatReadResponseDto, ChatTicketResponseDto } from "../../../features/room/chat-model";
+import { formatServerDateTime } from "../../../lib/date";
+import { createIdempotencyKey, IDEMPOTENCY_HEADER } from "../../idempotency";
 
 import { getMockChatReadState, mockDb } from "../db";
-import { chatReadKey } from "../fixtures/chat";
+import { chatReadKey, MOCK_CHAT_CONNECT_PATH } from "../fixtures/chat";
 import { MOCK_ME, type MockRoom } from "../fixtures/room";
 import { fail, MOCK_DELAY_MS, ok, readId, requireMockBearer, roomNotFound } from "./respond";
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 const INTEGER_PATTERN = /^-?\d+$/;
+
+/** 연결 티켓 수명(서버 `yeogirok.chat.ticket-ttl`). */
+const TICKET_TTL_MS = 30_000;
 
 type MessageWindow = Omit<ChatMessagePageDto, "chatReadState">;
 
@@ -194,5 +199,55 @@ export const chatHandlers = [
     };
 
     return ok(response);
+  }),
+
+  http.post("*/api/v1/realtime/tickets", async ({ request }) => {
+    await delay(MOCK_DELAY_MS);
+    const unauthorized = requireMockBearer(request);
+
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const idempotencyKey = request.headers.get(IDEMPOTENCY_HEADER)?.trim();
+
+    const body: unknown = await request.json().catch(() => {
+      return null;
+    });
+
+    const roomId: unknown = typeof body === "object" && body !== null && "roomId" in body ? body.roomId : null;
+
+    if (!idempotencyKey || roomId == null) {
+      return fail(400, "C001", "Idempotency-Key와 roomId는 필수입니다.");
+    }
+
+    if (typeof roomId !== "number" || !Number.isSafeInteger(roomId)) {
+      return fail(400, "C002", "roomId는 정수여야 합니다.");
+    }
+
+    const room = findMemberRoom(String(roomId));
+
+    if (room instanceof Response) {
+      return room;
+    }
+
+    // 같은 멱등키로 다시 오면 처음 발급한 티켓을 돌려준다. 이미 썼거나 만료된 티켓일 수 있다.
+    const requestKey = `${room.id}:${idempotencyKey}`;
+    const issued = mockDb.chatTicketRequests.get(requestKey);
+
+    if (issued !== undefined) {
+      return ok(issued, 201);
+    }
+
+    const response: ChatTicketResponseDto = {
+      ticket: createIdempotencyKey(),
+      expiresAt: formatServerDateTime(new Date(Date.now() + TICKET_TTL_MS)),
+      connectPath: MOCK_CHAT_CONNECT_PATH,
+      roomId: room.id,
+    };
+
+    mockDb.chatTickets.set(response.ticket, { userId: MOCK_ME.userId, roomId: room.id });
+    mockDb.chatTicketRequests.set(requestKey, response);
+    return ok(response, 201);
   }),
 ];

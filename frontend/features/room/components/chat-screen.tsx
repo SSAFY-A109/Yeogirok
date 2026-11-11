@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 
 import { isApiError } from "@/api/errors";
@@ -12,14 +12,15 @@ import { Text } from "@/components/ui/text";
 import { useChatConnection } from "@/features/room/api/chat-connection";
 import { useChatMessages, useChatReadReporter } from "@/features/room/api/chat-queries";
 import { useRoom } from "@/features/room/api/queries";
-import { joinChatPages } from "@/features/room/chat-model";
+import { joinChatPages, mergeChatMessages } from "@/features/room/chat-model";
 import { ChatComposer } from "@/features/room/components/chat-composer";
-import { ChatMessageList } from "@/features/room/components/chat-message-list";
-import { getRoomErrorMessage, ROOM_ACCESS_ERROR_CODES, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
+import { ChatMessageList, type ChatMessageListHandle } from "@/features/room/components/chat-message-list";
+import { getRoomCodeMessage, getRoomErrorMessage, ROOM_ACCESS_ERROR_CODES, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
 import { useMe } from "@/features/user/api/queries";
 import { cn } from "@/lib/utils";
 
 const ROOM_NOT_FOUND_MESSAGE = "여행방을 찾을 수 없어요.";
+const CONNECTING_MESSAGE = "대화에 연결하고 있어요";
 
 /** 로딩 스켈레톤의 말풍선 자리. `mine`이면 오른쪽에 둔다. */
 const SKELETON_BUBBLES = [
@@ -49,7 +50,7 @@ function leaveChat(roomId: number | null) {
 }
 
 /**
- * 여행방 채팅(Figma W09-2, TRP-11). 1단계는 이력 조회와 읽은 위치 갱신까지이고, 보내기는 실시간 연결(`useChatConnection`)이 준비되면 열린다.
+ * 여행방 채팅(Figma W09-2, TRP-11). 이력(API-076)을 받은 뒤 실시간으로 연결해(`useChatConnection`) 메시지를 주고받고, 화면에 보인 위치까지 읽음으로 알린다(API-088).
  * `roomId`가 `null`이면 여행방을 찾을 수 없다는 안내를 보여 준다.
  */
 export function ChatScreen({ roomId }: { roomId: number | null }) {
@@ -68,12 +69,13 @@ function ChatRoom({ roomId }: { roomId: number }) {
   const room = useRoom(roomId);
   const me = useMe();
   const history = useChatMessages(roomId);
-  const connection = useChatConnection(roomId);
+  const connection = useChatConnection(roomId, history.isSuccess);
   const reportSeenMessage = useChatReadReporter(roomId);
+  const messageList = useRef<ChatMessageListHandle>(null);
 
   const messages = useMemo(() => {
-    return history.data ? joinChatPages(history.data.pages) : [];
-  }, [history.data]);
+    return history.data ? mergeChatMessages(joinChatPages(history.data.pages), connection.liveMessages) : [];
+  }, [history.data, connection.liveMessages]);
 
   const accessError = [history.error, room.error].find(isRoomAccessError);
 
@@ -85,18 +87,30 @@ function ChatRoom({ roomId }: { roomId: number }) {
     );
   }
 
+  if (connection.status === "CLOSED") {
+    return (
+      <ChatFrame roomId={roomId} title="">
+        <ChatUnavailable message={getRoomCodeMessage(connection.closedCode, ROOM_NOT_FOUND_MESSAGE)} />
+      </ChatFrame>
+    );
+  }
+
   const title = room.data?.name ?? "";
-  const subtitle = room.data ? `${room.data.memberCount}명 참여 중` : undefined;
+  const connected = connection.status === "READY";
+  const memberCountLabel = room.data ? `${room.data.memberCount}명 참여 중` : undefined;
+  const subtitle = history.isSuccess && !connected ? CONNECTING_MESSAGE : memberCountLabel;
 
   if (room.data && me.data && history.data) {
     return (
-      <ChatFrame roomId={roomId} title={title} subtitle={subtitle}>
+      <ChatFrame roomId={roomId} title={title} subtitle={subtitle} connected={connected}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-          {messages.length === 0 ? (
+          {messages.length === 0 && connection.pendingMessages.length === 0 ? (
             <ChatEmpty />
           ) : (
             <ChatMessageList
+              ref={messageList}
               messages={messages}
+              pendingMessages={connection.pendingMessages}
               members={room.data.members}
               myUserId={me.data.id}
               hasOlder={history.hasNextPage}
@@ -108,9 +122,18 @@ function ChatRoom({ roomId }: { roomId: number }) {
               }}
 
               onMessageSeen={reportSeenMessage}
+              onRetryPending={connection.retry}
+              onDiscardPending={connection.discard}
             />
           )}
-          <ChatComposer status={connection.status} onSend={connection.send} />
+          <ChatComposer
+            status={connection.status}
+
+            onSend={(body) => {
+              connection.send(body);
+              messageList.current?.scrollToLatest();
+            }}
+          />
         </KeyboardAvoidingView>
       </ChatFrame>
     );
@@ -152,16 +175,18 @@ function ChatRoom({ roomId }: { roomId: number }) {
 type ChatFrameProps = {
   roomId: number | null;
   title: string;
-  /** 제목 아래 작은 줄(`3명 참여 중`). */
+  /** 제목 아래 작은 줄(`3명 참여 중`, 연결 중 안내). */
   subtitle?: string;
+  /** 실시간 연결이 준비됐는지. `true`면 제목 아래 줄 앞에 초록 점을 둔다. */
+  connected?: boolean;
   children: ReactNode;
 };
 
 /**
  * 화면 틀과 상단 바. 공용 `ScreenHeader`는 제목 아래 줄이 없어, 같은 높이(56)·제목 글자(`text-h3`)로 이 화면에서 구성한다.
- * Figma의 "N명 실시간 연결됨"과 초록 점은 실시간 연결을 붙이는 다음 단계에서 넣는다.
+ * Figma의 "N명 실시간 연결됨"은 서버가 접속 중인 인원을 주지 않아, 내 연결 상태(초록 점)와 참여 인원으로 보여 준다.
  */
-function ChatFrame({ roomId, title, subtitle, children }: ChatFrameProps) {
+function ChatFrame({ roomId, title, subtitle, connected = false, children }: ChatFrameProps) {
   return (
     <Screen>
       <View className="h-14 flex-row items-center justify-between border-b border-border bg-card px-2" testID="chat.header">
@@ -180,9 +205,12 @@ function ChatFrame({ roomId, title, subtitle, children }: ChatFrameProps) {
             {title}
           </Text>
           {subtitle === undefined ? null : (
-            <Text className="text-caption text-foreground-secondary" numberOfLines={1} testID="chat.member-count">
-              {subtitle}
-            </Text>
+            <View className="flex-row items-center gap-1">
+              {connected ? <View accessible={false} className="h-2 w-2 rounded-full bg-positive" testID="chat.connected-dot" /> : null}
+              <Text className="text-caption text-foreground-secondary" numberOfLines={1} testID="chat.member-count">
+                {subtitle}
+              </Text>
+            </View>
           )}
         </View>
         <View className="w-touch" />

@@ -1,25 +1,53 @@
-/**
- * 실시간 연결 상태. `READY`일 때만 메시지를 보낼 수 있다.
- * `UNAVAILABLE`은 실시간 연결을 아직 붙이지 않은 상태다(1단계).
- */
-export type ChatConnectionStatus = "UNAVAILABLE" | "CONNECTING" | "READY" | "RECONNECTING" | "CLOSED";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 
-export type ChatConnection = {
-  status: ChatConnectionStatus;
-  /** 본문을 그대로 보낸다. `status`가 `READY`가 아니면 화면이 부르지 않는다. */
-  send: (body: string) => void;
-};
+import { chatMessagesOptions } from "@/features/room/api/chat-queries";
+import { createChatSession, type ChatSession, type ChatSessionState } from "@/features/room/api/chat-session";
+import { roomKeys } from "@/features/room/api/queries";
 
-const UNAVAILABLE_CONNECTION: ChatConnection = {
-  status: "UNAVAILABLE",
-
-  send: () => {},
-};
+export type ChatConnection = ChatSessionState & Pick<ChatSession, "send" | "retry" | "discard">;
 
 /**
- * 여행방 채팅의 실시간 연결(API-077 티켓 → WebSocket `/ws/v1`).
- * 1단계에서는 연결하지 않고 항상 `UNAVAILABLE`을 돌려준다. 다음 단계에서 이 훅의 구현만 바꾼다.
+ * 여행방 채팅의 실시간 연결(API-077 티켓 → WebSocket `/ws/v1`). 화면이 떠 있는 동안 연결하고, 앱이 백그라운드로 가면 닫았다가 돌아오면 다시 연결한다.
+ *
+ * 이 연결에서 받은 메시지(`liveMessages`)는 이력 캐시에 넣지 않고 따로 돌려준다. 이력 캐시는 다시 받을 때 서버 응답으로 통째로 바뀌므로,
+ * 화면이 이력과 `liveMessages`를 메시지 id로 합쳐 보여 준다(`mergeChatMessages`).
+ *
+ * @param enabled 채팅 이력을 받은 뒤에 `true`로 준다. 받아 둔 이력의 가장 최신 메시지 뒤부터 빠진 메시지를 복구한다.
  */
-export function useChatConnection(roomId: number): ChatConnection {
-  return UNAVAILABLE_CONNECTION;
+export function useChatConnection(roomId: number, enabled: boolean): ChatConnection {
+  const queryClient = useQueryClient();
+
+  const [session] = useState(() => {
+    return createChatSession(roomId, () => {
+      void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
+    });
+  });
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const latestPageMessages = queryClient.getQueryData(chatMessagesOptions(roomId).queryKey)?.pages[0]?.messages ?? [];
+    session.start(latestPageMessages[latestPageMessages.length - 1]?.id ?? 0);
+
+    const appStateSubscription = AppState.addEventListener("change", (appState) => {
+      if (appState === "active") {
+        session.resume();
+      } else if (appState === "background") {
+        session.suspend();
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+      session.stop();
+    };
+  }, [enabled, queryClient, roomId, session]);
+
+  const state = useSyncExternalStore(session.subscribe, session.getState);
+
+  return { ...state, send: session.send, retry: session.retry, discard: session.discard };
 }

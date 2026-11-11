@@ -29,7 +29,7 @@
 | 지도 조회 영역 | 영역 파라미터가 있다(C013 형식·범위 오류). 형식은 **상세 미확인** | 공통 실패 코드 |
 | 비동기 작업 | 작업 상태 조회 API-011 `GET /jobs/{jobId}`(오류 접두어 `J`). 작업 상태 열거형은 **상세 미확인** | API 목록 |
 | 파일 | 업로드 API-012 `POST /media` → `mediaId`. 접근 API-013 `GET /media/{mediaId}/access` | API 목록 |
-| 실시간 | 여행방 채팅(P1)은 API-077 `POST /realtime/tickets`로 연결 티켓을 받는다. 프로토콜 **상세 미확인** | API 목록 |
+| 실시간 | 여행방 채팅(P1)은 API-077 `POST /realtime/tickets`로 연결 티켓을 받아 WebSocket `/ws/v1`에 붙는다. 프레임은 §3-3 | API 목록, `backend/dev` 12211b2 |
 | 공통 기준 데이터 | API-010 `GET /metadata` 공통 선택 항목과 정책 | API 목록 |
 
 ## 2. 엔드포인트 목록 (83행 · 2026-10-27 기준)
@@ -331,9 +331,31 @@ Swagger는 요청 필드 이름과 헤더·쿼리만 보여 주고 응답은 `{ 
 | 032 `DELETE /rooms/{roomId}/places/{roomPlaceId}` | 쿼리 `version` | `{ removed, version, scheduleNeedsRecalculation, undoExpiresAt: null }` | 후보 목록에서만 뺀다. 일정 항목은 남는다 |
 | 094 `PATCH /rooms/{roomId}/places/{roomPlaceId}` | `{ version, action: "RESTORE" }` | `{ restored, roomPlaceId, version, scheduleNeedsRecalculation }` | "되돌리기" 토스트가 부른다. 시간 제한 없음 |
 | 087 `DELETE /rooms/{roomId}/members/me` | — | 본문 없음 | 마지막 참여자가 나가면 서버가 방을 지운다. 삭제 여부는 응답에 없어 나가기 전 인원으로 판단한다 |
-| 076 `GET /rooms/{roomId}/messages` | 쿼리 `beforeMessageId?`(이 id보다 과거), `afterMessageId?`+`throughMessageId?`(재연결 복구), `limit?`(기본 20, 최대 50) | `{ items[{ id, sender{ id, nickname }, body, createdAt, clientMessageId }], hasMore, nextAfterMessageId, replayThroughMessageId, chatReadState{ lastReadMessageId, hasUnreadMessages } }` | **backend PR #82(미머지) 기준**(2026-11-10). `items`는 오래된 → 최신. 탈퇴한 회원은 `sender.id`·`clientMessageId`가 `null`이고 이름이 "탈퇴한 사용자"다. `limit` 범위 밖 C007, 조회 방향 혼용·범위 밖 id C003. 조회만으로는 읽은 위치가 바뀌지 않는다. 앱 1단계는 `beforeMessageId`·`limit`만 보낸다 |
-| 088 `PATCH /rooms/{roomId}/messages/read` | `{ lastReadMessageId }` | `{ roomId, lastReadMessageId, hasUnreadMessages }` | **backend PR #82(미머지) 기준**(2026-11-10). 화면에서 실제로 본 위치만 보낸다. 더 작은 값을 보내면 기존 값을 유지하고 200이다. 누락 C001, 정수 아님 C002, 양수가 아니거나 그 방의 메시지가 아니면 C003. 안 읽음(`hasUnreadMessages`)은 읽은 위치보다 큰 타인 메시지가 있는지다(020·022·076과 같은 계산) |
+| 076 `GET /rooms/{roomId}/messages` | 쿼리 `beforeMessageId?`(이 id보다 과거), `afterMessageId?`+`throughMessageId?`(재연결 복구), `limit?`(기본 20, 최대 50) | `{ items[{ id, sender{ id, nickname }, body, createdAt, clientMessageId }], hasMore, nextAfterMessageId, replayThroughMessageId, chatReadState{ lastReadMessageId, hasUnreadMessages } }` | `backend/dev` 12211b2 기준(2026-11-11). `items`는 오래된 → 최신. 탈퇴한 회원은 `sender.id`·`clientMessageId`가 `null`이고 이름이 "탈퇴한 사용자"다. `limit` 범위 밖 C007, 조회 방향 혼용·범위 밖 id C003. 조회만으로는 읽은 위치가 바뀌지 않는다. 과거 이력은 `beforeMessageId`, 재연결 복구는 `afterMessageId`(받은 것이 없으면 0)로 받는다. 복구 첫 쪽의 `replayThroughMessageId`를 다음 쪽의 `throughMessageId`로, `nextAfterMessageId`를 다음 `afterMessageId`로 보낸다 |
+| 088 `PATCH /rooms/{roomId}/messages/read` | `{ lastReadMessageId }` | `{ roomId, lastReadMessageId, hasUnreadMessages }` | `backend/dev` 12211b2 기준(2026-11-11). 화면에서 실제로 본 위치만 보낸다. 더 작은 값을 보내면 기존 값을 유지하고 200이다. 누락 C001, 정수 아님 C002, 양수가 아니거나 그 방의 메시지가 아니면 C003. 안 읽음(`hasUnreadMessages`)은 읽은 위치보다 큰 타인 메시지가 있는지다(020·022·076과 같은 계산) |
+| 077 `POST /realtime/tickets` | 헤더 `Idempotency-Key`, `{ roomId }` | 201 `{ ticket, expiresAt, connectPath: "/ws/v1", roomId }` | `backend/dev` 12211b2 기준(2026-11-11). 티켓은 30초 안에 한 번만 쓸 수 있다. 같은 멱등키로 다시 요청하면 처음 티켓이 오므로 연결할 때마다 새 키를 쓴다. 참여자 아님 RO002, 여행방 없음 RO001 |
 
 - 여행방 `version`은 `features/room/api/queries.ts`의 `resolveRoomVersion`·`storeRoomVersion`이 캐시에서 읽고 쓴다. version을 싣는 변경 요청은 같은 scope로 차례로 보낸다.
 - 초대 주소(`inviteUrl`)는 서버 설정 `ROOM_INVITE_URL_BASE` + `/{inviteToken}`이다. 앱이 이 주소를 직접 여는 설정(앱 링크·유니버설 링크)은 아직 없다(`TBD`).
 - 지도 핀으로 장소 직접 추가(031)와 기록 공간 생성(057)은 서버에 있지만 화면이 없다.
+
+### 3-3. 여행방 채팅 WebSocket (2026-11-11, backend/dev 12211b2)
+
+`backend/docs/07-chat.md`와 `domain/chat/realtime`의 `ChatFrames`·`ChatWebSocketHandler`를 읽어 맞췄다. 주소는 API 호스트의 `wss://…/ws/v1`이고, 티켓·토큰을 주소나 헤더에 넣지 않는다. 프레임은 JSON 텍스트다(STOMP 아님).
+
+| 방향 | 프레임 | 비고 |
+| --- | --- | --- |
+| 앱 → 서버 | `{ type: "AUTH", ticket }` | 연결 뒤 첫 프레임. 10초 안에 보내지 않으면 A001로 닫힌다 |
+| 서버 → 앱 | `{ type: "READY", roomId, userId, latestMessageId }` | 이때부터 보낼 수 있다. `latestMessageId`는 방의 최신 저장 id(없으면 `null`) |
+| 앱 → 서버 | `{ type: "SEND_MESSAGE", roomId, clientMessageId, body }` | `body`는 1~100자(코드 포인트), 앞뒤 공백 그대로 저장. `clientMessageId`는 1~100자 |
+| 서버 → 앱 | `{ type: "MESSAGE_ACK", roomId, clientMessageId, replayed, message }` | 보낸 사람에게만. 같은 `clientMessageId`·같은 본문을 다시 보내면 새로 저장하지 않고 `replayed: true` |
+| 서버 → 앱 | `{ type: "MESSAGE_CREATED", roomId, message }` | 방의 모든 연결에(보낸 사람 포함). 순서가 바뀌거나 빠질 수 있어 `message.id`로 정렬·중복 제거한다 |
+| 앱 → 서버 | `{ type: "PING" }` | 25초마다. 서버는 60초 동안 프레임이 없으면 닫는다 |
+| 서버 → 앱 | `{ type: "PONG", roomId, latestMessageId }` | 최신 id가 받은 것보다 크면 API-076 복구 조회로 확인한다 |
+| 서버 → 앱 | `{ type: "ERROR", roomId, clientMessageId, code, message, retryable }` | `code`로만 분기한다. `clientMessageId`가 있으면 그 메시지의 실패다 |
+
+- `message`는 API-076의 메시지와 같은 모양이다.
+- `ERROR` code: A001(AUTH 없음)·A003(티켓 무효·만료·재사용, 탈퇴)·RO001(방 없음)·RO002(참여자 아님)은 보낸 뒤 서버가 연결을 닫는다. C001·C002·C003(입력 오류), C005(같은 `clientMessageId`에 다른 본문)는 연결을 유지한다. C014만 `retryable: true`이고 같은 `clientMessageId`·같은 본문으로 다시 보낼 수 있다.
+- 나가기(087)·방 삭제·회원 탈퇴가 일어나면 서버가 `ERROR`(RO002·RO001·A003)를 보내고 닫는다.
+- 앱 처리: RO001·RO002는 다시 연결하지 않는다. 그 밖에 닫히면 새 티켓으로 다시 연결하고(지수 백오프 + 무작위), 저장 완료를 받지 못한 메시지를 같은 `clientMessageId`로 다시 보낸다.
+- 서버에 없는 것: 접속 중인 인원 수, 타인 읽음 표시, 사진, 앱 푸시(API-095·096은 Notion에만 있다).
