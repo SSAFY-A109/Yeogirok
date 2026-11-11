@@ -19,7 +19,7 @@ public class PushConfig {
 	@Bean(destroyMethod = "close")
 	public PushSender pushSender(FcmProperties properties) {
 		if (!StringUtils.hasText(properties.serviceAccountBase64())) {
-			log.warn("FCM 서비스 계정 키(FIREBASE_SERVICE_ACCOUNT_BASE64)가 없어 채팅 푸시를 보내지 않습니다.");
+			log.warn("FCM 서비스 계정 키(FIREBASE_SERVICE_ACCOUNT_BASE64)가 없어 앱 푸시를 보내지 않습니다.");
 			return new NoOpPushSender();
 		}
 		return FcmPushSender.create(properties);

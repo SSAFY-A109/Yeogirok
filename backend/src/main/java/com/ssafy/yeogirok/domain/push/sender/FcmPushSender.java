@@ -26,7 +26,7 @@ import com.google.firebase.messaging.SendResponse;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Firebase Admin SDK 로 FCM HTTP v1 에 보낸다. 메시지 모양은 노션 API-077 "FCM HTTP v1 요청의 message 예시"를 따른다.
+ * Firebase Admin SDK 로 FCM HTTP v1 에 보낸다. 알림 모양은 부르는 기능이 정한다(채팅은 노션 API-077 "FCM HTTP v1 요청의 message 예시").
  *
  * <p>토큰·키·본문은 로그에 남기지 않는다.
  */
@@ -69,7 +69,7 @@ public class FcmPushSender implements PushSender {
 		// 이름이 겹치면 initializeApp 이 실패한다. 한 JVM 에 컨텍스트가 둘 떠도(테스트 컨텍스트 캐시 등) 겹치지 않게 번호를 붙인다.
 		String name = APP_NAME + "-" + APP_SEQUENCE.incrementAndGet();
 		FcmPushSender sender = new FcmPushSender(FirebaseApp.initializeApp(options, name));
-		log.info("FCM 채팅 푸시를 켰습니다. projectId={}", sender.app.getOptions().getProjectId());
+		log.info("FCM 앱 푸시를 켰습니다. projectId={}", sender.app.getOptions().getProjectId());
 		return sender;
 	}
 

@@ -100,6 +100,13 @@ Nginx `proxy_read_timeout` 은 무응답 기준(60초)보다 길게 둔다(`infr
 **방식**: Expo Push 를 거치지 않고 Firebase Admin SDK 로 FCM HTTP v1 에 직접 보낸다. 앱은 `getDevicePushTokenAsync()` 로 받은
 FCM 기기 토큰을 API-095 로 등록한다. Android 만 지원한다.
 
+**구조**: 푸시 발송은 채팅 밖에서도 쓰도록 공용으로 둔다. 초대 수락·일정 확정 같은 알림도 받을 회원과 알림 모양만 정해 `PushNotifier` 로 보낸다.
+
+| 위치 | 맡는 일 |
+| --- | --- |
+| `domain/push` (공용) | 기기 토큰 저장·API-095·096·탈퇴 삭제, FCM 발송기(`PushSender`), `PushNotifier.sendToUser`(그 회원 기기 모두에 발송, 해제된 토큰 정리, 결과 `SENT`·`NO_DEVICE`·`REJECTED`·`UNAVAILABLE`) |
+| `domain/chat/push` (채팅) | 받는 사람 조회, 접속자 제외(`chat:online`), 3초 제한(`push:chat`), 알림 모양, 비동기 발송 줄 |
+
 **언제·누구에게**
 
 - 커밋된 새 메시지(`replayed=false`)에서만 보낸다. 저장 실패·재전송 ACK 에는 보내지 않는다.

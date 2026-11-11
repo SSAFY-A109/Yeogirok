@@ -30,16 +30,7 @@ public interface UserPushTokenRepository extends JpaRepository<UserPushToken, St
 	@Query("delete from UserPushToken t where t.userId = :userId")
 	int deleteAllByUserId(@Param("userId") Long userId);
 
-	/**
-	 * 채팅 푸시 수신 후보(노션 API-077 채팅 푸시). 방이 살아 있고, 현재 참여 중이고(left_at IS NULL), 계정이 활성이며,
-	 * 보낸 사람이 아닌 회원의 등록 토큰. 토큰이 없는 회원은 나오지 않는다. 방 제목을 함께 읽는다(알림 제목).
-	 */
-	@Query("select new com.ssafy.yeogirok.domain.push.repository.ChatPushTarget(t.userId, t.token, r.title)"
-		+ " from TravelRoom r, RoomMember rm, User u, UserPushToken t"
-		+ " where r.id = :roomId and r.deletedAt is null"
-		+ " and rm.roomId = r.id and rm.leftAt is null and rm.userId <> :senderId"
-		+ " and u.id = rm.userId and u.status = com.ssafy.yeogirok.domain.user.domain.UserStatus.ACTIVE"
-		+ " and t.userId = u.id"
-		+ " order by t.userId, t.createdAt, t.token")
-	List<ChatPushTarget> findChatPushTargets(@Param("roomId") Long roomId, @Param("senderId") Long senderId);
+	/** 그 회원의 등록 기기 토큰. 먼저 등록한 순서. */
+	@Query("select t.token from UserPushToken t where t.userId = :userId order by t.createdAt, t.token")
+	List<String> findTokensByUserId(@Param("userId") Long userId);
 }

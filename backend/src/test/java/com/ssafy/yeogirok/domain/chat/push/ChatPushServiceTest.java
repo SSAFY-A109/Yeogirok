@@ -11,16 +11,19 @@ import org.junit.jupiter.api.Test;
 import com.ssafy.yeogirok.domain.chat.dto.ChatMessage;
 import com.ssafy.yeogirok.domain.push.repository.UserPushTokenRepository;
 import com.ssafy.yeogirok.domain.push.sender.NoOpPushSender;
+import com.ssafy.yeogirok.domain.push.service.PushNotifier;
 
-/** FCM 키가 없으면(보내지 않는 발송기) 수신자 조회·Redis 작업을 하지 않는다. */
+/** FCM 키가 없으면(보내지 않는 발송기) 받는 사람 조회·Redis 작업을 하지 않는다. */
 class ChatPushServiceTest {
 
 	@Test
 	void 보낼_수_없는_발송기면_아무것도_조회하지_않는다() {
-		UserPushTokenRepository repository = mock(UserPushTokenRepository.class);
+		ChatPushRecipientRepository recipients = mock(ChatPushRecipientRepository.class);
+		UserPushTokenRepository tokens = mock(UserPushTokenRepository.class);
 		ChatPresence presence = mock(ChatPresence.class);
 		ChatPushThrottle throttle = mock(ChatPushThrottle.class);
-		ChatPushService service = new ChatPushService(repository, presence, throttle, new NoOpPushSender(),
+		ChatPushService service = new ChatPushService(recipients, presence, throttle,
+			new PushNotifier(tokens, new NoOpPushSender()),
 			new ChatPushProperties(Duration.ofSeconds(90), Duration.ofSeconds(3), 40, 1, 10));
 		try {
 			service.notifyNewMessage(1L,
@@ -29,6 +32,6 @@ class ChatPushServiceTest {
 			service.shutdown();
 		}
 
-		verifyNoInteractions(repository, presence, throttle);
+		verifyNoInteractions(recipients, tokens, presence, throttle);
 	}
 }

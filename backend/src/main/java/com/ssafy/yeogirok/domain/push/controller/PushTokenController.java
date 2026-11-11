@@ -20,7 +20,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
-/** Android 채팅 푸시 기기 토큰(API-095·096). 발송 규칙은 노션 API-077 "채팅 푸시 알림 (Android)". */
+/** Android 푸시 기기 토큰(API-095·096). 채팅 등 모든 앱 푸시가 이 토큰으로 간다({@code PushNotifier}). */
 @Tag(name = "PUSH")
 @RestController
 @RequestMapping("/api/v1/users/me/push-tokens")
