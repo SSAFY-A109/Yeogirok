@@ -11,14 +11,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.request.JsonFields;
+import com.ssafy.yeogirok.global.request.Uuids;
 
 import tools.jackson.databind.JsonNode;
 
 /**
- * API-066 요청(1차: 수동 추가만).
+ * API-066 요청(수동 추가 + AI 초안 반영, 명세 {@code specs/record-api-2.md} 4-9).
  * <ul>
  *   <li>version 생략 C001, null·정수 아님 C002. items 생략 C001, 배열 아님 C002, 빈 배열·50개 초과 C003</li>
- *   <li>draftKey·draftVersion·items[].itemId(초안 반영), story·storyDraft, plannedItemId 값은 C003(명세 5절 8·12)</li>
+ *   <li>draftKey 는 UUID(C002). 있으면 draftVersion 필수(C001)이고 itemId 가 있는 항목이 하나 이상 있어야 한다(C003).
+ *   draftKey 없이 draftVersion·itemId 가 오면 C003.
+ *   itemId 는 1 이상 정수(정수 아님 C002, 1 미만 C003)</li>
+ *   <li>story·storyDraft 값은 C003. plannedItemId 는 계획 사본 전이라 값이 오면 C003, null 은 통과(명세 5절 8·12)</li>
  *   <li>장소: placeRef·customPlace 둘 다 C003, 둘 다 없으면 RE018</li>
  *   <li>visitDate·visitedAt·order: 명세 1-6, order 는 필수·1 이상</li>
  * </ul>
@@ -42,17 +46,27 @@ public class VisitAddRequest {
 
 	public VisitAddCommand toCommand() {
 		int versionValue = JsonFields.requiredInt(version, "version");
-		reject(draftKey, "draftKey");
-		reject(draftVersion, "draftVersion");
+		String key = JsonFields.isAbsent(draftKey) ? null
+			: Uuids.require(JsonFields.nonNullString(draftKey, "draftKey"), "draftKey");
+		Integer draftVersionValue = null;
+		if (key != null) {
+			draftVersionValue = VisitRequestFields.requiredInt(draftVersion, "draftVersion");
+		} else {
+			reject(draftVersion, "draftVersion");
+		}
 		List<VisitAddCommand.Item> parsed = new ArrayList<>();
 		for (JsonNode item : VisitRequestFields.requiredArray(items, "items", false, MAX_ITEMS)) {
-			parsed.add(item(VisitRequestFields.requiredObject(item, "items[]")));
+			parsed.add(item(VisitRequestFields.requiredObject(item, "items[]"), key != null));
 		}
-		return new VisitAddCommand(versionValue, parsed);
+		// 반영할 초안 항목 없이 초안이 반영됨으로 표시되지 않게 한다(PR #84 리뷰).
+		if (key != null && parsed.stream().allMatch(item -> item.itemId() == null)) {
+			throw VisitRequestFields.notAllowed("items: draftKey 를 보내면 itemId 가 있는 항목이 하나 이상 있어야 합니다.");
+		}
+		return new VisitAddCommand(versionValue, key, draftVersionValue, parsed);
 	}
 
-	private static VisitAddCommand.Item item(JsonNode item) {
-		reject(item.get("itemId"), "itemId");
+	private static VisitAddCommand.Item item(JsonNode item, boolean fromDraft) {
+		Integer itemId = itemId(item.get("itemId"), fromDraft);
 		reject(item.get("story"), "story");
 		reject(item.get("storyDraft"), "storyDraft");
 		reject(item.get("plannedItemId"), "plannedItemId");
@@ -64,6 +78,21 @@ public class VisitAddRequest {
 			throw new BusinessException(ExceptionType.VISIT_PLACE_MISSING);
 		}
 		VisitRequestFields.checkSameDate(visitDate, visitedAt);
-		return new VisitAddCommand.Item(place, visitDate, visitedAt.toInstant(), order);
+		return new VisitAddCommand.Item(place, visitDate, visitedAt.toInstant(), order, itemId);
+	}
+
+	/** 생략·null 이면 직접 추가한 항목. draftKey 없이 오면 C003. */
+	private static Integer itemId(JsonNode value, boolean fromDraft) {
+		if (JsonFields.isAbsent(value)) {
+			return null;
+		}
+		if (!fromDraft) {
+			throw VisitRequestFields.notAllowed("itemId: draftKey 없이 보낼 수 없습니다.");
+		}
+		int itemId = VisitRequestFields.requiredInt(value, "itemId");
+		if (itemId < 1) {
+			throw VisitRequestFields.notAllowed("itemId: 1 이상이어야 합니다.");
+		}
+		return itemId;
 	}
 }

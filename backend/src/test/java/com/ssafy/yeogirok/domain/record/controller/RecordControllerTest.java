@@ -181,6 +181,23 @@ class RecordControllerTest {
 					""", JsonCompareMode.STRICT));
 		}
 
+		@Test
+		void 초안_반영은_draftKey_draftVersion_itemId_를_넘기고_plannedItemId_null_은_받는다() throws Exception {
+			VisitPlaceInput place = new VisitPlaceInput.CustomPlace("경포대", new BigDecimal("37.7950000"),
+				new BigDecimal("128.9000000"), null);
+			VisitAddCommand expected = new VisitAddCommand(3, "22222222-3333-4444-8555-666666666666", 1, List.of(
+				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, 2),
+				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1)));
+			given(visitCommandService.add(USER_ID, 9L, expected))
+				.willReturn(new VisitAddResponse(List.of(701L, 702L), 4, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\","
+					+ " \"draftVersion\": 1, \"items\": [{\"itemId\": 2, \"plannedItemId\": null, " + VALID_ITEM + "}, {"
+					+ VALID_ITEM + "}]}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.data.visitIds[1]").value(702));
+		}
+
 		@ParameterizedTest
 		@CsvSource(delimiter = '|', value = {
 			"{\"items\": [{ITEM}]}|C001",
@@ -188,7 +205,14 @@ class RecordControllerTest {
 			"{\"version\": 3}|C001",
 			"{\"version\": 3, \"items\": []}|C003",
 			"{\"version\": 3, \"items\": {}}|C002",
-			"{\"version\": 3, \"draftKey\": \"k\", \"items\": [{ITEM}]}|C003",
+			"{\"version\": 3, \"draftKey\": \"k\", \"draftVersion\": 1, \"items\": [{ITEM}]}|C002",
+			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"items\": [{ITEM}]}|C001",
+			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": \"1\", \"items\": [{ITEM}]}|C002",
+			"{\"version\": 3, \"draftVersion\": 1, \"items\": [{ITEM}]}|C003",
+			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": 1, \"items\": [{\"itemId\": 0, ITEM}]}|C003",
+			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": 1, \"items\": [{\"itemId\": \"1\", ITEM}]}|C002",
+			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": 1, \"items\": [{\"itemId\": 1, \"storyDraft\": \"x\", ITEM}]}|C003",
+			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": 1, \"items\": [{ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"itemId\": 1, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"story\": \"x\", ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"plannedItemId\": 5, ITEM}]}|C003",

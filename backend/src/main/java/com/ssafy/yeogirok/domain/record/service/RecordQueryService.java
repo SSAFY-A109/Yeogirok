@@ -11,6 +11,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialEntry;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
@@ -22,6 +23,7 @@ import com.ssafy.yeogirok.domain.record.repository.VisitRegion;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder.RecordRoom;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
+import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
 import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
@@ -41,6 +43,8 @@ public class RecordQueryService {
 	private final TravelRoomRepository travelRoomRepository;
 	private final RoomMemberRepository roomMemberRepository;
 	private final ActualVisitRepository actualVisitRepository;
+	private final MaterialQueryService materialQueryService;
+	private final RecordProgressReader recordProgressReader;
 
 	/**
 	 * API-058. 현재 참여 중이고 방이 삭제되지 않은 기록을 최근 생성 순(id 내림차순)으로(명세 5절 2).
@@ -70,8 +74,11 @@ public class RecordQueryService {
 			.findRegionsInOrder(page.stream().map(TravelRecord::getId).toList()).stream()
 			.collect(groupingBy(VisitRegion::recordId));
 
+		Map<Long, RecordProgress> progress = recordProgressReader.read(userId, page, visits.entrySet().stream()
+			.collect(toMap(Map.Entry::getKey, entry -> entry.getValue().size())));
 		List<RecordListResponse.Item> items = page.stream().map(record -> item(record, rooms.get(record.getRoomId()),
-			members.getOrDefault(record.getRoomId(), List.of()), visits.getOrDefault(record.getId(), List.of())))
+			members.getOrDefault(record.getRoomId(), List.of()), visits.getOrDefault(record.getId(), List.of()),
+			progress.get(record.getId())))
 			.toList();
 		String nextCursor = found.size() > size ? new RecordCursor(page.getLast().getId()).encode() : null;
 		return new RecordListResponse(items, nextCursor);
@@ -87,14 +94,17 @@ public class RecordQueryService {
 		List<RecordDetailResponse.Member> members = roomMemberRepository.findCurrentMembers(List.of(room.getId()))
 			.stream().map(member -> new RecordDetailResponse.Member(member.userId(), member.nickname(), member.creator()))
 			.toList();
+		List<ReceiptMaterialEntry> mine = materialQueryService.mine(recordId, userId);
+		RecordProgress progress = recordProgressReader.read(List.of(record), Map.of(recordId, board.visits().size()),
+			Map.of(recordId, mine)).get(recordId);
 		return new RecordDetailResponse(record.getId(), record.getTitle(), record.getStatus(), record.getRoomId(),
-			members, room.getStartDate(), room.getEndDate(),
-			RecordProgress.of(record.getStatus(), board.visits().size()), null, List.of(), board.photoPool(),
-			board.visits(), List.of(), record.getPublishedAt() == null ? null : record.getId(), record.getVersion());
+			members, room.getStartDate(), room.getEndDate(), progress, null, List.of(), board.photoPool(),
+			board.visits(), MaterialQueryService.summaries(mine),
+			record.getPublishedAt() == null ? null : record.getId(), record.getVersion());
 	}
 
 	private static RecordListResponse.Item item(TravelRecord record, TravelRoom room, List<RoomMemberView> members,
-		List<VisitRegion> visits) {
+		List<VisitRegion> visits, RecordProgress progress) {
 		RecordListResponse.Publication publication = record.getPublishedAt() == null ? null
 			: new RecordListResponse.Publication(record.getId(), record.getPublishedAt(), record.getVersion());
 		return new RecordListResponse.Item(record.getId(), record.getTitle(), record.getRoomId(), record.getStatus(),
@@ -102,6 +112,6 @@ public class RecordQueryService {
 			members.size(), members.stream()
 				.map(member -> new RecordListResponse.Member(member.userId(), member.nickname(), member.profileImageUrl()))
 				.toList(),
-			visits.size(), RecordProgress.of(record.getStatus(), visits.size()), publication);
+			visits.size(), progress, publication);
 	}
 }

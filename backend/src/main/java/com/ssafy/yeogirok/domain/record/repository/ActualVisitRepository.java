@@ -19,6 +19,9 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 
 	boolean existsByIdAndRecordId(Long id, Long recordId);
 
+	/** 이 초안으로 이미 만든 방문이 있는지(API-066 초안 반영). */
+	boolean existsByRecordIdAndSourceDraftKey(Long recordId, String sourceDraftKey);
+
 	long countByRecordId(Long recordId);
 
 	/** 장소 행이 없는 방문 수(API-071 완성 조건). FK 가 없어 서비스에서 확인한다. */
