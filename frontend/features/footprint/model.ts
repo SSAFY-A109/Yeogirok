@@ -12,8 +12,16 @@ export const FOOTPRINT_BODY_MAX_LENGTH = 200;
 export const FOOTPRINT_CATEGORY_MIN_COUNT = 1;
 export const FOOTPRINT_CATEGORY_MAX_COUNT = 3;
 
+/**
+ * 잰 위치에서 이 거리(m) 안에서만 발자취 위치를 직접 고칠 수 있다(2026-11-11 사용자 결정).
+ * 서버는 고친 좌표만 받아 이 제한을 확인하지 못한다. 앱에서만 막는 값이다(TBD: 원래 측정 좌표 필드는 백엔드와 정한다).
+ */
+export const FOOTPRINT_ADJUST_RADIUS_METERS = 100;
+
 const MAX_LATITUDE = 90;
 const MAX_LONGITUDE = 180;
+const EARTH_RADIUS_METERS = 6_371_000;
+const RADIANS_PER_DEGREE = Math.PI / 180;
 
 export type FootprintLocationEvidenceDto = {
   latitude: number;
@@ -62,9 +70,10 @@ export type FootprintDraft = {
   /** 기기가 잰 위치. */
   position: FootprintPosition;
   /**
-   * 사용자가 지도에서 직접 고친 위치(2026-11-06 사용자 결정, 거리 제한 없음). 없으면 잰 위치를 그대로 쓴다.
+   * 사용자가 지도에서 직접 고친 위치(2026-11-06 사용자 결정). 없으면 잰 위치를 그대로 쓴다.
+   * 잰 위치에서 `FOOTPRINT_ADJUST_RADIUS_METERS` 안에서만 고칠 수 있다(2026-11-11 사용자 결정).
    * 백엔드 답변(2026-11-06): 고친 위치를 사용자의 실제 위치로 보고 그대로 저장·주소·500m 작성 제한·방문 분포에 반영한다.
-   * 고친 여부·원래 측정 좌표 필드는 거리 제한이 생기면 그때 정한다.
+   * 고친 여부·원래 측정 좌표 필드는 아직 계약에 없다(TBD).
    */
   chosen: ChosenFootprintPoint | null;
   categoryCodes: readonly string[];
@@ -109,8 +118,24 @@ export function isValidCoordinate(latitude: number, longitude: number): boolean 
   return Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= MAX_LATITUDE && Math.abs(longitude) <= MAX_LONGITUDE;
 }
 
+/** 두 좌표 사이의 거리(m). 지구를 구로 보고 잰다(하버사인). */
+function distanceMeters(from: FootprintPoint, to: FootprintPoint): number {
+  const latitudeDelta = (to.latitude - from.latitude) * RADIANS_PER_DEGREE;
+  const longitudeDelta = (to.longitude - from.longitude) * RADIANS_PER_DEGREE;
+
+  const haversine = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(from.latitude * RADIANS_PER_DEGREE) * Math.cos(to.latitude * RADIANS_PER_DEGREE) * Math.sin(longitudeDelta / 2) ** 2;
+
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+/** 고른 곳이 잰 위치에서 직접 고칠 수 있는 거리 안인지. */
+export function isWithinAdjustRadius(measured: FootprintPoint, point: FootprintPoint): boolean {
+  return distanceMeters(measured, point) <= FOOTPRINT_ADJUST_RADIUS_METERS;
+}
+
 /**
- * 입력을 저장 요청으로 바꾼다. 카테고리 수·본문 길이·좌표 범위가 맞지 않으면 `null`이다.
+ * 입력을 저장 요청으로 바꾼다. 카테고리 수·본문 길이·좌표 범위가 맞지 않거나, 직접 고친 위치가 잰 위치에서 너무 멀면 `null`이다.
  * 공백만 쓴 본문은 서버처럼 `null`로 보낸다.
  */
 export function toCreateFootprintRequest({ position, chosen, categoryCodes, body }: FootprintDraft): CreateFootprintRequestDto | null {
@@ -118,6 +143,7 @@ export function toCreateFootprintRequest({ position, chosen, categoryCodes, body
 
   if (
     !isValidCoordinate(point.latitude, point.longitude) ||
+    (chosen !== null && !isWithinAdjustRadius(position, chosen.point)) ||
     !isValidCategoryCount(categoryCodes.length) ||
     new Set(categoryCodes).size !== categoryCodes.length ||
     isFootprintBodyTooLong(body)
