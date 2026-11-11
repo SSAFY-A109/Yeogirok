@@ -29,6 +29,13 @@ public interface TravelRecordRepository extends JpaRepository<TravelRecord, Long
 	List<TravelRecord> findJoinedRecords(@Param("userId") Long userId, @Param("roomId") Long roomId,
 		@Param("status") RecordStatus status, @Param("beforeId") Long beforeId, Limit limit);
 
+	/** API-074. 현재 참여 중이고 방이 삭제되지 않았고 게시 중인 기록을 id 내림차순으로, {@code beforeId} 보다 작은 것만. */
+	@Query("select r from TravelRecord r, TravelRoom room, RoomMember m"
+		+ " where room.id = r.roomId and m.roomId = r.roomId and m.userId = :userId and m.leftAt is null"
+		+ " and room.deletedAt is null and r.publishedAt is not null and r.id < :beforeId order by r.id desc")
+	List<TravelRecord> findJoinedPublishedRecords(@Param("userId") Long userId, @Param("beforeId") Long beforeId,
+		Limit limit);
+
 	@Query("select r.roomId from TravelRecord r where r.id = :id")
 	Optional<Long> findRoomIdById(@Param("id") Long id);
 

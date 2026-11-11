@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -35,11 +36,13 @@ import com.ssafy.yeogirok.domain.course.dto.CourseDay;
 import com.ssafy.yeogirok.domain.course.dto.CourseInput;
 import com.ssafy.yeogirok.domain.course.dto.CoursePreviewResponse;
 import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
+import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
 import com.ssafy.yeogirok.domain.course.dto.PublicAuthor;
 import com.ssafy.yeogirok.domain.course.dto.PublicPhoto;
 import com.ssafy.yeogirok.domain.course.dto.PublicPlace;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
+import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -58,6 +61,8 @@ class CourseControllerTest {
 	CoursePreviewService coursePreviewService;
 	@MockitoBean
 	CoursePublishService coursePublishService;
+	@MockitoBean
+	MyCourseQueryService myCourseQueryService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -188,6 +193,26 @@ class CourseControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value(code));
 			verifyNoInteractions(coursePublishService, idempotencyService);
+		}
+	}
+
+	@Nested
+	class API_074 {
+
+		@Test
+		void 목록_응답_모양과_쿼리_전달() throws Exception {
+			given(myCourseQueryService.getMine(USER_ID, "c1", 10)).willReturn(new MyCourseListResponse(List.of(
+				new MyCourseListResponse.Item(7L, "강릉 1박", List.of(new PublicAuthor(1L, null)),
+					Instant.parse("2026-11-11T01:00:00Z"), 4)), "next"));
+
+			mockMvc.perform(get("/api/v1/users/me/courses").param("cursor", "c1").param("limit", "10")
+					.with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"items": [{"courseId": 7, "title": "강릉 1박",
+					  "authors": [{"id": 1, "profileImageUrl": null}], "publishedAt": "2026-11-11 10:00:00+09",
+					  "version": 4}], "nextCursor": "next"}}
+					""", org.springframework.test.json.JsonCompareMode.STRICT));
 		}
 	}
 }

@@ -21,9 +21,14 @@ public record CourseFixture(TestEntityManager em) {
 
 	public static final LocalDate DAY1 = LocalDate.parse("2026-11-01");
 
-	/** 회원 행(ACTIVE)을 넣고 첫 회원을 만든 사람으로 방에 넣는다. */
+	/** 없는 회원 행(ACTIVE)을 넣고 첫 회원을 만든 사람으로 방에 넣는다. 방마다 기록은 하나다. */
 	public TravelRoom room(LocalDate startDate, long... members) {
-		TestUsers.insertActive(em.getEntityManager(), members);
+		for (long member : members) {
+			if (em.getEntityManager().createNativeQuery("SELECT COUNT(*) FROM users WHERE id = ?1")
+				.setParameter(1, member).getSingleResult() instanceof Number count && count.longValue() == 0) {
+				TestUsers.insertActive(em.getEntityManager(), member);
+			}
+		}
 		TravelRoom room = em.persist(TravelRoom.builder().title("강릉 여행").startDate(startDate)
 			.endDate(startDate == null ? null : startDate.plusDays(2)).transportMode(TransportMode.CAR)
 			.createdAt(NOW).build());
