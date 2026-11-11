@@ -68,9 +68,10 @@ yeogirok:
     # Android App Links(/.well-known/assetlinks.json). 초대 링크를 브라우저 대신 앱으로 연다. 안드로이드만 지원한다.
     android:
       package-name: com.ssafya109.yeogirok
-      # 앱 서명 인증서 SHA-256 지문(AA:BB:... 대문자). 디버그·배포 키를 쉼표로 여러 개 넣는다. 비밀값은 아니다.
-      # 비어 있으면 assetlinks.json 이 빈 배열이고 링크는 앱 대신 /invite 안내 페이지로 열린다.
-      sha256-cert-fingerprints: ${ANDROID_APP_SHA256_FINGERPRINTS:}
+      # 앱 서명 인증서 SHA-256 지문(AA:BB:... 대문자). 여러 개면 쉼표로 넣는다. 비밀값은 아니다.
+      # 기본값은 Expo 템플릿 debug.keystore(androiddebugkey) 지문이다. 프로젝트에 배포 키가 없어 debug·release 빌드 모두
+      # 이 키로 서명된다(expo-template-bare-minimum 58 의 android/app/build.gradle). 배포 키를 만들면 그 지문을 환경 변수로 더한다.
+      sha256-cert-fingerprints: ${ANDROID_APP_SHA256_FINGERPRINTS:FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C}
   file:
     # Presigned URL 수명(11/3 결정). 업로드 URL 수명은 미완료 업로드 세션의 만료 시각이기도 하다.
     upload-url-ttl: 10m

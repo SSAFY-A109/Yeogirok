@@ -37,6 +37,23 @@ class AndroidAppLinkPropertiesTest {
 			.run(context -> assertThat(context).hasFailed());
 	}
 
+	/** application.yaml 기본값. 지문에 콜론이 있어도 ${...:기본값} 의 첫 콜론 뒤 전체가 기본값으로 읽힌다. */
+	@Test
+	void 환경_변수가_없으면_application_yaml의_debug_키_지문을_쓴다() throws Exception {
+		var yaml = new org.springframework.boot.env.YamlPropertySourceLoader()
+			.load("application", new org.springframework.core.io.ClassPathResource("application.yaml")).getFirst();
+		new ApplicationContextRunner()
+			.withConfiguration(AutoConfigurations.of(ValidationAutoConfiguration.class))
+			.withUserConfiguration(Config.class)
+			.withInitializer(context -> context.getEnvironment().getPropertySources().addLast(yaml))
+			.run(context -> {
+				AndroidAppLinkProperties properties = context.getBean(AndroidAppLinkProperties.class);
+				assertThat(properties.packageName()).isEqualTo("com.ssafya109.yeogirok");
+				assertThat(properties.sha256CertFingerprints()).containsExactly(
+					"FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C");
+			});
+	}
+
 	@Configuration
 	@EnableConfigurationProperties(AndroidAppLinkProperties.class)
 	static class Config {
