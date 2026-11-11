@@ -26,7 +26,8 @@ public class CourseUpdateService {
 	private final Clock clock;
 
 	/**
-	 * 기록 행 잠금 뒤 CO013 → CO008 → C004 → (내용 변경·재게시면) 해시 없음 C001 → 해시 불일치 CO010 → (재게시면) 미완성 RE019.
+	 * 기록 행 잠금 뒤 CO013 → CO008 → C004 → (내용 변경·재게시면) 해시·includePhotos 없음 C001 → 해시 불일치 CO010 → (재게시면)
+	 * 미완성 RE019.
 	 * 해제만(published=false)은 해시 없이 된다. 실제로 바뀐 것이 있을 때만 version 을 한 번 올린다. status 는 바꾸지 않는다.
 	 */
 	@Transactional
@@ -47,8 +48,13 @@ public class CourseUpdateService {
 				throw new BusinessException(ExceptionType.REQUIRED_VALUE_MISSING,
 					"selectionHash: 내용을 바꾸거나 다시 게시하려면 필요합니다.");
 			}
+			// 앱이 072 미리보기 때 정한 값을 그대로 보낸다. 서버가 추정하면 앱이 맞출 수 없어 CO010 이 풀리지 않았다(PR #89 리뷰).
+			if (input.includePhotos() == null) {
+				throw new BusinessException(ExceptionType.REQUIRED_VALUE_MISSING,
+					"includePhotos: 내용을 바꾸거나 다시 게시하려면 필요합니다.");
+			}
+			boolean includePhotos = input.includePhotos();
 			CourseSnapshot snapshot = publicCourseReader.snapshot(courseId);
-			boolean includePhotos = input.includePhotos() == null ? snapshot.hasPublicPhoto() : input.includePhotos();
 			if (!SelectionHash.of(courseId, record.getVersion(), title, description, includePhotos, snapshot)
 				.equals(input.selectionHash())) {
 				throw new BusinessException(ExceptionType.COURSE_SELECTION_CHANGED);

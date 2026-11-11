@@ -134,7 +134,9 @@ class CourseControllerTest {
 			"{\"version\": 1, \"title\": \"t\", \"includePhotos\": true, \"photoIds\": null}|C003",
 			"{\"version\": 1, \"title\": \"t\", \"includePhotos\": true, \"storyIds\": []}|C003",
 			"{\"version\": 1, \"title\": \"t\", \"includePhotos\": true, \"visibility\": \"PUBLIC\"}|C003",
-			"{\"version\": 1, \"title\": \"t\", \"includePhotos\": true, \"publishedAt\": \"x\"}|C003"
+			"{\"version\": 1, \"title\": \"t\", \"includePhotos\": true, \"publishedAt\": \"x\"}|C003",
+			"{\"version\": 1, \"title\": \"a\\u0000b\", \"includePhotos\": true}|C003",
+			"{\"version\": 1, \"title\": \"t\", \"includePhotos\": true, \"description\": \"a\\u001fb\"}|C003"
 		})
 		void 요청_형식_오류(String body, String code) throws Exception {
 			mockMvc.perform(json(post(PATH), body))

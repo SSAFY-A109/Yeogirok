@@ -15,7 +15,7 @@ import com.ssafy.yeogirok.domain.record.entity.VisitImage;
  */
 public final class SelectionHash {
 
-	/** 제목·설명에 나올 수 없는 구분 문자(단위 구분자). */
+	/** 구분 문자(단위 구분자). 요청 검사가 제목·설명의 제어 문자를 막아 값 안에 나오지 않는다({@code ControlCharacters}). */
 	private static final String SEPARATOR = "\u001F";
 
 	private SelectionHash() {

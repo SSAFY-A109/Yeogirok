@@ -228,7 +228,6 @@ class PublicCourseReaderTest {
 			assertThat(courseSelection.save(record.getId(), false)).isFalse();
 			em.clear();
 			assertThat(em.find(VisitImage.class, linked.getId()).isPublicSelected()).isFalse();
-			assertThat(reader.snapshot(record.getId()).hasPublicPhoto()).isFalse();
 		}
 	}
 
