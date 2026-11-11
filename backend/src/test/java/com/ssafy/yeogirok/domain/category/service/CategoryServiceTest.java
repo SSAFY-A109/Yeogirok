@@ -22,16 +22,26 @@ class CategoryServiceTest {
 	CategoryService categoryService;
 
 	@Test
-	void 표시_순서대로_돌려준다() {
-		em.persist(new TravelCategoryEntity("FOOD", "맛집", 4));
-		em.persist(new TravelCategoryEntity("NATURE", "자연 힐링", 1));
-		em.persist(new TravelCategoryEntity("CAFE", "카페", 5));
+	void TravelCategory_선언_순서대로_돌려준다() {
+		em.persist(new TravelCategoryEntity("FOOD", "맛집"));
+		em.persist(new TravelCategoryEntity("NATURE", "자연 힐링"));
+		em.persist(new TravelCategoryEntity("CAFE", "카페"));
 		em.flush();
 
 		assertThat(categoryService.getCategories().categories()).containsExactly(
 			new CategoryListResponse.Category("NATURE", "자연 힐링"),
 			new CategoryListResponse.Category("FOOD", "맛집"),
 			new CategoryListResponse.Category("CAFE", "카페"));
+	}
+
+	@Test
+	void enum에_없는_코드의_행은_빼고_돌려준다() {
+		em.persist(new TravelCategoryEntity("NATURE", "자연 힐링"));
+		em.persist(new TravelCategoryEntity("UNKNOWN", "모르는 코드"));
+		em.flush();
+
+		assertThat(categoryService.getCategories().categories()).containsExactly(
+			new CategoryListResponse.Category("NATURE", "자연 힐링"));
 	}
 
 	@Test

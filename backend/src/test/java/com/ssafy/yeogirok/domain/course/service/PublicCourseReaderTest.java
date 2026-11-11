@@ -63,7 +63,7 @@ class PublicCourseReaderTest {
 		Long place = fixture.place("경포대");
 		em.getEntityManager().createNativeQuery("update places set category_code = 'NATURE' where id = ?1")
 			.setParameter(1, place).executeUpdate();
-		em.persist(new TravelCategoryEntity("NATURE", "자연 힐링", 1));
+		em.persist(new TravelCategoryEntity("NATURE", "자연 힐링"));
 		second = fixture.visit(record.getId(), place, DAY1.plusDays(1), 1);
 		first = fixture.visit(record.getId(), place, DAY1, 1);
 		linked = fixture.photo(record.getId(), first.getId(), 1);
