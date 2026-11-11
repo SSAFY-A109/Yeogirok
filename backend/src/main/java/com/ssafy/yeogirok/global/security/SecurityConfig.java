@@ -32,8 +32,29 @@ public class SecurityConfig {
 		return http.build();
 	}
 
+	/**
+	 * 로그인 없이 브라우저·안드로이드가 여는 웹 경로. App Links 확인 파일과 초대 링크 안내 페이지(domain/applink).
+	 * 안드로이드는 확인 파일이 401 이면 링크를 앱과 묶지 않는다. 채팅과 같은 이유로 Bearer 검사를 아예 걸지 않는다.
+	 * GET 만 연다. 다른 메서드는 이 체인에서 거부한다.
+	 */
 	@Bean
 	@Order(2)
+	public SecurityFilterChain publicWebFilterChain(HttpSecurity http) throws Exception {
+		http
+			.securityMatcher("/.well-known/assetlinks.json", "/invite/**")
+			.csrf(AbstractHttpConfigurer::disable)
+			.formLogin(AbstractHttpConfigurer::disable)
+			.httpBasic(AbstractHttpConfigurer::disable)
+			.logout(AbstractHttpConfigurer::disable)
+			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+			.authorizeHttpRequests(authorize -> authorize
+				.requestMatchers(HttpMethod.GET, "/.well-known/assetlinks.json", "/invite/*").permitAll()
+				.anyRequest().denyAll());
+		return http.build();
+	}
+
+	@Bean
+	@Order(3)
 	public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder serviceJwtDecoder,
 		ServiceJwtAuthenticationConverter authenticationConverter,
 		RestAuthenticationEntryPoint authenticationEntryPoint,
