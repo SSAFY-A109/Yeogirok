@@ -38,6 +38,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestIdTokens;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** API-095·096 푸시 토큰 등록·삭제와 탈퇴 시 삭제. */
@@ -69,17 +70,19 @@ class PushTokenApiTest {
 
 	/* ── 헬퍼 ─────────────────────────────────────────────────── */
 
-	/** 카카오로 새 회원을 만들고 [액세스 토큰, 회원 ID] 를 돌려준다. */
+	/** 카카오로 새 회원을 만들고 [액세스 토큰, 리프레시 토큰, 회원 ID] 를 돌려준다. */
 	private Member signUp() throws Exception {
 		String body = mockMvc.perform(post("/api/v1/auth/token").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"provider\": \"kakao\", \"idToken\": \"%s\", \"nonce\": \"%s\"}".formatted(
 					idTokens.kakao(UUID.randomUUID().toString(), clock.instant()), TestIdTokens.NONCE)))
 			.andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString();
-		String accessToken = jsonMapper.readTree(body).get("data").get("accessToken").asString();
+		JsonNode tokens = jsonMapper.readTree(body).get("data");
+		String accessToken = tokens.get("accessToken").asString();
 		String me = mockMvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
 			.andReturn().getResponse().getContentAsString();
-		return new Member(accessToken, jsonMapper.readTree(me).get("data").get("id").asLong());
+		return new Member(accessToken, tokens.get("refreshToken").asString(),
+			jsonMapper.readTree(me).get("data").get("id").asLong());
 	}
 
 	private ResultActions register(Member member, String json) throws Exception {
@@ -115,7 +118,7 @@ class PushTokenApiTest {
 			.andExpect(jsonPath("$.code").value(code));
 	}
 
-	record Member(String accessToken, long id) {
+	record Member(String accessToken, String refreshToken, long id) {
 	}
 
 	/* ── API-095 ──────────────────────────────────────────────── */
@@ -281,6 +284,79 @@ class PushTokenApiTest {
 			.isInstanceOfSatisfying(BusinessException.class,
 				e -> assertThat(e.getExceptionType()).isEqualTo(ExceptionType.ACCESS_TOKEN_INVALID));
 		assertThat(ownersOf(token)).isEmpty();
+	}
+
+	/* ── API-007 로그아웃과 함께 지우기 ─────────────────────────── */
+
+	private ResultActions logout(Member member, String pushTokenJson) throws Exception {
+		String body = pushTokenJson == null
+			? "{\"refreshToken\": \"%s\"}".formatted(member.refreshToken())
+			: "{\"refreshToken\": \"%s\", \"pushToken\": %s}".formatted(member.refreshToken(), pushTokenJson);
+		return mockMvc.perform(post("/api/v1/auth/logout").header(HttpHeaders.AUTHORIZATION, "Bearer " + member.accessToken())
+			.contentType(MediaType.APPLICATION_JSON).content(body));
+	}
+
+	private ResultActions refresh(Member member) throws Exception {
+		return mockMvc.perform(post("/api/v1/auth/token/refresh").contentType(MediaType.APPLICATION_JSON)
+			.content("{\"refreshToken\": \"%s\"}".formatted(member.refreshToken())));
+	}
+
+	@Test
+	void 로그아웃에_푸시_토큰을_주면_세션과_함께_지운다() throws Exception {
+		Member member = signUp();
+		String phone = newToken();
+		String tablet = newToken();
+		register(member, phone, "ANDROID").andExpect(status().isOk());
+		register(member, tablet, "ANDROID").andExpect(status().isOk());
+
+		logout(member, "\"" + phone + "\"").andExpect(status().isOk());
+
+		assertThat(ownersOf(phone)).isEmpty();
+		// 다른 기기 토큰은 그대로 둔다.
+		assertThat(ownersOf(tablet)).containsExactly(member.id());
+		refresh(member).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void 로그아웃에_푸시_토큰을_빼거나_null_이면_토큰은_두고_세션만_폐기한다() throws Exception {
+		Member first = signUp();
+		Member second = signUp();
+		String firstToken = newToken();
+		String secondToken = newToken();
+		register(first, firstToken, "ANDROID").andExpect(status().isOk());
+		register(second, secondToken, "ANDROID").andExpect(status().isOk());
+
+		logout(first, null).andExpect(status().isOk());
+		logout(second, "null").andExpect(status().isOk());
+
+		assertThat(ownersOf(firstToken)).containsExactly(first.id());
+		assertThat(ownersOf(secondToken)).containsExactly(second.id());
+		refresh(first).andExpect(status().isUnauthorized());
+		refresh(second).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void 로그아웃으로_다른_계정의_푸시_토큰은_지우지_못한다() throws Exception {
+		Member owner = signUp();
+		Member other = signUp();
+		String token = newToken();
+		register(owner, token, "ANDROID").andExpect(status().isOk());
+
+		logout(other, "\"" + token + "\"").andExpect(status().isOk());
+
+		assertThat(ownersOf(token)).containsExactly(owner.id());
+	}
+
+	@Test
+	void 로그아웃의_푸시_토큰이_잘못되면_오류이고_세션도_그대로다() throws Exception {
+		Member member = signUp();
+
+		expectError(logout(member, "123"), "C002");
+		expectError(logout(member, "\"  \""), "C003");
+		expectError(logout(member, "\"" + "a".repeat(4097) + "\""), "C003");
+
+		// 검사가 먼저라 아무것도 바꾸지 않았다.
+		refresh(member).andExpect(status().isOk());
 	}
 
 	/* ── API-009 탈퇴 ─────────────────────────────────────────── */

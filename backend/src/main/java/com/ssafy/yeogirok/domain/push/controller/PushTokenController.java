@@ -41,7 +41,7 @@ public class PushTokenController {
 	}
 
 	@Operation(summary = "API-096 푸시 토큰 삭제",
-		description = "로그아웃(API-007) 전에 현재 기기 토큰을 지운다. 등록된 토큰이 없어도 성공한다.",
+		description = "현재 기기 토큰을 지운다(기기 토큰이 바뀌었을 때 등). 로그아웃은 API-007 에 pushToken 을 함께 보낸다. 등록된 토큰이 없어도 성공한다.",
 		security = @SecurityRequirement(name = "bearerAuth"))
 	@DeleteMapping
 	public ResponseEntity<ApiResponseBody<Void>> delete(@AuthenticationPrincipal AuthenticatedUser user,

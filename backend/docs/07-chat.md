@@ -15,7 +15,7 @@
 | 이력·재연결 복구 | API-076 `GET /rooms/{roomId}/messages` | `beforeMessageId` 과거 이력, `afterMessageId`+`throughMessageId` 복구 |
 | 읽은 위치 | API-088 `PATCH /rooms/{roomId}/messages/read` | 앱이 실제로 확인한 위치만. 수신·ACK·조회로는 바꾸지 않는다 |
 | 푸시 토큰 등록 | API-095 `PUT /users/me/push-tokens` | 로그인 뒤. `{token, platform:"ANDROID"}`. 같은 토큰 재등록 성공, 다른 계정 토큰이면 지금 계정으로 옮긴다 |
-| 푸시 토큰 삭제 | API-096 `DELETE /users/me/push-tokens` | 로그아웃(API-007) 전. `{token}`. 본인 토큰만 지우고 없어도 성공 |
+| 푸시 토큰 삭제 | API-096 `DELETE /users/me/push-tokens`, 또는 API-007 `pushToken` | 기기 토큰이 바뀌었을 때 096. 로그아웃은 API-007 에 `pushToken` 을 함께 보낸다. 본인 토큰만 지우고 없어도 성공 |
 | 앱 푸시 | FCM HTTP v1 | 채팅 화면에 연결되지 않은 참여자에게. 아래 "앱 푸시 알림" |
 
 프레임 모양·오류 코드표는 노션 API-077 "채팅 양방향 WebSocket 계약"을 따른다. STOMP 는 쓰지 않는다(Spring 기본 WebSocket + JSON 텍스트 프레임).
@@ -157,7 +157,8 @@ FCM 기기 토큰을 API-095 로 등록한다. Android 만 지원한다.
 - 등록은 회원 행을 탈퇴와 같은 잠금(`SELECT … FOR UPDATE`)으로 잡고 활성인지 본다. 탈퇴 커밋 직후 아직 유효한 액세스 토큰으로
   온 등록은 A003 이고, 등록이 먼저면 탈퇴가 기다렸다가 그 토큰까지 지운다.
 - 토큰 최대 4,096자(넘으면 C003)는 노션에 없는 서버 규칙이다. FCM 토큰은 보통 200자 안팎이다.
-- 로그아웃 때 서버가 따로 지우지 않는다. 앱이 API-007 전에 API-096 을 부른다. 탈퇴(API-009)는 탈퇴 트랜잭션 안에서 그 회원 토큰을 모두 지운다.
+- 로그아웃(API-007)은 요청의 `pushToken`(선택)을 세션 폐기와 함께 지운다. 앱이 API-096 을 빠뜨리거나 실패해도 로그아웃한 기기에
+  미리보기가 가지 않게 하려는 것이다(PR 리뷰 뒤 프론트와 합의). 탈퇴(API-009)는 탈퇴 트랜잭션 안에서 그 회원 토큰을 모두 지운다.
 
 **서비스 계정 키**
 
