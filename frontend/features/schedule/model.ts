@@ -473,7 +473,7 @@ export function isScheduleDraftSettled(draft: ScheduleDraft | undefined): boolea
 const UNKNOWN_PLACE_NAME = "이름을 확인할 수 없는 장소";
 
 /** `roomPlaceId`로 찾는 여행방 후보. 일정 응답에는 장소 이름·카테고리가 없다. */
-export type SchedulePlaceLookup = ReadonlyMap<number, Pick<RoomPlace, "name" | "category">>;
+export type SchedulePlaceLookup = ReadonlyMap<number, Pick<RoomPlace, "name" | "category" | "coordinate">>;
 
 export function toPlaceLookup(places: readonly RoomPlace[]): SchedulePlaceLookup {
   return new Map(places.map((place) => {
@@ -483,6 +483,30 @@ export function toPlaceLookup(places: readonly RoomPlace[]): SchedulePlaceLookup
 
 export function getPlaceName(places: SchedulePlaceLookup, roomPlaceId: number): string {
   return places.get(roomPlaceId)?.name ?? UNKNOWN_PLACE_NAME;
+}
+
+/** 지도에 번호 핀으로 찍을 일정 항목. `caption`은 `10:00 · 카페`(도착 시각 · 카테고리 이름)이고 둘 다 없으면 빈 문자열이다. */
+export type ScheduleMapStop = { id: string; name: string; caption: string; coordinate: RoomPlace["coordinate"] };
+
+/**
+ * 하루 일정을 방문 순서대로 지도 표시로 바꾼다("지도로 보기", TRP-07).
+ * 후보 목록에서 찾을 수 없는 항목은 좌표를 몰라 뺀다.
+ */
+export function toScheduleMapStops(items: readonly ScheduleItem[], places: SchedulePlaceLookup): ScheduleMapStop[] {
+  return items.flatMap((item) => {
+    const place = places.get(item.roomPlaceId);
+
+    if (place === undefined) {
+      return [];
+    }
+
+    return [{
+      id: String(item.id),
+      name: place.name,
+      caption: [item.arrivalTime, place.category?.name].filter(Boolean).join(" · "),
+      coordinate: place.coordinate,
+    }];
+  });
 }
 
 /** 그날 머무는 시간의 합(분). */

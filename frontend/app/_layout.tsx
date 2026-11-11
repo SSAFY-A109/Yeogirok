@@ -77,6 +77,7 @@ function RootNavigator() {
             <Stack.Screen name="rooms/[roomId]/invite" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/search" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/recommend" options={{ headerShown: false }} />
+            <Stack.Screen name="rooms/[roomId]/map" options={{ headerShown: false }} />
             <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
             <Stack.Screen name="ar-tip" options={{ headerShown: false }} />
             <Stack.Screen name="map" options={{ headerShown: false }} />

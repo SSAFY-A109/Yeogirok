@@ -98,7 +98,7 @@ export function RoomPlaceList({ roomId, members, hiddenIds, header, onDeletePlac
       keyExtractor={(place) => {
         return String(place.id);
       }}
-      contentContainerClassName="pb-4"
+      contentContainerClassName="pb-16"
       ListHeaderComponent={(
         <>
           {header}

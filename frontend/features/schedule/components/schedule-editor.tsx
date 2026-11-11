@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronUp, GripVertical, Hourglass, Info, TriangleAlert, type LucideIcon } from "lucide-react-native";
 import { useState, type ReactNode } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Modal, Pressable, ScrollView, View } from "react-native";
 
 import { BottomCta } from "@/components/ui/bottom-cta";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { MapViewToggle } from "@/features/room/components/map-view-toggle";
+import { PlaceRouteMap } from "@/features/room/components/place-route-map";
 import { TRANSPORT_MODE_LABEL, type RoomDetail } from "@/features/room/model";
 import { SCHEDULE_DRAFT_MAX_WAIT_MS, useAdjustScheduleDraft, useRoomSchedule, useSaveSchedule } from "@/features/schedule/api/queries";
 import { DayChips, type DayChipItem } from "@/features/schedule/components/day-chips";
@@ -34,6 +36,7 @@ import {
   toAdjustDraftRequest,
   toDraftLayout,
   toSaveScheduleRequest,
+  toScheduleMapStops,
   toUncalculatedDay,
   unassignItem,
   type DraftLayout,
@@ -103,6 +106,7 @@ export function ScheduleEditor({ roomId, draftKey, room, draft, places, adjustin
   const [moveTarget, setMoveTarget] = useState<MoveStopTarget | null>(null);
   const [stayTarget, setStayTarget] = useState<StayTarget | null>(null);
   const [recalculatedFrom, setRecalculatedFrom] = useState<number | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
   const adjustDraft = useAdjustScheduleDraft();
   const saveDraft = useSaveSchedule();
   const toast = useToast();
@@ -373,19 +377,53 @@ export function ScheduleEditor({ roomId, draftKey, room, draft, places, adjustin
     );
   };
 
+  // 순서를 바꾸는 동안에는 지도로 넘어가지 않는다. 지도는 고른 날의 지금 순서(저장 전 편집 포함)를 보여 준다.
+  const mapStops = selectedDay === undefined || reorderDay !== undefined ? [] : toScheduleMapStops(selectedDay.items, places);
+
+  const closeMap = () => {
+    setMapOpen(false);
+  };
+
   return (
     <Screen>
       <ScreenHeader title={adjusting ? "일정 조정" : "일정 초안"} onBack={goBack} testID="schedule-draft.header" />
-      <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-6 pt-4" testID="schedule-draft.review">
-        <EditorIntro adjusting={adjusting} draft={draft} />
-        {room?.hasSchedule ? <ScheduleChangesNotice roomId={roomId} layout={layout} places={places} /> : null}
-        {editedDates.length === 0 && draft.schedule.warnings.length > 0 ? <WarningList warnings={draft.schedule.warnings} testID="schedule-draft.warnings" /> : null}
-        {layout.unassigned.length === 0 || reorderLayout !== null ? null : (
-          <UnassignedItems items={layout.unassigned} places={places} locked={editingLocked} onMove={openMoveUnassigned} />
+      <View className="flex-1">
+        <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-16 pt-4" testID="schedule-draft.review">
+          <EditorIntro adjusting={adjusting} draft={draft} />
+          {room?.hasSchedule ? <ScheduleChangesNotice roomId={roomId} layout={layout} places={places} /> : null}
+          {editedDates.length === 0 && draft.schedule.warnings.length > 0 ? <WarningList warnings={draft.schedule.warnings} testID="schedule-draft.warnings" /> : null}
+          {layout.unassigned.length === 0 || reorderLayout !== null ? null : (
+            <UnassignedItems items={layout.unassigned} places={places} locked={editingLocked} onMove={openMoveUnassigned} />
+          )}
+          {renderDay()}
+        </ScrollView>
+        {mapStops.length === 0 ? null : (
+          <View pointerEvents="box-none" className="absolute bottom-3 left-0 right-0 items-center">
+            <MapViewToggle
+              target="map"
+
+              onPress={() => {
+                setMapOpen(true);
+              }}
+
+              testID="schedule-draft.map-toggle"
+            />
+          </View>
         )}
-        {renderDay()}
-      </ScrollView>
+      </View>
       <BottomCta className="border-t border-border">{renderActions()}</BottomCta>
+      <Modal visible={mapOpen && mapStops.length > 0} animationType="slide" statusBarTranslucent onRequestClose={closeMap} testID="schedule-draft.map">
+        <Screen>
+          <ScreenHeader title={`${selectedIndex + 1}일차 지도`} onBack={closeMap} testID="schedule-draft.map-header" />
+          <PlaceRouteMap
+            places={mapStops}
+            connected
+            footer={<MapViewToggle target="list" onPress={closeMap} testID="schedule-draft.map-list-toggle" />}
+            accessibilityLabel="고른 날의 일정을 방문 순서대로 이은 지도"
+            testID="schedule-draft.map-route"
+          />
+        </Screen>
+      </Modal>
       {selectedDay === undefined ? null : (
         <DayPickerSheet
           open={pickerOpen}
