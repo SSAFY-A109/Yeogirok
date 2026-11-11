@@ -55,7 +55,7 @@ public class CourseSearchService {
 		int size = PageSize.resolve(limit);
 		CourseSearchCursor after = CourseSearchCursor.decodeOrNull(cursor);
 		List<Ranked> matched = publicCourseRepository.findCandidates(condition.pattern(), condition.regionPrefix(),
-				condition.category(), condition.transportMode()).stream()
+				condition.category(), condition.transportMode(), ImportWindow.ALL.start(), ImportWindow.ALL.end()).stream()
 			.map(candidate -> new Ranked(candidate, CoursePeriod.of(candidate.roomStart(), candidate.roomEnd(),
 				candidate.firstVisit(), candidate.lastVisit()), candidate.importCount()))
 			.filter(ranked -> condition.duration().matches(ranked.period().dayCount()))
