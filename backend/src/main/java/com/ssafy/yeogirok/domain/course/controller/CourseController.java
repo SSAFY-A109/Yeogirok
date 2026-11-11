@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +20,7 @@ import com.ssafy.yeogirok.domain.course.dto.CourseRequest;
 import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
+import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -41,6 +43,7 @@ public class CourseController {
 	private final CoursePreviewService coursePreviewService;
 	private final CoursePublishService coursePublishService;
 	private final MyCourseQueryService myCourseQueryService;
+	private final CourseUpdateService courseUpdateService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-072 공개할 코스 미리보기")
@@ -78,5 +81,16 @@ public class CourseController {
 		@Parameter(description = "한 번에 받을 개수. 기본 20, 최대 50") @RequestParam(required = false) Integer limit) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			myCourseQueryService.getMine(user.userId(), cursor, limit)));
+	}
+
+	/** 멱등키를 받지 않는다(노션 075, version 검사가 중복 저장을 막는다). */
+	@Operation(summary = "API-075 공개할 코스 수정·공개 해제")
+	@PatchMapping("/courses/{courseId}")
+	public ResponseEntity<ApiResponseBody<CoursePublicationResponse>> update(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@PathVariable Long courseId,
+		@RequestBody CourseRequest request) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			courseUpdateService.update(user.userId(), courseId, request.toUpdate())));
 	}
 }

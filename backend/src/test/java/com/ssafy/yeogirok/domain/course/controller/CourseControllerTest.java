@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -42,6 +43,7 @@ import com.ssafy.yeogirok.domain.course.dto.PublicPhoto;
 import com.ssafy.yeogirok.domain.course.dto.PublicPlace;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
+import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
@@ -63,6 +65,8 @@ class CourseControllerTest {
 	CoursePublishService coursePublishService;
 	@MockitoBean
 	MyCourseQueryService myCourseQueryService;
+	@MockitoBean
+	CourseUpdateService courseUpdateService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -213,6 +217,44 @@ class CourseControllerTest {
 					  "authors": [{"id": 1, "profileImageUrl": null}], "publishedAt": "2026-11-11 10:00:00+09",
 					  "version": 4}], "nextCursor": "next"}}
 					""", org.springframework.test.json.JsonCompareMode.STRICT));
+		}
+	}
+
+	@Nested
+	class API_075 {
+
+		static final String PATH = "/api/v1/courses/7";
+
+		@Test
+		void 해제_응답_모양() throws Exception {
+			given(courseUpdateService.update(USER_ID, 7L, new CourseInput(4, null, null, null, null, false)))
+				.willReturn(new CoursePublicationResponse(7L, null, 5));
+
+			mockMvc.perform(json(patch(PATH), "{\"version\": 4, \"published\": false}"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"courseId": 7, "publishedAt": null, "version": 5}}
+					""", org.springframework.test.json.JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"{\"published\": false}|C001",
+			"{\"version\": null, \"published\": false}|C002",
+			"{\"version\": 4, \"published\": \"false\"}|C002",
+			"{\"version\": 4, \"published\": null}|C001",
+			"{\"version\": 4, \"title\": null}|C001",
+			"{\"version\": 4, \"title\": \"  \"}|C003",
+			"{\"version\": 4, \"includePhotos\": 1}|C002",
+			"{\"version\": 4, \"selectionHash\": 1}|C002",
+			"{\"version\": 4, \"description\": null}|C002",
+			"{\"version\": 4, \"visitIds\": []}|C003"
+		})
+		void 요청_형식_오류(String body, String code) throws Exception {
+			mockMvc.perform(json(patch(PATH), body))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(courseUpdateService);
 		}
 	}
 }

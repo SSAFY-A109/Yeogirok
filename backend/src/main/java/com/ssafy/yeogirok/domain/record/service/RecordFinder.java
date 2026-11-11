@@ -77,6 +77,21 @@ public class RecordFinder {
 		return new RecordRoom(record, room);
 	}
 
+	/**
+	 * 공개 코스 수정(API-075)용. 기록 행을 잠그고, 기록 없음·방 삭제 CO013, 현재 참여자 아님 CO008. 기록 쪽 예외를 잡아 바꾸면
+	 * 트랜잭션이 rollback-only 가 되어 따로 둔다(명세 {@code specs/course-publish-api.md} 1-1).
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public TravelRecord lockCourse(Long recordId, Long userId) {
+		TravelRecord record = travelRecordRepository.findByIdForUpdate(recordId)
+			.orElseThrow(() -> new BusinessException(ExceptionType.COURSE_NOT_FOUND));
+		TravelRoom room = liveRoom(record).orElseThrow(() -> new BusinessException(ExceptionType.COURSE_NOT_FOUND));
+		if (!isCurrentMember(room.getId(), userId)) {
+			throw new BusinessException(ExceptionType.COURSE_NOT_MEMBER);
+		}
+		return record;
+	}
+
 	private Optional<TravelRoom> liveRoom(TravelRecord record) {
 		return travelRoomRepository.findByIdAndDeletedAtIsNull(record.getRoomId());
 	}
