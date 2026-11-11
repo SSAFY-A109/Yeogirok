@@ -338,6 +338,35 @@ class ChatPushTest {
 	}
 
 	@Test
+	void FCM_장애면_제한을_풀지_않는다() {
+		String device = registerDevice(friend);
+		pushSender.resultFor(device, PushResult.UNAVAILABLE);
+		deliverFromOwner("하나");
+
+		pushSender.resultFor(device, PushResult.SENT);
+		deliverFromOwner("둘");
+
+		// 장애 중 메시지마다 다시 보내지 않도록 "하나" 의 제한이 남아 "둘" 은 생략된다.
+		assertThat(sentTokens()).containsExactly(device);
+	}
+
+	@Test
+	void 종료로_인터럽트되면_남은_수신자에게는_보내지_않는다() {
+		String friendDevice = registerDevice(friend);
+		Long third = newUser();
+		join(third);
+		registerDevice(third);
+		pushSender.onSend(tokens -> Thread.currentThread().interrupt());
+		try {
+			deliverFromOwner("안녕");
+		} finally {
+			Thread.interrupted();
+		}
+
+		assertThat(sentTokens()).containsExactly(friendDevice);
+	}
+
+	@Test
 	void UNREGISTERED_토큰은_지우고_다른_토큰은_둔다() {
 		String gone = registerDevice(friend);
 		String alive = registerDevice(friend);

@@ -2,6 +2,8 @@ package com.ssafy.yeogirok.domain.push.sender;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -76,6 +78,11 @@ public class FcmPushSender implements PushSender {
 		List<PushResult> results = new ArrayList<>(tokens.size());
 		for (int from = 0; from < tokens.size(); from += MAX_BATCH) {
 			List<String> batch = tokens.subList(from, Math.min(from + MAX_BATCH, tokens.size()));
+			if (Thread.currentThread().isInterrupted()) {
+				// 종료 중이다. 남은 토큰은 보내지 않는다.
+				results.addAll(Collections.nCopies(tokens.size() - from, PushResult.UNAVAILABLE));
+				break;
+			}
 			results.addAll(sendBatch(batch, message));
 		}
 		return results;
@@ -86,8 +93,14 @@ public class FcmPushSender implements PushSender {
 			BatchResponse response = messaging.sendEach(tokens.stream().map(token -> toMessage(token, message)).toList());
 			return response.getResponses().stream().map(FcmPushSender::toResult).toList();
 		} catch (FirebaseMessagingException | RuntimeException e) {
-			log.warn("FCM 발송에 실패했습니다. tokens={}", tokens.size(), e);
-			return Collections.nCopies(tokens.size(), PushResult.FAILED);
+			if (causedByInterrupt(e)) {
+				// SDK 가 인터럽트를 감싸 던지면 상태가 지워질 수 있다. 다시 세워 부르는 쪽이 멈추게 한다.
+				Thread.currentThread().interrupt();
+				log.info("종료 중이라 FCM 발송을 멈춥니다. tokens={}", tokens.size());
+			} else {
+				log.warn("FCM 발송에 실패했습니다. tokens={}", tokens.size(), e);
+			}
+			return Collections.nCopies(tokens.size(), PushResult.UNAVAILABLE);
 		}
 	}
 
@@ -97,11 +110,34 @@ public class FcmPushSender implements PushSender {
 		}
 		FirebaseMessagingException e = response.getException();
 		MessagingErrorCode code = e == null ? null : e.getMessagingErrorCode();
-		if (code == MessagingErrorCode.UNREGISTERED) {
-			return PushResult.UNREGISTERED;
+		PushResult result = resultOf(code);
+		if (result != PushResult.UNREGISTERED) {
+			log.warn("FCM 이 알림을 받지 않았습니다. errorCode={}, message={}", code, e == null ? null : e.getMessage());
 		}
-		log.warn("FCM 이 알림을 받지 않았습니다. errorCode={}, message={}", code, e == null ? null : e.getMessage());
-		return PushResult.FAILED;
+		return result;
+	}
+
+	/** FCM 오류 코드를 결과로 바꾼다. FCM 쪽 장애·한도는 토큰 문제가 아니므로 UNAVAILABLE. */
+	static PushResult resultOf(MessagingErrorCode code) {
+		if (code == null) {
+			return PushResult.UNAVAILABLE;
+		}
+		return switch (code) {
+			case UNREGISTERED -> PushResult.UNREGISTERED;
+			case UNAVAILABLE, INTERNAL, QUOTA_EXCEEDED -> PushResult.UNAVAILABLE;
+			default -> PushResult.FAILED;
+		};
+	}
+
+	/** 인터럽트로 멈췄는지. 시간 초과(SocketTimeoutException)도 InterruptedIOException 이라 뺀다. */
+	static boolean causedByInterrupt(Throwable e) {
+		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+			if (cause instanceof InterruptedException
+				|| (cause instanceof InterruptedIOException && !(cause instanceof SocketTimeoutException))) {
+				return true;
+			}
+		}
+		return Thread.currentThread().isInterrupted();
 	}
 
 	/**

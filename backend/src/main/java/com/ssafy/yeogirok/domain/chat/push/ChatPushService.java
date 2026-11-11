@@ -73,8 +73,10 @@ public class ChatPushService {
 		executor.shutdown();
 		try {
 			if (!executor.awaitTermination(SHUTDOWN_WAIT.toMillis(), TimeUnit.MILLISECONDS)) {
-				int dropped = executor.shutdownNow().size();
-				log.warn("종료 대기 시간 안에 채팅 푸시를 다 보내지 못해 남은 {}건을 버립니다.", dropped);
+				int running = executor.getActiveCount();
+				int queued = executor.shutdownNow().size();
+				log.warn("종료 대기 시간 안에 채팅 푸시를 다 보내지 못했습니다. 보내던 {}건은 멈추고 대기 중인 {}건은 버립니다.", running,
+					queued);
 			}
 		} catch (InterruptedException e) {
 			executor.shutdownNow();
@@ -84,13 +86,21 @@ public class ChatPushService {
 
 	/** 커밋된 새 메시지(replayed=false)에서만 부른다. 예외를 던지지 않는다. */
 	public void notifyNewMessage(Long roomId, ChatMessage message) {
+		if (!sender.isEnabled()) {
+			// FCM 키가 없다. 보낼 수 없으니 수신자 조회·Redis 작업도 하지 않는다.
+			return;
+		}
 		ChatPushJob job = new ChatPushJob(roomId, message.sender().id(), message.sender().nickname(), message.id(),
 			message.body());
 		try {
 			executor.execute(() -> deliver(job));
 		} catch (RejectedExecutionException e) {
-			log.warn("채팅 푸시 대기 줄이 가득 차 이 메시지의 푸시를 보내지 않습니다. roomId={}, messageId={}", roomId,
-				message.id());
+			if (executor.isShutdown()) {
+				log.info("서버가 종료 중이라 이 메시지의 푸시를 보내지 않습니다. roomId={}, messageId={}", roomId, message.id());
+			} else {
+				log.warn("채팅 푸시 대기 줄이 가득 차 이 메시지의 푸시를 보내지 않습니다. roomId={}, messageId={}", roomId,
+					message.id());
+			}
 		}
 	}
 
@@ -110,7 +120,14 @@ public class ChatPushService {
 			}
 			PushMessage message = ChatPushMessages.of(job.roomId(), job.messageId(), targets.getFirst().roomTitle(),
 				job.senderNickname(), job.body(), properties.previewLength());
-			byUser.forEach((userId, devices) -> sendTo(job, userId, devices, message));
+			for (Map.Entry<Long, List<ChatPushTarget>> entry : byUser.entrySet()) {
+				if (Thread.currentThread().isInterrupted()) {
+					// 종료 중이다. 남은 수신자는 보내지 않는다.
+					log.info("종료 중이라 채팅 푸시를 멈춥니다. roomId={}, messageId={}", job.roomId(), job.messageId());
+					return;
+				}
+				sendTo(job, entry.getKey(), entry.getValue(), message);
+			}
 		} catch (RuntimeException e) {
 			log.error("채팅 푸시를 보내지 못했습니다. roomId={}, messageId={}", job.roomId(), job.messageId(), e);
 		}
@@ -122,14 +139,18 @@ public class ChatPushService {
 		}
 		List<String> tokens = devices.stream().map(ChatPushTarget::token).toList();
 		List<PushResult> results = sender.send(tokens, message);
-		if (results.stream().noneMatch(result -> result == PushResult.SENT)) {
-			// 한 기기에도 가지 않았다(FCM 장애, 모두 해제된 토큰 등). 제한을 풀어 다음 메시지에서 다시 보낸다.
+		if (results.stream().allMatch(result -> result == PushResult.FAILED || result == PushResult.UNREGISTERED)) {
+			// FCM 이 이 수신자의 모든 토큰을 거절했다(토큰 문제). 제한을 풀어 다음 메시지에서 남은·새 토큰으로 다시 보낸다.
+			// FCM 장애(UNAVAILABLE)는 풀지 않는다. 풀면 장애 중 메시지마다 재시도가 쌓여 발송 줄이 막힌다.
 			throttle.release(userId, job.roomId());
 		}
 		for (int i = 0; i < tokens.size() && i < results.size(); i++) {
 			if (results.get(i) == PushResult.UNREGISTERED) {
-				tokenRepository.deleteByUserIdAndToken(userId, tokens.get(i));
-				log.info("FCM 이 등록 해제된 토큰이라 알려 지웠습니다. userId={}", userId);
+				if (tokenRepository.deleteByUserIdAndToken(userId, tokens.get(i)) > 0) {
+					log.info("FCM 이 등록 해제된 토큰이라 알려 지웠습니다. userId={}", userId);
+				} else {
+					log.info("FCM 이 등록 해제된 토큰이라 알렸지만, 그사이 다른 계정으로 옮겨 갔거나 지워져 두었습니다. userId={}", userId);
+				}
 			}
 		}
 	}
