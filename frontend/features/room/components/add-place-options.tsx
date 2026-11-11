@@ -4,12 +4,12 @@ import { Pressable, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 
-/** 장소를 담는 경로. `course` 다른 사람 코스, `ai` AI 추천(W10), `search` 직접 검색(W12). */
+/** 장소를 담는 경로. `course` 다른 사람 코스, `ai` 장소 추천(W10), `search` 직접 검색(W12). */
 export type AddPlaceSource = "course" | "ai" | "search";
 
 const ADD_PLACE_OPTIONS: readonly { source: AddPlaceSource; icon: LucideIcon; title: string; description: string }[] = [
   { source: "course", icon: MapIcon, title: "다른 사람 코스에서", description: "공개 코스에서 원하는 장소만 골라요" },
-  { source: "ai", icon: Sparkles, title: "AI 추천 받기", description: "담은 장소와 동선이 맞는 곳을 추천해요" },
+  { source: "ai", icon: Sparkles, title: "추천 받기", description: "담은 장소와 동선이 맞는 곳을 추천해요" },
   { source: "search", icon: Search, title: "직접 검색하기", description: "장소 이름으로 찾아 바로 담아요" },
 ];
 

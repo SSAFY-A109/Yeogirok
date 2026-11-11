@@ -31,7 +31,7 @@ import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors
 import type { AddRoomPlaceItemDto, RoomDetail, RoomPlace } from "@/features/room/model";
 import { useIdempotencyKeyFor } from "@/hooks/use-idempotency-key";
 
-const CONDITIONS_TITLE = "AI 장소 추천";
+const CONDITIONS_TITLE = "장소 추천";
 const RESULTS_TITLE = "추천 장소";
 const SKELETON_CHIP_COUNT = 6;
 const HTTP_NOT_FOUND = 404;
@@ -43,7 +43,7 @@ function goBack() {
   router.back();
 }
 
-/** AI 장소 추천(Figma W10 → W10-1 → W11). 한 라우트 안에서 단계를 바꾼다. */
+/** 장소 추천(Figma W10 → W10-1 → W11). 한 라우트 안에서 단계를 바꾼다. */
 export function RecommendScreen({ roomId }: { roomId: number | null }) {
   return roomId === null ? <RecommendRoomNotFound /> : <RecommendDataGate roomId={roomId} />;
 }

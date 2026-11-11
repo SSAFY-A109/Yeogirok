@@ -402,13 +402,13 @@ export function isPastTrip(room: Pick<RoomSummary, "endDate">, today: LocalDate 
   return room.endDate !== null && compareLocalDate(room.endDate, today) < 0;
 }
 
-/** 장소 행 보조 문구의 담은 경로(`강릉 바다 따라 2박 3일`, `AI 추천`, `직접 검색`). 코스는 서버가 준 원본 코스 제목을 쓴다. */
+/** 장소 행 보조 문구의 담은 경로(`강릉 바다 따라 2박 3일`, `추천`, `직접 검색`). 코스는 서버가 준 원본 코스 제목을 쓴다. */
 export function getRoomPlaceSourceLabel(place: Pick<RoomPlace, "source" | "sourceTitle">): string | null {
   switch (place.source) {
     case "COURSE":
       return place.sourceTitle ?? "공개 코스";
     case "AI":
-      return "AI 추천";
+      return "추천";
     case "SEARCH":
       return "직접 검색";
     case "MANUAL":
