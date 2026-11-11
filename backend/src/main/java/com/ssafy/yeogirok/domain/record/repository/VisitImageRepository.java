@@ -31,7 +31,8 @@ public interface VisitImageRepository extends JpaRepository<VisitImage, Long> {
 
 	/**
 	 * 코스 공개(API-073·075). includePhotos 면 방문에 연결된 사진만 공개 선택, 나머지(미연결·includePhotos=false)는 해제한다.
-	 * 값이 달라지는 행만 바꾼다. 컨텍스트를 비우지 않는 이유는 {@link #pullForward} 와 같다.
+	 * 값이 달라지는 행만 바꾼다. 컨텍스트를 비우지 않는 이유는 {@link #pullForward} 와 같다. 그래서 UPDATE 전에 읽어 둔 사진
+	 * 엔티티(073·075 의 snapshot)는 값이 낡는다. 바꾼 표시가 없어 덮어쓰지는 않고, 지금은 UPDATE 뒤에 다시 읽는 곳이 없다.
 	 *
 	 * @return 바뀐 사진 수
 	 */
