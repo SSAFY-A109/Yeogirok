@@ -68,6 +68,8 @@ yeogirok:
     # Android App Links(/.well-known/assetlinks.json). 초대 링크를 브라우저 대신 앱으로 연다. 안드로이드만 지원한다.
     android:
       package-name: com.ssafya109.yeogirok
+      # 초대 안내 페이지의 "앱에서 열기" 버튼이 쓰는 스킴(frontend/app.json 의 scheme). 예전 빌드에도 등록되어 있다.
+      app-scheme: yeogirokfe
       # 앱 서명 인증서 SHA-256 지문(AA:BB:... 대문자). 여러 개면 쉼표로 넣는다. 비밀값은 아니다.
       # 기본값은 Expo 템플릿 debug.keystore(androiddebugkey) 지문이다. 프로젝트에 배포 키가 없어 debug·release 빌드 모두
       # 이 키로 서명된다(expo-template-bare-minimum 58 의 android/app/build.gradle). 배포 키를 만들면 그 지문을 환경 변수로 더한다.

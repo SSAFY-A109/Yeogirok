@@ -1,6 +1,8 @@
 package com.ssafy.yeogirok.domain.applink;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 import org.springframework.http.CacheControl;
@@ -8,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.HtmlUtils;
 
@@ -35,10 +38,17 @@ public class InvitePageController {
 	private final AndroidAppLinkProperties properties;
 	private final RoomInviteProperties inviteProperties;
 
+	/** 앱을 못 찾았을 때 intent 가 되돌아오는 표시. 이 값이면 설치 안내를 함께 보여 준다. */
+	static final String APP_MISSING = "missing";
+
 	@GetMapping(value = "/invite/{token}", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-	public ResponseEntity<String> invitePage(@PathVariable String token) {
+	public ResponseEntity<String> invitePage(@PathVariable String token,
+		@RequestParam(name = "app", required = false) String app) {
+		String missingNotice = APP_MISSING.equals(app)
+			? "<p class=\"notice\">이 기기에서 여기록 앱을 찾지 못했어요. 앱을 설치하거나 최신 버전으로 업데이트한 뒤 다시 눌러 주세요.</p>"
+			: "";
 		String openButton = TOKEN.matcher(token).matches()
-			? "<a class=\"button\" href=\"" + HtmlUtils.htmlEscape(intentUrl(token)) + "\">여기록 앱에서 열기</a>"
+			? missingNotice + "<a class=\"button\" href=\"" + HtmlUtils.htmlEscape(intentUrl(token)) + "\">여기록 앱에서 열기</a>"
 			: "<p class=\"muted\">링크 주소가 올바르지 않아요. 초대한 사람에게 링크를 다시 받아 주세요.</p>";
 		return ResponseEntity.ok()
 			.cacheControl(CacheControl.noStore())
@@ -48,13 +58,16 @@ public class InvitePageController {
 	}
 
 	/**
-	 * 안드로이드 크롬·카카오톡 인앱 브라우저에서 앱을 여는 intent 주소. 초대 링크(url-base/{token})와 같은 https 주소를
-	 * 이 패키지로 연다. 앱이 없으면 브라우저가 Play 스토어의 이 패키지 페이지로 보낸다.
+	 * 안드로이드 크롬·카카오톡 인앱 브라우저에서 앱을 여는 intent 주소. 앱의 커스텀 스킴({@code yeogirokfe://invite/{token}})으로 연다.
+	 * https App Links 는 앱 빌드에 /invite intentFilter 가 들어 있어야만 열리지만, 스킴은 처음 빌드부터 등록되어 있어
+	 * 예전 빌드에서도 열린다. 앱은 Play 스토어에 없어서, 앱을 못 찾으면 스토어 대신 이 페이지(?app=missing)로 되돌아온다.
 	 */
 	private String intentUrl(String token) {
 		URI base = URI.create(inviteProperties.urlBase());
-		return "intent://" + base.getRawAuthority() + base.getRawPath() + "/" + token
-			+ "#Intent;scheme=" + base.getScheme() + ";package=" + properties.packageName() + ";end";
+		String fallback = inviteProperties.urlBase() + "/" + token + "?app=" + APP_MISSING;
+		return "intent://" + base.getRawPath().replaceFirst("^/", "") + "/" + token
+			+ "#Intent;scheme=" + properties.appScheme() + ";package=" + properties.packageName()
+			+ ";S.browser_fallback_url=" + URLEncoder.encode(fallback, StandardCharsets.UTF_8) + ";end";
 	}
 
 	private static final String PAGE = """
@@ -72,6 +85,7 @@ public class InvitePageController {
 		p{font-size:15px;line-height:1.6;margin:0 0 24px}
 		.button{display:block;padding:16px;border-radius:12px;background:#208AEF;color:#fff;font-weight:600;text-decoration:none}
 		.muted{color:#6B7280}
+		.notice{padding:12px 16px;border-radius:12px;background:#FEF3C7;color:#92400E;font-size:14px}
 		</style>
 		</head>
 		<body>
