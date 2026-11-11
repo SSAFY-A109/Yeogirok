@@ -88,7 +88,7 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
     private fun load() {
         ready = false; status.visibility = VISIBLE; status.text = "지도 불러오는 중"
         removeCallbacks(timeout); postDelayed(timeout, 20_000)
-        web.loadDataWithBaseURL("http://localhost", html, "text/html", "UTF-8", null)
+        web.loadDataWithBaseURL("https://localhost", html, "text/html", "UTF-8", null)
     }
     fun updateLocation(lat: Double, lng: Double, heading: Double?) {
         if (destroyed || !NavigationPolicy.coordinates(lat, lng)) return

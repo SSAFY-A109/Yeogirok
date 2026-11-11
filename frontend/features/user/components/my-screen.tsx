@@ -9,6 +9,8 @@ import { MediaImage } from "@/components/ui/media-photo";
 import { Screen } from "@/components/ui/screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { useToast } from "@/components/ui/toast";
+import { useSignOut } from "@/features/auth/api/queries";
 import { useRecords } from "@/features/record/api/queries";
 import { RecordCard, RecordIssue, RecordLoading } from "@/features/record/components/record-list-screen";
 import { cn } from "@/lib/utils";
@@ -18,6 +20,8 @@ import { MyLoading, MyUnavailable } from "./my-page";
 
 export function MyScreen() {
   const me = useMe();
+  const signOut = useSignOut();
+  const toast = useToast();
   const { refetch } = me;
   const profile = me.data;
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -91,10 +95,24 @@ export function MyScreen() {
           </>
         )}
       </ScrollView>
-      <ConfirmDialog open={logoutOpen} onOpenChange={setLogoutOpen} title="로그아웃할까요?" description={"이 기기에서 로그아웃돼요.\n내 기록과 팁은 다시 로그인하면\n이어서 볼 수 있어요."} confirmLabel="로그아웃" testID="my.logout-dialog" onConfirm={() => {
-        setLogoutOpen(false);
-        router.push("/my/preview-login");
-      }} />
+      <ConfirmDialog
+        open={logoutOpen}
+        onOpenChange={setLogoutOpen}
+        title="로그아웃할까요?"
+        description={"이 기기에서 로그아웃돼요.\n내 기록과 팁은 다시 로그인하면\n이어서 볼 수 있어요."}
+        confirmLabel="로그아웃"
+        loading={signOut.isPending}
+        loadingLabel="로그아웃 중"
+        testID="my.logout-dialog"
+        onConfirm={() => {
+          signOut.mutate(undefined, {
+            onError: () => {
+              setLogoutOpen(false);
+              toast.show({ message: "로그아웃하지 못했어요. 다시 시도해 주세요." });
+            },
+          });
+        }}
+      />
     </Screen>
   );
 }

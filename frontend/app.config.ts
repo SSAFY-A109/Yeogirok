@@ -1,7 +1,12 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const plugins: NonNullable<ExpoConfig["plugins"]> = [...(config.plugins ?? []), "expo-dev-client", "expo-secure-store"];
+  const plugins: NonNullable<ExpoConfig["plugins"]> = [
+    ...(config.plugins ?? []),
+    "expo-dev-client",
+    "expo-secure-store",
+    ["expo-notifications", { defaultChannel: "chat", enableRemoteNotifications: false }],
+  ];
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
   const nativeAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY;
 
@@ -27,6 +32,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: config.name ?? "여기록",
     slug: config.slug ?? "yeogirok-fe",
+    android: {
+      ...config.android,
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
+    },
     plugins,
   };
 };

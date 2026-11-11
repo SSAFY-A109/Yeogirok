@@ -118,7 +118,7 @@ Cloud AR 화면은 지원 기기에서 ARCore Depth 이미지로 표면 깊이�
 
 `.env.local`에 `EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY`를 설정한다. 키 값을 커밋하거나 채팅에 붙이지 않는다. ARCore에는 API 키를 사용하지 않는다.
 
-- 지도: 카카오 JavaScript 키, 웹 플랫폼에 `http://localhost` 등록. Kakao 네이티브 지도 SDK는 사용하지 않는다.
+- 지도: 카카오 JavaScript 키의 JavaScript SDK 도메인에 `https://localhost` 등록. Kakao 네이티브 지도 SDK는 사용하지 않는다.
 - AR: Google Cloud에서 ARCore API를 활성화하고 앱 패키지 `com.ssafya109.yeogirok`와 해당 APK 서명 SHA-1의 Android OAuth 클라이언트를 등록한다. 앱은 Keyless 인증을 사용한다. 빌드의 `arcoreAuthMode=KEYLESS`는 앱 설정을 나타내며 실제 OAuth 승인 성공을 뜻하지 않는다.
 - 기존 config plugin이 prebuild 때 ARCore API 키 metadata와 생성된 `local.properties`의 해당 키를 제거하고 `play-services-auth:22.0.0`과 인증용 ProGuard 규칙을 포함한다. 사용자 `.env.local`은 자동으로 수정하지 않으며, 남아 있는 `ARCORE_API_KEY`는 전달하지 않는다. 지도 키 전달은 유지한다.
 - **이전 API 키 빌드에서 전환하려면 prebuild와 APK 재빌드·재설치가 필요하다. Metro 새로고침만으로 네이티브 인증 방식은 바뀌지 않는다.**

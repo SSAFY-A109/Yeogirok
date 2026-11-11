@@ -1,15 +1,17 @@
+import { runSessionLogout } from "../../api/client";
+import { getChatPushToken } from "../../lib/native/chat-notifications";
 import { revokeRefreshToken } from "./api/auth.api";
 import { clearTokens, getTokens } from "./token-store";
 
-/** 서버에 이 기기의 리프레시 토큰 폐기를 요청하고, 요청이 실패해도 기기 토큰은 지운다. */
-export async function signOutThisDevice(): Promise<void> {
-  const tokens = await getTokens();
+/** 서버에서 이 기기의 리프레시 토큰을 폐기한 뒤 기기 토큰을 지운다. */
+export function signOutThisDevice(): Promise<void> {
+  return runSessionLogout(async () => {
+    const tokens = await getTokens();
 
-  try {
     if (tokens) {
-      await revokeRefreshToken(tokens.refreshToken);
+      await revokeRefreshToken(tokens.refreshToken, getChatPushToken() ?? undefined);
     }
-  } finally {
+
     await clearTokens();
-  }
+  });
 }

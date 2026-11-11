@@ -7,9 +7,18 @@ const { http, HttpResponse } = require("msw");
 
 const stored = new Map();
 const load = Module._load;
+let chatPushToken = null;
 const sdkState = { googleResponse: { type: "success", data: { idToken: "sdk-google-id-token", serverAuthCode: "sdk-google-auth-code" } }, kakaoResponse: { idToken: "sdk-kakao-id-token" }, googleError: null, kakaoError: null, googleConfig: null, kakaoLogin: null };
 
 Module._load = function (id, ...args) {
+  if (id === "../../lib/native/chat-notifications") {
+    return {
+      getChatPushToken: () => {
+        return chatPushToken;
+      },
+    };
+  }
+
   if (id === "react-native") {
     return { Platform: { OS: "android" } };
   }
@@ -101,7 +110,7 @@ const { exchangeSocialToken, refreshServiceTokens } = require("../.expo/auth-che
 const { toLoginResult, toServiceTokens } = require("../.expo/auth-check/features/auth/model");
 const { getTokens, setTokens, getLoginProvider, clearTokens } = require("../.expo/auth-check/features/auth/token-store");
 const { server } = require("../.expo/auth-check/api/mocks/server");
-const { failedRefreshTokensFixture, googleServerAuthCodeFixture, serviceTokensFixture, socialCredentialsFixture } = require("../.expo/auth-check/api/mocks/fixtures/auth");
+const { expiredAccessTokenFixture, failedRefreshTokensFixture, googleServerAuthCodeFixture, serviceTokensFixture, socialCredentialsFixture } = require("../.expo/auth-check/api/mocks/fixtures/auth");
 const { createNonce } = require("../.expo/auth-check/features/auth/nonce");
 const { signOutThisDevice } = require("../.expo/auth-check/features/auth/sign-out");
 const { deleteMe, getMe } = require("../.expo/auth-check/features/user/api/user.api");
@@ -206,10 +215,17 @@ async function check() {
   }
 
   const authorizationHeaders = [];
+  const logoutRequests = [];
 
   server.events.on("request:start", ({ request }) => {
-    if (new URL(request.url).pathname.startsWith("/api/v1/auth/token")) {
+    const pathname = new URL(request.url).pathname;
+
+    if (pathname.startsWith("/api/v1/auth/token")) {
       authorizationHeaders.push(request.headers.get("Authorization"));
+    }
+
+    if (pathname === "/api/v1/auth/logout") {
+      logoutRequests.push(request.clone());
     }
   });
 
@@ -285,21 +301,89 @@ async function check() {
 
     server.resetHandlers();
 
-    // 로그아웃(API-007): 이 기기 리프레시 토큰 폐기, 요청이 실패해도 기기 토큰 삭제
+    // 로그아웃(API-007): 성공하면 이 기기 토큰을 지우고 실패하면 세션을 유지한다.
     await performSocialLogin("kakao");
     const beforeLogout = await getTokens();
-    await signOutThisDevice();
+    const otherDevice = await exchangeSocialToken(socialCredentialsFixture.kakao);
+    const logoutBody = { refreshToken: beforeLogout.refreshToken };
+
+    for (const [pushToken, code] of [[false, "C002"], ["", "C003"], ["   ", "C003"], ["x".repeat(4097), "C003"]]) {
+      chatPushToken = pushToken;
+      await assert.rejects(signOutThisDevice(), hasCode(code, 400));
+      assert.deepEqual(await getTokens(), beforeLogout);
+    }
+
+    chatPushToken = "mock-fcm-device-token";
+    const requestCount = logoutRequests.length;
+    await Promise.all([signOutThisDevice(), signOutThisDevice()]);
+    assert.equal(logoutRequests.length, requestCount + 1);
+    const logoutRequest = logoutRequests.at(-1);
+    assert.equal(logoutRequest.headers.get("Authorization"), `Bearer ${beforeLogout.accessToken}`);
+    assert.match(logoutRequest.headers.get("Content-Type"), /^application\/json/);
+    assert.deepEqual(await logoutRequest.json(), { ...logoutBody, pushToken: chatPushToken });
     assert.equal(await getTokens(), null);
+    assert.equal(await getLoginProvider(), null);
     await assert.rejects(refreshServiceTokens(beforeLogout.refreshToken), hasCode("A007", 401));
-    await setTokens(serviceTokensFixture);
+    await refreshServiceTokens(otherDevice.refreshToken);
 
-    server.use(http.post("*/api/v1/auth/logout", () => {
-      return HttpResponse.json({ success: false, code: "C009", message: "fail" }, { status: 500 });
-    }));
+    // 같은 액세스 토큰과 이미 폐기된 리프레시 토큰으로 다시 요청해도 성공한다.
+    const logoutAgain = await api.post("/auth/logout", { ...logoutBody, pushToken: null }, {
+      accountAccessToken: beforeLogout.accessToken,
+    });
+    assert.equal(logoutAgain.status, 200);
+    assert.equal(logoutAgain.data, undefined);
 
-    await assert.rejects(signOutThisDevice(), hasCode("C009", 500));
-    assert.equal(await getTokens(), null, "로그아웃 요청이 실패해도 기기 토큰은 지워야 합니다.");
-    server.resetHandlers();
+    for (const [accountAccessToken, code] of [[undefined, "A001"], [expiredAccessTokenFixture, "A002"], ["invalid", "A003"]]) {
+      await assert.rejects(api.post("/auth/logout", logoutBody, { accountAccessToken }), hasCode(code, 401));
+    }
+
+    chatPushToken = null;
+    await performSocialLogin("kakao");
+    const withoutPushToken = await getTokens();
+    await signOutThisDevice();
+    assert.deepEqual(await logoutRequests.at(-1).json(), { refreshToken: withoutPushToken.refreshToken });
+
+    await performSocialLogin("kakao");
+    const currentSession = await getTokens();
+
+    for (const [code, status] of [["C014", 500], ["A002", 401]]) {
+      server.use(http.post("*/api/v1/auth/logout", () => {
+        return HttpResponse.json({ success: false, code, message: "fail" }, { status });
+      }));
+
+      await assert.rejects(signOutThisDevice(), hasCode(code, status));
+      assert.deepEqual(await getTokens(), currentSession);
+      assert.equal(await getLoginProvider(), "kakao");
+      server.resetHandlers();
+    }
+
+    const logoutStarted = Promise.withResolvers();
+    const finishLogout = Promise.withResolvers();
+
+    server.use(
+      http.post("*/api/v1/auth/logout", async () => {
+        logoutStarted.resolve();
+        await finishLogout.promise;
+        return HttpResponse.json({ success: true });
+      }),
+      http.get("*/api/v1/__auth_check__", () => {
+        return HttpResponse.json({ success: false, code: "A002", message: "expired" }, { status: 401 });
+      }),
+    );
+
+    const pendingLogout = signOutThisDevice();
+
+    try {
+      await Promise.race([logoutStarted.promise, pendingLogout]);
+      await assert.rejects(api.get("/__auth_check__"), hasCode("A002", 401));
+      assert.deepEqual(await getTokens(), currentSession);
+    } finally {
+      finishLogout.resolve();
+      await pendingLogout;
+      server.resetHandlers();
+    }
+
+    assert.equal(await getTokens(), null);
 
     // 내 정보(API-008)
     await performSocialLogin("kakao");
@@ -317,8 +401,41 @@ async function check() {
     await performSocialLogin("google");
     assert.deepEqual(await deleteMe(googleServerAuthCodeFixture), { withdrawn: true, dataCleanupStatus: "QUEUED" });
 
+    await performSocialLogin("kakao");
+    const beforeWithdrawal = await getTokens();
+
+    for (const [code, status] of [["C014", 500], ["A011", 401]]) {
+      server.use(http.delete("*/api/v1/users/me", ({ request }) => {
+        assert.notEqual(request.headers.get("Authorization"), `Bearer ${beforeWithdrawal.accessToken}`);
+        return HttpResponse.json({ success: false, code, message: "fail" }, { status });
+      }));
+
+      await assert.rejects(withdrawWithReauthentication("kakao"), hasCode(code, status));
+      assert.deepEqual(await getTokens(), beforeWithdrawal);
+      assert.equal(await getLoginProvider(), "kakao");
+      server.resetHandlers();
+    }
+
+    let deleteRequests = 0;
+
+    server.use(
+      http.get("*/api/v1/users/me", ({ request }) => {
+        const isCurrentSession = request.headers.get("Authorization") === `Bearer ${beforeWithdrawal.accessToken}`;
+        return HttpResponse.json({ success: true, data: { ...me, id: isCurrentSession ? me.id : me.id + 1 } });
+      }),
+      http.delete("*/api/v1/users/me", () => {
+        deleteRequests += 1;
+        return HttpResponse.json({ success: true, data: { withdrawn: true, dataCleanupStatus: "QUEUED" } });
+      }),
+    );
+
+    await assert.rejects(withdrawWithReauthentication("kakao"), hasCode("WITHDRAW_ACCOUNT_MISMATCH", 0));
+    assert.equal(deleteRequests, 0);
+    assert.deepEqual(await getTokens(), beforeWithdrawal);
+    server.resetHandlers();
+
     for (const provider of ["google", "kakao"]) {
-      await setTokens(serviceTokensFixture);
+      await performSocialLogin(provider);
       await withdrawWithReauthentication(provider);
       assert.equal(await getTokens(), null, "탈퇴 후 기기 토큰을 지워야 합니다.");
     }
