@@ -1,9 +1,8 @@
 import { getErrorMessage, isApiError } from "@/api/errors";
 import type { LocationFailure } from "@/lib/native/location";
 
-// 2026-11-06 backend/dev `ExceptionType` 기준 code다. `api/errors.ts`의 공통 표는 10-27 초안 번호(C012~C014 위치 증거 등)라
-// 실제 서버 번호와 다르다(예: 서버 C008 = 위치 증거 없음, C005 = 멱등키 재사용). 공통 표를 고치기 전까지(TBD)
-// 발자취 저장에서 서버가 보내는 code는 이 표에서 먼저 찾는다.
+// 2026-11-06 backend/dev `ExceptionType` 기준 code다. `api/errors.ts`의 공통 표도 2026-11-10에 같은 서버 번호로 맞췄다.
+// 이 표에는 발자취 저장 상황에 맞춘 문구를 둔다. 같은 code가 공통 표에 있어도 이 표의 문구를 먼저 쓴다.
 
 /** 위치를 다시 재면 풀리는 code: 위치 증거 없음(C008)·유효 시각 지남(C009)·위경도 범위(C011). */
 const LOCATION_EVIDENCE_CODES: readonly string[] = ["C008", "C009", "C011"];

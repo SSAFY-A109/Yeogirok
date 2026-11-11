@@ -53,13 +53,15 @@ type RoomMapScreenProps = {
   roomId: number | null;
   /** 지도로 볼 대상. 여행방 상세의 탭과 같다. */
   view: PlaceTab;
+  /** 일정 지도를 열 때 처음 보여 줄 날(일정 탭에서 보고 있던 날). 없거나 일정에 없는 날이면 첫날이다. */
+  initialDate: LocalDate | null;
 };
 
 /**
  * 여행방 "지도로 보기"(TRP-07). 여행방 상세의 장소 탭에서 오면 후보 장소를, 일정 탭에서 오면 고른 날의 일정을 방문 순서대로 지도에 보여 준다.
  * Figma에는 진입 버튼(`Map view toggle`)만 있고 이 화면의 시안은 없다.
  */
-export function RoomMapScreen({ roomId, view }: RoomMapScreenProps) {
+export function RoomMapScreen({ roomId, view, initialDate }: RoomMapScreenProps) {
   const back = () => {
     goToList(roomId, view);
   };
@@ -69,7 +71,7 @@ export function RoomMapScreen({ roomId, view }: RoomMapScreenProps) {
       return <MapMessage message="여행방을 찾을 수 없어요." onBack={back} />;
     }
 
-    return view === "schedule" ? <ScheduleMap roomId={roomId} onBack={back} /> : <CandidatePlacesMap roomId={roomId} onBack={back} />;
+    return view === "schedule" ? <ScheduleMap roomId={roomId} initialDate={initialDate} onBack={back} /> : <CandidatePlacesMap roomId={roomId} onBack={back} />;
   };
 
   return (
@@ -123,7 +125,7 @@ function CandidatePlacesMap({ roomId, onBack }: { roomId: number; onBack: () => 
 
 // #region 일정
 
-function ScheduleMap({ roomId, onBack }: { roomId: number; onBack: () => void }) {
+function ScheduleMap({ roomId, initialDate, onBack }: { roomId: number; initialDate: LocalDate | null; onBack: () => void }) {
   const scheduleQuery = useRoomSchedule(roomId);
   const placesQuery = useAllRoomPlaces(roomId);
 
@@ -132,7 +134,7 @@ function ScheduleMap({ roomId, onBack }: { roomId: number; onBack: () => void })
       return <MapMessage message="아직 일정이 없어요." onBack={onBack} />;
     }
 
-    return <ScheduleDayMap schedule={scheduleQuery.data} places={toPlaceLookup(placesQuery.data)} onBack={onBack} />;
+    return <ScheduleDayMap schedule={scheduleQuery.data} places={toPlaceLookup(placesQuery.data)} initialDate={initialDate} onBack={onBack} />;
   }
 
   if (scheduleQuery.isError || placesQuery.isError) {
@@ -166,12 +168,14 @@ type ScheduleDayMapProps = {
   schedule: RoomSchedule;
   /** 뺀 후보까지 포함한 후보 장소. 일정 항목의 이름과 좌표를 찾는다. */
   places: SchedulePlaceLookup;
+  /** 처음 보여 줄 날. 일정에 없는 날이면 첫날을 보여 준다. */
+  initialDate: LocalDate | null;
   onBack: () => void;
 };
 
-/** 날짜 칩으로 고른 날의 일정을 방문 순서대로 잇는다. 처음에는 첫날을 보여 준다. */
-function ScheduleDayMap({ schedule, places, onBack }: ScheduleDayMapProps) {
-  const [pickedDate, setPickedDate] = useState<LocalDate | null>(null);
+/** 날짜 칩으로 고른 날의 일정을 방문 순서대로 잇는다. 처음에는 일정 탭에서 보고 있던 날을, 없으면 첫날을 보여 준다. */
+function ScheduleDayMap({ schedule, places, initialDate, onBack }: ScheduleDayMapProps) {
+  const [pickedDate, setPickedDate] = useState<LocalDate | null>(initialDate);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const selectedDay = schedule.days.find((day) => {
