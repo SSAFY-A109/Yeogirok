@@ -40,7 +40,7 @@ public class CourseUpdateService {
 		boolean publishing = Boolean.TRUE.equals(input.published()) && !published;
 		boolean unpublishing = Boolean.FALSE.equals(input.published()) && published;
 		String title = input.title() == null ? record.getTitle() : input.title();
-		String description = input.description() == null ? record.getDescription() : input.description();
+		String description = SelectionHash.description(record, input.description());
 
 		boolean selectionChanged = false;
 		if (input.changesContent() || publishing) {
@@ -55,10 +55,7 @@ public class CourseUpdateService {
 			}
 			boolean includePhotos = input.includePhotos();
 			CourseSnapshot snapshot = publicCourseReader.snapshot(courseId);
-			if (!SelectionHash.of(courseId, record.getVersion(), title, description, includePhotos, snapshot)
-				.equals(input.selectionHash())) {
-				throw new BusinessException(ExceptionType.COURSE_SELECTION_CHANGED);
-			}
+			SelectionHash.verify(record, title, description, includePhotos, snapshot, input.selectionHash());
 			if (publishing && !record.isCompleted()) {
 				throw new BusinessException(ExceptionType.RECORD_NOT_PUBLISHABLE);
 			}

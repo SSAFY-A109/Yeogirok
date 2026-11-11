@@ -38,12 +38,12 @@ public class CoursePublishService {
 		if (!record.isCompleted()) {
 			throw new BusinessException(ExceptionType.RECORD_NOT_PUBLISHABLE);
 		}
-		String description = input.description() == null ? record.getDescription() : input.description();
+		String description = SelectionHash.description(record, input.description());
 		CourseSnapshot snapshot = publicCourseReader.snapshot(recordId);
-		if (record.getVersion() != input.version() || !SelectionHash.of(recordId, record.getVersion(), input.title(),
-			description, input.includePhotos(), snapshot).equals(input.selectionHash())) {
+		if (record.getVersion() != input.version()) {
 			throw new BusinessException(ExceptionType.COURSE_SELECTION_CHANGED);
 		}
+		SelectionHash.verify(record, input.title(), description, input.includePhotos(), snapshot, input.selectionHash());
 		boolean selectionChanged = courseSelection.save(recordId, input.includePhotos());
 		Instant now = clock.instant();
 		record.changeCourse(input.title(), description, now, selectionChanged, now);

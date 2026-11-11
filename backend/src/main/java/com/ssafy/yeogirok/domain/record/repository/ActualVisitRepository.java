@@ -35,7 +35,8 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 
 	/**
 	 * 코스 공개(API-073·075). 기록의 모든 방문을 공개 선택한다. 영속성 컨텍스트를 거치지 않는 UPDATE 라 잠가 둔 기록 엔티티가
-	 * 분리되지 않게 컨텍스트는 비우지 않는다(이 트랜잭션에서 방문 엔티티를 다시 읽지 않는 곳에서만 쓴다).
+	 * 분리되지 않게 컨텍스트는 비우지 않는다. 그래서 UPDATE 전에 읽어 둔 방문 엔티티(073·075 의 snapshot)는 값이 낡는다. 바꾼
+	 * 표시가 없어 덮어쓰지는 않고, 지금은 UPDATE 뒤에 다시 읽는 곳이 없다. 뒤에서 공개 선택 값을 읽어야 하면 새로 조회한다.
 	 *
 	 * @return 바뀐 방문 수
 	 */

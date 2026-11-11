@@ -7,7 +7,10 @@ import java.util.HexFormat;
 import java.util.StringJoiner;
 
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
+import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 /**
  * 미리보기(API-072)에서 본 내용과 저장(073·075) 시점 내용이 같은지 보는 값(명세 {@code specs/course-publish-api.md} 1-3).
@@ -19,6 +22,29 @@ public final class SelectionHash {
 	private static final String SEPARATOR = "\u001F";
 
 	private SelectionHash() {
+	}
+
+	/**
+	 * 072·073·075 가 같은 입력으로 해시를 만들도록 모은 곳이다. 해시 입력을 바꿀 때는 여기만 고친다(PR #89 리뷰).
+	 *
+	 * @param requested 요청의 설명. 생략(null)이면 지금 기록 설명을 쓴다(명세 1-2)
+	 */
+	public static String description(TravelRecord record, String requested) {
+		return requested == null ? record.getDescription() : requested;
+	}
+
+	/** 기록의 지금 id·version 으로 계산한다(072 미리보기가 돌려주는 값). */
+	public static String of(TravelRecord record, String title, String description, boolean includePhotos,
+		CourseSnapshot snapshot) {
+		return of(record.getId(), record.getVersion(), title, description, includePhotos, snapshot);
+	}
+
+	/** 지금 값으로 다시 계산한 해시가 요청과 다르면 CO010(073·075). */
+	public static void verify(TravelRecord record, String title, String description, boolean includePhotos,
+		CourseSnapshot snapshot, String requested) {
+		if (!of(record, title, description, includePhotos, snapshot).equals(requested)) {
+			throw new BusinessException(ExceptionType.COURSE_SELECTION_CHANGED);
+		}
 	}
 
 	/** @return SHA-256 16진 소문자 */
