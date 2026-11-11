@@ -13,13 +13,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.course.dto.CourseDetailResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseInput;
 import com.ssafy.yeogirok.domain.course.dto.CoursePreviewResponse;
 import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseRequest;
+import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
+import com.ssafy.yeogirok.domain.course.dto.CourseSearchResponse;
 import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
+import com.ssafy.yeogirok.domain.course.service.CourseDetailService;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
+import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
@@ -44,6 +49,8 @@ public class CourseController {
 	private final CoursePublishService coursePublishService;
 	private final MyCourseQueryService myCourseQueryService;
 	private final CourseUpdateService courseUpdateService;
+	private final CourseDetailService courseDetailService;
+	private final CourseSearchService courseSearchService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-072 공개할 코스 미리보기")
@@ -92,5 +99,28 @@ public class CourseController {
 		@RequestBody CourseRequest request) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			courseUpdateService.update(user.userId(), courseId, request.toUpdate())));
+	}
+
+	@Operation(summary = "API-016 공개된 코스 상세 조회")
+	@GetMapping("/courses/{courseId}")
+	public ResponseEntity<ApiResponseBody<CourseDetailResponse>> getDetail(@PathVariable Long courseId) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(courseDetailService.getDetail(courseId)));
+	}
+
+	@Operation(summary = "API-014 공개된 코스 검색")
+	@GetMapping("/courses")
+	public ResponseEntity<ApiResponseBody<CourseSearchResponse>> search(
+		@Parameter(description = "코스 제목·방문 장소 이름(최대 100자)") @RequestParam(required = false) String q,
+		@Parameter(description = "시·도 2자리 또는 시·군·구 5자리") @RequestParam(required = false) String regionCode,
+		@Parameter(description = "공통 카테고리 코드") @RequestParam(required = false) String category,
+		@Parameter(description = "POPULAR(기본)만") @RequestParam(required = false) String sort,
+		@Parameter(description = "ALL·DAY_TRIP·ONE_NIGHT_TWO_DAYS·TWO_NIGHTS_OR_MORE") @RequestParam(required = false)
+		String duration,
+		@Parameter(description = "CAR·TRANSIT") @RequestParam(required = false) String transportMode,
+		@RequestParam(required = false) String cursor,
+		@Parameter(description = "한 번에 받을 개수. 기본 20, 최대 50") @RequestParam(required = false) Integer limit) {
+		CourseSearchCondition condition = CourseSearchCondition.of(q, regionCode, category, sort, duration, transportMode);
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			courseSearchService.search(condition, cursor, limit)));
 	}
 }

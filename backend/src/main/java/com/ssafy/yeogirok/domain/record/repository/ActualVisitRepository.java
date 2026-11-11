@@ -16,6 +16,9 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 	/** 날짜·날짜 안 순서대로. */
 	List<ActualVisit> findByRecordIdOrderByVisitDateAscPositionAsc(Long recordId);
 
+	/** 여러 기록의 방문을 기록별 날짜·순서대로(공개 코스 검색 API-014). */
+	List<ActualVisit> findByRecordIdInOrderByRecordIdAscVisitDateAscPositionAsc(Collection<Long> recordIds);
+
 	Optional<ActualVisit> findByIdAndRecordId(Long id, Long recordId);
 
 	boolean existsByIdAndRecordId(Long id, Long recordId);

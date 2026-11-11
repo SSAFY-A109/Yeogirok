@@ -46,6 +46,9 @@ public interface VisitImageRepository extends JpaRepository<VisitImage, Long> {
 		+ " from VisitImage i where i.recordId in :recordIds group by i.recordId")
 	List<RecordPhotoCount> countByRecordIds(@Param("recordIds") Collection<Long> recordIds);
 
+	/** 여러 기록의 공개 선택된 연결 사진(공개 코스 검색 API-014 대표 사진). */
+	List<VisitImage> findByRecordIdInAndPublicSelectedTrueAndVisitIdIsNotNull(Collection<Long> recordIds);
+
 	/** 기록의 사진 보관함(미연결 포함). 올린 순서(id). */
 	List<VisitImage> findByRecordIdOrderByIdAsc(Long recordId);
 }
