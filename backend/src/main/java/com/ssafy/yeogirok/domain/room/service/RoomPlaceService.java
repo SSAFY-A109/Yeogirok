@@ -36,13 +36,9 @@ import com.ssafy.yeogirok.global.geo.LegalDongResolver;
  * <p>후보를 바꾸는 요청은 방 행을 잠가 한 줄로 세우고, 실제로 바뀐 경우에만 여행방 version 을 1 올린다. 이미 뺀 후보 빼기·
  * 이미 있는 후보 복원은 바꾸는 것이 없어 version 을 보지도 올리지도 않고 성공한다(동시에 같은 요청이 와도 오류 없이).
  *
- * <p>TODO API-029(검색·AI 추천 담기): 투어API 장소 조회(API-026·027)와 추천 기록(recommendation_logs)이 생기면 만든다.
- * <ul>
- *   <li>같은 투어API 장소는 places 한 행을 재사용한다. 두 요청이 동시에 처음 담으면 UNIQUE(provider, provider_place_id)
- *       충돌이 나므로 "없으면 넣고 있으면 그 행"(INSERT ... ON CONFLICT DO NOTHING 후 조회)으로 처리한다.</li>
- *   <li>지역은 투어API 코드(시·군·구 단위까지)를 그대로 넣지 말고, 장소 좌표(mapx·mapy)로 {@link LegalDongResolver} 를
- *       불러 직접 추가와 같은 10자리 법정동 코드·읍·면·동 이름을 저장한다(region_code 단위가 섞이지 않게).</li>
- * </ul>
+ * <p>API-029(검색·AI 추천 담기)는 {@link RoomPlaceAddService} 에 있다. 지금은 추천 담기(AI)만 한다.
+ * TODO 검색 담기(SEARCH): 장소 검색·상세(API-026·027)가 생기면 같은 서비스에서 장소를 TourAPI 로 확인해 붙인다
+ * (places 재사용·법정동 조회·version 증가는 추천 담기와 같다).
  * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
  * <ul>
  *   <li>원본 기록 행과 대상 방 행을 잠그고, 저장 직전에 게시 여부·원본 방 미삭제·방문 소속을 다시 확인한다.</li>

@@ -86,6 +86,28 @@ public class RecommendationLog {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
+	/**
+	 * API-029 추천 장소 담기 한 건. 담은 장소·순위·방식은 원래 추천 요청에서 가져온다.
+	 *
+	 * @param placeKey 추천 대상 식별값({@code TOUR_API:providerPlaceId})
+	 * @param input    원래 추천 요청 ID 와 새로 만든 후보 ID
+	 */
+	public static RecommendationLog add(Long roomId, Long userId, String placeKey, Map<String, Object> placeSnapshot,
+		int rank, RecommendationMode mode, Map<String, Object> input, Instant now) {
+		RecommendationLog log = new RecommendationLog();
+		log.roomId = roomId;
+		log.userId = userId;
+		log.eventType = RecommendationEventType.ADD;
+		log.placeKey = placeKey;
+		log.placeSnapshot = new HashMap<>(placeSnapshot);
+		log.rank = rank;
+		log.mode = mode;
+		log.status = RecommendationLogStatus.SUCCEEDED;
+		log.inputPayload = new HashMap<>(input);
+		log.createdAt = now;
+		return log;
+	}
+
 	/** API-034 추천 요청 한 건(동기 처리, 성공). */
 	public static RecommendationLog request(Long roomId, Long userId, RecommendationMode mode,
 		Map<String, Object> input, Map<String, Object> result, Instant now) {
