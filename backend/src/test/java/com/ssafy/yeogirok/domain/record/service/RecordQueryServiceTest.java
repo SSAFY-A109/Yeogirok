@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,10 +19,13 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
+import com.ssafy.yeogirok.domain.record.dto.MaterialSummary;
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialStore;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress.Stage;
@@ -34,6 +38,7 @@ import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.TestRedis;
 import com.ssafy.yeogirok.support.TestUsers;
 
 /** API-059. 응답 조립(순서·사진 보관함·탈퇴자 익명화)과 권한. */
@@ -56,12 +61,15 @@ class RecordQueryServiceTest {
 	TestEntityManager em;
 	@Autowired
 	FileStorage fileStorage;
+	@Autowired
+	ReceiptMaterialStore materialStore;
 
 	TravelRoom room;
 	TravelRecord record;
 
 	@BeforeEach
 	void setUp() {
+		TestRedis.flushAll();
 		TestUsers.insertActive(em.getEntityManager(), MEMBER, FRIEND, LEFT, STRANGER);
 		TestUsers.insert(em.getEntityManager(), WITHDRAWN, "WITHDRAWN");
 		room = em.persist(TravelRoom.builder().title("강릉 여행").startDate(DAY1).endDate(DAY2)
@@ -164,6 +172,21 @@ class RecordQueryServiceTest {
 			assertThat(view.id()).isEqualTo(lost.getId());
 			assertThat(view.place()).isNull();
 		});
+	}
+
+	@Test
+	void materials_는_요청자_본인_자료_요약이다() {
+		ReceiptMaterial failed = ReceiptMaterial.uploaded(record.getId(), MEMBER, "receipt/u", NOW,
+			NOW.plus(Duration.ofHours(24))).linked("RECEIPT", "job-ocr", NOW)
+			.ocrFailed(new ReceiptMaterial.Error("M003", "읽을 수 없음"));
+		materialStore.save("m-1", failed);
+		materialStore.addToIndex(record.getId(), MEMBER, "m-1");
+
+		assertThat(recordQueryService.getDetail(MEMBER, record.getId()).materials()).containsExactly(
+			new MaterialSummary("m-1", 2, "RECEIPT", ReceiptMaterial.Status.FAILED, ReceiptMaterial.ReviewStatus.REQUIRED,
+				true, List.of("merchantName", "paidDate", "paidTime", "place"), false,
+				new ReceiptMaterial.Error("M003", "읽을 수 없음")));
+		assertThat(recordQueryService.getDetail(FRIEND, record.getId()).materials()).isEmpty();
 	}
 
 	@Test

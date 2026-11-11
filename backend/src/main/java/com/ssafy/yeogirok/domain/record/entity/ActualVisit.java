@@ -107,6 +107,16 @@ public class ActualVisit {
 		return visit;
 	}
 
+	/** AI 초안 항목을 반영한 방문(API-066). 날짜·장소·순서는 사용자가 확인한 값이다. */
+	public static ActualVisit fromDraft(Long recordId, Long placeId, LocalDate visitDate, Instant visitedAt,
+		String draftKey, int itemId, Instant now) {
+		ActualVisit visit = manual(recordId, placeId, visitDate, visitedAt, now);
+		visit.creationType = VisitCreationType.AI;
+		visit.sourceDraftKey = draftKey;
+		visit.sourceItemId = itemId;
+		return visit;
+	}
+
 	/** @return 값이 하나라도 바뀌었으면 true */
 	public boolean change(Long placeId, LocalDate visitDate, Instant visitedAt, Instant now) {
 		if (this.placeId.equals(placeId) && this.visitDate.equals(visitDate) && this.visitedAt.equals(visitedAt)) {

@@ -26,6 +26,11 @@ public interface VisitImageRepository extends JpaRepository<VisitImage, Long> {
 	@Query("update VisitImage i set i.position = i.position - 1 where i.visitId = :visitId and i.position > :position")
 	int pullForward(@Param("visitId") Long visitId, @Param("position") int position);
 
+	/** 기록별 사진 수(API-058·059 progress). 사진이 없는 기록은 빠진다. */
+	@Query("select new com.ssafy.yeogirok.domain.record.repository.RecordPhotoCount(i.recordId, count(i))"
+		+ " from VisitImage i where i.recordId in :recordIds group by i.recordId")
+	List<RecordPhotoCount> countByRecordIds(@Param("recordIds") Collection<Long> recordIds);
+
 	/** 기록의 사진 보관함(미연결 포함). 올린 순서(id). */
 	List<VisitImage> findByRecordIdOrderByIdAsc(Long recordId);
 }

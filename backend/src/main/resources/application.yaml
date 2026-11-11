@@ -32,6 +32,18 @@ yeogirok:
   schedule:
     # 일정 초안(API-037~039·084) 보관 기간. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
     draft-retention: 24h
+  record:
+    # 통합 기록 초안(API-064·065) 보관 기간. 노션 제안값이다(팀 미확정).
+    draft-retention: 24h
+    # 기록에 연결한 영수증 자료(정제 값)를 원본 삭제 뒤 두는 기간(11/10 결정). 연결 안 된 자료는 멱등키 보관 기간(24h).
+    material-retention: 30d
+    draft:
+      # 사진을 영수증 항목 근거로 붙이는 기준(결제 시각 앞뒤, 사진 GPS 와 영수증 장소 거리)과
+      # 남은 사진을 묶는 기준(앞 사진과의 시간 차·거리). 제안값이다(specs/record-api-2.md 5절 14).
+      receipt-photo-window: 60m
+      receipt-photo-max-meters: 1000
+      photo-group-gap: 60m
+      photo-group-max-meters: 500
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
@@ -68,6 +80,15 @@ yeogirok:
     cleanup:
       due-interval: PT10M
       safety-scan-interval: PT1H
+  ocr:
+    # 영수증 OCR 서버(ai/ocr). 서버는 compose 내부 주소 http://ai:8000. 비어 있으면 앱은 뜨고 OCR 작업만 실패한다(C014).
+    base-url: ${OCR_BASE_URL:}
+    connect-timeout: 2s
+    # 11/9 노트북(22코어) 시험에서 긴 변 1600 제한 시 2.4초. 서버 실측 뒤 가장 느린 경우의 2배로 조정.
+    # 차례 대기 + 호출이 작업 실행 제한(yeogirok.job.run-timeout 2m) 안에 들어와야 한다.
+    read-timeout: 20s
+    # OCR 은 한 번에 한 건만 부른다. 앞 건을 기다리는 최대 시간(응답 제한과 따로).
+    slot-wait: 30s
   # 채팅(11/10 결정). 앱은 25초마다 PING 을 보낸다. Nginx proxy_read_timeout 은 idle-timeout 보다 길게 둔다.
   chat:
     ticket-ttl: PT30S
