@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,6 +29,17 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 	@Query("select count(v) from ActualVisit v where v.recordId = :recordId"
 		+ " and not exists (select 1 from Place p where p.id = v.placeId)")
 	long countWithoutPlace(@Param("recordId") Long recordId);
+
+	/**
+	 * 코스 공개(API-073·075). 기록의 모든 방문을 공개 선택한다. 영속성 컨텍스트를 거치지 않는 UPDATE 라 잠가 둔 기록 엔티티가
+	 * 분리되지 않게 컨텍스트는 비우지 않는다. 그래서 UPDATE 전에 읽어 둔 방문 엔티티(073·075 의 snapshot)는 값이 낡는다. 바꾼
+	 * 표시가 없어 덮어쓰지는 않고, 지금은 UPDATE 뒤에 다시 읽는 곳이 없다. 뒤에서 공개 선택 값을 읽어야 하면 새로 조회한다.
+	 *
+	 * @return 바뀐 방문 수
+	 */
+	@Modifying(flushAutomatically = true)
+	@Query("update ActualVisit v set v.publicSelected = true where v.recordId = :recordId and v.publicSelected = false")
+	int selectAllPublic(@Param("recordId") Long recordId);
 
 	/** 여러 기록의 실제 방문을 기록별 날짜·순서대로. 기록마다 첫 줄이 첫 방문이다. 장소 행이 없으면 regionName 이 null(방문 수에는 넣는다). */
 	@Query("select new com.ssafy.yeogirok.domain.record.repository.VisitRegion(v.recordId, p.regionName)"

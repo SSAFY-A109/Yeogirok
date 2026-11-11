@@ -6,16 +6,16 @@ import java.util.Base64;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
-/** API-058 목록 커서. base64url("{마지막 기록 id}"), 해석할 수 없으면 C006. */
-record RecordCursor(Long recordId) {
+/** 기록 id 내림차순 목록 커서(API-058·074). base64url("{마지막 기록 id}"), 해석할 수 없으면 C006. */
+public record RecordCursor(Long recordId) {
 
-	String encode() {
+	public String encode() {
 		return Base64.getUrlEncoder().withoutPadding()
 			.encodeToString(recordId.toString().getBytes(StandardCharsets.UTF_8));
 	}
 
 	/** @return 값이 없으면 null */
-	static RecordCursor decodeOrNull(String cursor) {
+	public static RecordCursor decodeOrNull(String cursor) {
 		if (cursor == null) {
 			return null;
 		}

@@ -53,11 +53,17 @@ public class RecordFinder {
 	 */
 	@Transactional(readOnly = true)
 	public TravelRecord checkWritable(Long recordId, Long userId) {
+		return getWritable(recordId, userId).record();
+	}
+
+	/** {@link #checkWritable} 과 같고 방도 돌려준다(코스 미리보기 API-072 의 일차 계산). */
+	@Transactional(readOnly = true)
+	public RecordRoom getWritable(Long recordId, Long userId) {
 		TravelRecord record = travelRecordRepository.findById(recordId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_NOT_FOUND));
-		liveRoom(record).filter(found -> isCurrentMember(found.getId(), userId))
+		TravelRoom room = liveRoom(record).filter(found -> isCurrentMember(found.getId(), userId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_EDIT_FORBIDDEN));
-		return record;
+		return new RecordRoom(record, room);
 	}
 
 	/** 기록 행을 잠그고 쓰기 권한을 확인한다. 호출한 트랜잭션 안에서만 쓴다. */
@@ -69,6 +75,21 @@ public class RecordFinder {
 			.filter(found -> isCurrentMember(found.getId(), userId))
 			.orElseThrow(() -> new BusinessException(ExceptionType.RECORD_EDIT_FORBIDDEN));
 		return new RecordRoom(record, room);
+	}
+
+	/**
+	 * 공개 코스 수정(API-075)용. 기록 행을 잠그고, 기록 없음·방 삭제 CO013, 현재 참여자 아님 CO008. 기록 쪽 예외를 잡아 바꾸면
+	 * 트랜잭션이 rollback-only 가 되어 따로 둔다(명세 {@code specs/course-publish-api.md} 1-1).
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public TravelRecord lockCourse(Long recordId, Long userId) {
+		TravelRecord record = travelRecordRepository.findByIdForUpdate(recordId)
+			.orElseThrow(() -> new BusinessException(ExceptionType.COURSE_NOT_FOUND));
+		TravelRoom room = liveRoom(record).orElseThrow(() -> new BusinessException(ExceptionType.COURSE_NOT_FOUND));
+		if (!isCurrentMember(room.getId(), userId)) {
+			throw new BusinessException(ExceptionType.COURSE_NOT_MEMBER);
+		}
+		return record;
 	}
 
 	private Optional<TravelRoom> liveRoom(TravelRecord record) {

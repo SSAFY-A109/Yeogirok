@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.record.entity;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -93,6 +94,28 @@ public class TravelRecord {
 		status = RecordStatus.DRAFT;
 		version++;
 		updatedAt = now;
+	}
+
+	/**
+	 * 코스 게시·수정·해제(API-073·075). 제목·설명·게시 시각 중 하나라도 바뀌었거나 공개 선택이 바뀌었으면 version 을 한 번 올린다.
+	 * 완성 상태는 게시와 별개라 status 는 건드리지 않는다.
+	 *
+	 * @param publishedAt 바꾼 뒤의 게시 시각(null 이면 미게시)
+	 * @return 바뀐 것이 있으면 true
+	 */
+	public boolean changeCourse(String title, String description, Instant publishedAt, boolean selectionChanged,
+		Instant now) {
+		boolean changed = selectionChanged || !this.title.equals(title) || !this.description.equals(description)
+			|| !Objects.equals(this.publishedAt, publishedAt);
+		if (!changed) {
+			return false;
+		}
+		this.title = title;
+		this.description = description;
+		this.publishedAt = publishedAt;
+		version++;
+		updatedAt = now;
+		return true;
 	}
 
 	/** API-071. 이미 완성한 기록에는 부르지 않는다. */
