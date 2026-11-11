@@ -9,10 +9,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 공통 카테고리 기준 데이터. 노션 DDL {@code travel_categories} 와 맞춘다. name 은 화면 표시명(API-079 label)이다.
+ * 공통 카테고리 기준 데이터. 노션 DDL {@code travel_categories} 와 맞춘다. name 은 화면 표시명이다.
  * 코드 이름이 같은 enum {@link com.ssafy.yeogirok.domain.category.TravelCategory} 와 겹쳐 엔티티는 Entity 를 붙였다.
  *
- * <p>행은 아직 넣지 않는다. 코드별 표시명이 확정되지 않았다(API-079 는 예시만 있다). 행이 없으면 categoryName 은 null 이다.
+ * <p>행은 Flyway V2 가 넣는다. displayOrder 는 API-079 목록의 표시 순서다.
  */
 @Getter
 @Entity
@@ -27,8 +27,12 @@ public class TravelCategoryEntity {
 	@Column(nullable = false, length = 100)
 	private String name;
 
-	public TravelCategoryEntity(String code, String name) {
+	@Column(name = "display_order", nullable = false)
+	private int displayOrder;
+
+	public TravelCategoryEntity(String code, String name, int displayOrder) {
 		this.code = code;
 		this.name = name;
+		this.displayOrder = displayOrder;
 	}
 }

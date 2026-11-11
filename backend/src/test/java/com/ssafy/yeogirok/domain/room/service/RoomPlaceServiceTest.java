@@ -193,7 +193,7 @@ class RoomPlaceServiceTest {
 
 	@Test
 	void categoryName은_travel_categories의_이름이고_행이_없으면_null() {
-		em.persist(new TravelCategoryEntity("NATURE", "테스트 자연"));
+		em.persist(new TravelCategoryEntity("NATURE", "테스트 자연", 1));
 		insertCandidate(insertTourPlace("NATURE"));
 		insertCandidate(insertTourPlace("CAFE"));
 
