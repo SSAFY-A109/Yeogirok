@@ -13,8 +13,9 @@ spring:
       password: ${REDIS_PASSWORD}
   jpa:
     hibernate:
-      # Flyway(V1) 도입 전까지만 update 로 둔다. V1 이 들어오는 날 validate 로 바꾸고 서버 DB를 한 번 비운다.
-      ddl-auto: update
+      # 테이블은 Flyway 가 만들고(db/migration), Hibernate 는 엔티티와 맞는지만 확인한다.
+      # 이 설정이 처음 배포되는 날 서버 DB 를 한 번 비운다(infra/README.md 7단계). 비우지 않으면 Flyway 가 시작을 거부한다.
+      ddl-auto: validate
 
 yeogirok:
   # API-046 방문 분포 집계 기준. 노션에 수치가 확정되지 않아 기본값을 두지 않는다. 값이 없으면 실행이 바로 실패한다.

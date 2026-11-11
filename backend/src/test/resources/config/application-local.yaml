@@ -1,0 +1,11 @@
+# 테스트에서만 읽는 local 프로필 덮어쓰기. classpath:/config/ 는 classpath:/ 보다 우선해서, 같은 프로필의
+# src/main/resources/application-local.yaml 값을 이 파일이 덮는다(나머지 값은 그대로 쓴다).
+#
+# @ActiveProfiles 가 없는 테스트(@DataJpaTest 등)는 기본 프로필 local 로 돈다. 그 테스트들은 H2 를 쓰는데
+# 마이그레이션 파일은 PostgreSQL 문법이라 Flyway 를 끄고, 전처럼 Hibernate 가 엔티티를 보고 테이블을 만들게 한다.
+spring:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: update

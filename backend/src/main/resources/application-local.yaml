@@ -11,7 +11,9 @@ spring:
       password: ${REDIS_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: update
+      # 테이블은 Flyway 가 만들고(db/migration), Hibernate 는 엔티티와 맞는지만 확인한다. 엔티티를 바꾸면 새 번호 파일을 함께 추가한다.
+      # update 로 만든 예전 로컬 DB 가 남아 있으면 Flyway 가 시작을 거부한다. 한 번 비운다(docs/08-flyway.md).
+      ddl-auto: validate
 
 yeogirok:
   # API-046 방문 분포. 로컬 실행용 제안값이다(11/4). 실제 값은 팀이 정해 prod 환경 변수로 넣는다.

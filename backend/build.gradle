@@ -32,6 +32,10 @@ dependencies {
 	/* 데이터 */
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	runtimeOnly 'org.postgresql:postgresql'
+	// 스키마 마이그레이션(src/main/resources/db/migration). Boot 4 는 flyway-core 만 넣으면 마이그레이션이 실행되지 않아 starter 를 쓴다.
+	// PostgreSQL 지원은 별도 모듈이다.
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	// Redis: 멱등키·업로드 세션 등 짧게 보관하는 값 (global.idempotency)
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
