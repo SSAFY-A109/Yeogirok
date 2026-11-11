@@ -3,3 +3,7 @@
 *
 !requirements.txt
 !*.py
+
+# 운영 글자 인식 모델 B30 (S15P31A109-49): 이 폴더만 이미지에 다시 넣는다 (models/rec_b30_v1/MODEL_INFO.md)
+!models/rec_b30_v1
+!models/rec_b30_v1/**
