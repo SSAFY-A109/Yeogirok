@@ -116,6 +116,14 @@ yeogirok:
       service-account-base64: ${FIREBASE_SERVICE_ACCOUNT_BASE64:}
       connect-timeout: 5s
       read-timeout: 10s
+  tour-api:
+    # 한국관광공사 국문 관광정보(KorService2). 공공데이터포털 일반 인증키의 Decoding 값을 환경 변수로만 넣는다.
+    # 비어 있으면 앱은 뜨고 장소 추천(API-034)만 C014 로 실패한다.
+    service-key: ${TOUR_API_KEY:}
+    base-url: https://apis.data.go.kr/B551011/KorService2
+    mobile-app: Yeogirok
+    connect-timeout: 2s
+    read-timeout: 3s
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.
