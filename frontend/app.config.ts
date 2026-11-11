@@ -24,7 +24,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     }]);
     // Kakao SDK artifacts are published only to Kakao's Maven repository, not Maven Central.
     plugins.push(["expo-build-properties", {
-      android: { extraMavenRepos: ["https://devrepo.kakao.com/nexus/content/groups/public/"] },
+      android: {
+        extraMavenRepos: ["https://devrepo.kakao.com/nexus/content/groups/public/"],
+        extraProguardRules: [
+          // Retrofit 2.9 reads Call<T> at runtime during Kakao token exchange.
+          "-keep,allowobfuscation,allowshrinking interface retrofit2.Call",
+          // Kakao reads annotations from enum constants by their original field names.
+          "-keepclassmembers enum com.kakao.sdk.** { public static final <fields>; }",
+          // Kakao's Gson converter derives JSON keys from unannotated model field names.
+          "-keepclassmembers class com.kakao.sdk.**.model.** { <fields>; }",
+        ].join("\n"),
+      },
     }]);
   }
 

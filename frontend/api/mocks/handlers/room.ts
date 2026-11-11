@@ -24,7 +24,7 @@ import {
   createRoomPlaceFixture,
   getActivePlaces,
   getMockChatMessages,
-  getMockChatReadState,
+  getMockChatReadState as getFixtureChatReadState,
   MOCK_ME,
   ROOM_MEMBER_LIMIT,
   toRoomDetail,
@@ -185,7 +185,7 @@ export const roomHandlers = [
       hasMore,
       nextAfterMessageId: after !== undefined && hasMore ? items.at(-1)?.id ?? null : null,
       replayThroughMessageId: after === undefined ? null : upper,
-      chatReadState: getMockChatReadState(room),
+      chatReadState: getFixtureChatReadState(room),
     });
   }),
 
@@ -219,7 +219,7 @@ export const roomHandlers = [
     }
 
     room.chatLastReadMessageId = Math.max(room.chatLastReadMessageId ?? 0, lastReadMessageId);
-    return ok({ roomId: room.id, ...getMockChatReadState(room) });
+    return ok({ roomId: room.id, ...getFixtureChatReadState(room) });
   }),
 
   http.get("*/api/v1/rooms", async ({ request }) => {
@@ -444,7 +444,7 @@ export const roomHandlers = [
       invitationId: room.id,
       inviteToken: room.inviteToken,
       expiresAt: null,
-      inviteUrl: `https://yeogirok.app/invite/${room.inviteToken}`,
+      inviteUrl: `https://k15a109.p.ssafy.io/invite/${room.inviteToken}`,
     };
 
     return ok(response);

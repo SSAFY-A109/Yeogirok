@@ -8,10 +8,19 @@
     "scheme": "yeogirokfe",
     "userInterfaceStyle": "light",
     "ios": {
-      "bundleIdentifier": "com.ssafya109.yeogirok"
+      "bundleIdentifier": "com.ssafya109.yeogirok",
+      "associatedDomains": ["applinks:k15a109.p.ssafy.io"]
     },
     "android": {
       "package": "com.ssafya109.yeogirok",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "k15a109.p.ssafy.io", "pathPrefix": "/invite/" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

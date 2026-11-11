@@ -115,11 +115,9 @@ function RootNavigator() {
             <Stack.Screen name="rooms/[roomId]/chat" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/edit" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/invite" options={{ headerShown: false }} />
-            <Stack.Screen name="rooms/[roomId]/chat" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/search" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/recommend" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/map" options={{ headerShown: false }} />
-            <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
             <Stack.Screen name="ar-tip" options={{ headerShown: false }} />
             <Stack.Screen name="map" options={{ headerShown: false }} />
             <Stack.Screen name="footprints/new" options={{ headerShown: false }} />
@@ -131,6 +129,7 @@ function RootNavigator() {
           <Stack.Protected guard={!session.data} redirectTo="/">
             <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
           </Stack.Protected>
+          <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
         </Stack>
       </View>
       {session.data && <MainTabBar />}
