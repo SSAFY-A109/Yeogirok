@@ -39,12 +39,15 @@ import com.ssafy.yeogirok.domain.course.dto.CourseInput;
 import com.ssafy.yeogirok.domain.course.dto.CoursePreviewResponse;
 import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
 import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
+import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
+import com.ssafy.yeogirok.domain.course.dto.CourseSearchResponse;
 import com.ssafy.yeogirok.domain.course.dto.PublicAuthor;
 import com.ssafy.yeogirok.domain.course.dto.PublicPhoto;
 import com.ssafy.yeogirok.domain.course.dto.PublicPlace;
 import com.ssafy.yeogirok.domain.course.service.CourseDetailService;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
+import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
@@ -72,6 +75,8 @@ class CourseControllerTest {
 	CourseUpdateService courseUpdateService;
 	@MockitoBean
 	CourseDetailService courseDetailService;
+	@MockitoBean
+	CourseSearchService courseSearchService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -288,6 +293,39 @@ class CourseControllerTest {
 					    "photos": [{"imageId": 21, "url": "https://signed/p", "attribution": null}]}]}],
 					  "dayCount": 2, "nightCount": 1, "transportMode": "CAR", "version": 4}}
 					""", org.springframework.test.json.JsonCompareMode.STRICT));
+		}
+	}
+
+	@Nested
+	class API_014 {
+
+		@Test
+		void 검색_응답_모양과_조건_전달() throws Exception {
+			given(courseSearchService.search(
+				CourseSearchCondition.of("강릉", "51", "NATURE", "POPULAR", "DAY_TRIP", "CAR"), "c1", 10))
+				.willReturn(new CourseSearchResponse(List.of(new CourseSearchResponse.Item(7L, "강릉 1박",
+					List.of(new PublicAuthor(1L, null)), "강릉시", null, 3, 2, 1, TransportMode.CAR,
+					List.of("경포대", "안목해변"), 4)), 12, "next"));
+
+			mockMvc.perform(get("/api/v1/courses").with(asUser(USER_ID)).param("q", "강릉").param("regionCode", "51")
+					.param("category", "NATURE").param("sort", "POPULAR").param("duration", "DAY_TRIP")
+					.param("transportMode", "CAR").param("cursor", "c1").param("limit", "10"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"items": [{"id": 7, "title": "강릉 1박",
+					  "authors": [{"id": 1, "profileImageUrl": null}], "regionName": "강릉시", "thumbnailUrl": null,
+					  "placeCount": 3, "dayCount": 2, "nightCount": 1, "transportMode": "CAR",
+					  "routePreview": ["경포대", "안목해변"], "importCount": 4}], "totalCount": 12, "nextCursor": "next"}}
+					""", org.springframework.test.json.JsonCompareMode.STRICT));
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {"sort|LATEST|CO003", "regionCode|5|CO002", "duration|X|CO002"})
+		void 조건_값_오류(String param, String value, String code) throws Exception {
+			mockMvc.perform(get("/api/v1/courses").with(asUser(USER_ID)).param(param, value))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value(code));
+			verifyNoInteractions(courseSearchService);
 		}
 	}
 }

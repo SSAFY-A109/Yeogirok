@@ -67,20 +67,24 @@ public class PublicCourseReader {
 			.stream().collect(toMap(Place::getId, Function.identity()));
 		Map<String, String> names = categoryNames.of(places.values().stream().map(Place::getCategoryCode).toList());
 		LocalDate firstDay = firstDay(roomStartDate, visits.getFirst().getVisitDate());
-		String bucket = fileProperties.bucketFor(FilePurpose.RECORD_PHOTO);
 
 		Map<Integer, List<CourseDay.Item>> byDay = new LinkedHashMap<>();
 		for (ActualVisit visit : visits) {
 			List<PublicPhoto> photos = snapshot.photosOf(visit.getId()).stream()
 				.filter(image -> scope == PhotoScope.LINKED || scope == PhotoScope.PUBLIC_SELECTED && image.isPublicSelected())
-				.map(image -> new PublicPhoto(image.getId(),
-					fileStorage.presignGet(bucket, image.getImagePath(), fileProperties.downloadUrlTtl()), null))
+				.map(image -> new PublicPhoto(image.getId(), photoUrl(image), null))
 				.toList();
 			int day = (int) ChronoUnit.DAYS.between(firstDay, visit.getVisitDate()) + 1;
 			byDay.computeIfAbsent(day, ignored -> new ArrayList<>()).add(new CourseDay.Item(visit.getId(),
 				PublicPlace.from(places.get(visit.getPlaceId()), names), visit.getPosition(), photos));
 		}
 		return byDay.entrySet().stream().map(entry -> new CourseDay(entry.getKey(), entry.getValue())).toList();
+	}
+
+	/** 기록 사진 조회 URL. 서명만 한다(S3 HEAD 없음). */
+	public String photoUrl(VisitImage image) {
+		return fileStorage.presignGet(fileProperties.bucketFor(FilePurpose.RECORD_PHOTO), image.getImagePath(),
+			fileProperties.downloadUrlTtl());
 	}
 
 	/** 여행 첫날: 방 시작일. 시작일이 없거나 첫 방문이 더 이르면 첫 방문 날짜(명세 5절 2, 일차가 1보다 작아지지 않게). */
