@@ -42,6 +42,9 @@ dependencies {
 	implementation platform('software.amazon.awssdk:bom:2.57.10')
 	implementation 'software.amazon.awssdk:s3'
 
+	/* 사진 EXIF: 통합 기록 초안(API-064)이 기록 사진의 촬영 시각·GPS 를 읽는다. Apache 2.0, xmpcore 하나만 딸려 온다 */
+	implementation 'com.drewnoakes:metadata-extractor:2.22.0'
+
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

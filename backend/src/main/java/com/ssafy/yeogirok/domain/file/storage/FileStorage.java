@@ -1,5 +1,6 @@
 package com.ssafy.yeogirok.domain.file.storage;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -13,9 +14,11 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -83,6 +86,21 @@ public class FileStorage {
 		}
 	}
 
+	/** 앞부분 최대 {@code length} 바이트(사진 EXIF). 객체가 더 작으면 전체. 없으면 M004, 그 밖의 실패는 M012. */
+	public byte[] readPrefix(String bucket, String key, int length) {
+		try {
+			return s3Client.getObjectAsBytes(builder -> builder.bucket(bucket).key(key)
+				.range("bytes=0-" + (length - 1))).asByteArray();
+		} catch (S3Exception e) {
+			if (e.statusCode() == NOT_FOUND) {
+				throw new BusinessException(ExceptionType.FILE_NOT_FOUND);
+			}
+			throw unavailable(e);
+		} catch (SdkException e) {
+			throw unavailable(e);
+		}
+	}
+
 	/** 앞부분 {@code length} 바이트. {@code eTag} 가 아닌 객체로 바뀌었으면 M003. */
 	public byte[] readHeader(String bucket, String key, int length, String eTag) {
 		try {
@@ -90,6 +108,33 @@ public class FileStorage {
 				.range("bytes=0-" + (length - 1)).ifMatch(eTag)).asByteArray();
 		} catch (SdkException e) {
 			throw translate(e);
+		}
+	}
+
+	/**
+	 * 객체 전체(영수증 OCR). {@code maxBytes} 를 넘으면 받지 않고 M001, 없으면 M004, 그 밖의 실패는 M012.
+	 * 응답에 크기가 없어도 상한까지만 읽는다(PR #84 리뷰).
+	 */
+	public byte[] readAll(String bucket, String key, long maxBytes) {
+		try (ResponseInputStream<GetObjectResponse> object = s3Client.getObject(builder -> builder.bucket(bucket).key(key))) {
+			Long length = object.response().contentLength();
+			byte[] bytes = length != null && length > maxBytes ? null
+				: object.readNBytes((int)Math.min(maxBytes + 1, Integer.MAX_VALUE - 8));
+			if (bytes == null || bytes.length > maxBytes) {
+				object.abort();
+				throw new BusinessException(ExceptionType.FILE_TOO_LARGE);
+			}
+			return bytes;
+		} catch (S3Exception e) {
+			if (e.statusCode() == NOT_FOUND) {
+				throw new BusinessException(ExceptionType.FILE_NOT_FOUND);
+			}
+			throw unavailable(e);
+		} catch (SdkException e) {
+			throw unavailable(e);
+		} catch (IOException e) {
+			log.error("S3 객체를 읽지 못했습니다: {}", e.getClass().getSimpleName(), e);
+			throw new BusinessException(ExceptionType.FILE_STORAGE_UNAVAILABLE);
 		}
 	}
 

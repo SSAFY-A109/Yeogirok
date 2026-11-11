@@ -81,6 +81,17 @@ final class VisitRequestFields {
 		return value.longValue();
 	}
 
+	/** version 같은 정수. 생략·null C001, 정수(int 범위) 아님 C002(API-091·092·064). */
+	static int requiredInt(JsonNode value, String field) {
+		if (isAbsent(value)) {
+			throw missing(field);
+		}
+		if (!value.isIntegralNumber() || !value.canConvertToInt()) {
+			throw invalidFormat(field, "정수여야 합니다.");
+		}
+		return value.intValue();
+	}
+
 	/** 생략·null 이면 빈 목록, 배열·정수 아님 C002, maxSize 초과 C003(중복을 빼기 전 개수). 같은 ID 는 한 번만 남긴다(보낸 순서 유지). */
 	static List<Long> optionalIds(JsonNode value, String field, int maxSize) {
 		if (isAbsent(value)) {

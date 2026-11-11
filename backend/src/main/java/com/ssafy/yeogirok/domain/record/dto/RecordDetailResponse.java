@@ -11,7 +11,7 @@ import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
  * <ul>
  *   <li>plannedSchedule: 일정 기능 머지 전이라 항상 null</li>
  *   <li>uploads: 업로드 세션을 기록·업로더로 찾을 수 없어 빈 배열(명세 5절 5, 구조는 노션 그대로 둔다)</li>
- *   <li>materials: 영수증 API(2차) 전이라 빈 배열</li>
+ *   <li>materials: 요청자 본인 영수증 자료 요약(API-063 과 같은 계산)</li>
  *   <li>publishedCourseId: 게시됐으면 기록 ID, 아니면 null</li>
  * </ul>
  */
@@ -28,7 +28,7 @@ public record RecordDetailResponse(
 	List<Object> uploads,
 	List<RecordPhotoView> photoPool,
 	List<ActualVisitView> actualVisits,
-	List<Object> materials,
+	List<MaterialSummary> materials,
 	Long publishedCourseId,
 	Integer version
 ) {

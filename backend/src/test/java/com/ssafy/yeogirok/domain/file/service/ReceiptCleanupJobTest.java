@@ -21,6 +21,7 @@ import com.ssafy.yeogirok.domain.file.session.ReceiptCleanupQueue;
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialStore;
 import com.ssafy.yeogirok.domain.file.storage.FileStorage;
+import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -32,6 +33,7 @@ class ReceiptCleanupJobTest {
 	static final Instant NOW = Instant.parse("2026-11-07T00:00:00Z");
 	static final String UPLOAD_A = "550e8400-e29b-41d4-a716-44665544000a";
 	static final String UPLOAD_B = "550e8400-e29b-41d4-a716-44665544000b";
+	static final Duration RETENTION = RecordTestConfig.RECORD_PROPERTIES.materialRetention();
 
 	final ReceiptCleanupQueue queue = mock(ReceiptCleanupQueue.class);
 	final ReceiptMaterialStore materialStore = mock(ReceiptMaterialStore.class);
@@ -40,7 +42,8 @@ class ReceiptCleanupJobTest {
 
 	@BeforeEach
 	void setUp() {
-		job = new ReceiptCleanupJob(queue, materialStore, storage, TestFileProperties.VALUE, new MutableClock(NOW));
+		job = new ReceiptCleanupJob(queue, materialStore, storage, TestFileProperties.VALUE,
+			RecordTestConfig.RECORD_PROPERTIES, new MutableClock(NOW));
 	}
 
 	@Test
@@ -55,8 +58,8 @@ class ReceiptCleanupJobTest {
 		verify(queue).remove("receipts/tmp/" + UPLOAD_A);
 		verify(queue).remove("receipts/receipt/" + UPLOAD_A);
 		// tmp 원본에는 자료가 없다. 확정 원본만 자료를 찾는다.
-		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_A));
-		verify(materialStore).markOriginalDeleted(any());
+		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_A), RETENTION);
+		verify(materialStore).markOriginalDeleted(any(), any());
 	}
 
 	@Test
@@ -78,9 +81,9 @@ class ReceiptCleanupJobTest {
 		job.deleteDue();
 
 		verify(queue, never()).remove("receipts/receipt/" + UPLOAD_A);
-		verify(materialStore, never()).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_A));
+		verify(materialStore, never()).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_A), RETENTION);
 		verify(queue).remove("receipts/receipt/" + UPLOAD_B);
-		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_B));
+		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_B), RETENTION);
 	}
 
 	@Test
@@ -92,7 +95,23 @@ class ReceiptCleanupJobTest {
 
 		verify(storage).delete("receipts", "tmp/" + UPLOAD_A);
 		verify(storage).delete("receipts", "receipt/" + UPLOAD_B);
-		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_B));
+		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_B), RETENTION);
+	}
+
+	@Test
+	void 안전망에서_한_객체가_실패하면_기한_목록에_넣고_나머지는_계속_지운다() {
+		given(storage.listKeysModifiedBefore("receipts", NOW.minus(Duration.ofHours(24))))
+			.willReturn(List.of("receipt/" + UPLOAD_A, "receipt/" + UPLOAD_B));
+		willThrow(new BusinessException(ExceptionType.IDEMPOTENT_REQUEST_IN_PROGRESS))
+			.given(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_A), RETENTION);
+
+		job.deleteExpiredInBucket();
+
+		// 원본은 이미 지워져 다음 스캔에 안 나오므로 기한 목록이 다시 시도한다.
+		verify(queue).register("receipts", "receipt/" + UPLOAD_A, NOW);
+		verify(storage).delete("receipts", "receipt/" + UPLOAD_B);
+		verify(materialStore).markOriginalDeleted(ReceiptMaterial.idOf(UPLOAD_B), RETENTION);
+		verify(queue, never()).register("receipts", "receipt/" + UPLOAD_B, NOW);
 	}
 
 	@Test

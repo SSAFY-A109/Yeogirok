@@ -154,9 +154,7 @@ class FileAccessServiceTest {
 
 	@Test
 	void 원본을_지운_자료는_M004() {
-		ReceiptMaterial live = uploadedBy(USER_ID);
-		receipt(new ReceiptMaterial(null, RECORD_ID, USER_ID, "RECEIPT", null, "READY", "DELETED", live.deleteAfter(),
-			ACCEPTED));
+		receipt(uploadedBy(USER_ID).deleted());
 
 		assertError(() -> service.receipt(USER_ID, RECORD_ID, MATERIAL_ID), ExceptionType.FILE_NOT_FOUND);
 	}

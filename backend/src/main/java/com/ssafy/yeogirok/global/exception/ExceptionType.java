@@ -100,12 +100,18 @@ public enum ExceptionType {
 	SCHEDULE_ORDER_DUPLICATED(BAD_REQUEST, "SC005", "같은 날짜에 방문 순서가 중복됩니다."),
 	SCHEDULE_STAY_NEGATIVE(BAD_REQUEST, "SC006", "체류 시간은 음수일 수 없습니다."),
 
-	/* ── 여행 기록 RE (RE021 은 노션에서 사용 중단. RE011·RE012 는 초안 API 때 넣는다) ── */
+	/* ── 여행 기록 RE (RE021 은 노션에서 사용 중단) ── */
 
 	/** 없는 기록과 방이 삭제된 기록을 구분하지 않는다. */
 	RECORD_NOT_FOUND(NOT_FOUND, "RE001", "여행 기록 없음"),
 	RECORD_NOT_MEMBER(FORBIDDEN, "RE002", "여행 기록 참여자가 아님"),
 	RECORD_EDIT_FORBIDDEN(FORBIDDEN, "RE003", "여행 기록 편집 권한 없음"),
+	MATERIAL_NOT_FOUND(NOT_FOUND, "RE008", "해당 기록의 자료 없음·만료"),
+	MATERIAL_ALREADY_LINKED(CONFLICT, "RE009", "동일 자료가 해당 기록에 이미 연결됨"),
+	/** 노션 발생 조건이 한 줄뿐이라 아직 쓰지 않는다(specs/record-api-2.md 5절 15). */
+	NO_MATERIAL_FOR_DRAFT(UNPROCESSABLE_CONTENT, "RE010", "초안 생성에 사용할 수 있는 자료 없음"),
+	RECORD_DRAFT_NOT_FOUND(NOT_FOUND, "RE011", "요청한 AI 기록 초안이 해당 기록에 없음"),
+	RECORD_DRAFT_ALREADY_APPLIED(CONFLICT, "RE012", "해당 AI 기록 초안이 이미 실제 일정에 반영됨"),
 	VISIT_NOT_FOUND(NOT_FOUND, "RE013", "요청한 실제 방문 일정이 해당 기록에 없음"),
 	STORY_NOT_FOUND(NOT_FOUND, "RE014", "요청한 이야기가 해당 방문 일정에 없음"),
 	STORY_EDIT_FORBIDDEN(FORBIDDEN, "RE015", "일정별 이야기 편집 권한 없음"),
@@ -117,6 +123,7 @@ public enum ExceptionType {
 	VISIT_HAS_PHOTOS(CONFLICT, "RE020", "삭제 대상 방문에 연결된 사진이 남아 있음"),
 	VISIT_STORIES_NOT_CONFIRMED(CONFLICT, "RE023",
 		"삭제 대상 방문에 이야기가 있으나 confirmDeleteStories=true 확인이 없음"),
+	RECEIPT_NOT_READY(CONFLICT, "RE022", "영수증 OCR 처리 또는 필수값 보정이 끝나지 않음"),
 	TRIP_NOT_ENDED(UNPROCESSABLE_CONTENT, "RE024",
 		"여행 종료 조건 미충족: 종료일 미정 또는 Asia/Seoul 기준 종료일이 오늘·미래"),
 
