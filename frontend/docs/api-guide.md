@@ -225,6 +225,7 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | `POST /rooms/{id}/place-imports` (API-030) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)`, `roomKeys.list()`, `courseKeys.all` | — |
 | `DELETE /rooms/{id}/places/{roomPlaceId}` (API-032) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — (화면이 되돌리기 토스트 동안 행을 숨겼다가 확정 시 요청) |
 | `PATCH /rooms/{id}/messages/read` (API-088) | — (화면에 보인 가장 최신 메시지만 보낸다. 읽은 위치 이하의 값은 보내지 않고, 요청은 한 번에 하나만 보낸다) | 응답의 읽음 상태 → `chatKeys.messages(roomId)` 첫 쪽의 `readState`, `roomKeys.detail(roomId)`·`roomKeys.list()`의 `hasUnreadChat` |
+| `POST /realtime/tickets` (API-077) + WebSocket `/ws/v1` | 여행방이 없어졌거나 참여자가 아니게 되면(RO001·RO002) `roomKeys.list()` | — (실시간으로 받은 메시지는 이력 캐시에 넣지 않는다. 이력 캐시는 다시 받을 때 통째로 바뀌므로 `useChatConnection`의 `liveMessages`로 따로 두고, 화면이 `mergeChatMessages`로 이력과 합친다) |
 | `PUT /rooms/{id}/preferences` + `POST …/place-recommendations` (API-033·034) | `recommendationKeys.preference(roomId)` | — (추천 결과는 뮤테이션 `data`로만 쓴다) |
 | `POST /rooms/{id}/schedule-drafts` (API-037, 작업) | — (진행은 `scheduleKeys.draft(roomId, draftKey)`를 끝날 때까지 확인). 409 C004면 `roomKeys.detail(roomId)`·`roomKeys.places(roomId)`·`scheduleKeys.room(roomId)` 다시 조회. "일정 조정하기"는 저장된 일정을 이어받는 초안을 `scheduleKeys.savedDraft(roomId)` 쿼리로 만든다(캐시를 남기지 않는다) | — |
 | `PATCH /rooms/{id}/schedule-drafts/{draftKey}` (API-084, 작업) | `scheduleKeys.draft(roomId, draftKey)`(끝날 때까지 확인). 409 C004·422 SC003이면 초안을, C004면 `roomKeys.detail(roomId)`·`roomKeys.places(roomId)`·`scheduleKeys.room(roomId)`도 다시 조회 | 초안을 계산 중으로 표시 |
@@ -352,6 +353,7 @@ export function useUploadMedia() {
   - `api/mocks/handlers/index.ts`: 전 도메인 핸들러를 모은 `handlers` 배열을 내보낸다
   - `api/mocks/polyfills.ts`, `api/mocks/native.ts`: 앱용
   - `api/mocks/server.ts`: jest용
+  - `api/mocks/chat-transport.ts`: 채팅 WebSocket(`/ws/v1`)의 목 연결. MSW 2는 WebSocket을 가로채지 못해, `startMocking`이 `setChatTransportFactory`(`features/room/api/chat-transport.ts`)로 연결을 바꿔 끼운다. 티켓(API-077 핸들러가 발급)을 확인하고 서버와 같은 프레임을 돌려주며, 내가 보내면 다른 일행 한 명이 잠시 뒤 답장한다
 - 앱(개발 빌드) — 목표 형태 `[확인]`(처음 구현할 때 기기에서 동작을 확인한다):
   ```ts
   // api/mocks/polyfills.ts — Hermes에 이미 있는 API면 해당 줄은 지운다
