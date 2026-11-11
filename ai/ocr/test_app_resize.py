@@ -37,7 +37,7 @@ def test_api_passes_shrunk_image_to_ocr():
     seen = {}
 
     def fake(img):
-        seen["hw"] = img.shape[:2]
+        seen.setdefault("hw", img.shape[:2])   # 방향 보정으로 다시 읽어도 첫 입력 크기만 본다
         return [], [], []
     old = server.get_runner
     server.get_runner = lambda: fake

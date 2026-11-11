@@ -34,3 +34,6 @@ runs/
 rect/
 venv_yolo/
 *.pt
+
+# 운영 글자 인식 모델 B30 은 저장소에 포함 (S15P31A109-49, models/rec_b30_v1/MODEL_INFO.md)
+!models/rec_b30_v1/*

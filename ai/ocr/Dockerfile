@@ -47,6 +47,7 @@ RUN groupadd --system app \
 
 # 코드는 최상위 .py 만 들어온다(.dockerignore). 실제 영수증 사진·학습 데이터·모델 가중치는 이미지에 넣지 않는다.
 COPY *.py ./
+COPY models/ ./models/
 USER app
 
 # 서버에 GPU 가 없다. app.py 의 기본값(gpu:0)을 CPU 로 바꾼다.
