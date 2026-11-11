@@ -17,6 +17,7 @@ import { canCreateRecord } from "@/features/record/model";
 import { useRoom, useRoomPlaces } from "@/features/room/api/queries";
 import type { AddPlaceSource } from "@/features/room/components/add-place-options";
 import { AddPlaceSheet } from "@/features/room/components/add-place-sheet";
+import { MapViewToggle } from "@/features/room/components/map-view-toggle";
 import { PlaceTabs, type PlaceTab } from "@/features/room/components/place-tabs";
 import { RoomDetailSchedule } from "@/features/room/components/room-detail-schedule";
 import { RoomInfo } from "@/features/room/components/room-info";
@@ -126,6 +127,10 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
     router.push({ pathname: "/rooms/[roomId]/invite", params });
   };
 
+  const goToChat = () => {
+    router.push({ pathname: "/rooms/[roomId]/chat", params });
+  };
+
   const openSheet = () => {
     setSheetOpen(true);
   };
@@ -145,6 +150,13 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
   };
 
   const showAdjustButton = tab === "schedule" && room.hasSchedule;
+
+  /** 지금 탭의 내용(후보 장소 또는 일정)을 지도로 본다(TRP-07). */
+  const goToMap = () => {
+    router.push({ pathname: "/rooms/[roomId]/map", params: { ...params, view: tab } });
+  };
+
+  const showMapToggle = tab === "places" ? visiblePlaceCount > 0 : room.hasSchedule;
 
   const header = (
     <>
@@ -192,6 +204,11 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
         ) : (
           <RoomDetailSchedule room={room} header={header} />
         )}
+        {showMapToggle ? (
+          <View pointerEvents="box-none" className="absolute bottom-3 left-0 right-0 items-center">
+            <MapViewToggle target="map" onPress={goToMap} testID="room-detail.map-toggle" />
+          </View>
+        ) : null}
       </View>
       {showAdjustButton ? (
         <BottomCta className="border-t border-border">
@@ -211,6 +228,27 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
       )}
       <AddPlaceSheet open={sheetOpen} onOpenChange={setSheetOpen} onSelect={selectSource} />
     </Screen>
+  );
+}
+
+/** 헤더의 채팅 버튼(Figma W09). 안 읽은 메시지가 있으면 오른쪽 위에 점을 찍는다. */
+function ChatButton({ hasUnread, onPress }: { hasUnread: boolean; onPress: () => void }) {
+  return (
+    <View>
+      <HeaderIconButton
+        icon={MessageCircle}
+        accessibilityLabel={hasUnread ? "채팅, 안 읽은 메시지 있음" : "채팅"}
+        onPress={onPress}
+        testID="room-detail.chat"
+      />
+      {hasUnread ? (
+        <View
+          accessible={false}
+          className="pointer-events-none absolute right-1.5 top-2 h-2 w-2 rounded-full bg-highlight"
+          testID="room-detail.chat-unread"
+        />
+      ) : null}
+    </View>
   );
 }
 

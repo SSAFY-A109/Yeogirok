@@ -17,7 +17,7 @@ import type {
 } from "../../../features/room/model";
 import { formatServerDateTime, todayLocalDate } from "../../../lib/date";
 
-import { mockDb } from "../db";
+import { getMockChatReadState, mockDb } from "../db";
 import { findMockCourse } from "../fixtures/course";
 import { findCatalogPlace, MOCK_PLACE_PROVIDER } from "../fixtures/place";
 import {
@@ -237,7 +237,11 @@ export const roomHandlers = [
     }
 
     const rooms = [...mockDb.rooms.values()].filter(isMember);
-    const items = rooms.slice(offset, offset + limit).map(toRoomListItem);
+
+    const items = rooms.slice(offset, offset + limit).map((room) => {
+      return toRoomListItem(room, getMockChatReadState(room.id, MOCK_ME.userId));
+    });
+
     const nextOffset = offset + items.length;
     const response: RoomsResponseDto = { items, nextCursor: nextOffset < rooms.length ? String(nextOffset) : null };
     return ok(response);
@@ -308,7 +312,7 @@ export const roomHandlers = [
   http.get("*/api/v1/rooms/:roomId", async ({ params }) => {
     await delay(MOCK_DELAY_MS);
     const room = findMemberRoom(params.roomId);
-    return room instanceof Response ? room : ok(toRoomDetail(room));
+    return room instanceof Response ? room : ok(toRoomDetail(room, getMockChatReadState(room.id, MOCK_ME.userId)));
   }),
 
   http.patch("*/api/v1/rooms/:roomId", async ({ params, request }) => {
