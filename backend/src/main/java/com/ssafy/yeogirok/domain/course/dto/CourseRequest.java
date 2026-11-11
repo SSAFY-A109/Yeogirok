@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ssafy.yeogirok.domain.record.dto.RecordTitle;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.request.ControlCharacters;
 
 import tools.jackson.databind.JsonNode;
 
@@ -69,7 +70,7 @@ public class CourseRequest {
 			optionalNonNullString(selectionHash, "selectionHash"), optionalNonNullBoolean(published, "published"));
 	}
 
-	/** 생략이면 null, null·문자열 아님 C002, 2,000자 초과 C003. 앞뒤 공백은 그대로 둔다. */
+	/** 생략이면 null, null·문자열 아님 C002, 제어 문자(줄바꿈·탭 제외)·2,000자 초과 C003. 앞뒤 공백은 그대로 둔다. */
 	private String description() {
 		if (description == null) {
 			return null;
@@ -77,7 +78,7 @@ public class CourseRequest {
 		if (!description.isString()) {
 			throw invalidFormat("description", "문자열이어야 합니다.");
 		}
-		String value = description.stringValue();
+		String value = ControlCharacters.reject(description.stringValue(), "description");
 		if (value.codePointCount(0, value.length()) > DESCRIPTION_MAX_LENGTH) {
 			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
 				"description: 최대 %d자입니다.".formatted(DESCRIPTION_MAX_LENGTH));
