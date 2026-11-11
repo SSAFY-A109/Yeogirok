@@ -170,6 +170,14 @@ class MaterialReviewServiceTest {
 	}
 
 	@Test
+	void 장소를_잠금_밖에서_찾아도_판정_순서는_C004_가_C003_보다_먼저다() {
+		linked(ME);
+
+		assertError(() -> review(ME, recordId, 1, new VisitPlaceInput.TourPlace("none")),
+			ExceptionType.VERSION_MISMATCH);
+	}
+
+	@Test
 	void OCR_이_실패한_자료도_직접_입력해_확정한다() {
 		given(ocrClient.recognize(any())).willThrow(new BusinessException(ExceptionType.FILE_VERIFICATION_FAILED));
 		linked(ME);

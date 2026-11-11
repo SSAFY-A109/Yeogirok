@@ -1,5 +1,7 @@
 package com.ssafy.yeogirok.domain.record.material;
 
+import java.util.Optional;
+
 import org.springframework.stereotype.Service;
 
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
@@ -32,10 +34,14 @@ public class MaterialReviewService {
 	/** 판정 순서: RE001/RE003 → RE008 → M005 → RE022(OCR 처리 중) → C004 → 투어API 장소 없음 C003. */
 	public MaterialReviewResponse review(Long userId, Long recordId, String materialId, MaterialReviewCommand command) {
 		recordFinder.checkWritable(recordId, userId);
+		// 장소 DB 조회는 자료 잠금(Redis 만, 5초) 밖에서 한다. 없는 장소 C003 은 판정 순서대로 잠금 안 검사 뒤에 던진다.
+		Optional<RecordPlaceView> place = place(command.place());
 		ReceiptMaterial saved = materials.update(materialId, material -> {
 			materials.checkChangeable(material, recordId, userId, command.version());
 			return material.reviewed(new ReceiptMaterial.Values(command.merchantName(), command.paidAt().toInstant(),
-				command.paidAt().toLocalDate(), command.paidAt().toLocalTime(), place(command.place())));
+				command.paidAt().toLocalDate(), command.paidAt().toLocalTime(),
+				place.orElseThrow(() -> new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
+					"placeRef: 아직 저장되지 않은 투어API 장소입니다."))));
 		}).orElseThrow(() -> new BusinessException(ExceptionType.MATERIAL_NOT_FOUND));
 		return MaterialReviewResponse.of(materialId, saved);
 	}
@@ -49,15 +55,14 @@ public class MaterialReviewService {
 		return MaterialReviewResponse.of(materialId, materials.current(material));
 	}
 
-	/** 투어API 장소는 places 에 이미 있는 행만 받는다(1차 5절 6, 투어API 클라이언트 전까지). */
-	private RecordPlaceView place(VisitPlaceInput input) {
+	/** 투어API 장소는 places 에 이미 있는 행만 받는다(1차 5절 6, 투어API 클라이언트 전까지). 없으면 empty. */
+	private Optional<RecordPlaceView> place(VisitPlaceInput input) {
 		return switch (input) {
-			case VisitPlaceInput.TourPlace tour -> RecordPlaceView.from(recordPlaceRepository
+			case VisitPlaceInput.TourPlace tour -> recordPlaceRepository
 				.findByProviderAndProviderPlaceId(PlaceProvider.TOUR_API, tour.providerPlaceId())
-				.orElseThrow(() -> new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
-					"placeRef: 아직 저장되지 않은 투어API 장소입니다.")));
-			case VisitPlaceInput.CustomPlace custom -> new RecordPlaceView(PlaceProvider.MANUAL, null, custom.name(),
-				custom.latitude(), custom.longitude(), custom.address(), null, null, null);
+				.map(RecordPlaceView::from);
+			case VisitPlaceInput.CustomPlace custom -> Optional.of(new RecordPlaceView(PlaceProvider.MANUAL, null,
+				custom.name(), custom.latitude(), custom.longitude(), custom.address(), null, null, null));
 		};
 	}
 }
