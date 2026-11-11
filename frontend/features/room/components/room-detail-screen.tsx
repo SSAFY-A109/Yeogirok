@@ -26,6 +26,7 @@ import { RoomPlaceList } from "@/features/room/components/room-place-list";
 import { ScheduleReadinessBar } from "@/features/room/components/schedule-readiness-bar";
 import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
 import { getScheduleReadiness, type RoomDetail } from "@/features/room/model";
+import type { LocalDate } from "@/lib/date";
 
 const NOT_FOUND_STATUS = 404;
 
@@ -151,12 +152,17 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
 
   const showAdjustButton = tab === "schedule" && room.hasSchedule;
 
-  /** 지금 탭의 내용(후보 장소 또는 일정)을 지도로 본다(TRP-07). */
-  const goToMap = () => {
-    router.push({ pathname: "/rooms/[roomId]/map", params: { ...params, view: tab } });
+  /** 후보 장소를 지도로 본다(TRP-07). */
+  const goToPlacesMap = () => {
+    router.push({ pathname: "/rooms/[roomId]/map", params: { ...params, view: "places" } });
   };
 
-  const showMapToggle = tab === "places" ? visiblePlaceCount > 0 : room.hasSchedule;
+  /** 일정을 지도로 본다. 일정 탭에서 보고 있던 날부터 연다. */
+  const goToScheduleMap = (day: LocalDate) => {
+    router.push({ pathname: "/rooms/[roomId]/map", params: { ...params, view: "schedule", day } });
+  };
+
+  const showPlacesMapToggle = tab === "places" && visiblePlaceCount > 0;
 
   const header = (
     <>
@@ -200,11 +206,11 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
             onSelectSource={selectSource}
           />
         ) : (
-          <RoomDetailSchedule room={room} header={header} />
+          <RoomDetailSchedule room={room} header={header} onOpenMap={goToScheduleMap} />
         )}
-        {showMapToggle ? (
+        {showPlacesMapToggle ? (
           <View pointerEvents="box-none" className="absolute bottom-3 left-0 right-0 items-center">
-            <MapViewToggle target="map" onPress={goToMap} testID="room-detail.map-toggle" />
+            <MapViewToggle target="map" onPress={goToPlacesMap} testID="room-detail.map-toggle" />
           </View>
         ) : null}
       </View>

@@ -1,6 +1,7 @@
 import { PLACE_PROVIDERS } from "@/features/course/model";
 import type { PlaceTab } from "@/features/room/components/place-tabs";
 import { toPlaceKey, type PlaceRefDto } from "@/features/room/model";
+import type { LocalDate } from "@/lib/date";
 
 type RouteParam = string | string[] | undefined;
 
@@ -120,6 +121,14 @@ export function parsePlaceRefs(value: RouteParam): PlaceRefDto[] {
 /** 여행방 상세 탭. 모르는 값이면 장소 탭이다. */
 export function parseRoomDetailTab(value: RouteParam): PlaceTab {
   return firstValue(value) === "schedule" ? "schedule" : "places";
+}
+
+const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** 라우트 파라미터의 날짜(`2026-11-08`). 형식이 다르면 `null`이다. 실제로 일정에 있는 날인지는 받는 화면이 확인한다. */
+export function parseRouteDate(value: RouteParam): LocalDate | null {
+  const raw = firstValue(value);
+  return raw !== undefined && LOCAL_DATE_PATTERN.test(raw) ? raw : null;
 }
 
 /** 화면에 글자로만 보여 줄 라우트 파라미터. 비어 있으면 `null`. */

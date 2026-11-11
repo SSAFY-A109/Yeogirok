@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useAllRoomPlaces } from "@/features/room/api/queries";
+import { MapViewToggle } from "@/features/room/components/map-view-toggle";
 import { getRoomErrorMessage, ROOM_ERROR_FALLBACK } from "@/features/room/errors";
 import type { RoomDetail } from "@/features/room/model";
 import { useRoomSchedule } from "@/features/schedule/api/queries";
@@ -35,6 +36,8 @@ type RoomDetailScheduleProps = {
   room: RoomDetail;
   /** 목록 위에 함께 스크롤되는 여행방 정보·탭. */
   header: ReactElement;
+  /** "지도로 보기"를 눌렀을 때. 지금 보고 있는 날을 넘긴다. */
+  onOpenMap: (date: LocalDate) => void;
 };
 
 /**
@@ -42,13 +45,13 @@ type RoomDetailScheduleProps = {
  * 일정 응답에는 장소 이름이 없어 후보 목록(뺀 후보 포함)과 `roomPlaceId`로 묶는다.
  * 일정을 고치는 버튼("일정 조정하기")은 여행방 상세 하단에 있다.
  */
-export function RoomDetailSchedule({ room, header }: RoomDetailScheduleProps) {
+export function RoomDetailSchedule({ room, header, onOpenMap }: RoomDetailScheduleProps) {
   const scheduleQuery = useRoomSchedule(room.id, { enabled: room.hasSchedule });
   const placesQuery = useAllRoomPlaces(room.id, { enabled: room.hasSchedule });
   const schedule = scheduleQuery.data;
 
   if (room.hasSchedule && schedule && placesQuery.data) {
-    return <ScheduleTimeline schedule={schedule} places={toPlaceLookup(placesQuery.data)} header={header} />;
+    return <ScheduleTimeline schedule={schedule} places={toPlaceLookup(placesQuery.data)} header={header} onOpenMap={onOpenMap} />;
   }
 
   const renderState = () => {
@@ -114,8 +117,18 @@ export function toDayChipItems(days: readonly ScheduleDay[]): DayChipItem[] {
   });
 }
 
-/** 전체 일정을 위아래로 잇는다. 일차 머리글은 스크롤해도 위에 붙고, 날짜 칩은 목차처럼 그 날로 넘긴다. */
-function ScheduleTimeline({ schedule, places, header }: { schedule: RoomSchedule; places: SchedulePlaceLookup; header: ReactElement }) {
+type ScheduleTimelineProps = {
+  schedule: RoomSchedule;
+  places: SchedulePlaceLookup;
+  header: ReactElement;
+  onOpenMap: (date: LocalDate) => void;
+};
+
+/**
+ * 전체 일정을 위아래로 잇는다. 일차 머리글은 스크롤해도 위에 붙고, 날짜 칩은 목차처럼 그 날로 넘긴다.
+ * 아래쪽 "지도로 보기"(Figma W09-B)는 지금 보고 있는 날을 지도로 연다.
+ */
+function ScheduleTimeline({ schedule, places, header, onOpenMap }: ScheduleTimelineProps) {
   const listRef = useRef<SectionList<ScheduleItem, DaySection>>(null);
   const [selectedDate, setSelectedDate] = useState<LocalDate | undefined>(schedule.days[0]?.date);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -204,6 +217,19 @@ function ScheduleTimeline({ schedule, places, header }: { schedule: RoomSchedule
         ListFooterComponent={schedule.unassignedPlaceIds.length === 0 ? undefined : <UnassignedPlaces roomPlaceIds={schedule.unassignedPlaceIds} places={places} />}
         testID="room-detail.schedule"
       />
+      {selectedDate !== undefined ? (
+        <View pointerEvents="box-none" className="absolute bottom-3 left-0 right-0 items-center">
+          <MapViewToggle
+            target="map"
+
+            onPress={() => {
+              onOpenMap(selectedDate);
+            }}
+
+            testID="room-detail.map-toggle"
+          />
+        </View>
+      ) : null}
       {selectedDate !== undefined ? (
         <DayPickerSheet
           open={pickerOpen}
