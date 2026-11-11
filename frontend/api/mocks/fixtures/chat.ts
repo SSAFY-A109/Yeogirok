@@ -47,6 +47,12 @@ const GANGNEUNG_MESSAGES: MessageSeed[] = [
 
 const GANGNEUNG_ROOM_ID = 1;
 
+/** API-077이 돌려주는 WebSocket 경로(서버 `ChatTicketService.CONNECT_PATH`). */
+export const MOCK_CHAT_CONNECT_PATH = "/ws/v1";
+
+/** 내가 메시지를 보내면 다른 일행이 돌려보내는 답장. 실시간 수신을 서버 없이 확인하는 데 쓴다. */
+export const MOCK_CHAT_REPLIES = ["좋아!", "확인했어", "그렇게 하자"] as const;
+
 /** 1번 방에서 내가 읽은 마지막 메시지(내가 보낸 21:10 메시지). 그 뒤 민서의 메시지가 안 읽은 메시지다. */
 const GANGNEUNG_LAST_READ_MESSAGE_ID = 28;
 

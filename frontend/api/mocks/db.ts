@@ -1,6 +1,6 @@
 import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
-import type { ChatMessageDto } from "../../features/room/chat-model";
+import type { ChatMessageDto, ChatTicketResponseDto } from "../../features/room/chat-model";
 import type { AddRoomPlacesResponseDto, ChatReadStateDto, CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
 
 import { chatReadKey, createChatMessageFixtures, createChatReadFixtures, toChatReadState } from "./fixtures/chat";
@@ -29,6 +29,10 @@ type MockDb = {
   roomMessages: Map<number, ChatMessageDto[]>;
   /** 참여자별 채팅 읽은 위치(메시지 id). 키는 `chatReadKey(여행방 id, 사용자 id)`다. */
   chatLastReadIds: Map<string, number>;
+  /** 발급했고 아직 쓰지 않은 실시간 연결 티켓. 키는 티켓이고, 연결에 쓰면 지운다. */
+  chatTickets: Map<string, { userId: number; roomId: number }>;
+  /** API-077 발급 요청. 키는 `여행방 id:멱등키`다. 같은 키로 다시 오면 처음 응답을 돌려준다. */
+  chatTicketRequests: Map<string, ChatTicketResponseDto>;
   roomCreateRequests: Map<string, { requestBody: string; response: CreateRoomResponseDto }>;
   courseImportRequests: Map<string, { requestBody: string; response: ImportCoursePlacesResponseDto }>;
   /** API-029 담기 요청. 키는 `여행방 id:멱등키`다. */
@@ -67,6 +71,8 @@ function createDb(): MockDb {
 
     roomMessages: createChatMessageFixtures(),
     chatLastReadIds: createChatReadFixtures(),
+    chatTickets: new Map(),
+    chatTicketRequests: new Map(),
     roomCreateRequests: new Map(),
     courseImportRequests: new Map(),
     roomPlaceRequests: new Map(),
