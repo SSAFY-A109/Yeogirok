@@ -45,6 +45,12 @@ dependencies {
 	/* 사진 EXIF: 통합 기록 초안(API-064)이 기록 사진의 촬영 시각·GPS 를 읽는다. Apache 2.0, xmpcore 하나만 딸려 온다 */
 	implementation 'com.drewnoakes:metadata-extractor:2.22.0'
 
+	/* 푸시: 앱 푸시 알림(채팅 API-077 등)을 FCM HTTP v1 로 보낸다. 쓰지 않는 Firestore·Storage 는 뺀다 */
+	implementation('com.google.firebase:firebase-admin:9.11.0') {
+		exclude group: 'com.google.cloud', module: 'google-cloud-firestore'
+		exclude group: 'com.google.cloud', module: 'google-cloud-storage'
+	}
+
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

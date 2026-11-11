@@ -1,6 +1,6 @@
 # 여행방 채팅 결정 사항
 
-> 여행방 채팅(API-076·077·088, WebSocket `/ws/v1`)을 만들면서 정한 규칙이다. 원천은 팀 Notion "API 명세"와 "ERD 설계 관련 사항·Redis"이고,
+> 여행방 채팅(API-076·077·088·095·096, WebSocket `/ws/v1`, Android 앱 푸시)을 만들면서 정한 규칙이다. 원천은 팀 Notion "API 명세"와 "ERD 설계 관련 사항·Redis"이고,
 > 명세에 없는 값은 여기 적는다. 명세와 이 문서가 다르면 명세를 먼저 고치고 이 문서를 맞춘다.
 
 ## 1. 흐름
@@ -14,6 +14,9 @@
 | 연결 유지 | `PING` → `PONG` | PONG 에 최신 저장 ID. 권한을 다시 확인한다 |
 | 이력·재연결 복구 | API-076 `GET /rooms/{roomId}/messages` | `beforeMessageId` 과거 이력, `afterMessageId`+`throughMessageId` 복구 |
 | 읽은 위치 | API-088 `PATCH /rooms/{roomId}/messages/read` | 앱이 실제로 확인한 위치만. 수신·ACK·조회로는 바꾸지 않는다 |
+| 푸시 토큰 등록 | API-095 `PUT /users/me/push-tokens` | 로그인 뒤. `{token, platform:"ANDROID"}`. 같은 토큰 재등록 성공, 다른 계정 토큰이면 지금 계정으로 옮긴다 |
+| 푸시 토큰 삭제 | API-096 `DELETE /users/me/push-tokens`, 또는 API-007 `pushToken` | 기기 토큰이 바뀌었을 때 096. 로그아웃은 API-007 에 `pushToken` 을 함께 보낸다. 본인 토큰만 지우고 없어도 성공 |
+| 앱 푸시 | FCM HTTP v1 | 채팅 화면에 연결되지 않은 참여자에게. 아래 "앱 푸시 알림" |
 
 프레임 모양·오류 코드표는 노션 API-077 "채팅 양방향 WebSocket 계약"을 따른다. STOMP 는 쓰지 않는다(Spring 기본 WebSocket + JSON 텍스트 프레임).
 
@@ -89,30 +92,94 @@ Nginx `proxy_read_timeout` 은 무응답 기준(60초)보다 길게 둔다(`infr
 - Redis 가 유실돼도 1시간마다 DB 에서 "삭제됐는데 메시지가 남은 방"을 찾아 지운다.
 - 삭제되지 않은 방의 메시지는 지우지 않는다(목록에 잘못 들어가도 빼기만 한다).
 
+### 앱 푸시 알림 (Android, FCM)
+
+원천은 노션 API-077 "채팅 푸시 알림 (Android)"·API-095·096, ERD `user_push_tokens`, Redis `push:chat:{userId}:{roomId}` 다.
+채팅 화면을 열지 않은 참여자(백그라운드·다른 화면·앱 꺼짐)가 새 메시지를 알 수 있게 한다.
+
+**방식**: Expo Push 를 거치지 않고 Firebase Admin SDK 로 FCM HTTP v1 에 직접 보낸다. 앱은 `getDevicePushTokenAsync()` 로 받은
+FCM 기기 토큰을 API-095 로 등록한다. Android 만 지원한다.
+
+**구조**: 푸시 발송은 채팅 밖에서도 쓰도록 공용으로 둔다. 초대 수락·일정 확정 같은 알림도 받을 회원과 알림 모양만 정해 `PushNotifier` 로 보낸다.
+
+| 위치 | 맡는 일 |
+| --- | --- |
+| `domain/push` (공용) | 기기 토큰 저장·API-095·096·탈퇴 삭제, FCM 발송기(`PushSender`), `PushNotifier.sendToUsers`(받을 회원들의 기기에 한 번에 발송: 토큰 조회 한 번, FCM 은 토큰 500개마다 한 번. 해제된 토큰 정리, 회원마다 결과 `SENT`·`NO_DEVICE`·`REJECTED`·`UNAVAILABLE`) |
+| `domain/chat/push` (채팅) | 받는 사람 조회, 접속자 제외(`chat:online`), 3초 제한(`push:chat`), 알림 모양, 비동기 발송 줄 |
+
+**언제·누구에게**
+
+- 커밋된 새 메시지(`replayed=false`)에서만 보낸다. 저장 실패·재전송 ACK 에는 보내지 않는다.
+- 방이 살아 있고, 현재 참여 중이고(`left_at IS NULL`), 계정이 활성인 회원 중 보낸 사람을 뺀, 토큰이 있는 회원.
+- 그 방에 **READY 로 연결된 회원은 모든 기기에서 뺀다**. 앱은 채팅 화면을 나가거나 백그라운드로 가면 연결을 닫는다.
+- 같은 수신자·같은 방은 **3초에 한 번**. 발송 직전에 Redis `push:chat:{userId}:{roomId}` 를 `SET NX EX 3` 하고, 키가 이미
+  있으면 그 수신자에게는 이번 푸시를 생략한다. 같은 방 다른 수신자와 WebSocket 실시간 수신에는 적용하지 않는다.
+- 제한을 통과한 수신자 모두의 등록 기기에 한 번에 보낸다(`sendEach`, 500개씩). 결과는 수신자마다 따로 보고 제한을 푼다.
+
+**알림 모양**(노션 API-077 예시 + Android tag)
+
+| 항목 | 값 |
+| --- | --- |
+| `notification.title` | 여행방 이름 |
+| `notification.body` | `닉네임: 메시지 앞 40자`. 글자 수는 본문만 코드 포인트로 센다(채팅 100자 기준과 같다). 40자를 넘으면 자르고 `…` |
+| `data` | `{type:"CHAT", roomId, messageId}`. 값은 모두 문자열. 알림을 누르면 앱이 그 방 채팅으로 간다 |
+| `android.notification.channel_id` | `chat`(앱이 만든 채널) |
+| `android.notification.tag` | `chat:{roomId}`. 같은 방 알림은 새 알림이 이전 알림을 바꿔 방마다 하나만 보인다 |
+| `android.priority` | `HIGH` |
+
+`…` 와 `tag` 는 노션 예시에 없어 여기서 정했다(노션에 반영 필요).
+
+**접속 상태(Redis)**: 방마다 정렬 집합 `chat:online:{roomId}`. 멤버 `{userId}:{연결 ID}`, 점수는 만료 시각(ms).
+
+- READY 때 넣고, PING 마다 만료 시각을 지금부터 90초로 늘리고, 연결이 닫히면 지운다. 서버가 여러 대여도 같은 키를 본다.
+- 서버가 죽어 지우지 못한 멤버는 만료 시각이 지나면 조회에서 빠진다(최대 90초 동안 그 사람에게 푸시가 생략될 수 있다).
+  키 자체에도 180초 만료를 걸어 빈 방 키가 남지 않는다.
+- 노션 Redis 문서에 아직 없는 키다(노션에 반영 필요).
+
+**비동기·실패**
+
+- WebSocket 처리 스레드는 발송 줄에 넣고 바로 돌아온다. 발송은 전용 스레드 2개가 하고, 줄(1,000개)이 넘치면 그 메시지의 푸시만 버린다.
+  실행기를 빈으로 두지 않는다(빈이 있으면 스프링 부트 기본 @Async 실행기가 물러난다).
+- 푸시가 실패해도 메시지 저장·ACK·방송·이력에는 영향이 없다.
+- 접속 상태·발송 제한 Redis 가 실패하면 보내는 쪽으로 간다(알림을 놓치는 것보다 중복이 낫다).
+- FCM 이 그 수신자의 토큰을 모두 거절하면(잘못된 토큰·해제된 토큰) 발송 제한을 바로 풀어 다음 메시지에서 남은·새 토큰으로 다시
+  보낸다. FCM 에 닿지 못했거나 FCM 쪽 장애(네트워크·시간 초과, `UNAVAILABLE`·`INTERNAL`·`QUOTA_EXCEEDED`)면 풀지 않는다.
+  풀면 장애 중 메시지마다 재시도가 쌓여 발송 줄이 막히기 때문이다(노션에 없는 서버 규칙이다. 노션에 반영 필요).
+- 서버가 내려갈 때는 줄에 남은 푸시를 최대 5초 기다려 마저 보내고, 그 안에 못 보낸 것은 버린다(보내던 발송은 인터럽트로
+  멈추고 남은 토큰 묶음(500개)은 보내지 않는다). 종료 중 들어온 메시지의 푸시는 보내지 않는다.
+- FCM 이 `UNREGISTERED`(앱 삭제 등)를 돌려준 토큰은 **보낼 당시 주인과 같을 때만** 지운다. 그사이 다른 계정으로 옮겨 간 토큰은 둔다.
+  그 밖의 실패는 토큰을 두고 로그만 남긴다. 토큰·키·본문은 로그에 남기지 않는다.
+
+**토큰 관리**
+
+- 한 회원에 여러 기기 토큰. 토큰이 기본키라 한 기기는 한 계정에만 묶인다(노션 ERD DDL 20번).
+- 같은 토큰의 첫 등록이 동시에 오면 한쪽이 기본키 충돌에 걸리고, 한 번 더 시도해 이미 들어간 행을 갱신한다.
+- 등록은 회원 행을 탈퇴와 같은 잠금(`SELECT … FOR UPDATE`)으로 잡고 활성인지 본다. 탈퇴 커밋 직후 아직 유효한 액세스 토큰으로
+  온 등록은 A003 이고, 등록이 먼저면 탈퇴가 기다렸다가 그 토큰까지 지운다.
+- 토큰 최대 4,096자(넘으면 C003)는 노션에 없는 서버 규칙이다. FCM 토큰은 보통 200자 안팎이다.
+- 로그아웃(API-007)은 요청의 `pushToken`(선택)을 세션 폐기와 함께 지운다. 앱이 API-096 을 빠뜨리거나 실패해도 로그아웃한 기기에
+  미리보기가 가지 않게 하려는 것이다(PR 리뷰 뒤 프론트와 합의). 탈퇴(API-009)는 탈퇴 트랜잭션 안에서 그 회원 토큰을 모두 지운다.
+
+**서비스 계정 키**
+
+- 환경 변수 `FIREBASE_SERVICE_ACCOUNT_BASE64`: 서비스 계정 키 JSON 파일 전체를 Base64 한 줄로(`base64 -w0 키.json`).
+  `application.yaml` 의 `yeogirok.push.fcm.service-account-base64`.
+- **선택 값**이다. 비어 있으면 시작 때 경고("FCM 서비스 계정 키(FIREBASE_SERVICE_ACCOUNT_BASE64)가 없어 채팅 푸시를 보내지 않습니다.")를
+  한 번 남기고 푸시만 보내지 않는다(수신자 조회·Redis 작업도 하지 않는다). 로컬·테스트는 키 없이 뜬다. 값을 잘못 넣으면(Base64 아님·서비스 계정 키 아님) 시작을 멈춘다.
+- 서버는 `infra/docker-compose.yml` backend 의 선택 키(`${FIREBASE_SERVICE_ACCOUNT_BASE64:-}`)와 `.env` 로 넣는다(인프라 담당).
+  기본값이 있어 `check-backend-env.sh` 점검 대상은 아니다.
+- 켜지면 시작 때 "FCM 채팅 푸시를 켰습니다. projectId=…" 를 남긴다.
+- SDK 9.11 의 `Message.setToken` 은 deprecated(FID 권장)지만 앱이 FCM 등록 토큰을 쓰므로 그대로 쓴다. FID 로 옮기면 앱·API-095 를 함께 바꾼다.
+
+**운영 수치**(`yeogirok.chat.push`): 접속 기록 수명 90초, 발송 제한 3초, 미리보기 40자, 발송 스레드 2개, 대기 줄 1,000개.
+FCM 연결 5초·응답 10초(`yeogirok.push.fcm`).
+
 ## 3. 하지 않은 것
 
 - 사진 채팅, 타인 읽음 실시간 방송, 메시지별 안 읽은 인원 수(노션 "별도 결정 항목").
 - 메시지 보관 기간 만료 삭제. 방이 유지되는 동안 계속 보관한다.
 - 전달 시점마다 받는 사람의 권한을 DB 에서 다시 확인하는 것. 강제 종료 알림과 전송·PING 재확인으로 대신한다.
-
-### TODO: 앱 푸시 알림
-
-노션에서 "별도 결정 항목"이라 이번 범위에서 뺐다. 지금은 채팅 화면을 연 사람만 실시간으로 받는다. 앱이 백그라운드에 있거나
-다른 화면에 있거나 꺼져 있으면 새 메시지를 알 수 없고, 방 목록의 안 읽음 점도 목록을 다시 불러올 때만 바뀐다.
-
-넣기 전에 팀이 정할 것:
-
-- 푸시 방식. 앱이 Expo 라 Expo Push(FCM·APNs 대행)가 가장 간단하다. iOS 는 Apple 개발자 계정·인증서가 필요하다.
-- 알림 내용. 본문 미리보기를 보여 줄지, "새 메시지가 있어요"만 보여 줄지(잠금 화면 노출·개인정보).
-- 방별 알림 끄기, 짧은 시간에 온 여러 메시지를 묶어 보낼지.
-- 채팅만 할지, 초대 수락·일정 확정 같은 알림도 함께 공통 모듈로 할지.
-- 프론트 문서(`frontend-spec.md` DEC-13)는 채팅을 아직 "만들지 않음"으로 둔다. 범위를 함께 맞춘다.
-
-서버 작업:
-
-- 기기 토큰 등록·삭제 API와 저장소. 로그아웃·탈퇴 때 지운다.
-- 커밋된 새 메시지(`replayed=false`)에서만, 그 방에 연결되지 않은 현재 참여자에게만 보낸다. 붙일 자리는
-  `ChatWebSocketHandler` 의 MESSAGE_CREATED 발행 바로 뒤다(TODO 주석). 서버가 여러 대면 접속 상태를 Redis 에 둔다.
+- 앱 푸시 중 미룬 것: 방별 알림 끄기, 안 읽은 개수 배지, iOS(APNs), 채팅 외 알림(초대·일정).
 
 ## 4. 운영 DB 반영
 
@@ -134,3 +201,20 @@ CREATE TABLE room_messages (
 
 CREATE INDEX ix_room_messages_room_id ON room_messages (room_id, id DESC);
 ```
+
+푸시 기기 토큰(`user_push_tokens`)도 배포하면 엔티티 기준으로 만들어진다. 엔티티는 노션 ERD DDL 20번을 따른다(토큰이 기본키).
+FK(`ON DELETE CASCADE`)는 Flyway 때 넣고, 시각은 DB 기본값 대신 서비스 시계로 넣는다. ERD DDL:
+
+```sql
+CREATE TABLE user_push_tokens (
+    token TEXT PRIMARY KEY CHECK (btrim(token) <> ''),
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL CHECK (platform = 'ANDROID'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_user_push_tokens_user ON user_push_tokens (user_id);
+```
+
+탈퇴는 회원 행을 지우지 않아(상태만 바꾼다) `ON DELETE CASCADE` 는 쓰이지 않는다. 탈퇴 트랜잭션에서 토큰을 직접 지운다.

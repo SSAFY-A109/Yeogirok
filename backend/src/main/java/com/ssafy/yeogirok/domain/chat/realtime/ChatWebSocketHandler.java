@@ -11,6 +11,8 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.ssafy.yeogirok.domain.chat.dto.ChatMessage;
+import com.ssafy.yeogirok.domain.chat.push.ChatPresence;
+import com.ssafy.yeogirok.domain.chat.push.ChatPushService;
 import com.ssafy.yeogirok.domain.chat.realtime.ChatTicketStore.TicketOwner;
 import com.ssafy.yeogirok.domain.chat.service.ChatMessageService;
 import com.ssafy.yeogirok.domain.chat.service.ChatMessageService.SendResult;
@@ -30,8 +32,10 @@ import tools.jackson.databind.json.JsonMapper;
  * <ol>
  *   <li>첫 프레임은 AUTH. Redis 티켓을 한 번 소모하고 계정·현재 참여·방 미삭제를 확인한 뒤 방 수신을 준비하고 READY 를
  *       보낸다. 티켓이 없거나 쓸 수 없으면 ERROR 후 연결을 닫는다.</li>
- *   <li>SEND_MESSAGE: 매번 권한을 다시 확인하고 저장한다. 커밋 뒤 보낸 사람에게 MESSAGE_ACK, 방에 MESSAGE_CREATED.</li>
+ *   <li>SEND_MESSAGE: 매번 권한을 다시 확인하고 저장한다. 커밋 뒤 보낸 사람에게 MESSAGE_ACK, 방에 MESSAGE_CREATED,
+ *       그 방에 연결되지 않은 참여자에게 앱 푸시({@link ChatPushService}).</li>
  *   <li>PING: 참여·방을 다시 확인하고 PONG 에 최신 저장 ID 를 담는다.</li>
+ *   <li>READY 부터 연결이 닫힐 때까지 Redis 에 접속 상태를 둔다({@link ChatPresence}, PING 마다 연장). 푸시 생략 기준이다.</li>
  * </ol>
  * 연결 이후 오류는 HTTP 상태가 아니라 ERROR 프레임으로 알린다. 방 없음·참여자 아님·계정 무효는 오류를 보낸 뒤 닫는다.
  */
@@ -48,6 +52,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 	private final ChatTicketStore ticketStore;
 	private final ChatMessageService chatMessageService;
 	private final ChatPublisher publisher;
+	private final ChatPresence presence;
+	private final ChatPushService pushService;
 	private final JsonMapper jsonMapper;
 	private final Clock clock;
 
@@ -58,7 +64,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
 	@Override
 	public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+		ChatConnection connection = hub.get(session.getId());
 		hub.closed(session.getId());
+		if (connection != null && connection.isAuthenticated()) {
+			presence.offline(connection.getRoomId(), connection.getUserId(), connection.id());
+		}
 	}
 
 	@Override
@@ -116,6 +126,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 			// 최신 ID 도 구독 뒤에 읽어 READY 와 실시간 사이 빈틈이 없다.
 			Long latestMessageId = chatMessageService.checkAccess(userId, roomId);
 			hub.ready(connection, new ChatFrames.Ready(roomId, userId, latestMessageId));
+			markOnline(connection);
 		} catch (BusinessException e) {
 			hub.reject(connection, roomId, null, e.getExceptionType(), e.getMessage());
 		} catch (RuntimeException e) {
@@ -170,12 +181,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 				// 이미 커밋됐다. 다른 참여자는 PONG 의 최신 ID·재연결 복구(API-076)로 받는다.
 				log.warn("채팅 메시지 방송에 실패했습니다. roomId={}, messageId={}", roomId, message.id(), e);
 			}
-			// TODO: 앱 푸시 알림. 노션에서 "별도 결정 항목"이라 이번 범위에서 뺐다(docs/07-chat.md 3절).
-			//  지금은 채팅 화면을 연 사람만 실시간으로 받고, 앱이 백그라운드·다른 화면·꺼짐이면 새 메시지를 알 수 없다.
-			//  - 팀 결정 필요: 푸시 방식(Expo Push 등), 본문 미리보기 여부(잠금 화면 노출), 방별 알림 끄기·묶어 보내기,
-			//    채팅 외 알림(초대 수락·일정 확정)과 공통 모듈로 할지
-			//  - 서버 작업: 기기 토큰 등록·삭제 API와 저장소(로그아웃·탈퇴 때 삭제), 이 방에 연결되지 않은 현재 참여자만
-			//    골라 보내기(서버가 여러 대면 Redis 에 접속 상태를 둔다). 커밋된 새 메시지(replayed=false)에서만 보낸다
+			// 앱 푸시(FCM, 노션 API-077 채팅 푸시). 커밋된 새 메시지에서만, 이 방에 READY 로 연결되지 않은 현재 참여자에게
+			// 보낸다. 줄에 넣고 바로 돌아오며(발송은 전용 스레드), 실패해도 저장·ACK·방송에는 영향이 없다.
+			pushService.notifyNewMessage(roomId, message);
 		}
 	}
 
@@ -185,6 +193,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 		try {
 			Long latest = chatMessageService.checkAccess(connection.getUserId(), connection.getRoomId());
 			hub.send(connection, new ChatFrames.Pong(connection.getRoomId(), latest));
+			markOnline(connection);
 		} catch (BusinessException e) {
 			handleFailure(connection, null, e);
 		} catch (RuntimeException e) {
@@ -194,6 +203,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 	}
 
 	/* ── 공통 ────────────────────────────────────────────── */
+
+	/**
+	 * READY 연결로 기록하거나 만료 시각을 늘린다(채팅 푸시 생략 대상). 기록하는 사이 연결이 닫혔으면 닫힘 처리가 먼저 지웠을 수
+	 * 있으므로 한 번 더 지운다. 남아 있으면 그 사용자는 기록이 만료될 때까지 푸시를 받지 못한다.
+	 */
+	private void markOnline(ChatConnection connection) {
+		presence.online(connection.getRoomId(), connection.getUserId(), connection.id());
+		if (!connection.getSession().isOpen()) {
+			presence.offline(connection.getRoomId(), connection.getUserId(), connection.id());
+		}
+	}
 
 	private void handleFailure(ChatConnection connection, String clientMessageId, BusinessException e) {
 		if (FATAL.contains(e.getExceptionType())) {

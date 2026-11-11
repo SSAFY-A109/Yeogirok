@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.auth.dto.LogoutRequest;
 import com.ssafy.yeogirok.domain.auth.dto.RefreshTokenRequest;
 import com.ssafy.yeogirok.domain.auth.dto.TokenIssueRequest;
 import com.ssafy.yeogirok.domain.auth.dto.TokenIssueResponse;
@@ -46,11 +47,13 @@ public class AuthController {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(data));
 	}
 
-	@Operation(summary = "API-007 로그아웃", security = @SecurityRequirement(name = "bearerAuth"))
+	@Operation(summary = "API-007 로그아웃",
+		description = "이 기기의 리프레시 토큰을 폐기한다. pushToken(선택)을 주면 이 기기의 푸시 토큰도 함께 지운다.",
+		security = @SecurityRequirement(name = "bearerAuth"))
 	@PostMapping("/logout")
 	public ResponseEntity<ApiResponseBody<Void>> logout(@AuthenticationPrincipal AuthenticatedUser user,
-		@Valid @RequestBody RefreshTokenRequest request) {
-		authService.logout(user.userId(), request.refreshToken());
+		@Valid @RequestBody LogoutRequest request) {
+		authService.logout(user.userId(), request.refreshToken(), request.toPushToken());
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse());
 	}
 }

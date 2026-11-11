@@ -11,6 +11,7 @@ import com.ssafy.yeogirok.domain.auth.dto.TokenIssueResponse;
 import com.ssafy.yeogirok.domain.auth.dto.TokenRefreshResponse;
 import com.ssafy.yeogirok.domain.auth.token.AccessTokenIssuer;
 import com.ssafy.yeogirok.domain.auth.token.RefreshTokenService;
+import com.ssafy.yeogirok.domain.push.service.PushTokenService;
 import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.domain.user.repository.UserRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -31,6 +32,7 @@ public class AuthService {
 	private final UserRepository userRepository;
 	private final AccessTokenIssuer accessTokenIssuer;
 	private final RefreshTokenService refreshTokenService;
+	private final PushTokenService pushTokenService;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
@@ -72,9 +74,18 @@ public class AuthService {
 			rotated.rawToken(), refreshTokenService.ttlSeconds());
 	}
 
-	/** API-007. */
-	public void logout(Long userId, String rawRefreshToken) {
-		refreshTokenService.revoke(userId, rawRefreshToken);
+	/**
+	 * API-007. 이 기기의 리프레시 토큰을 폐기하고, 푸시 토큰을 주면 함께 지운다(그 회원의 그 토큰만, API-096 과 같다).
+	 * 푸시 토큰 삭제(DB)가 실패해도 세션은 폐기하고 오류를 돌려준다. 앱이 다시 부르면 둘 다 성공한다(여러 번 불러도 된다).
+	 */
+	public void logout(Long userId, String rawRefreshToken, String pushToken) {
+		try {
+			if (pushToken != null) {
+				pushTokenService.delete(userId, pushToken);
+			}
+		} finally {
+			refreshTokenService.revoke(userId, rawRefreshToken);
+		}
 	}
 
 	/**

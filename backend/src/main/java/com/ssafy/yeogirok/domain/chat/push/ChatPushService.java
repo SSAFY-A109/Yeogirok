@@ -1,0 +1,150 @@
+package com.ssafy.yeogirok.domain.chat.push;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
+import org.springframework.scheduling.concurrent.CustomizableThreadFactory;
+import org.springframework.stereotype.Service;
+
+import com.ssafy.yeogirok.domain.chat.dto.ChatMessage;
+import com.ssafy.yeogirok.domain.push.sender.PushMessage;
+import com.ssafy.yeogirok.domain.push.service.PushNotifier;
+import com.ssafy.yeogirok.domain.push.service.PushOutcome;
+
+import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 새 채팅 메시지 앱 푸시(노션 API-077 "채팅 푸시 알림 (Android)"). 채팅 규칙(받는 사람·접속자 제외·발송 제한·알림 모양)만
+ * 정하고, 기기 토큰 조회·FCM 발송·해제된 토큰 정리는 공용 {@link PushNotifier} 가 한다.
+ *
+ * <ol>
+ *   <li>WebSocket 처리 스레드는 줄에 넣고 바로 돌아온다. 발송은 전용 스레드가 한다. 줄이 넘치거나 발송이 실패해도
+ *       메시지 저장·ACK·방송에는 영향이 없다.</li>
+ *   <li>받는 사람: 방이 살아 있고 현재 참여 중이며 계정이 활성인 회원 중 보낸 사람을 뺀, 등록 기기가 있는 회원
+ *       ({@link ChatPushRecipientRepository}).</li>
+ *   <li>그 방에 READY 로 연결된 회원은 모든 기기에서 뺀다({@link ChatPresence}).</li>
+ *   <li>남은 회원마다 3초 제한을 확인하고({@link ChatPushThrottle}), 통과한 회원 모두의 등록 기기에 한 번에 보낸다. FCM 이
+ *       그 회원의 토큰을 모두 거절했거나 기기가 없어졌으면 그 회원의 제한을 바로 푼다. FCM 장애면 풀지 않는다.</li>
+ * </ol>
+ *
+ * <p>실행기는 빈으로 등록하지 않는다. {@code Executor} 빈이 생기면 스프링 부트 기본 실행기(@Async)가 물러난다.
+ */
+@Slf4j
+@Service
+public class ChatPushService {
+
+	/** 종료할 때 줄에 남은 푸시를 기다리는 최대 시간. FCM 응답 제한(10초)보다 짧게 둔다. */
+	private static final Duration SHUTDOWN_WAIT = Duration.ofSeconds(5);
+
+	private final ChatPushRecipientRepository recipientRepository;
+	private final ChatPresence presence;
+	private final ChatPushThrottle throttle;
+	private final PushNotifier notifier;
+	private final ChatPushProperties properties;
+	private final ThreadPoolExecutor executor;
+
+	public ChatPushService(ChatPushRecipientRepository recipientRepository, ChatPresence presence,
+		ChatPushThrottle throttle, PushNotifier notifier, ChatPushProperties properties) {
+		this.recipientRepository = recipientRepository;
+		this.presence = presence;
+		this.throttle = throttle;
+		this.notifier = notifier;
+		this.properties = properties;
+		this.executor = new ThreadPoolExecutor(properties.threads(), properties.threads(), 0, TimeUnit.MILLISECONDS,
+			new ArrayBlockingQueue<>(properties.queueCapacity()), new CustomizableThreadFactory("chat-push-"),
+			new ThreadPoolExecutor.AbortPolicy());
+	}
+
+	/**
+	 * 종료. 이미 줄에 든 푸시는 잠깐 기다려 마저 보낸다. 이 빈이 발송기·DB 보다 먼저 정리되므로(의존 순서) 기다리는 동안은
+	 * 둘 다 살아 있다. 시간 안에 못 끝낸 것은 버린다.
+	 */
+	@PreDestroy
+	void shutdown() {
+		executor.shutdown();
+		try {
+			if (!executor.awaitTermination(SHUTDOWN_WAIT.toMillis(), TimeUnit.MILLISECONDS)) {
+				int running = executor.getActiveCount();
+				int queued = executor.shutdownNow().size();
+				log.warn("종료 대기 시간 안에 채팅 푸시를 다 보내지 못했습니다. 보내던 {}건은 멈추고 대기 중인 {}건은 버립니다.", running,
+					queued);
+			}
+		} catch (InterruptedException e) {
+			executor.shutdownNow();
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	/** 커밋된 새 메시지(replayed=false)에서만 부른다. 예외를 던지지 않는다. */
+	public void notifyNewMessage(Long roomId, ChatMessage message) {
+		if (!notifier.isEnabled()) {
+			// FCM 키가 없다. 보낼 수 없으니 받는 사람 조회·Redis 작업도 하지 않는다.
+			return;
+		}
+		ChatPushJob job = new ChatPushJob(roomId, message.sender().id(), message.sender().nickname(), message.id(),
+			message.body());
+		try {
+			executor.execute(() -> deliver(job));
+		} catch (RejectedExecutionException e) {
+			if (executor.isShutdown()) {
+				log.info("서버가 종료 중이라 이 메시지의 푸시를 보내지 않습니다. roomId={}, messageId={}", roomId, message.id());
+			} else {
+				log.warn("채팅 푸시 대기 줄이 가득 차 이 메시지의 푸시를 보내지 않습니다. roomId={}, messageId={}", roomId,
+					message.id());
+			}
+		}
+	}
+
+	/** 발송 스레드에서 돈다. 테스트는 직접 불러 결과를 바로 본다. */
+	void deliver(ChatPushJob job) {
+		try {
+			List<ChatPushRecipient> recipients = recipientRepository.findRecipients(job.roomId(), job.senderId());
+			if (recipients.isEmpty()) {
+				return;
+			}
+			Set<Long> online = presence.onlineUsers(job.roomId());
+			PushMessage message = ChatPushMessages.of(job.roomId(), job.messageId(), recipients.getFirst().roomTitle(),
+				job.senderNickname(), job.body(), properties.previewLength());
+			List<Long> sendTo = new ArrayList<>();
+			for (ChatPushRecipient recipient : recipients) {
+				if (!online.contains(recipient.userId()) && throttle.tryAcquire(recipient.userId(), job.roomId())) {
+					sendTo.add(recipient.userId());
+				}
+			}
+			if (sendTo.isEmpty()) {
+				return;
+			}
+			if (Thread.currentThread().isInterrupted()) {
+				// 종료 중이다. 보내지 않는다(잡아 둔 제한은 3초 뒤 풀린다).
+				log.info("종료 중이라 채팅 푸시를 멈춥니다. roomId={}, messageId={}", job.roomId(), job.messageId());
+				return;
+			}
+			// 남은 수신자 모두를 한 번에 보낸다(토큰 조회 한 번, FCM 호출은 토큰 500개마다 한 번).
+			notifier.sendToUsers(sendTo, message).forEach((userId, outcome) -> {
+				if (outcome == PushOutcome.REJECTED || outcome == PushOutcome.NO_DEVICE) {
+					// 한 기기에도 가지 않았고 토큰 문제다. 제한을 풀어 다음 메시지에서 남은·새 토큰으로 다시 보낸다.
+					// FCM 장애(UNAVAILABLE)는 풀지 않는다. 풀면 장애 중 메시지마다 재시도가 쌓여 발송 줄이 막힌다.
+					throttle.release(userId, job.roomId());
+				}
+			});
+		} catch (RuntimeException e) {
+			log.error("채팅 푸시를 보내지 못했습니다. roomId={}, messageId={}", job.roomId(), job.messageId(), e);
+		}
+	}
+
+	/** 발송 스레드로 넘기는 값. 엔티티·연결을 넘기지 않는다. */
+	record ChatPushJob(Long roomId, Long senderId, String senderNickname, Long messageId, String body) {
+
+		@Override
+		public String toString() {
+			return "ChatPushJob[roomId=" + roomId + ", messageId=" + messageId + "]";
+		}
+	}
+}
