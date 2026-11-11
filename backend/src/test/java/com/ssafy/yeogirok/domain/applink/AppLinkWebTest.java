@@ -28,6 +28,7 @@ import com.ssafy.yeogirok.support.WebMvcSecurity;
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
 	"yeogirok.app-links.android.package-name=com.ssafya109.yeogirok",
+	"yeogirok.app-links.android.app-scheme=yeogirokfe",
 	"yeogirok.app-links.android.sha256-cert-fingerprints="
 		+ "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C,"
 		+ "00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF"
@@ -68,15 +69,26 @@ class AppLinkWebTest {
 	}
 
 	@Test
-	void 초대_페이지는_같은_https_주소를_앱으로_여는_intent_버튼을_준다() throws Exception {
+	void 초대_페이지는_앱_스킴으로_여는_intent_버튼을_주고_스토어로_보내지_않는다() throws Exception {
 		String html = mockMvc.perform(get("/invite/" + TOKEN))
 			.andExpect(status().isOk())
 			.andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
 			.andExpect(header().string("Cache-Control", "no-store"))
 			.andReturn().getResponse().getContentAsString();
 
-		assertThat(html).contains("intent://test.yeogirok/invite/" + TOKEN
-			+ "#Intent;scheme=https;package=com.ssafya109.yeogirok;end");
+		assertThat(html).contains("intent://invite/" + TOKEN
+			+ "#Intent;scheme=yeogirokfe;package=com.ssafya109.yeogirok"
+			+ ";S.browser_fallback_url=https%3A%2F%2Ftest.yeogirok%2Finvite%2F" + TOKEN + "%3Fapp%3Dmissing;end");
+		assertThat(html).doesNotContain("play.google.com").doesNotContain("앱을 찾지 못했어요");
+	}
+
+	@Test
+	void 앱을_못_찾고_돌아오면_설치_안내를_보여_준다() throws Exception {
+		String html = mockMvc.perform(get("/invite/" + TOKEN).param("app", "missing"))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getContentAsString();
+
+		assertThat(html).contains("여기록 앱을 찾지 못했어요").contains("intent://");
 	}
 
 	@Test
