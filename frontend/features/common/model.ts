@@ -1,6 +1,7 @@
 import { ContractMismatchError } from "../../lib/contract";
 
-// 가정(TBD): API-078 관심 지역, API-079 여행 컨셉 카테고리의 응답 상세는 명세 미확정이다.
+// API-079 여행 컨셉 카테고리: Notion 명세 확정(2026-11-11, S15P31A109-202). `{ categories[{ code, name }] }`, 배열 순서가 표시 순서다.
+// 가정(TBD): API-078 관심 지역의 응답 상세는 명세 미확정이다.
 // W10 AI 추천 조건 화면의 "시/도 → 시/군/구" 2단 선택에 맞춰 지역을 2단 구조로 가정했다.
 
 export type CategoryDto = { code: string; name: string };
