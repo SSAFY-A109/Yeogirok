@@ -8,10 +8,11 @@ import com.ssafy.yeogirok.domain.category.TravelCategory;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.global.request.ControlCharacters;
 
 /**
  * API-014 검색 조건(명세 {@code specs/course-search-api.md} 2·5절 2~3). 모두 선택이고 생략하면 거르지 않는다. 지원하지 않는
- * 필터 값 CO002, 정렬 CO003.
+ * 필터 값 CO002, 정렬 CO003, q 의 제어 문자(줄바꿈·탭 제외) C003.
  *
  * @param pattern      q 를 소문자 LIKE 패턴으로(없으면 null)
  * @param regionPrefix regionCode LIKE 패턴(없으면 null)
@@ -43,7 +44,8 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 		if (sort != null && !POPULAR.equals(sort)) {
 			throw new BusinessException(ExceptionType.COURSE_SORT_NOT_SUPPORTED, "sort: POPULAR 만 지원합니다.");
 		}
-		String query = q == null ? "" : q.strip();
+		// U+0000 은 PostgreSQL 이 받지 못해 500 이 된다(H2 는 통과). 제목·설명과 같은 검사(PR #94 리뷰).
+		String query = q == null ? "" : ControlCharacters.reject(q, "q").strip();
 		if (query.codePointCount(0, query.length()) > QUERY_MAX_LENGTH) {
 			throw unsupported("q: 최대 %d자입니다.".formatted(QUERY_MAX_LENGTH));
 		}

@@ -40,6 +40,14 @@ class CourseSearchConditionTest {
 	}
 
 	@Test
+	void 검색어의_제어_문자는_C003() {
+		for (String q : new String[] {"a" + (char) 0 + "b", "a" + (char) 0x1F + "b"}) {
+			assertThatThrownBy(() -> of("q", q)).isInstanceOf(BusinessException.class)
+				.extracting("exceptionType").isEqualTo(ExceptionType.NOT_ALLOWED_VALUE);
+		}
+	}
+
+	@Test
 	void 생략하면_거르지_않고_공백뿐인_검색어도_무시한다() {
 		assertThat(CourseSearchCondition.of("  ", null, null, null, null, null))
 			.isEqualTo(new CourseSearchCondition(null, null, null, CourseSearchCondition.Duration.ALL, null));
