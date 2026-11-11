@@ -13,11 +13,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ssafy.yeogirok.domain.course.dto.CourseDetailResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseInput;
 import com.ssafy.yeogirok.domain.course.dto.CoursePreviewResponse;
 import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseRequest;
 import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
+import com.ssafy.yeogirok.domain.course.service.CourseDetailService;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
@@ -44,6 +46,7 @@ public class CourseController {
 	private final CoursePublishService coursePublishService;
 	private final MyCourseQueryService myCourseQueryService;
 	private final CourseUpdateService courseUpdateService;
+	private final CourseDetailService courseDetailService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-072 공개할 코스 미리보기")
@@ -92,5 +95,11 @@ public class CourseController {
 		@RequestBody CourseRequest request) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			courseUpdateService.update(user.userId(), courseId, request.toUpdate())));
+	}
+
+	@Operation(summary = "API-016 공개된 코스 상세 조회")
+	@GetMapping("/courses/{courseId}")
+	public ResponseEntity<ApiResponseBody<CourseDetailResponse>> getDetail(@PathVariable Long courseId) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(courseDetailService.getDetail(courseId)));
 	}
 }

@@ -34,6 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.ssafy.yeogirok.domain.course.dto.CourseDay;
+import com.ssafy.yeogirok.domain.course.dto.CourseDetailResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseInput;
 import com.ssafy.yeogirok.domain.course.dto.CoursePreviewResponse;
 import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
@@ -41,11 +42,13 @@ import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
 import com.ssafy.yeogirok.domain.course.dto.PublicAuthor;
 import com.ssafy.yeogirok.domain.course.dto.PublicPhoto;
 import com.ssafy.yeogirok.domain.course.dto.PublicPlace;
+import com.ssafy.yeogirok.domain.course.service.CourseDetailService;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -67,6 +70,8 @@ class CourseControllerTest {
 	MyCourseQueryService myCourseQueryService;
 	@MockitoBean
 	CourseUpdateService courseUpdateService;
+	@MockitoBean
+	CourseDetailService courseDetailService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -255,6 +260,32 @@ class CourseControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value(code));
 			verifyNoInteractions(courseUpdateService);
+		}
+	}
+
+	@Nested
+	class API_016 {
+
+		@Test
+		void 상세_응답_모양() throws Exception {
+			PublicPlace place = new PublicPlace(PlaceProvider.TOUR_API, "126508", "경포대", new BigDecimal("37.75"),
+				new BigDecimal("128.87"), null, "NATURE", "자연 힐링", "https://tour/img.jpg", "한국관광공사");
+			given(courseDetailService.getDetail(7L)).willReturn(new CourseDetailResponse(7L, "강릉 1박", "바다",
+				List.of(new PublicAuthor(1L, null)), List.of(new CourseDay(1, List.of(new CourseDay.Item(11L, place, 1,
+					List.of(new PublicPhoto(21L, "https://signed/p", null)))))), 2, 1, TransportMode.CAR, 4));
+
+			mockMvc.perform(get("/api/v1/courses/7").with(asUser(USER_ID)))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"id": 7, "title": "강릉 1박", "description": "바다",
+					  "authors": [{"id": 1, "profileImageUrl": null}],
+					  "days": [{"day": 1, "items": [{"visitId": 11, "order": 1,
+					    "place": {"provider": "TOUR_API", "providerPlaceId": "126508", "name": "경포대", "latitude": 37.75,
+					      "longitude": 128.87, "address": null, "categoryCode": "NATURE", "categoryName": "자연 힐링",
+					      "imageUrl": "https://tour/img.jpg", "imageAttribution": "한국관광공사"},
+					    "photos": [{"imageId": 21, "url": "https://signed/p", "attribution": null}]}]}],
+					  "dayCount": 2, "nightCount": 1, "transportMode": "CAR", "version": 4}}
+					""", org.springframework.test.json.JsonCompareMode.STRICT));
 		}
 	}
 }
