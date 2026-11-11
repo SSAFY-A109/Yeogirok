@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 const DELETE_BUTTON_HIT_SLOP = { left: 6, right: 6 };
 const LOADING_ROW_COUNT = 3;
 
-/** 장소 행 보조 줄. `카페 강문동 AI 추천`(카테고리 이름 + 지역 + 담은 경로). */
+/** 장소 행 보조 줄. `카페 강문동 추천`(카테고리 이름 + 지역 + 담은 경로). */
 function getPlaceMeta(place: RoomPlace): string {
   return [place.category?.name, place.areaName, getRoomPlaceSourceLabel(place)].filter(Boolean).join(" ");
 }
