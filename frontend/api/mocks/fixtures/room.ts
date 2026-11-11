@@ -1,4 +1,5 @@
 import type {
+  ChatReadStateDto,
   RoomDetailDto,
   RoomListItemDto,
   RoomPlaceDto,
@@ -69,7 +70,8 @@ export function getActivePlaces(room: MockRoom): RoomPlaceDto[] {
   });
 }
 
-export function toRoomListItem(room: MockRoom): RoomListItemDto {
+/** @param chatReadState 요청한 사람의 채팅 읽음 상태(`getMockChatReadState`). */
+export function toRoomListItem(room: MockRoom, chatReadState: ChatReadStateDto): RoomListItemDto {
   return {
     id: room.id,
     title: room.title,
@@ -84,11 +86,12 @@ export function toRoomListItem(room: MockRoom): RoomListItemDto {
 
     placeCount: getActivePlaces(room).length,
     recordIds: room.recordIds,
-    chatReadState: { lastReadMessageId: null, hasUnreadMessages: false },
+    chatReadState,
   };
 }
 
-export function toRoomDetail(room: MockRoom): RoomDetailDto {
+/** @param chatReadState 요청한 사람의 채팅 읽음 상태(`getMockChatReadState`). */
+export function toRoomDetail(room: MockRoom, chatReadState: ChatReadStateDto): RoomDetailDto {
   return {
     id: room.id,
     title: room.title,
@@ -107,7 +110,7 @@ export function toRoomDetail(room: MockRoom): RoomDetailDto {
 
     recordIds: room.recordIds,
     version: room.version,
-    chatReadState: { lastReadMessageId: null, hasUnreadMessages: false },
+    chatReadState,
     schedule: room.schedule,
   };
 }

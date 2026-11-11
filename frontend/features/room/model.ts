@@ -206,6 +206,8 @@ export type RoomSummary = {
   placeCount: number;
   /** 이 여행방의 여행 기록. 방마다 기록은 하나까지다. 없으면 `null`. */
   recordId: number | null;
+  /** 내가 읽은 위치 뒤에 다른 일행의 채팅 메시지가 있는지. */
+  hasUnreadChat: boolean;
 };
 
 export type RoomDetail = RoomSummary & {
@@ -276,6 +278,7 @@ export function toRoomSummary(dto: RoomListItemDto): RoomSummary {
     members: dto.members.map(toRoomMember),
     placeCount: dto.placeCount,
     recordId: toRecordId(dto.recordIds),
+    hasUnreadChat: dto.chatReadState.hasUnreadMessages,
   };
 }
 
@@ -290,6 +293,7 @@ export function toRoomDetail(dto: RoomDetailDto): RoomDetail {
     members: dto.members.map(toRoomMember),
     placeCount: dto.places.length,
     recordId: toRecordId(dto.recordIds),
+    hasUnreadChat: dto.chatReadState.hasUnreadMessages,
     memberLimit: ROOM_MEMBER_LIMIT,
     version: assertVersion(dto.version),
     hasSchedule: dto.schedule !== null,

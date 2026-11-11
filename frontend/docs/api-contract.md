@@ -331,6 +331,8 @@ Swagger는 요청 필드 이름과 헤더·쿼리만 보여 주고 응답은 `{ 
 | 032 `DELETE /rooms/{roomId}/places/{roomPlaceId}` | 쿼리 `version` | `{ removed, version, scheduleNeedsRecalculation, undoExpiresAt: null }` | 후보 목록에서만 뺀다. 일정 항목은 남는다 |
 | 094 `PATCH /rooms/{roomId}/places/{roomPlaceId}` | `{ version, action: "RESTORE" }` | `{ restored, roomPlaceId, version, scheduleNeedsRecalculation }` | "되돌리기" 토스트가 부른다. 시간 제한 없음 |
 | 087 `DELETE /rooms/{roomId}/members/me` | — | 본문 없음 | 마지막 참여자가 나가면 서버가 방을 지운다. 삭제 여부는 응답에 없어 나가기 전 인원으로 판단한다 |
+| 076 `GET /rooms/{roomId}/messages` | 쿼리 `beforeMessageId?`(이 id보다 과거), `afterMessageId?`+`throughMessageId?`(재연결 복구), `limit?`(기본 20, 최대 50) | `{ items[{ id, sender{ id, nickname }, body, createdAt, clientMessageId }], hasMore, nextAfterMessageId, replayThroughMessageId, chatReadState{ lastReadMessageId, hasUnreadMessages } }` | **backend PR #82(미머지) 기준**(2026-11-10). `items`는 오래된 → 최신. 탈퇴한 회원은 `sender.id`·`clientMessageId`가 `null`이고 이름이 "탈퇴한 사용자"다. `limit` 범위 밖 C007, 조회 방향 혼용·범위 밖 id C003. 조회만으로는 읽은 위치가 바뀌지 않는다. 앱 1단계는 `beforeMessageId`·`limit`만 보낸다 |
+| 088 `PATCH /rooms/{roomId}/messages/read` | `{ lastReadMessageId }` | `{ roomId, lastReadMessageId, hasUnreadMessages }` | **backend PR #82(미머지) 기준**(2026-11-10). 화면에서 실제로 본 위치만 보낸다. 더 작은 값을 보내면 기존 값을 유지하고 200이다. 누락 C001, 정수 아님 C002, 양수가 아니거나 그 방의 메시지가 아니면 C003. 안 읽음(`hasUnreadMessages`)은 읽은 위치보다 큰 타인 메시지가 있는지다(020·022·076과 같은 계산) |
 
 - 여행방 `version`은 `features/room/api/queries.ts`의 `resolveRoomVersion`·`storeRoomVersion`이 캐시에서 읽고 쓴다. version을 싣는 변경 요청은 같은 scope로 차례로 보낸다.
 - 초대 주소(`inviteUrl`)는 서버 설정 `ROOM_INVITE_URL_BASE` + `/{inviteToken}`이다. 앱이 이 주소를 직접 여는 설정(앱 링크·유니버설 링크)은 아직 없다(`TBD`).
