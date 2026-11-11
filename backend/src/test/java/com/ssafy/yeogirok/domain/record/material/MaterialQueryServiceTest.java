@@ -212,7 +212,7 @@ class MaterialQueryServiceTest {
 
 		assertThat(service.list(ME, recordId).items()).extracting(MaterialView::materialId)
 			.containsExactly(first, third);
-		assertThat(service.summaries(recordId, ME)).extracting(MaterialSummary::materialId)
+		assertThat(MaterialQueryService.summaries(service.mine(recordId, ME))).extracting(MaterialSummary::materialId)
 			.containsExactly(first, third);
 		assertThat(service.list(FRIEND, recordId).items()).hasSize(1);
 		executor.reset();
@@ -232,7 +232,7 @@ class MaterialQueryServiceTest {
 		given(ocrClient.recognize(any())).willReturn(new OcrResult("가게", LocalDate.of(2026, 11, 2), null));
 		String materialId = linked(ME);
 
-		assertThat(service.summaries(recordId, ME)).containsExactly(new MaterialSummary(materialId, 2, "RECEIPT",
+		assertThat(MaterialQueryService.summaries(service.mine(recordId, ME))).containsExactly(new MaterialSummary(materialId, 2, "RECEIPT",
 			ReceiptMaterial.Status.READY, ReceiptMaterial.ReviewStatus.REQUIRED, true, List.of("paidTime", "place"),
 			false, null));
 	}

@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
-import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialEntry;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftStore;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
@@ -36,11 +36,15 @@ public class RecordProgressReader {
 
 	/** @param visitCounts 기록 ID → 실제 방문 수(없으면 0) */
 	public Map<Long, RecordProgress> read(Long userId, List<TravelRecord> records, Map<Long, Integer> visitCounts) {
-		List<Long> open = records.stream().filter(record -> record.getStatus() != RecordStatus.COMPLETED)
-			.map(TravelRecord::getId).toList();
+		return read(records, visitCounts, materialQueryService.mineByRecord(openIds(records), userId));
+	}
+
+	/** 본인 자료를 이미 읽었을 때(API-059 는 materials 응답에도 같은 자료를 쓴다). */
+	public Map<Long, RecordProgress> read(List<TravelRecord> records, Map<Long, Integer> visitCounts,
+		Map<Long, List<ReceiptMaterialEntry>> mine) {
+		List<Long> open = openIds(records);
 		Instant now = clock.instant();
 		Map<Long, RecordDraft> drafts = draftStore.findLatest(open);
-		Map<Long, List<ReceiptMaterial>> materials = materialQueryService.mineByRecord(open, userId);
 		Map<Long, Long> photos = open.isEmpty() ? Map.of() : visitImageRepository.countByRecordIds(open).stream()
 			.collect(Collectors.toMap(RecordPhotoCount::recordId, RecordPhotoCount::count));
 		Map<Long, RecordProgress> progress = new HashMap<>();
@@ -48,8 +52,14 @@ public class RecordProgressReader {
 			RecordDraft draft = drafts.get(record.getId());
 			progress.put(record.getId(), RecordProgress.of(record.getStatus(),
 				visitCounts.getOrDefault(record.getId(), 0), draft == null ? null : draft.asOf(now),
-				materials.getOrDefault(record.getId(), List.of()), photos.getOrDefault(record.getId(), 0L)));
+				mine.getOrDefault(record.getId(), List.of()).stream().map(ReceiptMaterialEntry::material).toList(),
+				photos.getOrDefault(record.getId(), 0L)));
 		}
 		return progress;
+	}
+
+	private static List<Long> openIds(List<TravelRecord> records) {
+		return records.stream().filter(record -> record.getStatus() != RecordStatus.COMPLETED)
+			.map(TravelRecord::getId).toList();
 	}
 }

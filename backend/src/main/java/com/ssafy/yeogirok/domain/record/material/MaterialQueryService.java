@@ -9,7 +9,6 @@ import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
-import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialEntry;
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialStore;
 import com.ssafy.yeogirok.domain.record.dto.MaterialListResponse;
@@ -42,23 +41,25 @@ public class MaterialQueryService {
 			.toList());
 	}
 
-	/** API-059 materials. 권한은 부르는 쪽이 확인한다. */
-	public List<MaterialSummary> summaries(Long recordId, Long userId) {
-		return mine(recordId, userId).stream()
+	/** API-059 materials. {@link #mine} 으로 읽은 자료를 쓴다(progress 와 같이 한 번만 읽게). */
+	public static List<MaterialSummary> summaries(List<ReceiptMaterialEntry> mine) {
+		return mine.stream()
 			.map(entry -> MaterialSummary.of(entry.materialId(), entry.material()))
 			.toList();
 	}
 
-	/** 여러 기록의 본인 자료(API-058·059 progress). Redis 를 기록마다 따로 읽지 않는다. */
-	public Map<Long, List<ReceiptMaterial>> mineByRecord(List<Long> recordIds, Long userId) {
-		Map<Long, List<ReceiptMaterial>> byRecord = new HashMap<>();
-		materialStore.indexedAll(recordIds, userId).forEach((recordId, entries) -> byRecord.put(recordId,
-			own(recordId, userId, entries).stream().map(ReceiptMaterialEntry::material).toList()));
+	/** 여러 기록의 본인 자료(API-058 progress). Redis 를 기록마다 따로 읽지 않는다. */
+	public Map<Long, List<ReceiptMaterialEntry>> mineByRecord(List<Long> recordIds, Long userId) {
+		Map<Long, List<ReceiptMaterialEntry>> byRecord = new HashMap<>();
+		materialStore.indexedAll(recordIds, userId)
+			.forEach((recordId, entries) -> byRecord.put(recordId, own(recordId, userId, entries)));
 		return byRecord;
 	}
 
-	/** 연결한 본인 자료를 업로드 접수 순으로(명세 5절 12). 끊긴 작업은 실패로 바꿔 보여 준다. */
-	List<ReceiptMaterialEntry> mine(Long recordId, Long userId) {
+	/**
+	 * 연결한 본인 자료를 업로드 접수 순으로(명세 5절 12). 끊긴 작업은 실패로 바꿔 보여 준다. 권한은 부르는 쪽이 확인한다.
+	 */
+	public List<ReceiptMaterialEntry> mine(Long recordId, Long userId) {
 		return own(recordId, userId, materialStore.indexed(recordId, userId));
 	}
 

@@ -11,6 +11,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialEntry;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordListResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordProgress;
@@ -93,11 +94,12 @@ public class RecordQueryService {
 		List<RecordDetailResponse.Member> members = roomMemberRepository.findCurrentMembers(List.of(room.getId()))
 			.stream().map(member -> new RecordDetailResponse.Member(member.userId(), member.nickname(), member.creator()))
 			.toList();
-		RecordProgress progress = recordProgressReader.read(userId, List.of(record), Map.of(recordId, board.visits().size()))
-			.get(recordId);
+		List<ReceiptMaterialEntry> mine = materialQueryService.mine(recordId, userId);
+		RecordProgress progress = recordProgressReader.read(List.of(record), Map.of(recordId, board.visits().size()),
+			Map.of(recordId, mine)).get(recordId);
 		return new RecordDetailResponse(record.getId(), record.getTitle(), record.getStatus(), record.getRoomId(),
 			members, room.getStartDate(), room.getEndDate(), progress, null, List.of(), board.photoPool(),
-			board.visits(), materialQueryService.summaries(recordId, userId),
+			board.visits(), MaterialQueryService.summaries(mine),
 			record.getPublishedAt() == null ? null : record.getId(), record.getVersion());
 	}
 
