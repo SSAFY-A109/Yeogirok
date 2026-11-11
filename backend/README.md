@@ -16,6 +16,8 @@ cp .env.example .env        # 값 채우기 — docs/05-social-login-setup.md
 ./gradlew test              # DB는 H2(PostgreSQL 모드). Redis 테스트는 Testcontainers 라 Docker가 켜져 있어야 한다
 ```
 
+테이블은 Flyway 가 만든다(`src/main/resources/db/migration`). 엔티티를 바꾸면 새 번호 파일을 함께 추가한다. `update` 로 만든 예전 로컬 DB 가 남아 있으면 서버가 뜨지 않으니 한 번 비운다. 규칙과 방법은 [docs/08-flyway.md](docs/08-flyway.md).
+
 ## 구조
 
 ```
@@ -50,6 +52,7 @@ src/main/java/com/ssafy/yeogirok/
 | [docs/05-social-login-setup.md](docs/05-social-login-setup.md) | 구글·카카오 콘솔 설정과 서버 환경 변수 |
 | [docs/06-schedule.md](docs/06-schedule.md) | 계획 일정 흐름과 결정 사항(출발·도착지, 체류 시간, 식사 배치, 이동 시간) |
 | [docs/07-chat.md](docs/07-chat.md) | 여행방 채팅 흐름과 결정 사항(WebSocket·티켓, 저장 순서와 잠금, Redis 전달, 읽음, 강제 종료, 정리) |
+| [docs/08-flyway.md](docs/08-flyway.md) | DB 스키마 관리(Flyway) — 파일 규칙, 스키마를 바꾸는 순서, V1 에 넣은 것과 넣지 않은 것 |
 
 ## 계약 원천
 
