@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Pencil } from "lucide-react-native";
+import { MessageCircle, Pencil } from "lucide-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -168,7 +168,14 @@ function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: 
       <ScreenHeader
         title={room.name}
         titleAlign="start"
-        trailing={<HeaderIconButton icon={Pencil} accessibilityLabel="여행방 정보 수정" onPress={goToEdit} testID="room-detail.edit" />}
+        trailing={(
+          <>
+            <HeaderIconButton icon={MessageCircle} accessibilityLabel="여행방 채팅" onPress={() => {
+              router.push({ pathname: "/rooms/[roomId]/chat", params });
+            }} testID="room-detail.chat" />
+            <HeaderIconButton icon={Pencil} accessibilityLabel="여행방 정보 수정" onPress={goToEdit} testID="room-detail.edit" />
+          </>
+        )}
         testID="room-detail.header"
       />
       <View className="flex-1">

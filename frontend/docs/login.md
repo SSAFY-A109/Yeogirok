@@ -36,13 +36,15 @@ TanStack Query가 로그인 mutation과 저장소 세션 조회를 담당한다.
 원천: [API-005](https://app.notion.com/p/402debe071c381e58b0add45607da132), [API-006](https://app.notion.com/p/402debe071c381f7ac0defad7a91b6fd). 연결 도구는 404를 반환했으며, 사용자가 2026-11-03 제공한 해당 페이지 본문을 기준으로 구현했다. 원천은 설계 초안·서버 미구현 상태다.
 
 - 현재 계약은 **네이티브 SDK의 OIDC ID 토큰 교환**이다. 저장소의 이전 시스템 브라우저 인증/API-001·002 안내와 다르며, 이번 작업에서는 사용자가 제공한 현재 계약을 따른다. SDK 도입 시 기존 인증 지침도 함께 갱신해야 한다.
-- `features/auth/api/auth.api.ts`의 `exchangeSocialToken`은 API-005를, `refreshServiceTokens`는 API-006을 호출한다. 공통 클라이언트가 봉투를 해제하고 인증 헤더를 제외한다. `nonce`는 필수이며(없으면 C001, 다르면 A006) 서버가 반환하는 만료 시간과 `isNewUser`를 검증한다. `revokeRefreshToken`은 API-007 로그아웃, `features/user/api/user.api.ts`의 `getMe`·`deleteMe`는 API-008·009다. 탈퇴는 `features/user/withdraw.ts`가 같은 제공자 재로그인(API-005) → 탈퇴(구글은 `googleAuthCode`) → 기기 토큰 삭제 순서로 처리한다. 로그아웃은 요청이 실패해도 기기 토큰·Query 캐시를 지운다.
+- `features/auth/api/auth.api.ts`의 `exchangeSocialToken`은 API-005를, `refreshServiceTokens`는 API-006을 호출한다. 공통 클라이언트가 봉투를 해제하고 인증 헤더를 제외한다. `nonce`는 필수이며(없으면 C001, 다르면 A006) 서버가 반환하는 만료 시간과 `isNewUser`를 검증한다. `revokeRefreshToken`은 API-007 로그아웃, `features/user/api/user.api.ts`의 `getMe`·`deleteMe`는 API-008·009다. 탈퇴는 `features/user/withdraw.ts`에서 재인증한 계정과 현재 계정의 ID를 비교한 뒤 재인증 토큰으로 요청한다. 구글은 `googleAuthCode`도 보낸다. 로그아웃·탈퇴에 성공하면 기기 토큰과 Query 캐시를 지운다. 실패하면 현재 화면과 세션을 유지하고 알림을 표시한다.
 - API 함수는 결과만 반환한다. `performSocialLogin`이 서비스 토큰을 저장하고 Query mutation 성공 후 세션을 다시 읽는다. 기존 공통 클라이언트의 자동 갱신은 회전한 토큰 쌍 저장, 실패 시 삭제·인증 해제와 Query 캐시 정리를 담당한다.
 - 토큰 수명·로그인 유지 기간·온보딩 분기는 TBD다. 검토 수치를 서비스 정책으로 사용하지 않는다.
 
 ## 개발 목과 검사
 
-`api/mocks/fixtures/auth.ts`의 제공자별 가짜 ID 토큰으로 발급 요청을 할 수 있다. `nonce`는 필수이고 fixture 값과 대조한다. 누락은 C001, 잘못된 ID 토큰은 A005, nonce 불일치는 A006이다. 로그아웃은 `data: null`, 탈퇴는 로그인 직후 5분 안의 토큰만 받고(아니면 A011, 실제 HTTP 상태는 TBD라 목은 403), 구글 코드 누락은 C001·불일치는 A029다.
+`api/mocks/fixtures/auth.ts`의 제공자별 가짜 ID 토큰으로 발급 요청을 할 수 있다. `nonce`는 필수이고 fixture 값과 대조한다. 누락은 C001, 잘못된 ID 토큰은 A005, nonce 불일치는 A006이다. 탈퇴는 로그인 직후 5분 안의 토큰만 받고(아니면 A011, 실제 HTTP 상태는 TBD라 목은 403), 구글 코드 누락은 C001·불일치는 A029다.
+
+로그아웃은 2026-11-11에 사용자가 제공한 API-007 계약을 따른다. Android에서 확보한 채팅 푸시 토큰이 있으면 함께 보내고, `{ success: true }` 응답을 받은 뒤 로컬 서비스 토큰과 Query 캐시를 지운다. 개발 목은 인증·푸시 토큰 검증과 기기별 리프레시 토큰 폐기를 재현한다.
 
 목은 로그인마다 독립된 세션을 만들고, 갱신 시 이전 리프레시 토큰을 즉시 무효화한다(A010). 만료·폐기 시나리오는 `failedRefreshTokensFixture`의 전용 값으로 A008·A009를 재현하고, 나머지 무효 토큰은 A007이다. **60초·120초는 응답 검사용 가상 수명**이며, 실제 시간 경과나 제공자 JWT 서명을 검증하는 목이 아니다. 오류 시나리오를 추가할 때는 MSW `server.use`로 응답을 덮어쓴다.
 

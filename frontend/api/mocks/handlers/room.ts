@@ -23,6 +23,8 @@ import { findCatalogPlace, MOCK_PLACE_PROVIDER } from "../fixtures/place";
 import {
   createRoomPlaceFixture,
   getActivePlaces,
+  getMockChatMessages,
+  getMockChatReadState,
   MOCK_ME,
   ROOM_MEMBER_LIMIT,
   toRoomDetail,
@@ -125,6 +127,101 @@ function toAddedPlace({ id, place, sourceType, sourceRecordId, addedBy }: RoomPl
 }
 
 export const roomHandlers = [
+  http.get("*/api/v1/rooms/:roomId/messages", ({ params, request }) => {
+    const unauthorized = requireMockBearer(request);
+
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const room = findMemberRoom(params.roomId);
+
+    if (room instanceof Response) {
+      return room;
+    }
+
+    const query = new URL(request.url).searchParams;
+
+    const raw = ["beforeMessageId", "afterMessageId", "throughMessageId", "limit"].map((name) => {
+      return query.get(name);
+    });
+
+    if (raw.some((value) => {
+      return value !== null && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)));
+    })) {
+      return fail(400, "C002", "정수 형식이 올바르지 않습니다.");
+    }
+
+    const [before, after, through, requestedLimit] = raw.map((value) => {
+      return value === null ? undefined : Number(value);
+    });
+
+    const limit = requestedLimit ?? DEFAULT_PAGE_SIZE;
+
+    if (limit < 1 || limit > MAX_PAGE_SIZE) {
+      return fail(400, "C007", "페이지 크기가 범위를 벗어났습니다.");
+    }
+
+    const messages = getMockChatMessages(room);
+    const upper = through ?? messages.at(-1)?.id ?? 0;
+
+    if (before === 0 || (after !== undefined && (before !== undefined || upper < after)) ||
+      (after === undefined && through !== undefined)) {
+      return fail(400, "C003", "채팅 조회 범위가 올바르지 않습니다.");
+    }
+
+    const matching = after === undefined
+      ? messages.filter(({ id }) => {
+        return before === undefined || id < before;
+      })
+      : messages.filter(({ id }) => {
+        return id > after && id <= upper;
+      });
+
+    const items = after === undefined ? matching.slice(-limit) : matching.slice(0, limit);
+    const hasMore = matching.length > items.length;
+    return ok({
+      items,
+      hasMore,
+      nextAfterMessageId: after !== undefined && hasMore ? items.at(-1)?.id ?? null : null,
+      replayThroughMessageId: after === undefined ? null : upper,
+      chatReadState: getMockChatReadState(room),
+    });
+  }),
+
+  http.patch("*/api/v1/rooms/:roomId/messages/read", async ({ params, request }) => {
+    const unauthorized = requireMockBearer(request);
+
+    if (unauthorized) {
+      return unauthorized;
+    }
+
+    const room = findMemberRoom(params.roomId);
+
+    if (room instanceof Response) {
+      return room;
+    }
+
+    const { lastReadMessageId } = await readBody(request);
+
+    if (lastReadMessageId === undefined) {
+      return fail(400, "C001", "읽은 메시지 ID가 필요합니다.");
+    }
+
+    if (typeof lastReadMessageId !== "number" || !Number.isSafeInteger(lastReadMessageId)) {
+      return fail(400, "C002", "읽은 메시지 ID는 정수여야 합니다.");
+    }
+
+    if (!getMockChatMessages(room).some(({ id }) => {
+      return id === lastReadMessageId;
+    })) {
+      return fail(400, "C003", "이 방에서 확인할 수 없는 메시지입니다.");
+    }
+
+    room.chatLastReadMessageId = Math.max(room.chatLastReadMessageId ?? 0, lastReadMessageId);
+    return ok({ roomId: room.id, ...getMockChatReadState(room) });
+  }),
+
   http.get("*/api/v1/rooms", async ({ request }) => {
     await delay(MOCK_DELAY_MS);
     const url = new URL(request.url);

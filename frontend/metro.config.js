@@ -19,4 +19,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 module.exports = withNativeWind(config, {
   input: "./global.css",
   inlineRem: 16,
+  // CSS 생성물을 디스크에 저장해 Metro의 가상 모듈 패치를 건너뛴다.
+  forceWriteFileSystem: true,
 });

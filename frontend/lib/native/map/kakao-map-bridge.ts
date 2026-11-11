@@ -137,7 +137,8 @@ export type MapPerformanceReport =
       heapMb: number | null;
     };
 
-export const KAKAO_JS_SDK_DOMAIN = "http://localhost";
+// Kakao loads its map scripts over the page's protocol. Android release blocks HTTP.
+export const KAKAO_JS_SDK_DOMAIN = "https://localhost";
 
 const TILES_TIMEOUT_MS = 15000;
 const CLUSTER_MIN_LEVEL = 5;

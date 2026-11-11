@@ -1,7 +1,7 @@
 import "../global.css";
 
 import { useEffect } from "react";
-import { Stack } from "expo-router";
+import { router, Stack, useRootNavigationState } from "expo-router";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { PortalHost } from "@rn-primitives/portal";
 import { View } from "react-native";
@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { ToastProvider } from "@/components/ui/toast";
 import { setUnauthorizedHandler } from "@/api/client";
 import { authKeys, useSession } from "@/features/auth/api/queries";
+import { chatHistoryOptions } from "@/features/room/api/chat.api";
+import { listenForChatNotificationOpens, prepareChatNotifications } from "@/lib/native/chat-notifications";
 import { queryClient } from "@/lib/query-client";
 
 export default function RootLayout() {
@@ -35,6 +37,43 @@ export default function RootLayout() {
 function RootNavigator() {
   const session = useSession();
   const client = useQueryClient();
+  const navigationKey = useRootNavigationState()?.key;
+
+  useEffect(() => {
+    if (session.data === true) {
+      void prepareChatNotifications().catch(() => {
+        if (__DEV__) {
+          console.warn("채팅 알림을 초기화하지 못했어요.");
+        }
+      });
+    }
+  }, [session.data]);
+
+  useEffect(() => {
+    if (session.data !== true || !navigationKey) {
+      return;
+    }
+
+    let active = true;
+    let openRequest = 0;
+
+    const stopListening = listenForChatNotificationOpens((roomId) => {
+      const request = ++openRequest;
+
+      void client.fetchQuery(chatHistoryOptions(roomId)).then(() => {
+        if (active && request === openRequest && client.getQueryData(authKeys.session) === true) {
+          router.navigate({ pathname: "/rooms/[roomId]/chat", params: { roomId: String(roomId) } });
+        }
+      }).catch(() => {
+        // 이력으로 현재 참여 권한을 확인한 뒤에만 채팅을 연다.
+      });
+    });
+
+    return () => {
+      active = false;
+      stopListening?.();
+    };
+  }, [client, navigationKey, session.data]);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -73,6 +112,7 @@ function RootNavigator() {
             <Stack.Screen name="rooms/index" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/new" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/index" options={{ headerShown: false }} />
+            <Stack.Screen name="rooms/[roomId]/chat" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/edit" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/invite" options={{ headerShown: false }} />
             <Stack.Screen name="rooms/[roomId]/search" options={{ headerShown: false }} />

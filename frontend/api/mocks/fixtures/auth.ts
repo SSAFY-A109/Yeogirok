@@ -26,6 +26,8 @@ export const failedRefreshTokensFixture = {
   revoked: "mock-revoked-refresh-token",
 } as const;
 
+export const expiredAccessTokenFixture = "mock-expired-access-token";
+
 export const meFixture = {
   nickname: "여행자",
   profileImageUrl: null,

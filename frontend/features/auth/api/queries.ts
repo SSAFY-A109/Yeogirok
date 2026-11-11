@@ -58,7 +58,7 @@ export function useSocialLogin() {
   });
 }
 
-/** 로그아웃 버튼용. 서버 요청이 실패해도 기기 토큰과 사용자별 캐시를 지우고 비로그인 상태로 바꾼다. */
+/** 로그아웃에 성공하면 사용자별 캐시를 지우고 비로그인 상태로 바꾼다. */
 export function useSignOut() {
   const queryClient = useQueryClient();
 
@@ -66,7 +66,7 @@ export function useSignOut() {
     mutationFn: signOutThisDevice,
     retry: false,
 
-    onSettled: () => {
+    onSuccess: () => {
       queryClient.clear();
       queryClient.setQueryData(authKeys.session, false);
     },

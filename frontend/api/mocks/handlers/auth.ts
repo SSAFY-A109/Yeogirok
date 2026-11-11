@@ -1,11 +1,12 @@
 import { http, HttpResponse } from "msw";
 
 import { mockDb } from "../db";
-import { failedRefreshTokensFixture, googleServerAuthCodeFixture, meFixture, serviceTokensFixture, socialCredentialsFixture } from "../fixtures/auth";
+import { expiredAccessTokenFixture, failedRefreshTokensFixture, googleServerAuthCodeFixture, meFixture, serviceTokensFixture, socialCredentialsFixture } from "../fixtures/auth";
 
 /** 탈퇴(API-009)는 로그인 후 이 시간 안에 발급된 액세스 토큰만 받는다. */
 const REAUTH_WINDOW_MS = 5 * 60 * 1000;
 const MOCK_USER_ID = 1;
+const MAX_PUSH_TOKEN_LENGTH = 4096;
 
 type Provider = "google" | "kakao";
 type IssuedAccessToken = { provider: Provider; issuedAt: number; fromLogin: boolean };
@@ -104,6 +105,22 @@ export const authHandlers = [
     return HttpResponse.json({ success: true, data: issueMockTokens(provider, false) });
   }),
   http.post("*/api/v1/auth/logout", async ({ request }) => {
+    const accessToken = readBearer(request);
+
+    if (!request.headers.has("Authorization")) {
+      return failure("A001", 401);
+    }
+
+    if (accessToken === expiredAccessTokenFixture) {
+      return failure("A002", 401);
+    }
+
+    const issued = accessToken ? issuedAccessTokens.get(accessToken) : undefined;
+
+    if (!issued) {
+      return failure("A003", 401);
+    }
+
     const body = await readJson(request);
 
     if (
@@ -113,8 +130,21 @@ export const authHandlers = [
       return failure("C001", 400);
     }
 
-    activeRefreshTokens.delete(body.refreshToken);
-    return HttpResponse.json({ success: true, data: null });
+    if ("pushToken" in body && body.pushToken !== null) {
+      if (typeof body.pushToken !== "string") {
+        return failure("C002", 400);
+      }
+
+      if (!body.pushToken.trim() || body.pushToken.length > MAX_PUSH_TOKEN_LENGTH) {
+        return failure("C003", 400);
+      }
+    }
+
+    if (activeRefreshTokens.get(body.refreshToken) === issued.provider) {
+      activeRefreshTokens.delete(body.refreshToken);
+    }
+
+    return HttpResponse.json({ success: true });
   }),
   http.get("*/api/v1/users/me", ({ request }) => {
     const accessToken = readBearer(request);

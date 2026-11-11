@@ -88,10 +88,29 @@ export const api = create({
 type AuthRequestConfig = InternalAxiosRequestConfig & { authRetried?: boolean };
 type UnauthorizedHandler = () => void | Promise<void>;
 
+declare module "axios" {
+  interface AxiosRequestConfig {
+    accountAccessToken?: string;
+  }
+}
+
 let onUnauthorized: UnauthorizedHandler | undefined;
 // 동시 요청은 진행 중인 갱신·세션 정리 Promise를 공유한다.
 let refreshPromise: Promise<string> | undefined;
 let unauthorizedPromise: Promise<void> | undefined;
+let logoutPromise: Promise<void> | undefined;
+
+/** 진행 중인 갱신을 마친 뒤, 같은 기기의 로그아웃 중에는 토큰 회전을 막는다. */
+export function runSessionLogout(logout: () => Promise<void>): Promise<void> {
+  logoutPromise ??= (async () => {
+    await refreshPromise;
+    await logout();
+  })().finally(() => {
+    logoutPromise = undefined;
+  });
+
+  return logoutPromise;
+}
 
 /**
  * 인증을 복구할 수 없을 때 실행할 앱의 세션 종료 처리를 등록한다.
@@ -117,6 +136,16 @@ function isPublicAuthRequest(config: InternalAxiosRequestConfig): boolean {
     (config.method === "post" && (path === "/auth/token" || path === "/auth/token/refresh")) ||
     (config.method === "get" && /^\/auth\/[^/]+\/(login|callback)$/.test(path ?? ""))
   );
+}
+
+function isLogoutRequest(config: InternalAxiosRequestConfig): boolean {
+  return config.method === "post" && config.url?.split("?")[0].replace(/\/$/, "") === "/auth/logout";
+}
+
+/** 로그아웃과 탈퇴의 인증 오류는 각 화면에서 재시도할 수 있게 전달한다. */
+function isAccountExitRequest(config: InternalAxiosRequestConfig): boolean {
+  const path = config.url?.split("?")[0].replace(/\/$/, "");
+  return isLogoutRequest(config) || (config.method === "delete" && path === "/users/me");
 }
 
 /** 동시에 발생한 인증 실패에 대해 토큰 삭제와 앱의 세션 종료 처리를 한 번 수행한다. */
@@ -187,10 +216,10 @@ api.interceptors.request.use(async (config) => {
     return config;
   }
 
-  const tokens = await getTokens();
+  const accessToken = config.accountAccessToken ?? (await getTokens())?.accessToken;
 
-  if (tokens) {
-    config.headers.set("Authorization", `Bearer ${tokens.accessToken}`);
+  if (accessToken) {
+    config.headers.set("Authorization", `Bearer ${accessToken}`);
   } else {
     config.headers.delete("Authorization");
   }
@@ -201,7 +230,7 @@ api.interceptors.request.use(async (config) => {
 // 응답 후: 성공 봉투를 해제하고, 실패는 인증 복구 또는 공통 오류 처리로 보낸다.
 api.interceptors.response.use(
   (response) => {
-    response.data = unwrapEnvelope(response.data, response.status);
+    response.data = unwrapEnvelope(response.data, response.status, isLogoutRequest(response.config));
     return response;
   },
   async (error: unknown) => {
@@ -213,7 +242,7 @@ api.interceptors.response.use(
     const apiError = toApiError(error);
     const config: AuthRequestConfig | undefined = isAxiosError(error) ? error.config : undefined;
 
-    if (apiError.status !== 401 || !config || isPublicAuthRequest(config)) {
+    if (apiError.status !== 401 || !config || logoutPromise || config.accountAccessToken || isPublicAuthRequest(config) || isAccountExitRequest(config)) {
       throw apiError;
     }
 
@@ -229,6 +258,11 @@ api.interceptors.response.use(
 
     try {
       const tokens = await getTokens();
+
+      if (logoutPromise) {
+        throw apiError;
+      }
+
       const currentAuthorization = tokens ? `Bearer ${tokens.accessToken}` : undefined;
 
       // 다른 요청이 이미 갱신했다면, 늦게 도착한 이전 토큰의 401은 새 토큰으로 재요청한다.
