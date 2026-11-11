@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.chat.push;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -29,8 +30,8 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>받는 사람: 방이 살아 있고 현재 참여 중이며 계정이 활성인 회원 중 보낸 사람을 뺀, 등록 기기가 있는 회원
  *       ({@link ChatPushRecipientRepository}).</li>
  *   <li>그 방에 READY 로 연결된 회원은 모든 기기에서 뺀다({@link ChatPresence}).</li>
- *   <li>남은 회원마다 발송 직전에 3초 제한을 확인하고({@link ChatPushThrottle}) 등록된 기기 모두에 보낸다. FCM 이 그 회원의
- *       토큰을 모두 거절했거나 기기가 없어졌으면 제한을 바로 푼다. FCM 장애면 풀지 않는다.</li>
+ *   <li>남은 회원마다 3초 제한을 확인하고({@link ChatPushThrottle}), 통과한 회원 모두의 등록 기기에 한 번에 보낸다. FCM 이
+ *       그 회원의 토큰을 모두 거절했거나 기기가 없어졌으면 그 회원의 제한을 바로 푼다. FCM 장애면 풀지 않는다.</li>
  * </ol>
  *
  * <p>실행기는 빈으로 등록하지 않는다. {@code Executor} 빈이 생기면 스프링 부트 기본 실행기(@Async)가 물러난다.
@@ -111,30 +112,30 @@ public class ChatPushService {
 			Set<Long> online = presence.onlineUsers(job.roomId());
 			PushMessage message = ChatPushMessages.of(job.roomId(), job.messageId(), recipients.getFirst().roomTitle(),
 				job.senderNickname(), job.body(), properties.previewLength());
+			List<Long> sendTo = new ArrayList<>();
 			for (ChatPushRecipient recipient : recipients) {
-				if (Thread.currentThread().isInterrupted()) {
-					// 종료 중이다. 남은 수신자는 보내지 않는다.
-					log.info("종료 중이라 채팅 푸시를 멈춥니다. roomId={}, messageId={}", job.roomId(), job.messageId());
-					return;
-				}
-				if (!online.contains(recipient.userId())) {
-					sendTo(job, recipient.userId(), message);
+				if (!online.contains(recipient.userId()) && throttle.tryAcquire(recipient.userId(), job.roomId())) {
+					sendTo.add(recipient.userId());
 				}
 			}
+			if (sendTo.isEmpty()) {
+				return;
+			}
+			if (Thread.currentThread().isInterrupted()) {
+				// 종료 중이다. 보내지 않는다(잡아 둔 제한은 3초 뒤 풀린다).
+				log.info("종료 중이라 채팅 푸시를 멈춥니다. roomId={}, messageId={}", job.roomId(), job.messageId());
+				return;
+			}
+			// 남은 수신자 모두를 한 번에 보낸다(토큰 조회 한 번, FCM 호출은 토큰 500개마다 한 번).
+			notifier.sendToUsers(sendTo, message).forEach((userId, outcome) -> {
+				if (outcome == PushOutcome.REJECTED || outcome == PushOutcome.NO_DEVICE) {
+					// 한 기기에도 가지 않았고 토큰 문제다. 제한을 풀어 다음 메시지에서 남은·새 토큰으로 다시 보낸다.
+					// FCM 장애(UNAVAILABLE)는 풀지 않는다. 풀면 장애 중 메시지마다 재시도가 쌓여 발송 줄이 막힌다.
+					throttle.release(userId, job.roomId());
+				}
+			});
 		} catch (RuntimeException e) {
 			log.error("채팅 푸시를 보내지 못했습니다. roomId={}, messageId={}", job.roomId(), job.messageId(), e);
-		}
-	}
-
-	private void sendTo(ChatPushJob job, Long userId, PushMessage message) {
-		if (!throttle.tryAcquire(userId, job.roomId())) {
-			return;
-		}
-		PushOutcome outcome = notifier.sendToUser(userId, message);
-		if (outcome == PushOutcome.REJECTED || outcome == PushOutcome.NO_DEVICE) {
-			// 한 기기에도 가지 않았고 토큰 문제다. 제한을 풀어 다음 메시지에서 남은·새 토큰으로 다시 보낸다.
-			// FCM 장애(UNAVAILABLE)는 풀지 않는다. 풀면 장애 중 메시지마다 재시도가 쌓여 발송 줄이 막힌다.
-			throttle.release(userId, job.roomId());
 		}
 	}
 

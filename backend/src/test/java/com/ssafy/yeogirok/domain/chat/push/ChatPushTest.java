@@ -351,19 +351,24 @@ class ChatPushTest {
 	}
 
 	@Test
-	void 종료로_인터럽트되면_남은_수신자에게는_보내지_않는다() {
-		String friendDevice = registerDevice(friend);
+	void 여러_수신자의_기기를_FCM_한_번에_보내고_결과는_수신자마다_따로_본다() {
+		String friendPhone = registerDevice(friend);
+		String friendTablet = registerDevice(friend);
 		Long third = newUser();
 		join(third);
-		registerDevice(third);
-		pushSender.onSend(tokens -> Thread.currentThread().interrupt());
-		try {
-			deliverFromOwner("안녕");
-		} finally {
-			Thread.interrupted();
-		}
+		String thirdDevice = registerDevice(third);
+		pushSender.resultFor(thirdDevice, PushResult.FAILED);
 
-		assertThat(sentTokens()).containsExactly(friendDevice);
+		deliverFromOwner("하나");
+
+		List<FakePushSender.Sent> sent = pushSender.drain();
+		assertThat(sent).hasSize(1);
+		assertThat(sent.getFirst().tokens()).containsExactlyInAnyOrder(friendPhone, friendTablet, thirdDevice);
+
+		// friend 는 받았으니 제한이 남고, 토큰을 모두 거절당한 third 는 제한이 풀려 다음 메시지를 받는다.
+		pushSender.resultFor(thirdDevice, PushResult.SENT);
+		deliverFromOwner("둘");
+		assertThat(sentTokens()).containsExactly(thirdDevice);
 	}
 
 	@Test

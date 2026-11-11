@@ -1,5 +1,6 @@
 package com.ssafy.yeogirok.domain.push.repository;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -30,7 +31,7 @@ public interface UserPushTokenRepository extends JpaRepository<UserPushToken, St
 	@Query("delete from UserPushToken t where t.userId = :userId")
 	int deleteAllByUserId(@Param("userId") Long userId);
 
-	/** 그 회원의 등록 기기 토큰. 먼저 등록한 순서. */
-	@Query("select t.token from UserPushToken t where t.userId = :userId order by t.createdAt, t.token")
-	List<String> findTokensByUserId(@Param("userId") Long userId);
-}
+	/** 여러 회원의 등록 기기 토큰을 한 번에. 회원·먼저 등록한 순서. */
+	@Query("select new com.ssafy.yeogirok.domain.push.repository.UserDeviceToken(t.userId, t.token)"
+		+ " from UserPushToken t where t.userId in :userIds order by t.userId, t.createdAt, t.token")
+	List<UserDeviceToken> findTokensByUserIds(@Param("userIds") Collection<Long> userIds);}
