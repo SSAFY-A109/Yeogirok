@@ -128,6 +128,16 @@ class CoursePublishServiceTest {
 	}
 
 	@Test
+	void 미리보기_뒤_방문을_추가하면_CO010() {
+		CourseInput input = confirmed("", true);
+		fixture.visit(recordId, fixture.place("안목해변"), DAY1, 2);
+		em.flush();
+		em.clear();
+
+		assertError(() -> publish(input), ExceptionType.COURSE_SELECTION_CHANGED);
+	}
+
+	@Test
 	void 미리보기와_다른_제목이나_version이면_CO010() {
 		CourseInput input = confirmed("", true);
 
