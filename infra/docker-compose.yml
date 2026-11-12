@@ -114,6 +114,11 @@ services:
       # 초대 링크 앞부분(뒤에 /{초대 토큰}이 붙는다). 비밀 값이 아니라 여기에 바로 적는다.
       # TBD: 앱 딥링크 주소가 정해지면 바꾼다. 지금 앱은 이 링크를 복사·공유만 하고, 눌렀을 때 열리는 화면은 없다.
       ROOM_INVITE_URL_BASE: https://k15a109.p.ssafy.io/invite
+      # 초대 링크를 앱으로 여는 Android App Links(백엔드 /.well-known/assetlinks.json). 앱 서명 인증서 SHA-256 지문을 쉼표로 잇는다.
+      # 비밀 값이 아니라 여기에 바로 적는다. 여기 없는 키로 서명한 앱에서는 초대 링크가 앱이 아니라 브라우저로 열린다.
+      # 첫째는 Expo 템플릿 debug.keystore(개발 빌드), 둘째는 배포 키(yeogirok-release.p12, alias yeogirok) 지문이다.
+      # 값을 통째로 바꾸므로 백엔드 기본값(debug 지문)도 여기에 같이 적어야 한다. 빈 값으로 넘기면 모든 앱에서 링크가 안 열린다.
+      ANDROID_APP_SHA256_FINGERPRINTS: "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C,80:91:94:BA:C4:9D:FD:C0:3D:B6:D1:66:3D:03:EB:49:62:26:B2:94:E9:F1:EC:65:C7:C6:F6:BA:FF:F3:D7:F1"
       # 방문 분포(API-046)와 현재 위치 증거(DEC-01). 비밀 값이 아니라 여기에 바로 적는다. 하나라도 빠지면 백엔드가 바로 멈춘다.
       # TBD: 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다. 팀이 정하면 바꾼다.
       # 셀 크기를 바꾸면 VISIT_STATS_AGGREGATION_VERSION 도, 위치 기준을 바꾸면 LOCATION_POLICY_VERSION 도 함께 바꾼다.
