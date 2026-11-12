@@ -24,6 +24,19 @@ data class PinProjection(
 // A camera-facing pin 48 cm tall (3x the initial size); its bottom remains at the surface anchor.
 private const val PIN_HEIGHT_METERS = 0.48f
 private const val PIN_WIDTH_METERS = PIN_HEIGHT_METERS * 34f / 40f
+private const val TIP_GROUND_RADIUS_METERS = 0.12f
+
+internal fun tipGroundVertices(): FloatArray {
+    val radius = TIP_GROUND_RADIUS_METERS
+    return floatArrayOf(
+        -radius, 0f, -radius, 0f, 0f, 1f,
+        -radius, 0f, radius, 0f, 1f, 1f,
+        radius, 0f, radius, 1f, 1f, 1f,
+        -radius, 0f, -radius, 0f, 0f, 1f,
+        radius, 0f, radius, 1f, 1f, 1f,
+        radius, 0f, -radius, 1f, 0f, 1f,
+    )
+}
 
 internal const val TIP_TAG_SCALE = 2.5f
 internal const val TIP_TAG_HEIGHT_METERS = 0.06f * TIP_TAG_SCALE

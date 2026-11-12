@@ -16,7 +16,7 @@ const SCROLL_EVENT_THROTTLE_MS = 16;
 
 /**
  * 키보드가 올라오는 움직임을 매 프레임 따라가는 화면 아래 여백과 스크롤.
- * 아래 입력(방명록)을 쓰는 동안에는 키보드가 올라오는 만큼 스크롤도 함께 올려, 입력이 키보드 위에 붙어 따라 올라오게 한다.
+ * 아래 입력을 쓰는 동안에는 키보드가 올라오는 만큼 스크롤도 함께 올려, 입력이 키보드 위에 보이게 한다.
  * Expo Go에서도 돌아가도록 Reanimated `useAnimatedKeyboard`를 쓴다. 개발 빌드로 옮기면 Expo·Reanimated 문서가
  * 권하는 `react-native-keyboard-controller`로 바꾼다(TBD, 설치 승인 필요).
  */
@@ -25,6 +25,7 @@ export function useKeyboardFollowingScroll() {
   const scrollRef = useAnimatedRef<ScrollViewInstance>();
   const scrollOffset = useSharedValue(0);
   const contentHeight = useSharedValue(0);
+  const inputBottom = useSharedValue<number | null>(null);
   const closedViewportHeight = useSharedValue(0);
   const isFollowing = useSharedValue(false);
   const openingFrom = useSharedValue(0);
@@ -33,6 +34,12 @@ export function useKeyboardFollowingScroll() {
   const keyboardSpacerStyle = useAnimatedStyle(() => {
     return { height: keyboard.height.get() };
   });
+
+  const targetOffset = (keyboardHeight: number) => {
+    "worklet";
+    const viewportHeight = closedViewportHeight.get() - keyboardHeight;
+    return Math.max(0, (inputBottom.get() ?? contentHeight.get()) - viewportHeight);
+  };
 
   useAnimatedReaction(
     () => {
@@ -48,7 +55,7 @@ export function useKeyboardFollowingScroll() {
       }
 
       const from = openingFrom.get();
-      const endOffset = Math.max(0, contentHeight.get() - (closedViewportHeight.get() - height));
+      const endOffset = targetOffset(height);
 
       if (endOffset <= from) {
         return;
@@ -74,7 +81,7 @@ export function useKeyboardFollowingScroll() {
         expectedKeyboardHeight.set(height);
       }
 
-      const endOffset = Math.max(0, contentHeight.get() - (closedViewportHeight.get() - height));
+      const endOffset = targetOffset(height);
 
       if (isFollowing.get() && scrollOffset.get() < endOffset - 1) {
         scrollTo(scrollRef, 0, endOffset, true);
@@ -82,17 +89,25 @@ export function useKeyboardFollowingScroll() {
     },
   );
 
-  /** 아래 입력에 포커스가 가면 부른다. 키보드가 이미 떠 있으면 바로 끝까지 부드럽게 내린다. */
+  /** 키보드가 이미 떠 있으면 입력이 보이는 위치까지 스크롤한다. */
   const followInput = () => {
     isFollowing.set(true);
 
     if (keyboard.state.get() === KeyboardState.OPEN) {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      const offset = targetOffset(keyboard.height.get());
+
+      if (scrollOffset.get() < offset) {
+        scrollRef.current?.scrollTo({ y: offset, animated: true });
+      }
     }
   };
 
   const stopFollowing = () => {
     isFollowing.set(false);
+  };
+
+  const onInputLayout = ({ nativeEvent: { layout } }: LayoutChangeEvent) => {
+    inputBottom.set(layout.y + layout.height);
   };
 
   const scrollViewProps = {
@@ -114,5 +129,5 @@ export function useKeyboardFollowingScroll() {
     },
   };
 
-  return { scrollViewProps, keyboardSpacerStyle, followInput, stopFollowing };
+  return { scrollViewProps, keyboardSpacerStyle, followInput, stopFollowing, onInputLayout };
 }

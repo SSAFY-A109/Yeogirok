@@ -23,7 +23,7 @@ import { canShowLocationMap, FootprintLocationMap, LocationMapPlaceholder } from
 import { FootprintPointPicker } from "@/features/footprint/components/footprint-point-picker";
 import { LocationPermissionCard } from "@/features/footprint/components/location-permission-card";
 import { PreciseLocationNotice } from "@/features/footprint/components/precise-location-notice";
-import { useKeyboardFollowingScroll } from "@/features/footprint/components/use-keyboard-following-scroll";
+import { useKeyboardFollowingScroll } from "@/hooks/use-keyboard-following-scroll";
 import { getFootprintErrorMessage, getLocationFailureMessage, isLocationEvidenceError } from "@/features/footprint/errors";
 import {
   countFootprintBody,

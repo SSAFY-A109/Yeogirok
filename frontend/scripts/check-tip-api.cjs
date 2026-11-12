@@ -231,20 +231,33 @@ async function check() {
     assert.equal(page.totalCount, 2);
     assert.equal(page.nextCursor, "1");
     assert.equal((await tipApi.searchTips({ location, cursor: page.nextCursor, limit: 1 })).nextCursor, null);
-    const far = { ...location, latitude: location.latitude + 0.0001 };
+    const nearby = { ...location, latitude: location.latitude + 0.00044 };
+    const far = { ...location, latitude: location.latitude + 0.00046 };
 
-    assert.equal((await tipApi.searchTips({ location: far })).items.every((tip) => {
-      return tip.canInteract === false && tip.distanceMeters > 5 && tip.distanceMeters <= 50;
-    }), true);
+    const nearbyPage = await tipApi.searchTips({ location: nearby });
+    assert.equal(nearbyPage.interactionRadiusMeters, 50);
+    assert.equal(nearbyPage.items.length, 2);
+
+    assert.ok(nearbyPage.items.every((tip) => {
+      return tip.canInteract && tip.distanceMeters > 5 && tip.distanceMeters <= 50;
+    }));
+
+    assert.equal((await tipApi.viewTip({ tipId: 1, location: nearby })).id, 1);
+    assert.equal((await tipApi.searchTips({ location: far })).items.length, 0);
 
     await assert.rejects(tipApi.viewTip({ tipId: 1, location: far }), hasCode("T004"));
     assert.equal((await tipApi.searchTips({ location: { ...location, latitude: 38 } })).items.length, 0);
     assert.deepEqual((await tipApi.viewTip({ tipId: 1, location })).photos, []);
     assert.equal(model.toTipDetail({ ...tipFixture, author: { id: null, nickname: "탈퇴한 사용자" } }).author.id, null);
 
-    for (const distanceMeters of [5, 50]) {
-      const item = { id: 1, ...location, summary: "팁", spatialReference: tipFixture.spatialReference, placement: {}, distanceMeters, canInteract: distanceMeters <= 5 };
-      assert.equal(model.toTipSearchPage({ items: [item], nextCursor: null, totalCount: 1, appliedRadiusMeters: 50, interactionRadiusMeters: 5 }).items[0].canInteract, distanceMeters <= 5);
+    for (const interactionRadiusMeters of [5, 50]) {
+      const item = { id: 1, ...location, summary: "팁", spatialReference: tipFixture.spatialReference, placement: {}, distanceMeters: 50, canInteract: interactionRadiusMeters === 50 };
+      const response = { items: [item], nextCursor: null, totalCount: 1, appliedRadiusMeters: 50, interactionRadiusMeters };
+      assert.equal(model.toTipSearchPage(response).items[0].canInteract, item.canInteract);
+
+      assert.throws(() => {
+        model.toTipSearchPage({ ...response, items: [{ ...item, canInteract: !item.canInteract }] });
+      }, /계약/);
     }
 
     assert.throws(() => {
@@ -255,7 +268,8 @@ async function check() {
       model.validateTipLocation({ ...location, capturedAt: "2026-11-06T12:00:00+09:00" });
     }, /계약/);
 
-    const liked = await tipApi.setTipReaction({ tipId: 1, reaction: "LIKE", location });
+    const liked = await tipApi.setTipReaction({ tipId: 1, reaction: "LIKE", location: nearby });
+    assert.equal(liked.myReaction, "LIKE");
     assert.deepEqual(await tipApi.setTipReaction({ tipId: 1, reaction: "LIKE", location }), liked);
     assert.equal((await tipApi.setTipReaction({ tipId: 1, reaction: "DISLIKE", location })).myReaction, "DISLIKE");
     assert.equal((await tipApi.setTipReaction({ tipId: 1, reaction: "NONE", location })).myReaction, null);

@@ -2,7 +2,7 @@ import { http } from "msw";
 
 import { ApiError } from "../../errors";
 import {
-  normalizeTipBody, validateTipLocation, validateTipSpatialFields, validateTipUploads, validateTipType,
+  normalizeTipBody, TIP_INTERACTION_RADIUS_METERS, validateTipLocation, validateTipSpatialFields, validateTipUploads, validateTipType,
   type CreateTipRequestDto, type LocationEvidenceDto, type RetryTipRequestDto, type UpdateTipRequestDto,
 } from "../../../features/tip/model";
 import { mockDb } from "../db";
@@ -168,7 +168,7 @@ export const tipHandlers = [
         return tip.state.status === "PUBLISHED" && distance(body.location, tip) <= 50;
       }).map((tip) => {
         const distanceMeters = distance(body.location, tip);
-        return { id: tip.detail.id, category: tip.detail.category, ...tip.detail.location, summary: tip.detail.body, spatialReference: tip.detail.spatialReference, placement: tip.detail.placement, distanceMeters, canInteract: distanceMeters <= 5 };
+        return { id: tip.detail.id, category: tip.detail.category, ...tip.detail.location, summary: tip.detail.body, spatialReference: tip.detail.spatialReference, placement: tip.detail.placement, distanceMeters, canInteract: distanceMeters <= TIP_INTERACTION_RADIUS_METERS };
       }).sort((a, b) => {
         return a.distanceMeters - b.distanceMeters;
       });
@@ -177,7 +177,7 @@ export const tipHandlers = [
         return fail(400, "C003", "최대 10개");
       }
 
-      return ok({ ...paginate(items, body.cursor ?? null, body.limit ?? 10), totalCount: items.length, appliedRadiusMeters: 50, interactionRadiusMeters: 5 });
+      return ok({ ...paginate(items, body.cursor ?? null, body.limit ?? 10), totalCount: items.length, appliedRadiusMeters: 50, interactionRadiusMeters: TIP_INTERACTION_RADIUS_METERS });
     });
   }),
   http.post<{ tipId: string }, { location: LocationEvidenceDto }>("*/api/v1/tips/:tipId/view", ({ request, params }) => {
@@ -190,7 +190,7 @@ export const tipHandlers = [
         return fail(404, "T001", "공개 팁 없음");
       }
 
-      if (distance(body.location, tip) > 5) {
+      if (distance(body.location, tip) > TIP_INTERACTION_RADIUS_METERS) {
         return fail(422, "T004", "상호작용 거리 초과");
       }
 
@@ -252,7 +252,7 @@ export const tipHandlers = [
         return fail(404, "T001", "공개 팁 없음");
       }
 
-      if (distance(body.location, tip) > 5) {
+      if (distance(body.location, tip) > TIP_INTERACTION_RADIUS_METERS) {
         return fail(422, "T004", "상호작용 거리 초과");
       }
 
