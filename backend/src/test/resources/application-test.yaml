@@ -6,6 +6,11 @@ spring:
     url: jdbc:h2:mem:yeogirok;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
     username: sa
     password:
+  jpa:
+    hibernate:
+      # schema.sql 을 먼저 돌린 뒤, 거기 없는 테이블(발자취·팁 등)은 엔티티로 만든다. 기본값 none 이면 API-008 처럼
+      # 여러 도메인 테이블을 읽는 통합 테스트가 "Table not found" 로 실패한다.
+      ddl-auto: update
 
 yeogirok:
   # 멱등키 설정은 local·prod 프로필에만 있어 테스트 프로필에도 둔다. 값은 application-local.yaml 과 같다.

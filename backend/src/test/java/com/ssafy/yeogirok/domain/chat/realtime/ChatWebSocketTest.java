@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.chat.realtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
 import java.time.Duration;
@@ -21,10 +22,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketHttpHeaders;
@@ -35,9 +39,14 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.ssafy.yeogirok.domain.chat.cleanup.ChatCleanupJob;
 import com.ssafy.yeogirok.domain.chat.service.ChatTicketService;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
+import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
-import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
+import com.ssafy.yeogirok.domain.room.entity.RoomMember;
+import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
+import com.ssafy.yeogirok.domain.user.unlink.UserWithdrawnEvent;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.oauth.OAuthProvider;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestChatConfig;
@@ -67,11 +76,15 @@ class ChatWebSocketTest {
 	@Autowired
 	RoomService roomService;
 	@Autowired
-	RoomInvitationService roomInvitationService;
+	RoomMemberRepository roomMemberRepository;
 	@Autowired
 	ChatTicketService chatTicketService;
 	@Autowired
 	ChatHub chatHub;
+	@Autowired
+	ApplicationEventPublisher eventPublisher;
+	@Autowired
+	PlatformTransactionManager transactionManager;
 	@Autowired
 	ChatCleanupJob chatCleanupJob;
 	@Autowired
@@ -97,8 +110,8 @@ class ChatWebSocketTest {
 		owner = newUser();
 		friend = newUser();
 		roomId = roomService.create(owner, new RoomCreateCommand("채팅", null, null, TransportMode.CAR)).id();
-		String token = roomInvitationService.getOrCreateInvitation(owner, roomId).inviteToken();
-		roomInvitationService.accept(friend, token);
+		// 참여 API(API-025)는 MEMBERS 알림을 비동기로 보내 클라이언트가 연결된 뒤에 늦게 도착할 수 있다. 참여 행을 직접 넣는다.
+		roomMemberRepository.save(RoomMember.joined(roomId, friend, clock.instant()));
 	}
 
 	@AfterEach
@@ -390,6 +403,54 @@ class ChatWebSocketTest {
 
 		assertThat(messageCount()).isZero();
 		assertThat(redis.opsForSet().members("chat-cleanup:rooms")).isEmpty();
+	}
+
+	@Test
+	void 여행방이_바뀌면_커밋_뒤_방에_연결된_모든_참여자가_ROOM_UPDATED_를_받는다() throws Exception {
+		Client ownerClient = new Client().authenticate(owner);
+		Client friendClient = new Client().authenticate(friend);
+
+		int version = roomService.update(friend, roomId,
+			new RoomUpdateCommand(1, "새 제목", false, null, null, null, false)).version();
+
+		for (Client client : List.of(ownerClient, friendClient)) {
+			JsonNode frame = client.nextOfType("ROOM_UPDATED");
+			assertThat(frame.get("roomId").longValue()).isEqualTo(roomId);
+			assertThat(frame.get("version").intValue()).isEqualTo(version);
+			assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("ROOM");
+			assertThat(frame.get("changedBy").longValue()).isEqualTo(friend);
+		}
+
+		// 실패한(롤백된) 변경은 알리지 않는다.
+		assertThatThrownBy(() -> roomService.update(owner, roomId,
+			new RoomUpdateCommand(1, "낡은 version", false, null, null, null, false)))
+			.isInstanceOf(BusinessException.class);
+		assertThat(ownerClient.frames.poll(500, TimeUnit.MILLISECONDS)).isNull();
+	}
+
+	@Test
+	void 참여자가_나가면_남은_참여자는_MEMBERS_변경을_받는다() throws Exception {
+		Client ownerClient = new Client().authenticate(owner);
+
+		roomService.leave(friend, roomId);
+
+		JsonNode frame = ownerClient.nextOfType("ROOM_UPDATED");
+		assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("MEMBERS");
+		assertThat(frame.get("changedBy").longValue()).isEqualTo(friend);
+	}
+
+	@Test
+	void 회원이_탈퇴하면_참여_중이던_방의_다른_참여자는_MEMBERS_변경을_받는다() throws Exception {
+		Client ownerClient = new Client().authenticate(owner);
+
+		// 탈퇴 트랜잭션이 이벤트를 발행하고 커밋한다. 방 조회는 커밋 뒤 리스너(요청 스레드)에서 돈다.
+		// 제공자 연결 해제는 TestAuthConfig 의 가짜 클라이언트가 받는다.
+		new TransactionTemplate(transactionManager).executeWithoutResult(status -> eventPublisher.publishEvent(
+			new UserWithdrawnEvent(friend, OAuthProvider.KAKAO, "kakao-" + friend, null)));
+
+		JsonNode frame = ownerClient.nextOfType("ROOM_UPDATED");
+		assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("MEMBERS");
+		assertThat(frame.get("changedBy").longValue()).isEqualTo(friend);
 	}
 
 	@Test

@@ -117,7 +117,7 @@ Notion 상세(2026-11-04 확인)를 따른다. 요청 — `Authorization: Bearer
   "activityCounts": { "footprints": 0, "tips": 0 }, "loginProviders": ["google"] }
 ```
 
-- `activityCounts`: 발자취·팁 도메인이 생기기 전까지 0이다.
+- `activityCounts`: `footprints` 는 삭제하지 않은 내 발자취 수, `tips` 는 내 팁 목록(API-053)을 `status` 없이 부를 때 나오는 팁 수(삭제하지 않은 REGISTERING·PUBLISHED·FAILED)다.
 - `loginProviders`: 회원 하나에 제공자 하나라 원소가 하나다.
 - 실패: A001·A002·A003. 토큰의 회원이 없거나 탈퇴했으면 A003으로 응답한다(명세의 실패 응답이 A001~A003뿐이다).
 

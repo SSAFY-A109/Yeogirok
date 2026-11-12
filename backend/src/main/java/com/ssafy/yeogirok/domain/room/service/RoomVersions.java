@@ -2,11 +2,14 @@ package com.ssafy.yeogirok.domain.room.service;
 
 import java.time.Clock;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 
 import jakarta.persistence.EntityManager;
@@ -26,6 +29,7 @@ public class RoomVersions {
 
 	private final TravelRoomRepository travelRoomRepository;
 	private final EntityManager entityManager;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	/**
@@ -46,16 +50,24 @@ public class RoomVersions {
 	 * {@link #increase} 와 같고, 확정 일정이 있으면 재계산 필요({@code schedule_needs_recalculation})도 켠다. 후보 목록을
 	 * 바꾼 요청(API-029·030·031·032·094)이 부른다. 한 번의 UPDATE 로 바꿔 version 은 한 번만 오른다.
 	 *
+	 * <p>커밋 뒤 방에 연결된 참여자에게 후보 목록이 바뀌었다고 알린다({@link RoomChange#PLACES}). 후보를 바꾸는 경로는 모두
+	 * 여기를 지나므로 새 경로가 생겨도 알림이 빠지지 않는다.
+	 *
+	 * @param changedBy 후보를 바꾼 회원
 	 * @param hasSchedule 확정 일정 항목이 있는지. 없으면 다시 계산할 일정이 없어 켜지 않는다
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public int increaseAfterPlacesChanged(TravelRoom room, boolean hasSchedule) {
-		if (!hasSchedule) {
-			return increase(room);
+	public int increaseAfterPlacesChanged(TravelRoom room, Long changedBy, boolean hasSchedule) {
+		int version;
+		if (hasSchedule) {
+			entityManager.flush();
+			travelRoomRepository.increaseVersionMarkingSchedule(room.getId(), clock.instant());
+			entityManager.refresh(room);
+			version = room.getVersion();
+		} else {
+			version = increase(room);
 		}
-		entityManager.flush();
-		travelRoomRepository.increaseVersionMarkingSchedule(room.getId(), clock.instant());
-		entityManager.refresh(room);
-		return room.getVersion();
+		eventPublisher.publishEvent(RoomChangedEvent.of(room.getId(), changedBy, version, RoomChange.PLACES));
+		return version;
 	}
 }

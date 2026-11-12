@@ -133,6 +133,9 @@ public enum ExceptionType {
 	COURSE_UNAVAILABLE(NOT_FOUND, "CO001", "요청한 공개 코스에 접근할 수 없음"),
 	COURSE_FILTER_NOT_SUPPORTED(BAD_REQUEST, "CO002", "지원하지 않는 코스 검색 필터"),
 	COURSE_SORT_NOT_SUPPORTED(BAD_REQUEST, "CO003", "지원하지 않는 코스 정렬 조건"),
+	COURSE_RECOMMENDATION_CATEGORY_NOT_SUPPORTED(BAD_REQUEST, "CO004", "지원하지 않는 코스 추천 카테고리"),
+	/** 노션에 발생 조건이 "일시 불가"뿐이라 던지는 곳이 없다(명세 main-api.md 5절 7). */
+	COURSE_RECOMMENDATION_UNAVAILABLE(SERVICE_UNAVAILABLE, "CO005", "추천 코스 조회 일시 불가"),
 	COURSE_NOT_MEMBER(FORBIDDEN, "CO008", "해당 여행 기록의 현재 참여자가 아님"),
 	/** 부분 선택 필드를 받던 계약의 오류. 지금은 전체 공개라 생기지 않는다(명세 course-publish-api.md 5절 7). */
 	COURSE_SELECTION_NOT_IN_RECORD(UNPROCESSABLE_CONTENT, "CO009", "공개 대상으로 선택한 자원이 원본 기록에 속하지 않음"),

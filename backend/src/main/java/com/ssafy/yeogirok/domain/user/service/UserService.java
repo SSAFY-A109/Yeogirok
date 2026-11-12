@@ -12,7 +12,9 @@ import org.springframework.util.StringUtils;
 
 import com.ssafy.yeogirok.domain.auth.token.RefreshTokenService;
 import com.ssafy.yeogirok.domain.auth.token.WithdrawnUserTokens;
+import com.ssafy.yeogirok.domain.footprint.repository.FootprintRepository;
 import com.ssafy.yeogirok.domain.push.repository.UserPushTokenRepository;
+import com.ssafy.yeogirok.domain.tip.service.MyTipService;
 import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.domain.user.dto.MyAccountResponse;
 import com.ssafy.yeogirok.domain.user.dto.WithdrawResponse;
@@ -37,6 +39,8 @@ public class UserService {
 
 	private final UserRepository userRepository;
 	private final UserPushTokenRepository userPushTokenRepository;
+	private final FootprintRepository footprintRepository;
+	private final MyTipService myTipService;
 	private final RefreshTokenService refreshTokenService;
 	private final WithdrawnUserTokens withdrawnUserTokens;
 	private final GoogleOAuthClient googleOAuthClient;
@@ -51,12 +55,14 @@ public class UserService {
 	public MyAccountResponse getMyAccount(Long userId) {
 		User user = findActiveUser(userId);
 
-		// TODO: 발자취·팁 도메인이 생기면 activityCounts 를 실제 개수로 바꾼다(지금은 0 고정).
+		// 발자취는 삭제하지 않은 것, 팁은 내 팁 목록(API-053)에 나오는 것(삭제 안 된 REGISTERING·PUBLISHED·FAILED)을 센다.
 		return new MyAccountResponse(
 			user.getId(),
 			user.getNickname(),
 			user.getProfileImageUrl(),
-			new MyAccountResponse.ActivityCounts(0, 0),
+			new MyAccountResponse.ActivityCounts(
+				footprintRepository.countByUserIdAndDeletedAtIsNull(user.getId()),
+				myTipService.countMyTips(user.getId())),
 			List.of(user.getProvider().getValue()));
 	}
 

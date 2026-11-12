@@ -37,6 +37,12 @@ public class MyTipService {
 	private final MyTipFinder myTipFinder;
 	private final TipPhotoUrls tipPhotoUrls;
 
+	/** API-008 activityCounts.tips. 내 팁 목록(API-053)을 status 없이 부를 때 나오는 팁의 수. */
+	@Transactional(readOnly = true)
+	public long countMyTips(Long userId) {
+		return arTipRepository.countByAuthorIdAndStatusInAndDeletedAtIsNull(userId, LISTABLE);
+	}
+
 	/** API-053. 최신 등록순(createdAt·id 내림차순). status 는 REGISTERING·PUBLISHED·FAILED 만, 그 외 C003. */
 	@Transactional(readOnly = true)
 	public MyTipListResponse getMyTips(Long userId, String status, String cursor, Integer limit) {

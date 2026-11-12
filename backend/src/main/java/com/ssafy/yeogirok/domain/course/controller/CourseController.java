@@ -20,12 +20,14 @@ import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseRequest;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchResponse;
+import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
 import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
 import com.ssafy.yeogirok.domain.course.service.CourseDetailService;
 import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
+import com.ssafy.yeogirok.domain.course.service.MainCourseService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -51,6 +53,7 @@ public class CourseController {
 	private final CourseUpdateService courseUpdateService;
 	private final CourseDetailService courseDetailService;
 	private final CourseSearchService courseSearchService;
+	private final MainCourseService mainCourseService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-072 공개할 코스 미리보기")
@@ -122,5 +125,18 @@ public class CourseController {
 		CourseSearchCondition condition = CourseSearchCondition.of(q, regionCode, category, sort, duration, transportMode);
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			courseSearchService.search(condition, cursor, limit)));
+	}
+
+	/** 고정 경로라 {@code /courses/{courseId}}(016)보다 먼저 잡힌다. */
+	@Operation(summary = "API-015 메인 추천 코스 조회")
+	@GetMapping("/courses/recommendations")
+	public ResponseEntity<ApiResponseBody<MainCourseListResponse>> recommend(
+		@Parameter(description = "공통 카테고리 코드") @RequestParam(required = false) String category,
+		@Parameter(description = "시·도 2자리 또는 시·군·구 5자리") @RequestParam(required = false) String regionCode,
+		@Parameter(description = "다음 페이지 커서(최초 조회 시각을 담아 같은 30일 구간을 쓴다)") @RequestParam(required = false)
+		String cursor,
+		@Parameter(description = "한 번에 받을 개수. 기본 20, 최대 50") @RequestParam(required = false) Integer limit) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
+			mainCourseService.recommend(category, regionCode, cursor, limit)));
 	}
 }

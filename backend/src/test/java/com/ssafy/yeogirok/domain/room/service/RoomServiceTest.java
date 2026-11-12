@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
@@ -26,6 +29,8 @@ import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.RoomMemberId;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -33,6 +38,7 @@ import com.ssafy.yeogirok.support.TestUsers;
 
 @DataJpaTest
 @Import(RoomTestConfig.class)
+@RecordApplicationEvents
 class RoomServiceTest {
 
 	static final Long OWNER = 2001L;
@@ -49,6 +55,8 @@ class RoomServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	ApplicationEvents events;
 
 	@BeforeEach
 	void setUp() {
@@ -380,5 +388,61 @@ class RoomServiceTest {
 
 		assertThat(roomService.getCreated(OWNER, roomId)).isEqualTo(new RoomCreateResponse(roomId, 1, true));
 		assertError(() -> roomService.getCreated(STRANGER, roomId), ExceptionType.ROOM_NOT_MEMBER);
+	}
+
+	/* ── 실시간 알림(ROOM_UPDATED) 이벤트 ─────────────────────── */
+
+	private List<RoomChangedEvent> roomEvents() {
+		return events.stream(RoomChangedEvent.class).toList();
+	}
+
+	@Test
+	void 방_정보를_바꾸면_ROOM_변경을_알리고_확정_일정이_없으면_이동_수단이_바뀌어도_SCHEDULE_은_알리지_않는다() {
+		Long roomId = createRoom(OWNER);
+		join(FRIEND, roomId);
+		events.clear();
+
+		RoomUpdateResponse titled = roomService.update(FRIEND, roomId,
+			new RoomUpdateCommand(1, "새 제목", false, null, null, null, false));
+		assertThat(roomEvents()).containsExactly(RoomChangedEvent.of(roomId, FRIEND, titled.version(), RoomChange.ROOM));
+
+		events.clear();
+		RoomUpdateResponse moved = roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(titled.version(), null, false, null, null, TransportMode.TRANSIT, false));
+		assertThat(roomEvents()).containsExactly(
+			RoomChangedEvent.of(roomId, OWNER, moved.version(), RoomChange.ROOM));
+	}
+
+	@Test
+	void 미리보기나_같은_값으로_보낸_수정은_알리지_않는다() {
+		Long roomId = createRoom(OWNER);
+		events.clear();
+
+		roomService.update(OWNER, roomId, new RoomUpdateCommand(1, "바뀌면 안 됨", false, null, null, null, true));
+		RoomUpdateResponse same = roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(1, "가을 여행", false, null, null, TransportMode.CAR, false));
+
+		assertThat(same.version()).isEqualTo(1);
+		assertThat(roomEvents()).isEmpty();
+	}
+
+	@Test
+	void 참여하거나_나가면_MEMBERS_변경을_알리고_방이_삭제되면_알리지_않는다() {
+		Long roomId = createRoom(OWNER);
+		events.clear();
+
+		join(FRIEND, roomId);
+		assertThat(roomEvents()).containsExactly(RoomChangedEvent.of(roomId, FRIEND, 1, RoomChange.MEMBERS));
+
+		events.clear();
+		join(FRIEND, roomId);
+		assertThat(roomEvents()).as("이미 참여 중이면 바뀐 것이 없다").isEmpty();
+
+		roomService.leave(FRIEND, roomId);
+		assertThat(roomEvents()).containsExactly(RoomChangedEvent.of(roomId, FRIEND, 1, RoomChange.MEMBERS));
+
+		events.clear();
+		roomService.leave(OWNER, roomId);
+		assertThat(roomEvents()).isEmpty();
 	}
 }

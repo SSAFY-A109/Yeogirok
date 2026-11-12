@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import com.ssafy.yeogirok.domain.category.entity.TravelCategoryEntity;
 import com.ssafy.yeogirok.domain.place.entity.Place;
@@ -31,6 +33,8 @@ import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.LegalDong;
@@ -40,6 +44,7 @@ import com.ssafy.yeogirok.support.TestUsers;
 
 @DataJpaTest
 @Import(RoomTestConfig.class)
+@RecordApplicationEvents
 class RoomPlaceServiceTest {
 
 	static final Long OWNER = 6001L;
@@ -60,6 +65,8 @@ class RoomPlaceServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	ApplicationEvents events;
 
 	Long roomId;
 
@@ -372,5 +379,24 @@ class RoomPlaceServiceTest {
 
 		assertError(() -> roomService.update(OWNER, roomId,
 			new RoomUpdateCommand(seen, "새 제목", false, null, null, null, false)), ExceptionType.VERSION_MISMATCH);
+	}
+
+	/* ── 실시간 알림(ROOM_UPDATED) 이벤트 ─────────────────────── */
+
+	@Test
+	void 후보가_실제로_바뀔_때만_PLACES_변경을_올린_version과_함께_알린다() {
+		events.clear();
+		CustomPlaceCreateResponse added = add(FRIEND, "경포대");
+		Long placeId = added.roomPlace().id();
+		RoomPlaceRemoveResponse removed = roomPlaceService.remove(OWNER, roomId, placeId, added.version());
+		// 이미 뺀 후보 빼기·이미 있는 후보 복원은 바뀌는 것이 없다.
+		roomPlaceService.remove(OWNER, roomId, placeId, removed.version());
+		RoomPlaceRestoreResponse restored = roomPlaceService.restore(FRIEND, roomId, placeId, removed.version());
+		roomPlaceService.restore(FRIEND, roomId, placeId, restored.version());
+
+		assertThat(events.stream(RoomChangedEvent.class)).containsExactly(
+			RoomChangedEvent.of(roomId, FRIEND, added.version(), RoomChange.PLACES),
+			RoomChangedEvent.of(roomId, OWNER, removed.version(), RoomChange.PLACES),
+			RoomChangedEvent.of(roomId, FRIEND, restored.version(), RoomChange.PLACES));
 	}
 }

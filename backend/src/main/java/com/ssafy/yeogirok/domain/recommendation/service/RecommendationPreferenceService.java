@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.recommendation.service;
 
 import java.time.Clock;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,6 +10,8 @@ import com.ssafy.yeogirok.domain.recommendation.RecommendationPreferences;
 import com.ssafy.yeogirok.domain.recommendation.dto.PreferenceResponse;
 import com.ssafy.yeogirok.domain.recommendation.dto.PreferenceSaveCommand;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -24,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 public class RecommendationPreferenceService {
 
 	private final RoomFinder roomFinder;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	/** API-081. 저장한 적 없으면 빈 조건과 version 1. */
@@ -33,7 +37,10 @@ public class RecommendationPreferenceService {
 		return PreferenceResponse.of(roomId, RecommendationPreferences.from(room.getPreferences()));
 	}
 
-	/** API-033. 방 행을 잠그고 조건 version 을 비교한다. 다르면 C004. 같은 값으로 다시 저장해도 version 은 오른다. */
+	/**
+	 * API-033. 방 행을 잠그고 조건 version 을 비교한다. 다르면 C004. 같은 값으로 다시 저장해도 version 은 오르고
+	 * 실시간 알림({@link RoomChange#PREFERENCES})도 나간다.
+	 */
 	@Transactional
 	public PreferenceResponse save(Long userId, Long roomId, PreferenceSaveCommand command) {
 		TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
@@ -43,6 +50,8 @@ public class RecommendationPreferenceService {
 		}
 		RecommendationPreferences next = current.next(command.regionCode(), command.categoryCodes());
 		room.updatePreferences(next.toJson(), clock.instant());
+		// 커밋 뒤 방에 연결된 참여자에게 조건이 바뀌었다고 알린다(ROOM_UPDATED). 여행방 version 은 그대로다.
+		eventPublisher.publishEvent(RoomChangedEvent.of(roomId, userId, room.getVersion(), RoomChange.PREFERENCES));
 		return PreferenceResponse.of(roomId, next);
 	}
 }

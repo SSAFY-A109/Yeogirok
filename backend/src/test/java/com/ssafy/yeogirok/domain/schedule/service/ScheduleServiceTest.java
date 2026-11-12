@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
@@ -27,6 +29,8 @@ import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomUpdateResponse;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions;
 import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
@@ -45,6 +49,7 @@ import com.ssafy.yeogirok.support.TestUsers;
 
 @DataJpaTest
 @Import(RoomTestConfig.class)
+@RecordApplicationEvents
 class ScheduleServiceTest {
 
 	static final Long OWNER = 7001L;
@@ -71,6 +76,8 @@ class ScheduleServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	ApplicationEvents events;
 
 	Long roomId;
 	Long placeA;
@@ -512,5 +519,43 @@ class ScheduleServiceTest {
 		// 일차 시작 시각부터 새 이동 시간으로 다시 계산한다.
 		assertThat(day.items()).extracting(ScheduleView.Item::arrivalAt)
 			.containsExactly(DAY1_10AM, DAY1_10AM.plusSeconds((60 + 45) * 60));
+	}
+
+	/* ── 실시간 알림(ROOM_UPDATED) 이벤트 ─────────────────────── */
+
+	@Test
+	void 일정을_바꾸면_SCHEDULE_변경을_알리고_바꿀_것이_없으면_알리지_않는다() {
+		events.clear();
+		ScheduleUpdateResponse response = scheduleService.update(FRIEND, roomId,
+			new ScheduleUpdateCommand(version(), List.of(newItem(placeA, DAY1, 1, 60)), List.of()));
+		scheduleService.update(OWNER, roomId, new ScheduleUpdateCommand(version(), List.of(), List.of()));
+
+		assertThat(events.stream(RoomChangedEvent.class))
+			.containsExactly(RoomChangedEvent.of(roomId, FRIEND, response.version(), RoomChange.SCHEDULE));
+	}
+
+	@Test
+	void 확정_일정이_있는_방의_이동_수단을_바꾸면_ROOM_과_SCHEDULE_을_함께_알린다() {
+		update(newItem(placeA, DAY1, 1, 60), newItem(placeB, DAY1, 2, 60));
+		events.clear();
+
+		RoomUpdateResponse response = roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(version(), null, false, null, null, TransportMode.TRANSIT, false));
+
+		assertThat(events.stream(RoomChangedEvent.class)).containsExactly(
+			RoomChangedEvent.of(roomId, OWNER, response.version(), RoomChange.ROOM, RoomChange.SCHEDULE));
+	}
+
+	@Test
+	void 날짜를_줄여_확정_일정이_모두_지워져도_SCHEDULE_을_알린다() {
+		update(newItem(placeA, DAY2, 1, 60));
+		events.clear();
+
+		RoomUpdateResponse response = roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(version(), null, true, DAY1, DAY1, null, false));
+
+		assertThat(response.schedule()).isNull();
+		assertThat(events.stream(RoomChangedEvent.class)).containsExactly(
+			RoomChangedEvent.of(roomId, OWNER, response.version(), RoomChange.ROOM, RoomChange.SCHEDULE));
 	}
 }

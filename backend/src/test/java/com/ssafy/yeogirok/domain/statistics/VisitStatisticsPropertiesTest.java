@@ -3,10 +3,12 @@ package com.ssafy.yeogirok.domain.statistics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -26,6 +28,24 @@ class VisitStatisticsPropertiesTest {
 		assertThat(multipliers.multiplierFor(12)).isEqualTo(8);
 		assertThat(multipliers.multiplierFor(9)).isEqualTo(32);
 		assertThat(multipliers.multiplierFor(0)).isEqualTo(128);
+	}
+
+	/** 로컬 격자(S15P31A109-213): 기본 셀 0.0001도. zoom 16 이상은 촘촘하게, 15 이하는 이전 격자와 같은 칸 크기. */
+	static final String LOCAL_MULTIPLIERS = "19:1,18:2,17:5,16:10,15:50,13:100,11:400,9:1600,0:6400";
+
+	@Test
+	void 로컬_배수_문자열은_9단계로_읽힌다() {
+		assertThat(ZoomMultipliers.valueOf(LOCAL_MULTIPLIERS).levels()).hasSize(9);
+	}
+
+	@ParameterizedTest
+	@CsvSource({"19,0.0001", "18,0.0002", "17,0.0005", "16,0.001",
+		"15,0.005", "13,0.01", "11,0.04", "9,0.16", "0,0.64"})
+	void 로컬_격자의_zoom별_칸_크기(int zoom, String cellSize) {
+		VisitGrid grid = new VisitGrid(new BigDecimal("0.0001"),
+			ZoomMultipliers.valueOf(LOCAL_MULTIPLIERS).multiplierFor(zoom));
+
+		assertThat(grid.cellSize()).isEqualByComparingTo(cellSize);
 	}
 
 	@ParameterizedTest
