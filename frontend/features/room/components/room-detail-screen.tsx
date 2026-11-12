@@ -15,6 +15,7 @@ import { openRecord, RecordIssue } from "@/features/record/components/record-lis
 import { recordError } from "@/features/record/errors";
 import { canCreateRecord } from "@/features/record/model";
 import { useRoom, useRoomPlaces } from "@/features/room/api/queries";
+import { useRoomUpdates } from "@/features/room/api/room-updates";
 import type { AddPlaceSource } from "@/features/room/components/add-place-options";
 import { AddPlaceSheet } from "@/features/room/components/add-place-sheet";
 import { MapViewToggle } from "@/features/room/components/map-view-toggle";
@@ -113,6 +114,7 @@ function RoomDetailQuery({ roomId, tab, onTabChange }: { roomId: number; tab: Pl
 function RoomDetailContent({ room, tab, onTabChange }: { room: RoomDetail; tab: PlaceTab; onTabChange: (tab: PlaceTab) => void }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const placesQuery = useRoomPlaces(room.id);
+  useRoomUpdates(room.id);
   const record = useCreateRecord(openRecord);
   const { hiddenIds, remove } = useRoomPlaceRemoval(room.id);
 

@@ -4,9 +4,17 @@ import type { ChatReadStateDto } from "./model";
 
 // 여행방 채팅(API-076·077·088, WebSocket `/ws/v1`) DTO와 프레임은 `backend/dev` 12211b2(2026-11-11)의
 // ChatController·ChatMessagePage·ChatReadResponse·ChatTicketResponse·ChatFrames·ChatWebSocketHandler와 대조했다.
+// 여행방 변경 알림(`ROOM_UPDATED`)은 백엔드 브랜치 `backend/feat/S15P31A109-206-room-realtime-updates` 39d5d96(2026-11-12, 머지 전)의
+// ChatFrames.RoomUpdated·`backend/docs/07-chat.md`와 대조했다.
 
 /** 메시지 본문 최대 글자 수(코드 포인트 기준). 넘으면 서버가 C003으로 거절한다. */
 export const CHAT_BODY_MAX_LENGTH = 100;
+
+/** `ROOM_UPDATED`가 알려 주는 여행방의 바뀐 부분. 서버는 ROOM → PLACES → SCHEDULE → MEMBERS 순으로 보낸다. */
+export const ROOM_CHANGES = ["ROOM", "PLACES", "SCHEDULE", "MEMBERS"] as const;
+
+/** 모르는 값은 `UNKNOWN`으로 흡수한다(규칙 90). 무엇이 바뀌었는지 몰라도 여행방은 다시 받는다. */
+export type RoomChange = (typeof ROOM_CHANGES)[number] | "UNKNOWN";
 
 // #region DTO
 
@@ -52,6 +60,7 @@ export type ChatServerFrameDto =
   | { type: "MESSAGE_ACK"; roomId: number; clientMessageId: string; replayed: boolean; message: ChatMessageDto }
   | { type: "MESSAGE_CREATED"; roomId: number; message: ChatMessageDto }
   | { type: "PONG"; roomId: number; latestMessageId: number | null }
+  | { type: "ROOM_UPDATED"; roomId: number; version: number; changes: string[]; changedBy: number }
   | { type: "ERROR"; roomId: number | null; clientMessageId: string | null; code: string; message: string; retryable: boolean };
 
 // #endregion
@@ -101,12 +110,14 @@ export type ChatTicket = {
 /**
  * 화면이 쓰는 서버 프레임. 모르는 `type`은 `UNKNOWN`으로 흡수한다.
  * `ERROR`는 `code`로만 분기하고 서버 `message`는 쓰지 않는다.
+ * `ROOM_UPDATED`는 바뀐 부분만 쓴다. 바뀐 데이터는 실려 오지 않고, `version`은 도착 순서가 바뀔 수 있어 알림을 거르는 데 쓰지 않는다.
  */
 export type ChatServerFrame =
   | { type: "READY"; userId: number; latestMessageId: number | null }
   | { type: "MESSAGE_ACK"; clientMessageId: string; message: ChatMessage }
   | { type: "MESSAGE_CREATED"; message: ChatMessage }
   | { type: "PONG"; latestMessageId: number | null }
+  | { type: "ROOM_UPDATED"; changes: RoomChange[] }
   | { type: "ERROR"; code: string; clientMessageId: string | null; retryable: boolean }
   | { type: "UNKNOWN" };
 
@@ -216,6 +227,23 @@ function toFrameMessage(value: unknown, field: string): ChatMessage {
   return toChatMessage(value);
 }
 
+function isKnownRoomChange(value: unknown): value is (typeof ROOM_CHANGES)[number] {
+  return ROOM_CHANGES.some((change) => {
+    return change === value;
+  });
+}
+
+/** `ROOM_UPDATED.changes`를 읽는다. 서버는 하나 이상을 보낸다. */
+function toRoomChanges(value: unknown): RoomChange[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new ContractMismatchError("ROOM_UPDATED.changes");
+  }
+
+  return value.map((change) => {
+    return isKnownRoomChange(change) ? change : "UNKNOWN";
+  });
+}
+
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -255,6 +283,9 @@ export function parseChatServerFrame(text: string): ChatServerFrame {
 
     case "PONG":
       return { type: "PONG", latestMessageId: assertNullableId(frame.latestMessageId, "PONG.latestMessageId") };
+
+    case "ROOM_UPDATED":
+      return { type: "ROOM_UPDATED", changes: toRoomChanges(frame.changes) };
 
     case "ERROR":
       if (typeof frame.retryable !== "boolean") {

@@ -5,6 +5,7 @@ import { AppState } from "react-native";
 import { chatMessagesOptions } from "@/features/room/api/chat-queries";
 import { createChatSession, type ChatSession, type ChatSessionState } from "@/features/room/api/chat-session";
 import { roomKeys } from "@/features/room/api/queries";
+import { useRoomChangeRefresher } from "@/features/room/api/room-updates";
 
 export type ChatConnection = ChatSessionState & Pick<ChatSession, "send" | "retry" | "discard">;
 
@@ -14,15 +15,18 @@ export type ChatConnection = ChatSessionState & Pick<ChatSession, "send" | "retr
  * 이 연결에서 받은 메시지(`liveMessages`)는 이력 캐시에 넣지 않고 따로 돌려준다. 이력 캐시는 다시 받을 때 서버 응답으로 통째로 바뀌므로,
  * 화면이 이력과 `liveMessages`를 메시지 id로 합쳐 보여 준다(`mergeChatMessages`).
  *
+ * 같은 연결로 오는 여행방 변경 알림(`ROOM_UPDATED`)을 받으면 여행방을 다시 받는다. 채팅 화면이 떠 있는 동안에는 아래 여행방 화면의 연결이 닫혀 있다.
+ *
  * @param enabled 채팅 이력을 받은 뒤에 `true`로 준다. 받아 둔 이력의 가장 최신 메시지 뒤부터 빠진 메시지를 복구한다.
  */
 export function useChatConnection(roomId: number, enabled: boolean): ChatConnection {
   const queryClient = useQueryClient();
+  const refreshRoom = useRoomChangeRefresher(roomId);
 
   const [session] = useState(() => {
     return createChatSession(roomId, () => {
       void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
-    });
+    }, refreshRoom);
   });
 
   useEffect(() => {

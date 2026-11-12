@@ -2,7 +2,7 @@ import { isApiError } from "@/api/errors";
 import { createIdempotencyKey } from "@/api/idempotency";
 import { openChatSocket, type ChatSocket, type ChatSocketError } from "@/features/room/api/chat-socket";
 import { getChatMessagesAfter, issueChatTicket } from "@/features/room/api/chat.api";
-import { mergeChatMessages, type ChatMessage, type ChatTicket, type PendingChatMessage } from "@/features/room/chat-model";
+import { mergeChatMessages, type ChatMessage, type ChatTicket, type PendingChatMessage, type RoomChange } from "@/features/room/chat-model";
 import { ROOM_ACCESS_ERROR_CODES } from "@/features/room/errors";
 
 /** 다시 연결하기 전 대기 시간의 시작값. 실패할 때마다 두 배로 늘린다. */
@@ -46,12 +46,13 @@ export type ChatSession = {
 };
 
 /** 지수 백오프에 무작위 값을 섞은 재연결 대기 시간. 여러 기기가 같은 순간에 다시 붙지 않게 한다. */
-function getReconnectDelay(attempt: number): number {
+export function getReconnectDelay(attempt: number): number {
   const ceiling = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * 2 ** attempt);
   return ceiling / 2 + Math.random() * (ceiling / 2);
 }
 
-function getRoomAccessErrorCode(error: unknown): string | null {
+/** 여행방이 없어졌거나(RO001) 참여자가 아니게 된(RO002) 오류의 code. 그 밖의 오류는 `null`. */
+export function getRoomAccessErrorCode(error: unknown): string | null {
   return isApiError(error) && ROOM_ACCESS_ERROR_CODES.includes(error.code) ? error.code : null;
 }
 
@@ -63,8 +64,13 @@ function getRoomAccessErrorCode(error: unknown): string | null {
  * - 저장 완료를 받지 못한 메시지는 다시 연결되면 같은 `clientMessageId`로 다시 보낸다. 서버는 한 번만 저장한다.
  *
  * @param onAccessLost 여행방이 없어졌거나 참여자가 아니게 되어 연결을 끝냈을 때 부른다.
+ * @param onRoomUpdated 같은 연결로 온 여행방 변경 알림(`ROOM_UPDATED`)을 넘긴다.
  */
-export function createChatSession(roomId: number, onAccessLost: () => void): ChatSession {
+export function createChatSession(
+  roomId: number,
+  onAccessLost: () => void,
+  onRoomUpdated: (changes: RoomChange[]) => void,
+): ChatSession {
   const listeners = new Set<() => void>();
   let state: ChatSessionState = { status: "CONNECTING", closedCode: null, liveMessages: [], pendingMessages: [] };
 
@@ -213,6 +219,7 @@ export function createChatSession(roomId: number, onAccessLost: () => void): Cha
       },
 
       onPong: catchUp,
+      onRoomUpdated,
       onError: handleSocketError,
 
       onClose: () => {
