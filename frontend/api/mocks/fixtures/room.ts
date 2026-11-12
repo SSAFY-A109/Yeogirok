@@ -45,32 +45,7 @@ export type MockRoom = {
   /** 확정 일정이 있는 방에서 후보 목록이 바뀌면 `true`, 일정을 새로 저장하면 `false`. */
   scheduleNeedsRecalculation: boolean;
   inviteToken: string;
-  chatLastReadMessageId?: number;
 };
-
-export function getMockChatMessages(room: MockRoom) {
-  const sender = room.members.find((member) => {
-    return member.userId !== MOCK_ME.userId;
-  });
-
-  return sender ? [{
-    id: room.id * 100 + 1,
-    sender: { id: sender.userId, nickname: sender.nickname },
-    body: "여행 일정을 같이 확인해 봐요!",
-    createdAt: "2026-11-10 09:00:00+09",
-    clientMessageId: `mock-room-${room.id}-1`,
-  }] : [];
-}
-
-export function getMockChatReadState(room: MockRoom) {
-  const lastReadMessageId = room.chatLastReadMessageId ?? null;
-
-  const hasUnreadMessages = getMockChatMessages(room).some((message) => {
-    return message.id > (lastReadMessageId ?? 0);
-  });
-
-  return { lastReadMessageId, hasUnreadMessages };
-}
 
 export function createRoomPlaceFixture(
   id: number,
@@ -111,7 +86,7 @@ export function toRoomListItem(room: MockRoom, chatReadState: ChatReadStateDto):
 
     placeCount: getActivePlaces(room).length,
     recordIds: room.recordIds,
-    chatReadState: getMockChatReadState(room),
+    chatReadState,
   };
 }
 
@@ -135,7 +110,7 @@ export function toRoomDetail(room: MockRoom, chatReadState: ChatReadStateDto): R
 
     recordIds: room.recordIds,
     version: room.version,
-    chatReadState: getMockChatReadState(room),
+    chatReadState,
     schedule: room.schedule,
   };
 }
