@@ -8,7 +8,10 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+
+import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +48,7 @@ import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.CommittedRoomData;
 import com.ssafy.yeogirok.support.FakeTourApiClient;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestUsers;
@@ -59,6 +64,8 @@ class PlaceRecommendationServiceTest {
 
 	static long nextUserId = 8000L;
 
+	@Autowired
+	DataSource dataSource;
 	@Autowired
 	PlaceRecommendationService recommendationService;
 	@Autowired
@@ -90,11 +97,20 @@ class PlaceRecommendationServiceTest {
 			small == null ? null : small.substring(0, 2), small == null ? null : small.substring(0, 4), small);
 	}
 
+	/** 이 테스트가 만든 사용자. 끝나면 이 사용자들의 방·후보·장소·추천 기록과 함께 지운다(같은 DB 로 다시 돌릴 수 있게). */
+	final List<Long> createdUsers = new ArrayList<>();
+
+	private Long newUserId() {
+		Long id = nextUserId++;
+		createdUsers.add(id);
+		return id;
+	}
+
 	@BeforeEach
 	void setUp() {
 		clock.set(NOW);
 		tourApi.reset();
-		owner = nextUserId++;
+		owner = newUserId();
 		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), owner));
 		roomId = roomService.create(owner, new RoomCreateCommand("강릉 여행", null, null, TransportMode.CAR)).id();
 	}
@@ -120,15 +136,16 @@ class PlaceRecommendationServiceTest {
 			.extracting("exceptionType").isEqualTo(type);
 	}
 
-	/** 테스트 트랜잭션 없이 커밋하므로, 다른 테스트에 영향을 주는 기준 데이터는 실패해도 지운다. */
+	/** 테스트 트랜잭션 없이 커밋하므로, 기준 데이터와 이 테스트가 만든 사용자·방·장소는 실패해도 지운다. */
 	@AfterEach
 	void tearDown() {
 		inTransaction(() -> em.getEntityManager().createQuery("delete from TravelCategoryEntity").executeUpdate());
+		CommittedRoomData.delete(new JdbcTemplate(dataSource), createdUsers);
 	}
 
-	/** 다른 방이 TourAPI 장소를 담은 기록(인기 집계용). 담기 API-029 가 아직 없어 행을 직접 만든다. */
+	/** 다른 방이 TourAPI 장소를 담은 기록(인기 집계용). 담은 시각을 정하려고 행을 직접 만든다. */
 	private void addTourPlaceToNewRoom(String contentId, Instant addedAt, boolean deleteRoom) {
-		Long user = nextUserId++;
+		Long user = newUserId();
 		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), user));
 		Long otherRoom = roomService.create(user, new RoomCreateCommand("다른 방", null, null, TransportMode.CAR)).id();
 		addTourPlace(otherRoom, user, contentId, addedAt, deleteRoom);
@@ -365,7 +382,7 @@ class PlaceRecommendationServiceTest {
 	@Test
 	void 참여자가_아니면_RO002() {
 		savePreferences("CAFE");
-		Long stranger = nextUserId++;
+		Long stranger = newUserId();
 		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), stranger));
 
 		assertError(() -> recommendationService.recommend(stranger, roomId, PlaceRecommendationCommand.EMPTY),

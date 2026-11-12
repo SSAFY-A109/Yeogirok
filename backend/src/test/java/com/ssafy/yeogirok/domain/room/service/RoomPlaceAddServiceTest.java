@@ -6,15 +6,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
+import javax.sql.DataSource;
+
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -40,6 +45,7 @@ import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.CommittedRoomData;
 import com.ssafy.yeogirok.support.FakeTourApiClient;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestUsers;
@@ -56,6 +62,8 @@ class RoomPlaceAddServiceTest {
 	static long nextUserId = 9000L;
 	static long nextContentId = 500_000L;
 
+	@Autowired
+	DataSource dataSource;
 	@Autowired
 	RoomPlaceAddService addService;
 	@Autowired
@@ -81,12 +89,21 @@ class RoomPlaceAddServiceTest {
 	String cafe;
 	String bakery;
 
+	/** 이 테스트가 만든 사용자. 끝나면 이 사용자들의 방·후보·장소·추천 기록과 함께 지운다(같은 DB 로 다시 돌릴 수 있게). */
+	final List<Long> createdUsers = new ArrayList<>();
+
+	private Long newUserId() {
+		Long id = nextUserId++;
+		createdUsers.add(id);
+		return id;
+	}
+
 	@BeforeEach
 	void setUp() {
 		clock.set(NOW);
 		tourApi.reset();
-		owner = nextUserId++;
-		friend = nextUserId++;
+		owner = newUserId();
+		friend = newUserId();
 		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), owner, friend));
 		roomId = room(owner);
 		roomInvitationService.accept(friend, roomInvitationService.getOrCreateInvitation(owner, roomId).inviteToken());
@@ -96,6 +113,11 @@ class RoomPlaceAddServiceTest {
 			new BigDecimal("128.9183"), "http://img/cafe.jpg", "FD", "FD05", "FD050100"));
 		tourApi.willReturn("FD/FD03", new TourPlace(bakery, "빵집", null, new BigDecimal("37.7700"),
 			new BigDecimal("128.9000"), null, "FD", "FD03", "FD030100"));
+	}
+
+	@AfterEach
+	void tearDown() {
+		CommittedRoomData.delete(new JdbcTemplate(dataSource), createdUsers);
 	}
 
 	private Long room(Long user) {
@@ -237,7 +259,7 @@ class RoomPlaceAddServiceTest {
 	@Test
 	void 참여자가_아니면_RO002() {
 		PlaceRecommendationResponse recommended = recommend(owner, roomId);
-		Long stranger = nextUserId++;
+		Long stranger = newUserId();
 		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), stranger));
 
 		assertError(() -> addService.add(stranger, roomId, new RoomPlaceAddCommand(List.of(
