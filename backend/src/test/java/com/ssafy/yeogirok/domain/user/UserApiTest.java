@@ -1,5 +1,8 @@
 package com.ssafy.yeogirok.domain.user;
 
+import static com.ssafy.yeogirok.domain.footprint.FootprintFixture.footprintOf;
+import static com.ssafy.yeogirok.domain.tip.TipFixture.publish;
+import static com.ssafy.yeogirok.domain.tip.TipFixture.registeringAt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -8,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +33,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
+import com.ssafy.yeogirok.domain.footprint.repository.FootprintRepository;
+import com.ssafy.yeogirok.domain.tip.entity.ArTip;
+import com.ssafy.yeogirok.domain.tip.repository.ArTipRepository;
 import com.ssafy.yeogirok.domain.user.unlink.ProviderUnlinkService;
 import com.ssafy.yeogirok.domain.user.unlink.ProviderUnlinkTaskStore;
 import com.ssafy.yeogirok.support.FakeGoogleOAuthClient;
@@ -62,6 +70,10 @@ class UserApiTest {
 	ProviderUnlinkService providerUnlinkService;
 	@Autowired
 	ProviderUnlinkTaskStore unlinkTaskStore;
+	@Autowired
+	FootprintRepository footprintRepository;
+	@Autowired
+	ArTipRepository arTipRepository;
 
 	@BeforeEach
 	void reset() {
@@ -139,6 +151,38 @@ class UserApiTest {
 				.andExpect(jsonPath("$.data.activityCounts.tips").value(0))
 				.andExpect(jsonPath("$.data.loginProviders[0]").value("google"))
 				.andExpect(jsonPath("$.data.loginProviders.length()").value(1));
+		}
+
+		@Test
+		void activityCounts_는_삭제하지_않은_발자취와_내_팁_목록의_팁을_센다() throws Exception {
+			String accessToken = login("google", idTokens.google(uniqueSub(), clock.instant()))
+				.get("accessToken").asString();
+			Long userId = jsonMapper.readTree(getMe(accessToken).andReturn().getResponse().getContentAsString())
+				.get("data").get("id").asLong();
+			Instant now = clock.instant();
+
+			Footprint deletedFootprint = footprintOf(userId).build();
+			deletedFootprint.softDelete(now);
+			ArTip failedTip = registeringAt(userId, now);
+			failedTip.fail(now);
+			ArTip deletedTip = registeringAt(userId, now);
+			deletedTip.delete(now);
+			List<Footprint> footprints = footprintRepository.saveAll(
+				List.of(footprintOf(userId).build(), footprintOf(userId).build(), deletedFootprint,
+					footprintOf(userId + 1_000_000).build()));
+			List<ArTip> tips = arTipRepository.saveAll(
+				List.of(registeringAt(userId, now), publish(registeringAt(userId, now)), failedTip, deletedTip,
+					publish(registeringAt(userId + 1_000_000, now))));
+			try {
+				getMe(accessToken)
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.activityCounts.footprints").value(2))
+					.andExpect(jsonPath("$.data.activityCounts.tips").value(3));
+			} finally {
+				// 스프링 컨텍스트를 함께 쓰는 다른 테스트의 집계에 섞이지 않게 지운다.
+				arTipRepository.deleteAll(tips);
+				footprintRepository.deleteAll(footprints);
+			}
 		}
 
 		@Test

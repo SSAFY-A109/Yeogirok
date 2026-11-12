@@ -24,6 +24,9 @@ public interface ArTipRepository extends JpaRepository<ArTip, Long> {
 
 	Optional<ArTip> findByIdAndDeletedAtIsNull(Long id);
 
+	/** 작성자의 삭제되지 않은 팁 중 status 가 statuses 인 것의 수. */
+	long countByAuthorIdAndStatusInAndDeletedAtIsNull(Long authorId, Collection<TipStatus> statuses);
+
 	/** 팁 행을 잠가 읽는다(SELECT ... FOR UPDATE). 삭제·게시·수정이 한 줄로 서서 삭제한 팁을 되살리지 않게 한다. */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select t from ArTip t where t.id = :id")

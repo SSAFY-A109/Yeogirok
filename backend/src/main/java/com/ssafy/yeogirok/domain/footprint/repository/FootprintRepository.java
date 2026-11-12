@@ -18,6 +18,9 @@ public interface FootprintRepository extends JpaRepository<Footprint, Long>, Jpa
 
 	Optional<Footprint> findByIdAndDeletedAtIsNull(Long id);
 
+	/** API-008 activityCounts.footprints. 사용자의 삭제하지 않은 발자취 수. */
+	long countByUserIdAndDeletedAtIsNull(Long userId);
+
 	/** 삭제하지 않은 발자취를 행 잠금(SELECT ... FOR UPDATE)으로 읽는다. */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Footprint> findForUpdateByIdAndDeletedAtIsNull(Long id);
