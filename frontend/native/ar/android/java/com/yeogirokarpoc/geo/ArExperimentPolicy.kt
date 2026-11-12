@@ -42,16 +42,19 @@ internal class ResolveTrackingTimeout {
     }
 }
 
-/** Reset on a new hit, tracking loss, low quality, or an operation being started. */
-fun cloudQualityAllowsHost(quality: String, fresh: Boolean, stableGood: Boolean, diagnostic: Boolean,
-                          onPlacement: Boolean = false): Boolean =
-    onPlacement || (fresh && quality in listOf("GOOD", "SUFFICIENT", "INSUFFICIENT") &&
-        (if (diagnostic) true else quality == "GOOD" && stableGood))
+enum class HostQualityPolicy {
+    GOOD_STABLE, SCAN_COMPLETE, SCAN_LOW_QUALITY, DIAGNOSTIC_CURRENT_QUALITY,
+}
+
+fun cloudQualityAllowsHost(quality: String, fresh: Boolean, stableGood: Boolean, policy: HostQualityPolicy): Boolean =
+    fresh && cloudRecordQualityAllowed(quality, policy.name) && (policy != HostQualityPolicy.GOOD_STABLE || stableGood)
 
 fun cloudRecordQualityAllowed(quality: String, policy: String): Boolean = when (policy) {
     "ON_PLACEMENT" -> quality in listOf("GOOD", "SUFFICIENT", "INSUFFICIENT", "NOT_MEASURED")
     "GOOD_STABLE" -> quality == "GOOD"
-    "DIAGNOSTIC_CURRENT_QUALITY" -> quality in listOf("GOOD", "SUFFICIENT", "INSUFFICIENT")
+    "SCAN_COMPLETE" -> quality == "GOOD" || quality == "SUFFICIENT"
+    "SCAN_LOW_QUALITY" -> quality == "INSUFFICIENT"
+    "DIAGNOSTIC_CURRENT_QUALITY" -> quality == "GOOD" || quality == "SUFFICIENT" || quality == "INSUFFICIENT"
     else -> false
 }
 
@@ -71,6 +74,54 @@ class CloudQualityGate {
         if (start == null || nowMs < start) { goodSince = nowMs; return false }
         return nowMs - start >= ArExperimentPolicy.GOOD_QUALITY_HOLD_MS
     }
+}
+
+/** Counts distinct viewpoints around the same pin. Rotating in place does not change the bearing. */
+internal class PlacementScan {
+    companion object {
+        const val TOTAL_VIEWS = 3
+        private const val MIN_SEPARATION_DEGREES = 12.0
+        private const val HOLD_TOLERANCE_DEGREES = 5.0
+        private const val HOLD_MS = 350L
+        private const val MAX_FRAME_GAP_MS = 250L
+    }
+
+    private val captured = mutableListOf<Double>()
+    private var candidate: Double? = null
+    private var startedAt = 0L
+    private var lastFrameAt = 0L
+    val completedViews get() = captured.size
+    val complete get() = completedViews == TOTAL_VIEWS
+
+    fun reset() {
+        captured.clear()
+        candidate = null
+    }
+
+    /** Returns true while the user is holding a new view. Null means the pin isn't in view. */
+    fun observe(now: Long, bearing: Double?): Boolean {
+        if (complete || bearing == null || !bearing.isFinite() ||
+            captured.any { angularDistance(it, bearing) < MIN_SEPARATION_DEGREES }) {
+            candidate = null
+            return false
+        }
+
+        val previous = candidate
+        if (previous == null || now - lastFrameAt !in 0..MAX_FRAME_GAP_MS ||
+            angularDistance(previous, bearing) > HOLD_TOLERANCE_DEGREES) {
+            candidate = bearing
+            startedAt = now
+        }
+        lastFrameAt = now
+        if (now - startedAt < HOLD_MS) return true
+
+        captured.add(bearing)
+        candidate = null
+        return false
+    }
+
+    private fun angularDistance(first: Double, second: Double) =
+        kotlin.math.abs(Math.IEEEremainder(first - second, 360.0))
 }
 
 /** Camera-space -Z is forward and +X is right. Never use Location.bearing here. */

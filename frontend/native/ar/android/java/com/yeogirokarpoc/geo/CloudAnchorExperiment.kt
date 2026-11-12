@@ -32,8 +32,8 @@ class CloudAnchorExperiment {
     var hostQuality = ""; private set
     var hostQualityPolicy = "GOOD_STABLE"; private set
 
-    fun canRequestHost(diagnostic: Boolean, onPlacement: Boolean = false) = !busy && !failed && hostedId == null &&
-        cloudQualityAllowsHost(quality, qualityFresh, canHost, diagnostic, onPlacement)
+    fun canRequestHost(policy: HostQualityPolicy) = !busy && !failed && hostedId == null &&
+        cloudQualityAllowsHost(quality, qualityFresh, canHost, policy)
 
     fun placementChanged() {
         gate.reset(); canHost = false; lastQualityAt = 0L
@@ -71,12 +71,12 @@ class CloudAnchorExperiment {
         } catch (error: Exception) { fail("복원 시작 실패: ${error.javaClass.simpleName}") }
     }
 
-    fun startHost(session: Session, anchor: Anchor, diagnostic: Boolean, onPlacement: Boolean = false) {
-        if (!canRequestHost(diagnostic, onPlacement) || anchor.trackingState != TrackingState.TRACKING) return
+    fun startHost(session: Session, anchor: Anchor, policy: HostQualityPolicy) {
+        if (!canRequestHost(policy) || anchor.trackingState != TrackingState.TRACKING) return
         startedAt = SystemClock.elapsedRealtime()
         hostedAt = Instant.now()
-        hostQuality = if (qualityFresh) quality else "NOT_MEASURED"
-        hostQualityPolicy = if (onPlacement) "ON_PLACEMENT" else if (diagnostic) "DIAGNOSTIC_CURRENT_QUALITY" else "GOOD_STABLE"
+        hostQuality = quality
+        hostQualityPolicy = policy.name
         try {
             host = session.hostCloudAnchorAsync(anchor, ArExperimentPolicy.CLOUD_TTL_DAYS, null)
             Log.i("YeogirokCloud", "HOST_STARTED auth=KEYLESS ttlDays=${ArExperimentPolicy.CLOUD_TTL_DAYS} quality=$hostQuality policy=$hostQualityPolicy")
