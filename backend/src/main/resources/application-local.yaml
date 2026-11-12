@@ -16,12 +16,13 @@ spring:
       ddl-auto: validate
 
 yeogirok:
-  # API-046 방문 분포. 로컬 실행용 제안값이다(11/4). 실제 값은 팀이 정해 prod 환경 변수로 넣는다.
+  # API-046 방문 분포. 로컬 실행용 값이다. 실제 값은 prod 환경 변수로 넣는다.
   # 기본 셀 크기를 바꾸면 aggregation-version 도 바꾼다(VisitStatisticsProperties 참고).
+  # zoom 16 이상은 0.0001~0.001도로 촘촘하게, 15 이하는 이전 격자(0.005~0.64도)와 같은 칸 크기(S15P31A109-213).
   visit-statistics:
-    aggregation-version: grid-0.005-v1
-    base-cell-size-degrees: 0.005
-    zoom-multipliers: "15:1,13:2,11:8,9:32,0:128"
+    aggregation-version: grid-0.0001-v1
+    base-cell-size-degrees: 0.0001
+    zoom-multipliers: "19:1,18:2,17:5,16:10,15:50,13:100,11:400,9:1600,0:6400"
     min-count: 1
   # 현재 위치 증거(DEC-01). 로컬 실행용 제안값이다(11/4). 실제 값은 팀이 정해 prod 환경 변수로 넣는다.
   # 기준을 바꾸면 policy-version 도 바꾼다(footprints.location_policy_version 에 저장된다).
