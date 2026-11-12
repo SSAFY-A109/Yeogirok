@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ToastProvider } from "@/components/ui/toast";
 import { setUnauthorizedHandler } from "@/api/client";
 import { authKeys, useSession } from "@/features/auth/api/queries";
-import { chatHistoryOptions } from "@/features/room/api/chat.api";
+import { chatMessagesOptions } from "@/features/room/api/chat-queries";
 import { listenForChatNotificationOpens, prepareChatNotifications } from "@/lib/native/chat-notifications";
 import { queryClient } from "@/lib/query-client";
 
@@ -60,7 +60,7 @@ function RootNavigator() {
     const stopListening = listenForChatNotificationOpens((roomId) => {
       const request = ++openRequest;
 
-      void client.fetchQuery(chatHistoryOptions(roomId)).then(() => {
+      void client.fetchInfiniteQuery(chatMessagesOptions(roomId)).then(() => {
         if (active && request === openRequest && client.getQueryData(authKeys.session) === true) {
           router.navigate({ pathname: "/rooms/[roomId]/chat", params: { roomId: String(roomId) } });
         }
