@@ -1,6 +1,13 @@
 import { REALTIME_BASE_URL } from "@/api/client";
 import { openChatTransport } from "@/features/room/api/chat-transport";
-import { parseChatServerFrame, type ChatClientFrameDto, type ChatMessage, type ChatServerFrame, type ChatTicket } from "@/features/room/chat-model";
+import {
+  parseChatServerFrame,
+  type ChatClientFrameDto,
+  type ChatMessage,
+  type ChatServerFrame,
+  type ChatTicket,
+  type RoomChange,
+} from "@/features/room/chat-model";
 
 /** 앱이 PING을 보내는 간격. 서버는 60초 동안 프레임이 없으면 연결을 닫는다(backend `docs/07-chat.md`). */
 const PING_INTERVAL_MS = 25_000;
@@ -22,6 +29,8 @@ export type ChatSocketHandlers = {
   onAck: (message: ChatMessage) => void;
   /** 서버에 저장된 가장 최신 메시지 id. 방에 메시지가 없으면 `null`. */
   onPong: (latestMessageId: number | null) => void;
+  /** 여행방 내용이 바뀌었다. 바뀐 데이터는 오지 않으므로 받은 쪽이 다시 조회한다. 내가 바꾼 것도 온다. */
+  onRoomUpdated: (changes: RoomChange[]) => void;
   onError: (error: ChatSocketError) => void;
   /** 서버나 네트워크가 연결을 닫았을 때 한 번 부른다. `close()`로 직접 닫으면 부르지 않는다. */
   onClose: () => void;
@@ -34,8 +43,8 @@ export type ChatSocket = {
 };
 
 /**
- * 채팅 WebSocket 연결 하나(`/ws/v1`). 열리면 티켓으로 인증하고(`AUTH` → `READY`), 그 뒤로 PING을 보내 연결을 유지한다.
- * 티켓은 한 번만 쓸 수 있어 다시 연결할 때는 새 티켓으로 새 연결을 만든다.
+ * 여행방 실시간 연결 하나(`/ws/v1`). 열리면 티켓으로 인증하고(`AUTH` → `READY`), 그 뒤로 PING을 보내 연결을 유지한다.
+ * 채팅 메시지와 여행방 변경 알림이 같은 연결로 온다. 티켓은 한 번만 쓸 수 있어 다시 연결할 때는 새 티켓으로 새 연결을 만든다.
  */
 export function openChatSocket(roomId: number, ticket: ChatTicket, handlers: ChatSocketHandlers): ChatSocket {
   let closed = false;
@@ -92,6 +101,10 @@ export function openChatSocket(roomId: number, ticket: ChatTicket, handlers: Cha
 
       case "MESSAGE_CREATED":
         handlers.onMessage(frame.message);
+        return;
+
+      case "ROOM_UPDATED":
+        handlers.onRoomUpdated(frame.changes);
         return;
 
       case "ERROR":

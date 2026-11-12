@@ -17,6 +17,7 @@ import {
   restoreRoomPlace,
   updateRoom,
 } from "@/features/room/api/room.api";
+import type { RoomChange } from "@/features/room/chat-model";
 import type { RoomChanges, RoomPlaceList } from "@/features/room/model";
 import { scheduleKeys } from "@/features/schedule/api/keys";
 
@@ -154,6 +155,34 @@ function invalidateAfterPlacesChanged(queryClient: QueryClient, roomId: number):
   void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
 }
 
+/**
+ * 나가기를 요청한 여행방. 나가는 사람이 자기 나가기의 변경 알림(`ROOM_UPDATED`)을 응답보다 먼저 받을 수 있는데,
+ * 그 알림으로 다시 조회하면 RO002가 온다. 그래서 이 방의 알림으로는 다시 조회하지 않는다.
+ */
+const leavingRoomIds = new Set<number>();
+
+/**
+ * 다른 일행이 여행방을 바꿨다는 알림(`ROOM_UPDATED`)이 알려 준 부분을 다시 받는다.
+ * 방 상세(API-022)와 목록의 요약은 어떤 변경이든 낡으므로 항상 다시 받고, 후보가 바뀌면 후보 목록(API-028), 일정이 바뀌면 일정(API-036)을 함께 받는다.
+ * 나가기를 요청한 방이면 아무것도 하지 않는다.
+ */
+export function refreshRoomAfterChanges(queryClient: QueryClient, roomId: number, changes: ReadonlySet<RoomChange>): void {
+  if (leavingRoomIds.has(roomId)) {
+    return;
+  }
+
+  void queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) });
+  void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
+
+  if (changes.has("PLACES")) {
+    void queryClient.invalidateQueries({ queryKey: roomKeys.places(roomId) });
+  }
+
+  if (changes.has("SCHEDULE")) {
+    void queryClient.invalidateQueries({ queryKey: scheduleKeys.room(roomId) });
+  }
+}
+
 // #endregion
 
 function selectPlaces(list: RoomPlaceList) {
@@ -243,6 +272,14 @@ export function useLeaveRoom() {
     mutationFn: leaveRoom,
     retry: false,
 
+    onMutate: (roomId) => {
+      leavingRoomIds.add(roomId);
+    },
+
+    onError: (_error, roomId) => {
+      leavingRoomIds.delete(roomId);
+    },
+
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
     },
@@ -258,6 +295,7 @@ export function useAcceptRoomInvitation() {
     retry: false,
 
     onSuccess: ({ roomId }) => {
+      leavingRoomIds.delete(roomId);
       void queryClient.invalidateQueries({ queryKey: roomKeys.list() });
       void queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) });
     },
