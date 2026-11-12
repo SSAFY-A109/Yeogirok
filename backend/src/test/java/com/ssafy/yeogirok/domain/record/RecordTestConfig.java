@@ -75,7 +75,7 @@ public class RecordTestConfig {
 
 	/** application.yaml 과 같은 값(초안 24시간, 연결한 영수증 자료 30일, 사진 묶음 기준). */
 	public static final RecordProperties RECORD_PROPERTIES = new RecordProperties(Duration.ofHours(24), Duration.ofDays(30),
-		new RecordProperties.Draft(Duration.ofMinutes(60), 500, Duration.ofMinutes(60), 500, 150));
+		new RecordProperties.Draft(Duration.ofMinutes(60), 500, Duration.ofMinutes(60), 500, 150, 300));
 
 	/** 기록에 붙일 참고 계획 사본(API-057). 하루에 계획 항목 ID 를 순서대로 넣는다. */
 	public static Map<String, Object> referencePlan(Long roomId, LocalDate date, Long... itemIds) {

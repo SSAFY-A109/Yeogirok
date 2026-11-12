@@ -26,8 +26,8 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /**
  * 영수증·사진·참고 계획으로 초안 항목을 만든다(명세 {@code specs/record-api-2.md} 4-7 생성 규칙 1·2·4·5,
- * {@code specs/draft-merge.md} 3절). 같은 방문인 계획은 영수증 항목에 합치고, 이름은 비교하지 않으며, 사진·계획만으로 시각을
- * 지어내지 않는다.
+ * {@code specs/draft-merge.md} 3절). 같은 방문인 계획은 영수증 항목(208), 남으면 사진 묶음 항목(209)에 합치고, 이름은
+ * 비교하지 않으며, 사진·계획만으로 시각을 지어내지 않는다.
  */
 final class RecordDraftComposer {
 
@@ -66,8 +66,10 @@ final class RecordDraftComposer {
 			.forEach(photo -> nearestReceipt(builders, photo, rules)
 				.ifPresentOrElse(receipt -> receipt.attach(photo.imageId()), () -> remaining.add(photo)));
 		List<ItemBuilder> receiptItems = List.copyOf(builders);
-		groups(remaining, rules).forEach(group -> builders.add(ItemBuilder.photos(group)));
-		Set<Integer> merged = mergePlansIntoReceipts(plans, receiptItems, rules);
+		List<ItemBuilder> photoItems = groups(remaining, rules).stream().map(ItemBuilder::photos).toList();
+		builders.addAll(photoItems);
+		Set<Integer> merged = new HashSet<>(mergePlansIntoReceipts(plans, receiptItems, rules));
+		merged.addAll(mergePlansIntoPhotos(plans, merged, photoItems, rules));
 		for (int i = 0; i < plans.size(); i++) {
 			if (!merged.contains(i)) {
 				builders.add(ItemBuilder.plan(plans.get(i)));
@@ -123,6 +125,36 @@ final class RecordDraftComposer {
 			Comparator.nullsLast(Comparator.naturalOrder())).thenComparingDouble(PlanMatch::meters));
 	}
 
+	/**
+	 * 영수증에 안 붙은 계획을 같은 날짜 사진 묶음에 1대1로 붙인다. 묶음 거리 = 묶음 안 GPS 사진 중 계획 장소와 가장 가까운 사진. 시간은
+	 * 쓰지 않는다(계획 시각은 실제 시각이 아니다). GPS 사진이 없는 묶음·좌표 없는 계획은 맞추지 않는다.
+	 *
+	 * @param taken 이미 영수증에 붙은 계획의 순번
+	 */
+	private static Set<Integer> mergePlansIntoPhotos(List<PlannedVisit> plans, Set<Integer> taken,
+		List<ItemBuilder> photoGroups, RecordProperties.Draft rules) {
+		List<PlanMatch> matches = new ArrayList<>();
+		for (int p = 0; p < plans.size(); p++) {
+			PlannedVisit plan = plans.get(p);
+			if (taken.contains(p) || plan.place() == null || plan.place().latitude() == null
+				|| plan.place().longitude() == null) {
+				continue;
+			}
+			int planIndex = p;
+			for (int g = 0; g < photoGroups.size(); g++) {
+				ItemBuilder group = photoGroups.get(g);
+				int groupIndex = g;
+				if (!plan.date().equals(group.visitDate)) {
+					continue;
+				}
+				group.nearestPhotoMeters(plan.place())
+					.filter(meters -> meters <= rules.planPhotoMaxMeters())
+					.ifPresent(meters -> matches.add(new PlanMatch(planIndex, group, groupIndex, null, meters)));
+			}
+		}
+		return assignOneToOne(matches, plans, Comparator.comparingDouble(PlanMatch::meters));
+	}
+
 	/** 같은 장소면 거리(투어API 같은 장소는 0), 아니면 null. 좌표가 한쪽에라도 없으면 위치로 맞추지 않는다. */
 	private static Double samePlaceMeters(RecordPlaceView plan, RecordPlaceView other, int maxMeters) {
 		if (plan == null || other == null) {
@@ -156,7 +188,7 @@ final class RecordDraftComposer {
 			.forEach(match -> {
 				usedPlans.add(match.planIndex());
 				usedItems.add(match.item());
-				match.item().linkPlan(plans.get(match.planIndex()).plannedItemId());
+				match.item().linkPlan(plans.get(match.planIndex()));
 			});
 		return usedPlans;
 	}
@@ -212,7 +244,11 @@ final class RecordDraftComposer {
 		private final LocalDate visitDate;
 		private final Instant visitedAt;
 		private Long plannedItemId;
+		/** 사진 묶음에 붙은 계획의 장소(209). 영수증 항목은 장소를 바꾸지 않아 쓰지 않는다. */
+		private RecordPlaceView plannedPlace;
 		private final List<Long> photoIds = new ArrayList<>();
+		/** 사진 묶음 안 GPS 가 있는 사진(209 거리 계산). */
+		private final List<PhotoMetadata> located = new ArrayList<>();
 
 		private ItemBuilder(SourceType kind, List<String> materialIds, RecordPlaceView place, LocalDate visitDate,
 			Instant visitedAt, Long plannedItemId) {
@@ -232,7 +268,12 @@ final class RecordDraftComposer {
 		static ItemBuilder photos(List<TimedPhoto> group) {
 			Instant first = group.getFirst().metadata().takenAt();
 			ItemBuilder builder = new ItemBuilder(SourceType.PHOTO, List.of(), null, seoulDate(first), first, null);
-			group.forEach(photo -> builder.attach(photo.imageId()));
+			group.forEach(photo -> {
+				builder.attach(photo.imageId());
+				if (photo.metadata().hasLocation()) {
+					builder.located.add(photo.metadata());
+				}
+			});
 			return builder;
 		}
 
@@ -253,9 +294,17 @@ final class RecordDraftComposer {
 			photoIds.add(imageId);
 		}
 
-		/** 같은 방문으로 판단된 계획을 붙인다. 필드 값은 바꾸지 않는다. */
-		void linkPlan(Long plannedItemId) {
-			this.plannedItemId = plannedItemId;
+		/** 같은 방문으로 판단된 계획을 붙인다. 영수증 항목은 필드 값을 바꾸지 않고, 사진 묶음은 장소를 계획 장소로 제안한다. */
+		void linkPlan(PlannedVisit plan) {
+			this.plannedItemId = plan.plannedItemId();
+			this.plannedPlace = plan.place();
+		}
+
+		/** 묶음 안 GPS 사진 중 place 와 가장 가까운 거리. GPS 사진이 없으면 empty. */
+		Optional<Double> nearestPhotoMeters(RecordPlaceView place) {
+			return located.stream()
+				.map(photo -> GeoDistance.meters(photo.latitude(), photo.longitude(), place.latitude(), place.longitude()))
+				.min(Double::compare);
 		}
 
 		Item build(int itemId) {
@@ -265,6 +314,13 @@ final class RecordDraftComposer {
 						new FieldSources(place == null ? null : SourceType.PLAN, SourceType.PLAN, null),
 						List.of(RecordDraft.PLAN_NOT_CONFIRMED)),
 					List.of(), plannedItemId, place);
+			}
+			if (kind == SourceType.PHOTO && plannedItemId != null) {
+				// 장소는 계획, 날짜·시각은 사진. 계획 장소는 확인이 필요해 needsReview 는 그대로 true(209).
+				return new Item(itemId, List.of(), List.of(plannedPlace), visitDate, visitedAt, true,
+					new Evidence(List.of(SourceType.PHOTO, SourceType.PLAN),
+						new FieldSources(SourceType.PLAN, SourceType.PHOTO, SourceType.PHOTO), List.of()),
+					List.copyOf(photoIds), plannedItemId, plannedPlace);
 			}
 			if (kind == SourceType.PHOTO) {
 				return new Item(itemId, List.of(), List.of(), visitDate, visitedAt, true,

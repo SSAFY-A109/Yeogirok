@@ -30,12 +30,12 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /**
  * 초안 항목 만들기 규칙(명세 specs/record-api-2.md 4-7 생성 규칙 1·2·4·5, specs/draft-merge.md 3절). 기준은 사진-영수증
- * 60분·500m, 사진 묶음 60분·500m, 계획-영수증 150m(모두 이하면 같은 곳).
+ * 60분·500m, 사진 묶음 60분·500m, 계획-영수증 150m, 계획-사진 300m(모두 이하면 같은 곳).
  */
 class RecordDraftComposerTest {
 
 	static final RecordProperties.Draft RULES = new RecordProperties.Draft(Duration.ofMinutes(60), 500,
-		Duration.ofMinutes(60), 500, 150);
+		Duration.ofMinutes(60), 500, 150, 300);
 	/** 경포대 근처. 위도 0.01도는 약 1.1km. */
 	static final BigDecimal LAT = new BigDecimal("37.7950000");
 	static final BigDecimal LNG = new BigDecimal("128.8960000");
@@ -346,5 +346,102 @@ class RecordDraftComposerTest {
 
 		assertThat(result.items()).extracting(Item::sourceMaterialIds, Item::plannedItemId).containsExactly(
 			tuple(List.of("r2"), 501L), tuple(List.of("r1"), 502L));
+	}
+
+	/* ── 209 계획 + 사진 묶음 합치기(specs/draft-merge.md 3-3) ───────────── */
+
+	/** 2026-11-02 15:00 KST. 영수증(12:00)과 60분 넘게 떨어져 사진이 영수증에 붙지 않는다. */
+	static final Instant AFTERNOON = NOON.plus(Duration.ofHours(3));
+
+	@Test
+	void 계획_장소에서_300m_이하인_사진_묶음은_장소는_계획_시각은_사진으로_합쳐진다() {
+		RecordPlaceView beach = tourPlace("T1", LAT);
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(),
+			List.of(photo(7, AFTERNOON, at(300), LNG)), List.of(plan(501, beach, NOON)), RULES);
+
+		assertThat(result.items()).containsExactly(new Item(1, List.of(), List.of(beach), DAY, AFTERNOON, true,
+			new Evidence(List.of(SourceType.PHOTO, SourceType.PLAN),
+				new FieldSources(SourceType.PLAN, SourceType.PHOTO, SourceType.PHOTO), List.of()),
+			List.of(7L), 501L, beach));
+	}
+
+	@Test
+	void 사진_묶음이_계획_장소에서_301m_면_따로다() {
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(),
+			List.of(photo(7, AFTERNOON, over(301), LNG)), List.of(plan(501, tourPlace("T1", LAT), null)), RULES);
+
+		assertThat(result.items()).extracting(Item::sourcePhotoIds, Item::plannedItemId)
+			.containsExactly(tuple(List.of(7L), null), tuple(List.of(), 501L));
+	}
+
+	@Test
+	void 묶음_거리는_계획_장소와_가장_가까운_GPS_사진으로_잰다() {
+		// 두 사진은 450m 떨어져 한 묶음이다. 첫 사진은 계획에서 550m, 둘째는 100m.
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(),
+			List.of(photo(7, AFTERNOON, at(550), LNG), photo(8, AFTERNOON.plusSeconds(600), at(100), LNG),
+				photo(9, AFTERNOON.plusSeconds(700), null, null)),
+			List.of(plan(501, tourPlace("T1", LAT), null)), RULES);
+
+		assertThat(result.items()).singleElement().satisfies(item -> {
+			assertThat(item.sourcePhotoIds()).containsExactly(7L, 8L, 9L);
+			assertThat(item.plannedItemId()).isEqualTo(501L);
+		});
+	}
+
+	@Test
+	void GPS_없는_묶음이나_다른_날_묶음은_합치지_않는다() {
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(),
+			List.of(photo(7, AFTERNOON, null, null), photo(8, AFTERNOON.plus(Duration.ofDays(1)), LAT, LNG)),
+			List.of(plan(501, tourPlace("T1", LAT), null)), RULES);
+
+		assertThat(result.items()).extracting(Item::visitDate, Item::sourcePhotoIds, Item::plannedItemId).containsExactly(
+			tuple(DAY, List.of(7L), null), tuple(DAY, List.of(), 501L), tuple(DAY.plusDays(1), List.of(8L), null));
+	}
+
+	@Test
+	void 한_계획은_가장_가까운_사진_묶음_하나에만_붙는다() {
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(),
+			List.of(photo(7, NOON, at(200), LNG), photo(8, AFTERNOON, at(50), LNG)),
+			List.of(plan(501, tourPlace("T1", LAT), null)), RULES);
+
+		assertThat(result.items()).extracting(Item::sourcePhotoIds, Item::plannedItemId)
+			.containsExactly(tuple(List.of(7L), null), tuple(List.of(8L), 501L));
+	}
+
+	@Test
+	void 영수증에_합쳐진_계획은_사진_묶음과_다시_합치지_않는다() {
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", NOON, CAFE)),
+			List.of(photo(7, AFTERNOON, LAT, LNG)), List.of(plan(501, CAFE, null)), RULES);
+
+		assertThat(result.items()).extracting(Item::sourceMaterialIds, Item::sourcePhotoIds, Item::plannedItemId)
+			.containsExactly(tuple(List.of("m-1"), List.of(), 501L), tuple(List.of(), List.of(7L), null));
+	}
+
+	/** 명세 3-4: 계획 5곳을 그대로 다녀오면 지금 10줄이던 초안이 6줄이 된다. */
+	@Test
+	void 계획_5곳_예시는_10줄이_아니라_6줄이다() {
+		Instant t1 = Instant.parse("2026-11-02T01:00:00Z");
+		RecordPlaceView cafe = tourPlace("cafe", LAT);
+		RecordPlaceView restaurant = tourPlace("restaurant", LAT.add(new BigDecimal("0.0200000")));
+		RecordPlaceView beach = tourPlace("beach", LAT.add(new BigDecimal("0.0400000")));
+		RecordPlaceView view = tourPlace("view", LAT.add(new BigDecimal("0.0600000")));
+		RecordPlaceView market = tourPlace("market", LAT.add(new BigDecimal("0.0800000")));
+		RecordPlaceView restaurantPick = manualPlace(restaurant.latitude().add(new BigDecimal("0.0007000")));  // 약 80m
+
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(
+			List.of(receipt("m-cafe", t1, cafe), receipt("m-restaurant", t1.plus(Duration.ofHours(2)), restaurantPick)),
+			List.of(photo(7, t1.plus(Duration.ofHours(4)), beach.latitude().add(new BigDecimal("0.0013000")), LNG),
+				photo(8, t1.plus(Duration.ofHours(6)), null, null)),
+			List.of(plan(501, cafe, null), plan(502, restaurant, null), plan(503, beach, null), plan(504, view, null),
+				plan(505, market, null)), RULES);
+
+		assertThat(result.items()).extracting(Item::sourceMaterialIds, Item::sourcePhotoIds, Item::plannedItemId)
+			.containsExactly(
+				tuple(List.of("m-cafe"), List.of(), 501L),
+				tuple(List.of("m-restaurant"), List.of(), 502L),
+				tuple(List.of(), List.of(7L), 503L),
+				tuple(List.of(), List.of(8L), null),
+				tuple(List.of(), List.of(), 504L),
+				tuple(List.of(), List.of(), 505L));
 	}
 }

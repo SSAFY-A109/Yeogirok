@@ -47,6 +47,8 @@ yeogirok:
       photo-group-max-meters: 500
       # 계획 항목과 영수증 항목을 같은 방문으로 합치는 거리(091 확정 장소와 계획 장소). 시간 조건이 없어 더 엄격하게(specs/draft-merge.md).
       plan-receipt-max-meters: 150
+      # 계획 항목과 사진 묶음을 합치는 거리(묶음 안 GPS 사진 중 계획 장소와 가장 가까운 사진). 넓은 장소를 생각해 영수증보다 넉넉하게.
+      plan-photo-max-meters: 300
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500
