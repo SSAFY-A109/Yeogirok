@@ -1,27 +1,17 @@
 package com.ssafy.yeogirok.domain.course.service;
 
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toMap;
-
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchResponse;
-import com.ssafy.yeogirok.domain.course.dto.PublicAuthor;
 import com.ssafy.yeogirok.domain.course.repository.CourseCandidate;
 import com.ssafy.yeogirok.domain.course.repository.PublicCourseRepository;
 import com.ssafy.yeogirok.domain.place.entity.Place;
-import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
-import com.ssafy.yeogirok.domain.record.entity.VisitImage;
-import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
-import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.global.request.PageSize;
 
 import lombok.RequiredArgsConstructor;
@@ -40,11 +30,8 @@ public class CourseSearchService {
 		.thenComparingLong(ranked -> ranked.candidate().id()).reversed();
 
 	private final PublicCourseRepository publicCourseRepository;
-	private final ActualVisitRepository actualVisitRepository;
-	private final VisitImageRepository visitImageRepository;
-	private final PlaceRepository placeRepository;
+	private final CourseCards courseCards;
 	private final PublicCourseReader publicCourseReader;
-	private final CourseAuthors courseAuthors;
 
 	private record Ranked(CourseCandidate candidate, CoursePeriod period, long importCount) {
 	}
@@ -71,42 +58,23 @@ public class CourseSearchService {
 	}
 
 	private List<CourseSearchResponse.Item> items(List<Ranked> page) {
-		if (page.isEmpty()) {
-			return List.of();
-		}
-		List<Long> ids = page.stream().map(ranked -> ranked.candidate().id()).toList();
-		Map<Long, List<ActualVisit>> visits = actualVisitRepository
-			.findByRecordIdInOrderByRecordIdAscVisitDateAscPositionAsc(ids).stream()
-			.collect(groupingBy(ActualVisit::getRecordId));
-		Map<Long, Place> places = placeRepository.findAllById(visits.values().stream().flatMap(List::stream)
-				.map(ActualVisit::getPlaceId).distinct().toList()).stream()
-			.collect(toMap(Place::getId, Function.identity()));
-		Map<Long, List<VisitImage>> photos = visitImageRepository
-			.findByRecordIdInAndPublicSelectedTrueAndVisitIdIsNotNull(ids).stream()
-			.collect(groupingBy(VisitImage::getVisitId));
-		Map<Long, List<PublicAuthor>> authors = courseAuthors.byRoom(page.stream()
-			.map(ranked -> ranked.candidate().roomId()).toList());
+		CourseCards.Sources sources = courseCards.load(page.stream().map(Ranked::candidate).toList());
 		return page.stream().map(ranked -> {
 			CourseCandidate course = ranked.candidate();
-			List<ActualVisit> courseVisits = visits.getOrDefault(course.id(), List.of());
-			Place first = courseVisits.isEmpty() ? null : places.get(courseVisits.getFirst().getPlaceId());
-			return new CourseSearchResponse.Item(course.id(), course.title(),
-				authors.getOrDefault(course.roomId(), List.of()), CourseRegions.nameOf(first),
-				thumbnail(courseVisits, photos, first), courseVisits.size(), ranked.period().dayCount(),
-				ranked.period().nightCount(), course.transportMode(),
-				courseVisits.stream().limit(ROUTE_PREVIEW_SIZE).map(visit -> places.get(visit.getPlaceId()))
-					.filter(place -> place != null).map(Place::getName).toList(),
+			List<ActualVisit> visits = sources.visitsOf(course.id());
+			Place first = visits.isEmpty() ? null : sources.placeOf(visits.getFirst());
+			return new CourseSearchResponse.Item(course.id(), course.title(), sources.authorsOf(course.roomId()),
+				CourseRegions.nameOf(first), thumbnail(sources, course.id(), first), visits.size(),
+				ranked.period().dayCount(), ranked.period().nightCount(), course.transportMode(),
+				visits.stream().limit(ROUTE_PREVIEW_SIZE).map(sources::placeOf).filter(place -> place != null)
+					.map(Place::getName).toList(),
 				ranked.importCount());
 		}).toList();
 	}
 
 	/** 방문 순서대로 첫 공개 사진, 없으면 첫 방문 장소 이미지(프론트 016 화면과 같은 규칙). */
-	private String thumbnail(List<ActualVisit> visits, Map<Long, List<VisitImage>> photos, Place first) {
-		return visits.stream()
-			.flatMap(visit -> photos.getOrDefault(visit.getId(), List.of()).stream()
-				.sorted(Comparator.comparing(VisitImage::getPosition)))
-			.findFirst()
-			.map(publicCourseReader::photoUrl)
+	private String thumbnail(CourseCards.Sources sources, Long recordId, Place first) {
+		return sources.firstPhoto(recordId).map(publicCourseReader::photoUrl)
 			.orElse(first == null ? null : first.getImageUrl());
 	}
 }

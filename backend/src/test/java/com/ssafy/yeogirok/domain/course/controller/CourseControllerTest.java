@@ -38,6 +38,8 @@ import com.ssafy.yeogirok.domain.course.dto.CourseDetailResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseInput;
 import com.ssafy.yeogirok.domain.course.dto.CoursePreviewResponse;
 import com.ssafy.yeogirok.domain.course.dto.CoursePublicationResponse;
+import com.ssafy.yeogirok.domain.course.dto.ImportCountBasis;
+import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
 import com.ssafy.yeogirok.domain.course.dto.MyCourseListResponse;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchResponse;
@@ -49,6 +51,7 @@ import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.CourseUpdateService;
+import com.ssafy.yeogirok.domain.course.service.MainCourseService;
 import com.ssafy.yeogirok.domain.course.service.MyCourseQueryService;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
@@ -77,6 +80,8 @@ class CourseControllerTest {
 	CourseDetailService courseDetailService;
 	@MockitoBean
 	CourseSearchService courseSearchService;
+	@MockitoBean
+	MainCourseService mainCourseService;
 	@MockitoBean
 	IdempotencyService idempotencyService;
 
@@ -326,6 +331,35 @@ class CourseControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value(code));
 			verifyNoInteractions(courseSearchService);
+		}
+	}
+
+	@Nested
+	class API_015 {
+
+		@Test
+		void 추천_응답_모양과_조건_전달() throws Exception {
+			given(mainCourseService.recommend("CAFE", "51", "c1", 10)).willReturn(new MainCourseListResponse(List.of(
+				new MainCourseListResponse.Item(7L, "강릉 1박", List.of(new PublicAuthor(1L, null)), "강릉시",
+					"https://signed/t", 3, 2, 1, TransportMode.CAR, 12, List.of(new MainCourseListResponse.PreviewPlace(
+						11L, 1, "안목 카페거리", "CAFE", "카페", "https://signed/p")))), "next",
+				new ImportCountBasis("IMPORT_COUNT_30D", Instant.parse("2026-10-12T03:00:00Z"),
+					Instant.parse("2026-11-11T03:00:00Z"))));
+
+			mockMvc.perform(get("/api/v1/courses/recommendations").with(asUser(USER_ID)).param("category", "CAFE")
+					.param("regionCode", "51").param("cursor", "c1").param("limit", "10"))
+				.andExpect(status().isOk())
+				.andExpect(content().json("""
+					{"success": true, "data": {"items": [{"id": 7, "title": "강릉 1박",
+					  "authors": [{"id": 1, "profileImageUrl": null}], "regionName": "강릉시",
+					  "thumbnailUrl": "https://signed/t", "placeCount": 3, "dayCount": 2, "nightCount": 1,
+					  "transportMode": "CAR", "importCount30d": 12,
+					  "previewPlaces": [{"visitId": 11, "day": 1, "name": "안목 카페거리", "categoryCode": "CAFE",
+					    "categoryName": "카페", "imageUrl": "https://signed/p"}]}],
+					  "nextCursor": "next",
+					  "basis": {"type": "IMPORT_COUNT_30D", "periodStart": "2026-10-12 12:00:00+09",
+					    "periodEnd": "2026-11-11 12:00:00+09"}}}
+					""", org.springframework.test.json.JsonCompareMode.STRICT));
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.course.repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.Query;
@@ -48,4 +49,10 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 	List<CourseCandidate> findCandidates(@Param("pattern") String pattern, @Param("regionPrefix") String regionPrefix,
 		@Param("category") String category, @Param("transportMode") TransportMode transportMode,
 		@Param("importedFrom") Instant importedFrom, @Param("importedTo") Instant importedTo);
+
+	/** 코스별로 공개 선택된 사진이 연결된 방문 날짜(API-015 "모든 날짜에 공개 사진", 명세 main-api.md 5절 2). */
+	@Query("select distinct new com.ssafy.yeogirok.domain.course.repository.PublicPhotoDate(v.recordId, v.visitDate)"
+		+ " from ActualVisit v where v.recordId in :recordIds"
+		+ " and exists (select 1 from VisitImage i where i.visitId = v.id and i.publicSelected = true)")
+	List<PublicPhotoDate> findPublicPhotoDates(@Param("recordIds") Collection<Long> recordIds);
 }

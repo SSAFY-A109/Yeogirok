@@ -49,7 +49,7 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 		if (query.codePointCount(0, query.length()) > QUERY_MAX_LENGTH) {
 			throw unsupported("q: 최대 %d자입니다.".formatted(QUERY_MAX_LENGTH));
 		}
-		if (regionCode != null && !REGION_CODE.matcher(regionCode).matches()) {
+		if (regionCode != null && !isRegionCode(regionCode)) {
 			throw unsupported("regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
 		}
 		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
@@ -64,6 +64,11 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 	/** LIKE 이스케이프 문자는 '!'(저장소 쿼리와 같다). */
 	private static String escape(String value) {
 		return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+	}
+
+	/** 시·도 2자리 또는 시·군·구 5자리(014·015 공통). */
+	public static boolean isRegionCode(String regionCode) {
+		return REGION_CODE.matcher(regionCode).matches();
 	}
 
 	private static <E extends Enum<E>> E parse(Class<E> type, String value, String field) {
