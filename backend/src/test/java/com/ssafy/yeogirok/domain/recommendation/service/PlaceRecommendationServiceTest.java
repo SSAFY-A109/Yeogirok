@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -106,8 +107,14 @@ class PlaceRecommendationServiceTest {
 		return id;
 	}
 
+	/** 테스트 전 카테고리 행(PostgreSQL 이면 Flyway V2 기준 데이터). 테스트는 빈 상태로 돌고 끝나면 되돌린다. */
+	List<Map<String, Object>> savedCategories;
+
 	@BeforeEach
 	void setUp() {
+		JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+		savedCategories = jdbc.queryForList("SELECT code, name FROM travel_categories");
+		jdbc.update("DELETE FROM travel_categories");
 		clock.set(NOW);
 		tourApi.reset();
 		owner = newUserId();
@@ -136,11 +143,14 @@ class PlaceRecommendationServiceTest {
 			.extracting("exceptionType").isEqualTo(type);
 	}
 
-	/** 테스트 트랜잭션 없이 커밋하므로, 기준 데이터와 이 테스트가 만든 사용자·방·장소는 실패해도 지운다. */
+	/** 테스트 트랜잭션 없이 커밋하므로, 카테고리 행은 테스트 전 상태로 되돌리고 만든 사용자·방·장소는 실패해도 지운다. */
 	@AfterEach
 	void tearDown() {
-		inTransaction(() -> em.getEntityManager().createQuery("delete from TravelCategoryEntity").executeUpdate());
-		CommittedRoomData.delete(new JdbcTemplate(dataSource), createdUsers);
+		JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+		jdbc.update("DELETE FROM travel_categories");
+		savedCategories.forEach(row -> jdbc.update("INSERT INTO travel_categories (code, name) VALUES (?, ?)",
+			row.get("code"), row.get("name")));
+		CommittedRoomData.delete(jdbc, createdUsers);
 	}
 
 	/** 다른 방이 TourAPI 장소를 담은 기록(인기 집계용). 담은 시각을 정하려고 행을 직접 만든다. */
