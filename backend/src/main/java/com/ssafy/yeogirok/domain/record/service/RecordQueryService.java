@@ -45,6 +45,7 @@ public class RecordQueryService {
 	private final ActualVisitRepository actualVisitRepository;
 	private final MaterialQueryService materialQueryService;
 	private final RecordProgressReader recordProgressReader;
+	private final ReferencePlans referencePlans;
 
 	/**
 	 * API-058. 현재 참여 중이고 방이 삭제되지 않은 기록을 최근 생성 순(id 내림차순)으로(명세 5절 2).
@@ -98,7 +99,7 @@ public class RecordQueryService {
 		RecordProgress progress = recordProgressReader.read(List.of(record), Map.of(recordId, board.visits().size()),
 			Map.of(recordId, mine)).get(recordId);
 		return new RecordDetailResponse(record.getId(), record.getTitle(), record.getStatus(), record.getRoomId(),
-			members, room.getStartDate(), room.getEndDate(), progress, null, List.of(), board.photoPool(),
+			members, room.getStartDate(), room.getEndDate(), progress, referencePlans.read(record), List.of(), board.photoPool(),
 			board.visits(), MaterialQueryService.summaries(mine),
 			record.getPublishedAt() == null ? null : record.getId(), record.getVersion());
 	}

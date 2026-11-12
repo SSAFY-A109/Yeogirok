@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
@@ -46,6 +47,7 @@ import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
 import com.ssafy.yeogirok.domain.record.dto.PhotoDeleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
@@ -67,6 +69,8 @@ import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
+import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.domain.schedule.dto.ScheduleView;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -545,10 +549,15 @@ class RecordControllerTest {
 				new BigDecimal("37.7519000"), new BigDecimal("128.8761000"), null, null, null, null), null,
 				LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, List.of(photo),
 				List.of(new ActualVisitView.Story(41L, 2L, "좋았다")));
+			PlannedSchedule plan = new PlannedSchedule(7L, 4, List.of(new PlannedSchedule.Day(
+				LocalDate.parse("2026-11-01"), LocalTime.of(9, 0), null,
+				List.of(new PlannedSchedule.Item(501L, 31L, 1, Instant.parse("2026-11-01T01:00:00Z"), null, 60, false,
+					visit.place())),
+				List.of(new ScheduleView.Leg(null, 501L, TransportMode.CAR, null, "KAKAO")), List.of())));
 			given(recordQueryService.getDetail(USER_ID, 9L)).willReturn(new RecordDetailResponse(9L, "가을 여행",
 				RecordStatus.DRAFT, 7L, List.of(new RecordDetailResponse.Member(1L, "여행자", true)),
 				LocalDate.parse("2026-11-01"), LocalDate.parse("2026-11-02"),
-				new RecordProgress(RecordProgress.Stage.EDIT, null, null), null, List.of(), List.of(photo),
+				new RecordProgress(RecordProgress.Stage.EDIT, null, null), plan, List.of(), List.of(photo),
 				List.of(visit), List.of(), null, 3));
 
 			mockMvc.perform(get("/api/v1/records/9").with(asUser(USER_ID)))
@@ -559,7 +568,17 @@ class RecordControllerTest {
 					  "members": [{"userId": 1, "nickname": "여행자", "isCreator": true}],
 					  "startDate": "2026-11-01", "endDate": "2026-11-02",
 					  "progress": {"stage": "EDIT", "draftKey": null, "jobId": null},
-					  "plannedSchedule": null, "uploads": [],
+					  "plannedSchedule": {"roomId": 7, "version": 4, "days": [{
+					    "date": "2026-11-01", "startTime": "09:00:00", "endTime": null,
+					    "items": [{"id": 501, "roomPlaceId": 31, "order": 1, "arrivalAt": "2026-11-01 10:00:00+09",
+					      "departureAt": null, "stayMinutes": 60, "fixed": false,
+					      "place": {"provider": "MANUAL", "providerPlaceId": null, "name": "경포대",
+					        "latitude": 37.7519000, "longitude": 128.8761000, "address": null, "categoryCode": null,
+					        "imageUrl": null, "imageAttribution": null}}],
+					    "legs": [{"fromItemId": null, "toItemId": 501, "transportMode": "CAR", "travelMinutes": null,
+					      "source": "KAKAO"}],
+					    "warnings": []}]},
+					  "uploads": [],
 					  "photoPool": [{"imageId": 31, "url": "https://signed/31", "attribution": null, "uploadedBy": null, "visitId": 701}],
 					  "actualVisits": [{
 					    "id": 701,
