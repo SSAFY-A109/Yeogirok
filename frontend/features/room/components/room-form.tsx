@@ -101,7 +101,7 @@ export function TripDateField({ value, onChange, help, error, testID }: TripDate
         testID={`${testID}.date-field`}
       >
         <Icon as={Calendar} size={20} className="text-icon" />
-        <Text className={cn("flex-1 text-body", rangeText === null ? "text-muted-foreground" : "text-foreground")}>
+        <Text className={cn("flex-1 text-caption", rangeText === null ? "text-muted-foreground" : "text-foreground")}>
           {rangeText ?? EMPTY_TRIP_DATE_TEXT}
         </Text>
         {lengthText === null ? null : (
