@@ -95,7 +95,6 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     }
     @Volatile private var localTip: JSONObject? = null
     private var detailOpen = false
-    private var resumeFromDetail = false
     private val detailRequestCode = 9120
     private val detailRequested = AtomicBoolean(false)
     private val tapTarget = AtomicReference<PinTapTarget?>(null)
@@ -127,7 +126,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private val sessionId = UUID.randomUUID().toString()
     private val touch = AtomicReference<PointF?>(null)
     private val confirmRequested = AtomicBoolean(false)
-    private val resetRequested = AtomicBoolean(false)
+    private val resetRequested = AtomicBoolean(true)
     private val restoreRetryRequested = AtomicBoolean(false)
     private val resultDelivered = AtomicBoolean(false)
     private var width = 1
@@ -571,8 +570,6 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             }
             session!!.resume()
             sessionResumed = true
-            if (!resumeFromDetail) resetRequested.set(true)
-            resumeFromDetail = false
             // Keep imported coordinates for the initial restoration attempt.
             surface.onResume()
             navigation?.resume()
@@ -603,8 +600,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != detailRequestCode) return
         detailOpen = false
-        overlay.markerSelected = false; overlay.selectedTipId = null
-        overlay.postInvalidateOnAnimation()
+        overlay.selectedTipId = null
     }
 
     /** Query from the last successful GPS origin, with one in-flight refresh per visible AR activity. */
@@ -626,7 +622,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     }
 
     fun updatePublicTips(requestId: String, tips: JSONArray?, error: String?): Boolean {
-        if (!resumed || isFinishing || refreshRequestId != requestId) return false
+        if (!sessionResumed || isFinishing || refreshRequestId != requestId) return false
         refreshRequestId = null
         val origin = requestedLocation
         requestedLocation = null
@@ -653,23 +649,35 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
 
     override fun onPause() {
         resumed = false
+        // The translucent detail activity still shows this camera and map behind the sheet.
+        if (!detailOpen) pauseCamera()
+        super.onPause()
+    }
+
+    override fun onStop() {
+        pauseCamera()
+        super.onStop()
+    }
+
+    private fun pauseCamera() {
+        if (!sessionResumed) return
         restoredTipDistances.set(emptyMap())
         refreshRequestId = null; requestedLocation = null
-        tapTarget.set(null); detailRequested.set(false)
         navigation?.pause()
-        if (!::surface.isInitialized) { super.onPause(); return }
         touch.set(null); confirmRequested.set(false)
         placementRequested.set(null); publishCenterHit(null)
         addTip?.isEnabled = false; addTip?.alpha = 0.4f
         overlay.screenPoint = null; overlay.referencePoint = null; overlay.guidance = null; overlay.invalidate()
         surface.onPause() // Stop Session.update() before pausing the session.
         occlusionGates.clear()
-        if (!detailOpen) { nearbyAnchors?.clear(); cloud.reset() }
-        tipTargets.set(emptyList()); requestedTipId.set(null); overlay.otherPins = emptyList()
-        placementRequested.set(null); publishCenterHit(null)
+        if (!detailOpen) {
+            nearbyAnchors?.clear(); cloud.reset()
+            resetRequested.set(true)
+        }
+        tipTargets.set(emptyList()); requestedTipId.set(null)
         tapTarget.set(null); detailRequested.set(false); overlay.cancelPinTap()
-        if (sessionResumed) { session?.pause(); sessionResumed = false }
-        super.onPause()
+        session?.pause()
+        sessionResumed = false
     }
 
     override fun onDestroy() {
@@ -699,7 +707,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     // The green reference anchor remains in the same live AR session.
     private fun resetRestoredAnchor() {
         occlusionGates.clear()
-        nearbyAnchors?.clear(); tipTargets.set(emptyList()); requestedTipId.set(null); overlay.otherPins = emptyList()
+        nearbyAnchors?.clear(); tipTargets.set(emptyList()); requestedTipId.set(null)
         placementRequested.set(null); publishCenterHit(null)
         tapTarget.set(null); detailRequested.set(false)
         cloud.reset()
@@ -921,7 +929,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             touch.set(null); confirmRequested.set(false)
             placementRequested.set(null); publishCenterHit(null)
             tapTarget.set(null); detailRequested.set(false)
-            tipTargets.set(emptyList()); requestedTipId.set(null); overlay.otherPins = emptyList()
+            tipTargets.set(emptyList()); requestedTipId.set(null)
             overlay.guidance = "AR 처리 대기 중 — 상단 상태를 확인하세요."
             overlay.screenPoint = null
             overlay.referencePoint = null
@@ -1062,7 +1070,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         val frameDistances = mutableMapOf<String, Double>()
         val primaryDistance = if (visible) PublicTipPolicy.arDistance(frame.camera.pose.translation, point!!.pose.translation) else null
         if (localTip != null && primaryDistance != null) frameDistances[localTip!!.getString("id")] = primaryDistance
-        val projection = if (visible && (!publicTips || placingTip || PublicTipPolicy.inCamera(primaryDistance))) renderPin(point!!.pose, overlay.markerSelected, depth,
+        val selectedTipId = overlay.selectedTipId
+        val projection = if (visible && (!publicTips || placingTip || PublicTipPolicy.inCamera(primaryDistance))) renderPin(point!!.pose, selectedTipId != null && selectedTipId == localTip?.optString("id"), depth,
             localTip?.optString("tipType"), localTip?.optString("id")) else null
         val scanning = productMode && placingTip && !choosingCenter && point != null && !cloud.busy && !cloud.failed && cloud.hostedId == null
         val scanTarget = if (scanning && projection?.visible == true) PointF(projection.x!!, projection.y!!) else null
@@ -1094,9 +1103,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 val distance = PublicTipPolicy.arDistance(frame.camera.pose.translation, pose.translation)
                 if (distance != null) frameDistances[tip.getString("id")] = distance
                 if (publicTips && !PublicTipPolicy.inCamera(distance)) PinProjection(guidance = "실제 AR 거리 5m 이내에서 팁 표시")
-                else renderPin(pose, overlay.selectedTipId == tip.getString("id"), depth, tip.optString("tipType"), tip.getString("id"))
+                else renderPin(pose, selectedTipId == tip.getString("id"), depth, tip.optString("tipType"), tip.getString("id"))
             } ?: emptyList() else emptyList()
-        overlay.otherPins = otherPins
         restoredTipDistances.set(frameDistances)
         val frameRendered = renderedPins
         val frameOccluded = occludedPins
@@ -1137,9 +1145,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 return@runOnUiThread
             }
             if (resumed && !isFinishing && tipTargets.get().any { it.tip.getString("id") == selected.tip.getString("id") && SystemClock.elapsedRealtime() - it.target.atMs in 0..500 } && !detailOpen) {
-                overlay.markerSelected = selected.tip.getString("id") == localTip?.getString("id")
                 overlay.selectedTipId = selected.tip.getString("id")
-                detailOpen = true; resumeFromDetail = true
+                detailOpen = true
                 try {
                     startActivityForResult(Intent(this, TipDetailSheet::class.java).apply {
                         putExtra("tipId", selected.tip.getString("id"))
@@ -1147,8 +1154,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                         selected.distanceMeters?.let { putExtra("distanceMeters", it) }
                     }, detailRequestCode)
                 } catch (_: Exception) {
-                    detailOpen = false; resumeFromDetail = false
-                    overlay.markerSelected = false; overlay.selectedTipId = null
+                    detailOpen = false
+                    overlay.selectedTipId = null
                     Toast.makeText(this, "팁 상세를 열지 못했어요. 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -1400,15 +1407,12 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         @Volatile var referencePoint: PointF? = null
         @Volatile var showCenterTarget = false
         @Volatile var centerTargetReady = false
-        @Volatile var markerSelected = false
         @Volatile var selectedTipId: String? = null
-        @Volatile var otherPins: List<NearbyArPin> = emptyList()
         @Volatile var scan: ScanOverlay? = null
         var onPoint: ((Float, Float) -> Unit)? = null
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val placementReticle = ArSvg(this@GeoArActivity, "005f7.svg")
         private val placementCenter = ArSvg(this@GeoArActivity, "1e810.svg")
-        private val selectedGround = ArSvg(this@GeoArActivity, "d2771.svg")
         private val density = resources.displayMetrics.density
         private val theme by lazy { ArTheme(this@GeoArActivity) }
         private var offsetX = 0f; private var offsetY = 0f
@@ -1487,17 +1491,6 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 paint.color = Color.WHITE
                 canvas.drawCircle(r.x, r.y, 3 * density, paint)
             }
-            val selected = if (markerSelected) screenPoint
-                else otherPins.firstOrNull { it.tip.getString("id") == selectedTipId }?.projection
-            if (selected != null) drawSelectedGround(canvas, selected)
-        }
-        private fun drawSelectedGround(canvas: Canvas, p: PinProjection) {
-            canvas.save(); canvas.translate(p.x!!, p.y!!); canvas.rotate(p.tiltDegrees)
-            val groundWidth = p.widthPx * 1.4f * 28f / 48f
-            val groundHeight = groundWidth * 10f / 28f
-            selectedGround.setBounds((-groundWidth / 2).toInt(), (-groundHeight / 2).toInt(), (groundWidth / 2).toInt(), (groundHeight / 2).toInt())
-            selectedGround.draw(canvas)
-            canvas.restore()
         }
         override fun onTouchEvent(event: MotionEvent): Boolean {
             if (localTip != null && !placingTip) {

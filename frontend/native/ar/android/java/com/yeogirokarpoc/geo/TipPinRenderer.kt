@@ -19,7 +19,9 @@ import kotlin.math.sqrt
 /** One textured, bevelled mesh shared by all tip anchors in this GL context. */
 internal class TipPinRenderer(context: Context) {
     private val program = glCreateProgram()
-    private val texture = IntArray(1)
+    private val texture: Int
+    private val groundTexture: Int
+    private val groundMesh = meshBuffer(tipGroundVertices())
     private val mvp = FloatArray(16)
     private val model = FloatArray(16)
     private val vertices = mutableListOf<FloatArray>()
@@ -50,10 +52,7 @@ internal class TipPinRenderer(context: Context) {
                 }
             }
         }
-        ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-            put(data.toFloatArray())
-            position(0)
-        }
+        meshBuffer(data.toFloatArray())
     }
     private val matrixLocation: Int
     private val position: Int
@@ -72,14 +71,14 @@ internal class TipPinRenderer(context: Context) {
         matrixLocation = glGetUniformLocation(program, "mvp")
         position = glGetAttribLocation(program, "position")
         surface = glGetAttribLocation(program, "surface")
-        glGenTextures(1, texture, 0)
-        glBindTexture(GL_TEXTURE_2D, texture[0])
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         val bitmap = context.assets.open("figma/51db5.png").use { BitmapFactory.decodeStream(it) }
-        try { GLUtils.texImage2D(GL_TEXTURE_2D, 0, bitmap, 0) } finally { bitmap.recycle() }
+        texture = uploadTexture(bitmap)
+        val ground = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
+        ArSvg(context, "d2771.svg").apply {
+            setBounds(0, 0, ground.width, ground.height)
+            draw(Canvas(ground))
+        }
+        groundTexture = uploadTexture(ground)
         ShaderUtil.checkGLError("TipPin", "upload")
     }
 
@@ -112,7 +111,8 @@ internal class TipPinRenderer(context: Context) {
         }
         val bounds = PinBounds(left, top, right, bottom)
         if (shouldDraw(bounds)) {
-            drawMesh(texture[0], buffer)
+            if (selected) drawMesh(groundTexture, groundMesh)
+            drawMesh(texture, buffer)
             if (tipType != null && tipType in listOf("포토", "맛집", "카페", "꿀팁", "TMI")) {
                 val tag = tags.getOrPut(tipType) { createTag(tipType) }
                 drawMesh(tag.texture, tag.buffer)
@@ -149,6 +149,11 @@ internal class TipPinRenderer(context: Context) {
         canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 6f * tagTextureScale, 6f * tagTextureScale, paint)
         paint.color = theme.secondary; paint.textAlign = Paint.Align.CENTER
         canvas.drawText(type, width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
+        val data = tipTagVertices(vertices.maxOf { it[1] }, width.toFloat() / height)
+        return Tag(uploadTexture(bitmap), meshBuffer(data))
+    }
+
+    private fun uploadTexture(bitmap: Bitmap): Int {
         val id = IntArray(1)
         glGenTextures(1, id, 0)
         glBindTexture(GL_TEXTURE_2D, id[0])
@@ -157,12 +162,13 @@ internal class TipPinRenderer(context: Context) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         try { GLUtils.texImage2D(GL_TEXTURE_2D, 0, bitmap, 0) } finally { bitmap.recycle() }
-        val data = tipTagVertices(vertices.maxOf { it[1] }, width.toFloat() / height)
-        val mesh = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+        return id[0]
+    }
+
+    private fun meshBuffer(data: FloatArray): FloatBuffer =
+        ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
             put(data); position(0)
         }
-        return Tag(id[0], mesh)
-    }
 }
 
 private fun faceBrightness(a: FloatArray, b: FloatArray, c: FloatArray): Float {

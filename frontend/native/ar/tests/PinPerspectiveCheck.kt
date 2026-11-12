@@ -70,6 +70,13 @@ fun main() {
     check(!edgeOn.contains(550f, 700f, 1f, 1100L))
     check(!edgeOn.contains(506f, 700f, 1f, 1501L))
 
+    val ground = tipGroundVertices().toList().chunked(6)
+    check(ground.size == 6 && ground.all { it[1] == 0f })
+    close(ground.minOf { it[0] }, -0.12f)
+    close(ground.maxOf { it[0] }, 0.12f)
+    close(ground.minOf { it[2] }, -0.12f)
+    close(ground.maxOf { it[2] }, 0.12f)
+
     val tag = tipTagVertices(0.48f, 5f / 3f).toList().chunked(6)
     close(TIP_TAG_SCALE, 2.5f)
     close(tag.maxOf { it[1] } - tag.minOf { it[1] }, 0.15f)
