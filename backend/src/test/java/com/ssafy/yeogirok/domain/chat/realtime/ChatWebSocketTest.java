@@ -22,10 +22,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketHttpHeaders;
@@ -41,7 +44,9 @@ import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
+import com.ssafy.yeogirok.domain.user.unlink.UserWithdrawnEvent;
 import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.oauth.OAuthProvider;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestChatConfig;
@@ -77,7 +82,9 @@ class ChatWebSocketTest {
 	@Autowired
 	ChatHub chatHub;
 	@Autowired
-	RoomUpdateEventListener roomUpdateEventListener;
+	ApplicationEventPublisher eventPublisher;
+	@Autowired
+	PlatformTransactionManager transactionManager;
 	@Autowired
 	ChatCleanupJob chatCleanupJob;
 	@Autowired
@@ -436,8 +443,10 @@ class ChatWebSocketTest {
 	void 회원이_탈퇴하면_참여_중이던_방의_다른_참여자는_MEMBERS_변경을_받는다() throws Exception {
 		Client ownerClient = new Client().authenticate(owner);
 
-		// 탈퇴 커밋 뒤 발행 스레드가 하는 일. 이벤트 경로(제공자 연결 해제 등)를 피하려고 직접 부른다.
-		roomUpdateEventListener.publishWithdrawal(friend);
+		// 탈퇴 트랜잭션이 이벤트를 발행하고 커밋한다. 방 조회는 커밋 뒤 리스너(요청 스레드)에서 돈다.
+		// 제공자 연결 해제는 TestAuthConfig 의 가짜 클라이언트가 받는다.
+		new TransactionTemplate(transactionManager).executeWithoutResult(status -> eventPublisher.publishEvent(
+			new UserWithdrawnEvent(friend, OAuthProvider.KAKAO, "kakao-" + friend, null)));
 
 		JsonNode frame = ownerClient.nextOfType("ROOM_UPDATED");
 		assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("MEMBERS");
