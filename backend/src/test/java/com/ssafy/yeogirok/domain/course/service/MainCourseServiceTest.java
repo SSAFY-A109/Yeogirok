@@ -14,6 +14,8 @@ import java.util.List;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
@@ -178,6 +180,16 @@ class MainCourseServiceTest {
 		assertThat(ids(page2)).containsExactly(b.getId());
 		assertThat(page2.nextCursor()).isNull();
 		assertThat(page2.basis()).isEqualTo(page1.basis());
+	}
+
+	/** 최초 조회 시각이 지금보다 뒤거나 시각으로 바꿀 수 없을 만큼 크면 500 대신 C006(PR #107 리뷰). */
+	@ParameterizedTest
+	@ValueSource(longs = {1L, 99_999_999_999_999_999L})
+	void 커서의_최초_조회_시각이_지금보다_뒤면_C006(long secondsAfterNow) {
+		String cursor = CourseSearchCursor.encodeParts(NOW.getEpochSecond() + secondsAfterNow, 0, 1);
+
+		assertThatThrownBy(() -> recommend(null, null, cursor, null)).isInstanceOf(BusinessException.class)
+			.extracting("exceptionType").isEqualTo(ExceptionType.INVALID_CURSOR);
 	}
 
 	@Test

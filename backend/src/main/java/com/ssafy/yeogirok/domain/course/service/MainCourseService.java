@@ -66,7 +66,7 @@ public class MainCourseService {
 				"regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
 		}
 		int size = PageSize.resolve(limit);
-		MainCourseCursor after = MainCourseCursor.decodeOrNull(cursor);
+		MainCourseCursor after = MainCourseCursor.decodeOrNull(cursor, clock.instant());
 		ImportWindow window = after == null ? ImportWindow.now(clock) : ImportWindow.endingAt(after.windowEnd());
 
 		List<Ranked> eligible = eligible(publicCourseRepository.findCandidates(null,
