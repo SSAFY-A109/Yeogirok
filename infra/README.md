@@ -610,6 +610,26 @@ bash scripts/deploy-backend.sh                    # 마지막에 "[deploy] 성�
 - 마지막 확인에서 `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`만 남으면 백엔드는 뜹니다. 파일 업로드만 접근 키를 넣은 뒤에 동작합니다.
 - 같은 변경에 `LOCATION_EVIDENCE_MAX_ACCURACY_METERS`(AR 팁 위치 정확도, `30`)도 넣었습니다. 11/8 백엔드 AR 팁 PR(#64)이 prod 프로필에 기본값 없이 추가하는 값이라, #64가 머지되기 전에 서버에 있어야 합니다. 비밀 값이 아니라 compose에 바로 적었고(TBD: 백엔드 로컬 제안값), `.env`에는 넣을 것이 없습니다.
 
+**초대 링크 앱 연결 지문 (2026-11-12)**
+- 백엔드는 `https://<도메인>/.well-known/assetlinks.json`으로 "이 도메인의 초대 링크를 열어도 되는 앱"을 알려 줍니다. 안드로이드는 앱을 설치할 때 이 주소를 읽고, 앱 서명 지문이 목록에 있을 때만 초대 링크를 앱으로 엽니다. 목록에 없으면 브라우저로 열립니다.
+- 백엔드 기본값에는 개발 빌드용 지문(Expo 템플릿 `debug.keystore`)만 있어서, 배포 키로 서명한 APK에서는 링크가 앱으로 열리지 않았습니다. `docker-compose.yml`의 `ANDROID_APP_SHA256_FINGERPRINTS`에 개발 빌드 지문과 배포 키 지문을 쉼표로 이어 넣었습니다. 비밀 값이 아니라 compose에 바로 적었고, `.env`에는 넣을 것이 없습니다.
+- 서명 키가 바뀌거나 늘면 이 줄에 지문을 더합니다. 지문은 서명한 APK에서 읽습니다.
+
+```bash
+apksigner verify --print-certs <APK 파일> | grep SHA-256   # 64자를 대문자로 바꾸고 두 글자마다 : 를 넣는다
+```
+
+- 반영과 확인(서버):
+
+```bash
+cd ~/yeogirok/infra-src && git pull
+cd infra
+docker compose up -d backend                      # 설정이 바뀐 백엔드만 다시 만들어진다
+curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보이면 끝
+```
+
+- 이미 앱을 설치한 폰은 설치할 때 읽은 결과를 기억합니다. 앱을 다시 설치하거나 `adb shell pm verify-app-links --re-verify com.ssafya109.yeogirok`로 다시 확인시킵니다.
+
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
 2. `docker-compose.yml`의 해당 서비스 `environment`에 `KEY: ${KEY}` 한 줄 추가 (이 파일은 `infra/dev`로 커밋)
