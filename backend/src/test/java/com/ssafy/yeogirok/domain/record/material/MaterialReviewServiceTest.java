@@ -41,6 +41,7 @@ import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.FakePlaceKeywordSearch;
 import com.ssafy.yeogirok.support.HoldableExecutor;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestRedis;
@@ -69,6 +70,8 @@ class MaterialReviewServiceTest {
 	@Autowired
 	ReceiptOcrClient ocrClient;
 	@Autowired
+	FakePlaceKeywordSearch placeSearch;
+	@Autowired
 	FileStorage fileStorage;
 	@Autowired
 	HoldableExecutor executor;
@@ -86,6 +89,7 @@ class MaterialReviewServiceTest {
 		clock.set(NOW);
 		executor.reset();
 		reset(ocrClient);
+		placeSearch.reset();
 		given(fileStorage.readAll(anyString(), anyString(), anyLong())).willReturn(new byte[] {1});
 		given(ocrClient.recognize(any())).willReturn(new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON));
 		recordId = record();
@@ -123,6 +127,19 @@ class MaterialReviewServiceTest {
 	private static void assertError(Runnable call, ExceptionType type) {
 		assertThatThrownBy(call::run).isInstanceOf(BusinessException.class)
 			.extracting("exceptionType").isEqualTo(type);
+	}
+
+	/** 장소 후보는 OCR 이 끝날 때 한 번만 찾는다(specs/draft-merge.md 5절). 091 확정 때는 다시 찾지 않는다. */
+	@Test
+	void 확정할_때는_장소를_다시_찾지_않는다() {
+		given(ocrClient.recognize(any())).willReturn(
+			new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "강원 강릉시 창해로", true));
+		linked(ME);
+		assertThat(placeSearch.queries()).hasSize(1);
+
+		review(ME, recordId, 2, CUSTOM);
+
+		assertThat(placeSearch.queries()).hasSize(1);
 	}
 
 	@Test

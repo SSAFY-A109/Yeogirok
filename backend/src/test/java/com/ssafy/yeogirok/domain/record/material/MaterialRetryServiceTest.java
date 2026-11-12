@@ -37,6 +37,7 @@ import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
+import com.ssafy.yeogirok.support.FakePlaceKeywordSearch;
 import com.ssafy.yeogirok.support.HoldableExecutor;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestRedis;
@@ -62,6 +63,8 @@ class MaterialRetryServiceTest {
 	@Autowired
 	ReceiptOcrClient ocrClient;
 	@Autowired
+	FakePlaceKeywordSearch placeSearch;
+	@Autowired
 	JobStore jobStore;
 	@Autowired
 	FileStorage fileStorage;
@@ -81,6 +84,7 @@ class MaterialRetryServiceTest {
 		clock.set(NOW);
 		executor.reset();
 		reset(ocrClient);
+		placeSearch.reset();
 		given(fileStorage.readAll(anyString(), anyString(), anyLong())).willReturn(new byte[] {1});
 		TravelRoom room = em.persist(TravelRoom.builder().title("강릉 여행").transportMode(TransportMode.CAR)
 			.createdAt(NOW).build());
@@ -160,6 +164,8 @@ class MaterialRetryServiceTest {
 
 		assertThat(stored().extracted().address()).isEqualTo("서울 노원구 노해로");
 		assertThat(stored().extracted().addressComplete()).isTrue();
+		// 092 로 OCR 을 다시 돌리면 새 주소로 장소도 다시 찾는다.
+		assertThat(placeSearch.queries()).containsExactly("서울 노원구 동일로 가게", "서울 노원구 노해로 가게");
 	}
 
 	@Test

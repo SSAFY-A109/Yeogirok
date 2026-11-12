@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.record.material;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -10,6 +11,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Semaphore;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,10 +38,15 @@ import com.ssafy.yeogirok.domain.job.JobProperties;
 import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.job.service.JobStore;
+import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
+import com.ssafy.yeogirok.global.geo.PlaceKeywordSearch;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
 import com.ssafy.yeogirok.global.lock.RedisLock;
+import com.ssafy.yeogirok.support.FakePlaceKeywordSearch;
+import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.support.HoldableExecutor;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestFileProperties;
@@ -63,6 +74,7 @@ class ReceiptOcrRunnerTest {
 	JobStore jobStore;
 	FileStorage fileStorage;
 	ReceiptOcrClient ocrClient;
+	FakePlaceKeywordSearch placeSearch;
 	ReceiptOcrRunner runner;
 
 	@BeforeEach
@@ -78,6 +90,7 @@ class ReceiptOcrRunnerTest {
 		materials = new ReceiptMaterials(materialStore, jobStore, clock);
 		fileStorage = mock(FileStorage.class);
 		ocrClient = mock(ReceiptOcrClient.class);
+		placeSearch = new FakePlaceKeywordSearch();
 		runner = runnerWith(new JobRunner(jobStore, executor, JOB_PROPERTIES, clock));
 		when(fileStorage.readAll(anyString(), anyString(), anyLong())).thenReturn(IMAGE);
 	}
@@ -88,6 +101,7 @@ class ReceiptOcrRunnerTest {
 
 	ReceiptOcrRunner runnerWith(JobRunner jobRunner, Duration readTimeout, Duration slotWait) {
 		return new ReceiptOcrRunner(jobRunner, materials, fileStorage, TestFileProperties.VALUE, ocrClient,
+			new ReceiptPlaceCandidates(placeSearch, RecordTestConfig.RECORD_PROPERTIES),
 			new OcrProperties("http://ocr.test", Duration.ofSeconds(2), readTimeout, slotWait), clock);
 	}
 
@@ -144,6 +158,57 @@ class ReceiptOcrRunnerTest {
 
 		assertThat(stored().extracted().address()).isEqualTo("부산 해운대구 해운대로");
 		assertThat(stored().extracted().addressComplete()).isTrue();
+	}
+
+	@Test
+	void OCR_이_끝나면_주소_상호로_찾은_장소를_후보로_저장하고_확정하지는_않는다() {
+		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("해운대 커피", LocalDate.of(2026, 11, 8),
+			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+		placeSearch.willReturn(PlaceKeywordSearch.Result.found(List.of(new PlaceKeywordSearch.Place("해운대 커피 본점",
+			new BigDecimal("35.1631"), new BigDecimal("129.1603"), "부산 해운대구 해운대로 570", null))));
+
+		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
+
+		ReceiptMaterial saved = stored();
+		assertThat(placeSearch.queries()).containsExactly("부산 해운대구 해운대로 해운대 커피");
+		assertThat(saved.extracted().placeCandidates()).extracting(RecordPlaceView::provider, RecordPlaceView::name)
+			.containsExactly(tuple(PlaceProvider.MANUAL, "해운대 커피 본점"));
+		assertThat(saved.values().place()).isNull();
+		assertThat(saved.reviewStatus()).isEqualTo(ReceiptMaterial.ReviewStatus.REQUIRED);
+		assertThat(saved.version()).isEqualTo(2);
+	}
+
+	@Test
+	void 장소_검색이_실패해도_OCR_결과는_그대로_저장된다() {
+		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("가게", LocalDate.of(2026, 11, 8),
+			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+		placeSearch.willReturn(PlaceKeywordSearch.Result.failed("SocketTimeoutException"));
+
+		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
+
+		assertThat(stored().processStatus()).isEqualTo(ReceiptMaterial.Status.READY);
+		assertThat(stored().extracted().merchantName()).isEqualTo("가게");
+		assertThat(stored().extracted().placeCandidates()).isEmpty();
+		assertThat(job(JOB_ID).status()).isEqualTo(JobStatus.SUCCEEDED);
+	}
+
+	/** 검색 중에는 OCR 슬롯과 자료 잠금을 잡고 있지 않다(다음 영수증 OCR 이 밀리지 않는다). */
+	@Test
+	void 장소_검색은_OCR_슬롯을_반납하고_자료_잠금_밖에서_한다() throws Exception {
+		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("가게", LocalDate.of(2026, 11, 8),
+			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+		Field slotField = ReceiptOcrRunner.class.getDeclaredField("ocrSlot");
+		slotField.setAccessible(true);
+		Semaphore slot = (Semaphore) slotField.get(runner);
+		List<Boolean> observed = new ArrayList<>();
+		placeSearch.onSearch(() -> {
+			observed.add(slot.availablePermits() == 1);
+			observed.add(!Boolean.TRUE.equals(TestRedis.template().hasKey("material-lock:" + MATERIAL_ID)));
+		});
+
+		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
+
+		assertThat(observed).containsExactly(true, true);
 	}
 
 	@Test

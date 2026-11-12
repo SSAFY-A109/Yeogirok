@@ -12,15 +12,17 @@ import com.ssafy.yeogirok.domain.file.session.UploadSessionStore;
 import com.ssafy.yeogirok.domain.job.JobConfig;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
+import com.ssafy.yeogirok.support.FakePlaceKeywordSearch;
 import com.ssafy.yeogirok.support.HoldableExecutor;
 
 /**
  * 영수증 자료 서비스 @DataJpaTest 용 빈. 기록 빈(실제 Redis 포함)에 #79 작업 실행기(호출 스레드에서 바로 실행)와 자료 API 를
- * 더한다. OCR 서버는 가짜({@link ReceiptOcrClient} mock), S3 는 RecordTestConfig 의 mock.
+ * 더한다. OCR 서버는 가짜({@link ReceiptOcrClient} mock), 장소 검색은 {@link FakePlaceKeywordSearch}, S3 는 RecordTestConfig 의
+ * mock.
  */
 @TestConfiguration
 @Import({RecordTestConfig.class, JobRunner.class, UploadSessionStore.class, ReceiptOcrRunner.class,
-	MaterialLinkService.class, MaterialReviewService.class, MaterialRetryService.class})
+	ReceiptPlaceCandidates.class, MaterialLinkService.class, MaterialReviewService.class, MaterialRetryService.class})
 public class MaterialTestConfig {
 
 	@Bean(JobConfig.EXECUTOR)
@@ -37,5 +39,11 @@ public class MaterialTestConfig {
 	@Bean
 	ReceiptOcrClient receiptOcrClient() {
 		return mock(ReceiptOcrClient.class);
+	}
+
+	/** 카카오 키워드 검색 대신. 기본은 결과 없음(후보 빈 목록). */
+	@Bean
+	FakePlaceKeywordSearch placeKeywordSearch() {
+		return new FakePlaceKeywordSearch();
 	}
 }

@@ -29,6 +29,8 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
 import com.ssafy.yeogirok.global.lock.RedisLock;
 import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.FakePlaceKeywordSearch;
+import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.support.TestFileProperties;
 import com.ssafy.yeogirok.support.TestRedis;
 
@@ -59,6 +61,7 @@ class MaterialLinkConcurrencyTest {
 		List<Runnable> queued = Collections.synchronizedList(new ArrayList<>());
 		ReceiptOcrRunner runner = new ReceiptOcrRunner(new JobRunner(jobStore, queued::add, jobProperties, clock),
 			materials, mock(FileStorage.class), TestFileProperties.VALUE, mock(ReceiptOcrClient.class),
+			new ReceiptPlaceCandidates(new FakePlaceKeywordSearch(), RecordTestConfig.RECORD_PROPERTIES),
 			new OcrProperties("http://ocr.test", Duration.ofSeconds(2), Duration.ofSeconds(20), Duration.ofSeconds(30)), clock);
 		MaterialLinkService service = new MaterialLinkService(mock(RecordFinder.class), materials, materialStore,
 			new UploadSessionStore(TestRedis.template(), json, idempotency, clock), runner, clock);

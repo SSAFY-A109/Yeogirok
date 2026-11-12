@@ -11,14 +11,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param draftRetention    초안 보관 기간. 만든 시각부터 센다
  * @param materialRetention 기록에 연결한 영수증 자료를 원본 삭제 뒤 두는 기간(11/10 사용자 결정 30일). 연결하지 않은 자료는
  *                          멱등키 보관 기간(24시간)만 둔다
+ * @param receiptPlaceCandidates 영수증 주소·상호로 찾은 장소 후보를 063 에 몇 개까지 줄지(1 이상)
  * @param draft             사진을 영수증 근거로 붙이고 사진끼리 묶는 기준
  */
 @ConfigurationProperties("yeogirok.record")
-public record RecordProperties(Duration draftRetention, Duration materialRetention, Draft draft) {
+public record RecordProperties(Duration draftRetention, Duration materialRetention, int receiptPlaceCandidates,
+	Draft draft) {
 
 	public RecordProperties {
 		requirePositive(draftRetention, "draft-retention");
 		requirePositive(materialRetention, "material-retention");
+		if (receiptPlaceCandidates <= 0) {
+			throw new IllegalArgumentException("yeogirok.record.receipt-place-candidates 값이 필요합니다(1 이상).");
+		}
 		if (draft == null) {
 			throw new IllegalArgumentException("yeogirok.record.draft 값이 필요합니다.");
 		}
