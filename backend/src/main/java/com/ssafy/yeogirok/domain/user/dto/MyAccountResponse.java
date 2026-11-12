@@ -11,7 +11,7 @@ public record MyAccountResponse(
 	List<String> loginProviders
 ) {
 
-	/** 발자취·팁 도메인이 생기기 전까지는 0 이다. */
+	/** 발자취는 삭제하지 않은 것, 팁은 내 팁 목록(API-053)에 나오는 것의 수. */
 	public record ActivityCounts(
 		long footprints,
 		long tips
