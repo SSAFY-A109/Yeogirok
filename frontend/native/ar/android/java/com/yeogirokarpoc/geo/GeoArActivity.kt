@@ -3,6 +3,7 @@ package com.yeogirokarpoc.geo
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.*
@@ -36,6 +37,8 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 private const val PLACEMENT_TARGET_HEIGHT_FRACTION = 0.64f
+private const val SCAN_TARGET_HEIGHT_FRACTION = 0.54f
+private const val SCAN_AIM_RADIUS_DP = 48f
 
 /** Owns exactly one session: hit test, anchor pose and Earth conversion all use it. */
 class GeoArActivity : Activity(), GLSurfaceView.Renderer {
@@ -51,6 +54,9 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private var placementHeader: View? = null
     private var placementPanel: View? = null
     private var placementConfirm: Button? = null
+    private var placementReset: Button? = null
+    private var scanProgress: ProgressBar? = null
+    private var scanProgressLabel: TextView? = null
     private var placementLocation: TextView? = null
     private var productTabs: View? = null
     @Volatile private var placingTip = false
@@ -105,6 +111,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
     private var placementHitType = "PLANE"
     private var referenceHitType = "PLANE"
     private val cloud = CloudAnchorExperiment()
+    private val placementScan = PlacementScan()
+    private data class ScanOverlay(val target: PointF?, val aligned: Boolean, val moveSideways: Boolean)
     private var lastCloudTracking = ""
     private var lastCloudGate = ""
     private var lastCloudGateAt = 0L
@@ -406,6 +414,20 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     }
                     addView(placementLocation, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
                 })
+                scanProgressLabel = TextView(this@GeoArActivity).apply {
+                    textSize = 14f; typeface = theme.medium; setTextColor(theme.foreground)
+                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                    visibility = View.GONE
+                }
+                addView(scanProgressLabel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+                scanProgress = ProgressBar(this@GeoArActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = PlacementScan.TOTAL_VIEWS
+                    progressTintList = ColorStateList.valueOf(theme.primary)
+                    progressBackgroundTintList = ColorStateList.valueOf(theme.border)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    visibility = View.GONE
+                }
+                addView(scanProgress, LinearLayout.LayoutParams(-1, dp(8)).apply { topMargin = dp(4) })
                 placementConfirm = Button(this@GeoArActivity).apply {
                     text = "여기에 놓기"; contentDescription = "인식된 표면에 팁 위치 확정"
                     isEnabled = false; textSize = 15f; typeface = theme.medium; isAllCaps = false
@@ -423,13 +445,14 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     }
                 }
                 addView(placementConfirm, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(16) })
-                addView(Button(this@GeoArActivity).apply {
+                placementReset = Button(this@GeoArActivity).apply {
                     text = "다시 놓기"; contentDescription = "선택한 팁 위치 초기화"
                     textSize = 14f; typeface = theme.medium; isAllCaps = false
                     setTextColor(theme.primary); background = theme.background(theme.card, dp(8).toFloat())
                     setOnClickListener { placementCommitted.set(false); resetRequested.set(true) }
                     visibility = View.GONE
-                }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+                }
+                addView(placementReset, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
             }
             placementPanel = panel
             root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
@@ -691,6 +714,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
 
     private fun resetAnchor() {
         resetRestoredAnchor()
+        placementScan.reset()
+        overlay.scan = null
         measurementAnchor?.detach(); measurementAnchor = null
         overlay.referencePoint = null
         restoreRetryRequested.set(false)
@@ -987,6 +1012,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         if (anchor?.trackingState == TrackingState.STOPPED) {
             anchor?.detach(); anchor = null; validPlacement = false
             placementCommitted.set(false)
+            placementScan.reset()
             cloud.reset()
             placementMessage = "앵커 추적이 종료됐습니다. 다시 배치하거나 복원 재시도를 눌러 주세요."
         }
@@ -1030,10 +1056,6 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             lastCloudTracking = trackingSummary
             Log.i("YeogirokCloud", "TRACKING $trackingSummary")
         }
-        if (productMode && placingTip && restore == null && cameraTracking && validPlacement &&
-            point?.trackingState == TrackingState.TRACKING && cloud.canRequestHost(false, onPlacement = true)) {
-            cloud.startHost(current, point, diagnostic = false, onPlacement = true)
-        }
         val visible = cameraTracking && validPlacement && !cloud.failed && point?.trackingState == TrackingState.TRACKING && !(placingTip && exploring)
         val reference = measurementAnchor
         val referenceVisible = cameraTracking && reference?.trackingState == TrackingState.TRACKING
@@ -1042,6 +1064,27 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         if (localTip != null && primaryDistance != null) frameDistances[localTip!!.getString("id")] = primaryDistance
         val projection = if (visible && (!publicTips || placingTip || PublicTipPolicy.inCamera(primaryDistance))) renderPin(point!!.pose, overlay.markerSelected, depth,
             localTip?.optString("tipType"), localTip?.optString("id")) else null
+        val scanning = productMode && placingTip && !choosingCenter && point != null && !cloud.busy && !cloud.failed && cloud.hostedId == null
+        val scanTarget = if (scanning && projection?.visible == true) PointF(projection.x!!, projection.y!!) else null
+        val aimRadius = SCAN_AIM_RADIUS_DP * resources.displayMetrics.density
+        val aligned = scanTarget != null && hypot(scanTarget.x - width / 2f, scanTarget.y - height * SCAN_TARGET_HEIGHT_FRACTION) <= aimRadius
+        val bearing = if (aligned && point != null) {
+            val cameraPose = frame.camera.pose
+            val pinPose = point.pose
+            val dx = (cameraPose.tx() - pinPose.tx()).toDouble()
+            val dz = (cameraPose.tz() - pinPose.tz()).toDouble()
+            if (hypot(dx, dz) >= 0.25) Math.toDegrees(kotlin.math.atan2(dx, dz)) else null
+        } else null
+        val holdingNewAngle = placementScan.observe(SystemClock.elapsedRealtime(), bearing)
+        val scannedViews = placementScan.completedViews
+        val scanComplete = placementScan.complete
+        val moveSideways = bearing != null && !scanComplete && !holdingNewAngle
+        val scanHostAnchor = point?.takeIf { scanning && scanComplete && visible }
+        if (scanHostAnchor != null && cloud.canRequestHost(HostQualityPolicy.SCAN_COMPLETE)) {
+            cloud.startHost(current, scanHostAnchor, HostQualityPolicy.SCAN_COMPLETE)
+        }
+        val canSaveLowQuality = scanHostAnchor != null && cloud.canRequestHost(HostQualityPolicy.SCAN_LOW_QUALITY)
+        overlay.scan = if (scanning && cameraTracking && !cloud.busy) ScanOverlay(scanTarget, aligned, moveSideways) else null
         overlay.screenPoint = projection?.takeIf { it.visible }
         tapTarget.set(if (localTip != null && projection?.visible == true)
             PinTapTarget(projection, SystemClock.elapsedRealtime()) else null)
@@ -1122,7 +1165,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             !cameraTracking -> if (productMode) productTrackingHint(frame) else "카메라 추적 대기: ${frame.camera.trackingFailureReason}"
             publicTips && !placingTip && primaryDistance != null && !PublicTipPolicy.inCamera(primaryDistance) -> "복원된 팁까지 약 %.1fm예요. 실제 거리 5m 이내에서 표시돼요.".format(primaryDistance)
             productMode && cloud.authorizationFailed -> "Keyless 인증에 실패했어요. Google Cloud의 앱 등록을 확인해 주세요."
-            publicTips && cloud.failed -> "이 팁의 위치를 복원하지 못했어요."
+            publicTips && cloud.failed -> "팁 위치를 찾지 못했어요. ‘다시 찾기’를 누르고 팁을 남긴 곳의 벽과 사물을 여러 각도에서 비춰 주세요."
             productMode && cloud.failed -> "이 팁의 위치를 복원하지 못했어요. 위에서 팁을 다시 선택해 보세요."
             productMode && cloud.busy -> "저장했던 공간 위치를 찾고 있어요."
             cloud.failed || cloud.busy -> cloud.message
@@ -1136,13 +1179,15 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 .put("verticalOffsetMeters", (p.ty() - r.ty()).toDouble())
                 .put("referenceHitType", referenceHitType).put("groundTruth", false)
         } else null
+        val experimentHostPolicy = if (diagnosticHost) HostQualityPolicy.DIAGNOSTIC_CURRENT_QUALITY else HostQualityPolicy.GOOD_STABLE
         if (confirmRequested.getAndSet(false) && !overlay.dragging) {
             if (productMode && restore == null) {
                 if (cloud.failed && cameraTracking && validPlacement && point?.trackingState == TrackingState.TRACKING) {
                     cloud.reset()
-                    cloud.startHost(current, point, diagnostic = false, onPlacement = true)
+                } else if (canSaveLowQuality && scanHostAnchor != null) {
+                    cloud.startHost(current, scanHostAnchor, HostQualityPolicy.SCAN_LOW_QUALITY)
                 }
-            } else if (visible && restore == null && cloud.canRequestHost(diagnosticHost)) cloud.startHost(current, point!!, diagnosticHost)
+            } else if (visible && restore == null && cloud.canRequestHost(experimentHostPolicy)) cloud.startHost(current, point!!, experimentHostPolicy)
             else if (visible && restore != null && !cloud.busy && (estimate != null || navigationMode)) {
                 val record = JSONObject(restore.toString())
                     .put("operation", CloudRecord.operation("RESOLVE", sessionId, cloud.durationMs))
@@ -1160,9 +1205,10 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             returnCloudRecord(record)
         }
         val enabled = if (productMode && placingTip)
-            if (choosingCenter) center != null else cloud.failed && cameraTracking && validPlacement && point?.trackingState == TrackingState.TRACKING
+            if (choosingCenter) center != null else !cloud.busy && (canSaveLowQuality ||
+                cloud.failed && cameraTracking && validPlacement && point?.trackingState == TrackingState.TRACKING)
         else visible && !overlay.dragging && !cloud.busy &&
-            (if (restore == null) cloud.canRequestHost(diagnosticHost) else estimate != null || navigationMode)
+            (if (restore == null) cloud.canRequestHost(experimentHostPolicy) else estimate != null || navigationMode)
         val gateCode = when {
             cloud.failed -> "OPERATION_FAILED"
             cloud.busy -> "BUSY"
@@ -1174,7 +1220,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             overlay.dragging -> "DRAGGING"
             cloud.qualityErrorType != null -> "QUALITY_ERROR"
             !cloud.qualityFresh -> "QUALITY_PENDING"
-            diagnosticHost && cloud.canRequestHost(true) -> "DIAGNOSTIC_READY"
+            diagnosticHost && cloud.canRequestHost(experimentHostPolicy) -> "DIAGNOSTIC_READY"
             cloud.quality == "INSUFFICIENT" -> "QUALITY_INSUFFICIENT"
             cloud.quality == "SUFFICIENT" -> "QUALITY_SUFFICIENT"
             cloud.canHost -> "READY"
@@ -1201,7 +1247,15 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             cloud.failed -> "위치를 저장하지 못했어요. 네트워크를 확인한 뒤 ‘저장 다시 시도’를 눌러 주세요."
             cloud.busy -> "팁 위치를 저장하고 있어요. 잠시 기다려 주세요."
             !cameraTracking -> productTrackingHint(frame)
-            else -> "선택한 위치를 확인하고 있어요."
+            point?.trackingState != TrackingState.TRACKING -> "핀을 놓은 곳을 비춰 위치를 다시 인식해 주세요."
+            canSaveLowQuality -> "공간 특징이 적어 팁을 다시 찾기 어려울 수 있어요. 주변을 더 비추거나 현재 상태로 저장해 보세요."
+            scanComplete -> "스캔을 완료했어요. 공간 품질을 확인할 수 있도록 주변을 비춰 주세요."
+            projection?.occluded == true -> "핀이 가려졌어요. 핀이 보이는 쪽으로 움직여 주세요."
+            scanTarget == null -> "핀을 놓은 곳으로 카메라를 돌려 주세요."
+            !aligned -> "핀에 표시된 작은 원을 화면 가운데 큰 원에 맞춰 주세요."
+            bearing == null -> "핀에서 한 걸음 떨어져 비춰 주세요."
+            moveSideways -> "핀을 계속 비추면서 왼쪽이나 오른쪽으로 천천히 옆걸음해 주세요."
+            else -> "이 각도에서 핀을 잠깐 비춰 주세요."
         }
         if (restore == null) {
             val gateState = "$gateCode valid=$validPlacement dragging=${overlay.dragging} quality=${cloud.quality}" +
@@ -1231,6 +1285,8 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 "지리 좌표·위치 정확도: 이 모드에서는 측정하지 않음\n수명 ${restore?.getInt("ttlDays") ?: ArExperimentPolicy.CLOUD_TTL_DAYS}일 / 기기 간 복원 성공 미검증"
             val nearbyFailed = (nearbyAnchors?.failedCount ?: 0) > 0
             val restoreFailed = restore != null && (cloud.failed || nearbyFailed)
+            val savingPlacement = cloud.busy || cloud.hostedId != null
+            val placementFailed = cloud.failed
             runOnUiThread { if (!isFinishing) {
                 val centerHint = if (!cameraTracking) productTrackingHint(frame)
                     else if (center != null) "중앙 표면에 팁을 남길 수 있어요. ＋를 눌러 주세요."
@@ -1260,8 +1316,25 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 if (placingTip) {
                     placementConfirm?.isEnabled = enabled
                     placementConfirm?.alpha = if (enabled) 1f else 0.4f
-                    placementConfirm?.text = if (choosingCenter) "여기에 놓기" else if (cloud.failed) "저장 다시 시도" else "공간 저장 중"
-                    (placementPanel as? LinearLayout)?.getChildAt(2)?.visibility = if (cloud.failed) View.VISIBLE else View.GONE
+                    placementConfirm?.visibility = if (choosingCenter || placementFailed || canSaveLowQuality && !savingPlacement) View.VISIBLE else View.GONE
+                    val placementLabel = when {
+                        choosingCenter -> "여기에 놓기"
+                        placementFailed -> "저장 다시 시도"
+                        else -> "현재 상태로 저장"
+                    }
+                    placementConfirm?.text = placementLabel
+                    placementConfirm?.contentDescription = if (choosingCenter) "인식된 표면에 팁 위치 확정" else placementLabel
+                    placementReset?.visibility = if (!choosingCenter && !savingPlacement) View.VISIBLE else View.GONE
+                    val progressVisibility = if (choosingCenter || placementFailed) View.GONE else View.VISIBLE
+                    scanProgress?.visibility = progressVisibility
+                    scanProgress?.progress = scannedViews
+                    scanProgressLabel?.visibility = progressVisibility
+                    val progressText = when {
+                        savingPlacement -> "스캔 완료 · 공간 저장 중"
+                        scanComplete -> "스캔 완료 · $scannedViews/${PlacementScan.TOTAL_VIEWS}"
+                        else -> "스캔 각도 $scannedViews/${PlacementScan.TOTAL_VIEWS}"
+                    }
+                    scanProgressLabel?.let { if (it.text != progressText) it.text = progressText }
                     placementLocation?.text = navigation?.visitLocation?.let {
                         "현재 장소 · 정확도 " + kotlin.math.round(JSONObject(it).getDouble("accuracyMeters")).toInt() + "m"
                     } ?: "현재 장소 · 위치를 확인하지 못했어요"
@@ -1330,6 +1403,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         @Volatile var markerSelected = false
         @Volatile var selectedTipId: String? = null
         @Volatile var otherPins: List<NearbyArPin> = emptyList()
+        @Volatile var scan: ScanOverlay? = null
         var onPoint: ((Float, Float) -> Unit)? = null
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val placementReticle = ArSvg(this@GeoArActivity, "005f7.svg")
@@ -1341,7 +1415,41 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         private val pinTap = PinTapPolicy(android.view.ViewConfiguration.get(this@GeoArActivity).scaledTouchSlop.toFloat())
         private var pressedTipId: String? = null
         fun cancelPinTap() { pinTap.cancel() }
+
+        private fun drawScan(canvas: Canvas, guide: ScanOverlay) {
+            val x = width / 2f
+            val y = height * SCAN_TARGET_HEIGHT_FRACTION
+            val radius = SCAN_AIM_RADIUS_DP * density
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 4 * density
+            paint.color = theme.foreground
+            canvas.drawCircle(x, y, radius, paint)
+            paint.strokeWidth = 2 * density
+            paint.color = theme.card
+            canvas.drawCircle(x, y, radius, paint)
+            guide.target?.let { target ->
+                paint.strokeWidth = 5 * density
+                paint.color = theme.card
+                canvas.drawCircle(target.x, target.y, 12 * density, paint)
+                paint.strokeWidth = 3 * density
+                paint.color = if (guide.aligned) theme.positive else theme.primary
+                canvas.drawCircle(target.x, target.y, 12 * density, paint)
+            }
+            if (guide.moveSideways) {
+                paint.color = theme.card
+                paint.strokeWidth = 3 * density
+                for (direction in listOf(-1, 1)) {
+                    val tipX = x + direction * (radius + 20 * density)
+                    val baseX = tipX - direction * 8 * density
+                    canvas.drawLine(baseX, y - 8 * density, tipX, y, paint)
+                    canvas.drawLine(tipX, y, baseX, y + 8 * density, paint)
+                }
+            }
+            paint.style = Paint.Style.FILL
+        }
+
         override fun onDraw(canvas: Canvas) {
+            scan?.let { drawScan(canvas, it) }
             if (showCenterTarget) {
                 val x = width / 2f; val y = height * PLACEMENT_TARGET_HEIGHT_FRACTION
                 placementReticle.setBounds((x - 75 * density).toInt(), (y - 24 * density).toInt(), (x + 75 * density).toInt(), (y + 24 * density).toInt())
