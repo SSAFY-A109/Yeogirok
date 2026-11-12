@@ -551,7 +551,7 @@ docker compose exec redis redis-cli config get maxmemory-policy
   | `JWT_SECRET` | 서버 `.env` | `openssl rand -base64 48`. 서버에서만 만든다 |
   | `GOOGLE_WEB_CLIENT_ID` | 서버 `.env` | 구글 **웹** 클라이언트 ID. 앱의 `webClientId`와 같은 값 |
   | `KAKAO_APP_KEY` | 서버 `.env` | 카카오 **네이티브 앱 키**. 앱 카카오 SDK와 같은 값 |
-  | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다 |
+  | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. `LOCATION_*`는 TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다. `VISIT_STATS_*`(방문 분포 격자)는 11/12에 지도를 가장 가까이 당기면 발자취가 남긴 자리(약 11m 칸)에 찍히도록 바꿨다. 단계별 칸 크기와 주의점은 compose 주석에 있다 |
 
 - 구글·카카오 키가 아직 없으면 임시 문자열을 넣습니다. 백엔드는 뜨고 그 제공자 로그인만 실패합니다.
 - 선택 키 3개는 비어 있어도 백엔드가 뜹니다. 값을 받으면 서버 `.env`에 넣고 `docker compose up -d backend`로 백엔드만 다시 켭니다(다시 빌드하지 않음).
