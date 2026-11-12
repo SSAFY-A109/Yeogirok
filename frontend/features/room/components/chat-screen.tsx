@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { useMemo, useRef, type ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { View } from "react-native";
 
 import { isApiError } from "@/api/errors";
 import { Button } from "@/components/ui/button";
@@ -103,7 +103,7 @@ function ChatRoom({ roomId }: { roomId: number }) {
   if (room.data && me.data && history.data) {
     return (
       <ChatFrame roomId={roomId} title={title} subtitle={subtitle} connected={connected}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
+        <View className="flex-1">
           {messages.length === 0 && connection.pendingMessages.length === 0 ? (
             <ChatEmpty />
           ) : (
@@ -134,7 +134,7 @@ function ChatRoom({ roomId }: { roomId: number }) {
               messageList.current?.scrollToLatest();
             }}
           />
-        </KeyboardAvoidingView>
+        </View>
       </ChatFrame>
     );
   }
