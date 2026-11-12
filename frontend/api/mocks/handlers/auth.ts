@@ -160,6 +160,48 @@ export const authHandlers = [
 
     return HttpResponse.json({ success: true, data: { id: MOCK_USER_ID, ...meFixture, loginProviders: [provider], activityCounts: { footprints, tips } } });
   }),
+  http.put("*/api/v1/users/me/push-tokens", async ({ request }) => {
+    if (!readBearer(request)) {
+      return failure("A001", 401);
+    }
+
+    const body = await readJson(request);
+
+    if (typeof body !== "object" || body === null || !("token" in body) || !("platform" in body)) {
+      return failure("C001", 400);
+    }
+
+    if (typeof body.token !== "string" || typeof body.platform !== "string") {
+      return failure("C002", 400);
+    }
+
+    if (!body.token.trim() || body.token.length > MAX_PUSH_TOKEN_LENGTH || body.platform !== "ANDROID") {
+      return failure("C003", 400);
+    }
+
+    return HttpResponse.json({ success: true, data: null });
+  }),
+  http.delete("*/api/v1/users/me/push-tokens", async ({ request }) => {
+    if (!readBearer(request)) {
+      return failure("A001", 401);
+    }
+
+    const body = await readJson(request);
+
+    if (typeof body !== "object" || body === null || !("token" in body)) {
+      return failure("C001", 400);
+    }
+
+    if (typeof body.token !== "string") {
+      return failure("C002", 400);
+    }
+
+    if (!body.token.trim() || body.token.length > MAX_PUSH_TOKEN_LENGTH) {
+      return failure("C003", 400);
+    }
+
+    return HttpResponse.json({ success: true, data: null });
+  }),
   http.delete("*/api/v1/users/me", async ({ request }) => {
     const accessToken = readBearer(request);
     const issued = accessToken ? issuedAccessTokens.get(accessToken) : undefined;

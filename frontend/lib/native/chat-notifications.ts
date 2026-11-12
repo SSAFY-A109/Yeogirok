@@ -10,3 +10,9 @@ export const listenForChatNotificationOpens: (onOpen: (roomId: number) => void) 
   () => {
     return undefined;
   };
+
+export const listenForChatPushTokenChanges: (
+  onChange: (token: string, previous: string | null) => void,
+) => (() => void) | undefined = () => {
+  return undefined;
+};

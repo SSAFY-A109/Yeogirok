@@ -14,7 +14,8 @@ import { ToastProvider } from "@/components/ui/toast";
 import { setUnauthorizedHandler } from "@/api/client";
 import { authKeys, useSession } from "@/features/auth/api/queries";
 import { chatMessagesOptions } from "@/features/room/api/chat-queries";
-import { listenForChatNotificationOpens, prepareChatNotifications } from "@/lib/native/chat-notifications";
+import { registerChatPushToken, syncChatPushTokenChanges } from "@/features/user/push-token";
+import { listenForChatNotificationOpens } from "@/lib/native/chat-notifications";
 import { queryClient } from "@/lib/query-client";
 
 export default function RootLayout() {
@@ -40,13 +41,23 @@ function RootNavigator() {
   const navigationKey = useRootNavigationState()?.key;
 
   useEffect(() => {
-    if (session.data === true) {
-      void prepareChatNotifications().catch(() => {
-        if (__DEV__) {
-          console.warn("채팅 알림을 초기화하지 못했어요.");
-        }
-      });
+    if (session.data !== true) {
+      return;
     }
+
+    const warn = () => {
+      if (__DEV__) {
+        console.warn("채팅 알림을 초기화하지 못했어요.");
+      }
+    };
+
+    // 로그인 상태가 될 때마다 등록한다. 같은 토큰 재등록은 서버가 성공으로 처리한다.
+    void registerChatPushToken().catch(warn);
+    const stopSyncing = syncChatPushTokenChanges(warn);
+
+    return () => {
+      stopSyncing?.();
+    };
   }, [session.data]);
 
   useEffect(() => {

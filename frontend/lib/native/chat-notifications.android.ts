@@ -51,6 +51,23 @@ async function requestChatPushToken(): Promise<string | null> {
   return typeof data === "string" && data.length > 0 ? data : null;
 }
 
+/** FCM이 기기 토큰을 바꾸면 새 토큰과 이전 토큰을 알린다. */
+export function listenForChatPushTokenChanges(onChange: (token: string, previous: string | null) => void) {
+  const subscription = Notifications.addPushTokenListener(({ data }) => {
+    if (typeof data !== "string" || data.length === 0 || data === chatPushToken) {
+      return;
+    }
+
+    const previous = chatPushToken;
+    chatPushToken = data;
+    onChange(data, previous);
+  });
+
+  return () => {
+    return subscription.remove();
+  };
+}
+
 function parseChatTarget(data: Record<string, unknown> | undefined) {
   if (data?.type !== "CHAT" || typeof data.roomId !== "string" || typeof data.messageId !== "string") {
     return null;
