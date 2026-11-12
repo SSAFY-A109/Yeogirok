@@ -12,5 +12,7 @@ public enum RoomChange {
 	/** 확정 일정. API-022·036 을 다시 받는다. */
 	SCHEDULE,
 	/** 현재 참여자(참여·나가기). 여행방 version 은 오르지 않는다. API-022 를 다시 받는다. */
-	MEMBERS
+	MEMBERS,
+	/** 추천 조건(API-033). 조건은 자체 version 을 쓰고 여행방 version 은 오르지 않는다. API-081 을 다시 받는다. */
+	PREFERENCES
 }

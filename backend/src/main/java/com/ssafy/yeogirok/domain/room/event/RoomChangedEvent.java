@@ -10,7 +10,7 @@ import java.util.Set;
  *
  * @param roomId    여행방
  * @param changedBy 바꾼 사람. 앱이 자기 요청의 알림을 가려낼 때 쓴다
- * @param version   커밋된 뒤의 여행방 version. 참여·나가기는 version 을 올리지 않아 지금 값 그대로다
+ * @param version   커밋된 뒤의 여행방 version. 참여·나가기·추천 조건 저장은 version 을 올리지 않아 지금 값 그대로다
  * @param changes   바뀐 부분. 하나 이상
  */
 public record RoomChangedEvent(Long roomId, Long changedBy, int version, Set<RoomChange> changes) {
@@ -19,7 +19,7 @@ public record RoomChangedEvent(Long roomId, Long changedBy, int version, Set<Roo
 		if (changes.isEmpty()) {
 			throw new IllegalArgumentException("changes 가 비었습니다.");
 		}
-		// 선언 순서(ROOM, PLACES, SCHEDULE, MEMBERS)로 돈다. 프레임의 changes 도 이 순서다.
+		// RoomChange 선언 순서로 돈다. 프레임의 changes 도 이 순서다.
 		changes = Collections.unmodifiableSet(EnumSet.copyOf(changes));
 	}
 
