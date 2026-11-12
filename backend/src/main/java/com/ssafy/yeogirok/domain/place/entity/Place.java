@@ -126,4 +126,31 @@ public class Place {
 		place.createdAt = now;
 		return place;
 	}
+
+	/**
+	 * 투어API 장소를 처음 저장한다(API-029 담기). 같은 providerPlaceId 는 한 행만 두고 재사용하며, 이미 있는 행은
+	 * 다시 받은 값으로 고치지 않는다(ERD "외부 장소는 최초 저장 정보를 재사용"). 값 검사는 부르는 쪽이 끝낸다.
+	 *
+	 * @param regionCode 좌표로 찾은 10자리 법정동 코드(직접 추가와 같은 단위), 못 찾으면 null
+	 * @param regionName 좌표로 찾은 읍·면·동 이름, 못 찾으면 null
+	 */
+	public static Place tourApi(String providerPlaceId, String name, BigDecimal latitude, BigDecimal longitude,
+		String address, String regionCode, String regionName, String categoryCode, String imageUrl,
+		String imageAttribution, Instant now) {
+		Place place = new Place();
+		place.provider = PlaceProvider.TOUR_API;
+		place.providerPlaceId = providerPlaceId;
+		place.name = name;
+		place.latitude = latitude;
+		place.longitude = longitude;
+		place.address = address;
+		place.regionCode = regionCode;
+		place.regionName = regionName;
+		place.categoryCode = categoryCode;
+		place.imageUrl = imageUrl;
+		place.imageAttribution = imageAttribution;
+		place.syncedAt = now;
+		place.createdAt = now;
+		return place;
+	}
 }

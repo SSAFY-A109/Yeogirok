@@ -53,6 +53,7 @@ src/main/java/com/ssafy/yeogirok/
 | [docs/06-schedule.md](docs/06-schedule.md) | 계획 일정 흐름과 결정 사항(출발·도착지, 체류 시간, 식사 배치, 이동 시간) |
 | [docs/07-chat.md](docs/07-chat.md) | 여행방 채팅 흐름과 결정 사항(WebSocket·티켓, 저장 순서와 잠금, Redis 전달, 읽음, 강제 종료, 정리) |
 | [docs/08-flyway.md](docs/08-flyway.md) | DB 스키마 관리(Flyway) — 파일 규칙, 스키마를 바꾸는 순서, V1 에 넣은 것과 넣지 않은 것 |
+| [docs/09-recommendation.md](docs/09-recommendation.md) | 여행방 장소 추천·추천 담기 흐름과 결정 사항(규칙 점수, 조건 version, TourAPI 분류·지역 코드, 추천 기록) |
 
 ## 계약 원천
 
