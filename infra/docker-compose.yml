@@ -120,11 +120,20 @@ services:
       # 값을 통째로 바꾸므로 백엔드 기본값(debug 지문)도 여기에 같이 적어야 한다. 빈 값으로 넘기면 모든 앱에서 링크가 안 열린다.
       ANDROID_APP_SHA256_FINGERPRINTS: "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C,80:91:94:BA:C4:9D:FD:C0:3D:B6:D1:66:3D:03:EB:49:62:26:B2:94:E9:F1:EC:65:C7:C6:F6:BA:FF:F3:D7:F1"
       # 방문 분포(API-046)와 현재 위치 증거(DEC-01). 비밀 값이 아니라 여기에 바로 적는다. 하나라도 빠지면 백엔드가 바로 멈춘다.
-      # TBD: 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다. 팀이 정하면 바꾼다.
+      # TBD: 위치 증거 값(LOCATION_*)은 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다.
       # 셀 크기를 바꾸면 VISIT_STATS_AGGREGATION_VERSION 도, 위치 기준을 바꾸면 LOCATION_POLICY_VERSION 도 함께 바꾼다.
-      VISIT_STATS_AGGREGATION_VERSION: grid-0.005-v1
-      VISIT_STATS_BASE_CELL_SIZE_DEGREES: "0.005"
-      VISIT_STATS_ZOOM_MULTIPLIERS: "15:1,13:2,11:8,9:32,0:128"
+      #
+      # 방문 분포 격자(11/12, 백엔드와 공유): 지도를 가장 가까이 당겼을 때(카카오 지도 20m 기준, zoom 19) 발자취가 남긴 자리에
+      # 찍히도록 기본 셀을 0.0001도(약 11m x 9m)로 두고, 멀리 볼수록 "최소zoom:배수"로 셀을 키운다. 마커는 셀 중심에 찍힌다.
+      #   zoom 19 -> 0.0001도(약 11m)   18 -> 0.0002도   17 -> 0.0005도   16 -> 0.001도(약 110m)
+      #   zoom 15 -> 0.005도(약 550m)   13 -> 0.01도     11 -> 0.04도     9 -> 0.16도     그 아래 -> 0.64도
+      # zoom 15 이하는 이전 값(기본 셀 0.005도, 배수 15:1,13:2,11:8,9:32,0:128)과 셀 크기가 같다.
+      # 주의 1) 셀이 작아 한 사람이 남긴 발자취 하나의 위치도 그대로 보인다(누가 남겼는지는 나오지 않는다, DEC-07).
+      # 주의 2) 기본 셀을 더 줄이면 가까이 본 화면이 한 번에 조회할 수 있는 셀 수(백엔드 max-cells 2500)를 넘어 C013 이 난다.
+      # 주의 3) 집계 버전을 바꿨으므로 이전 버전(grid-0.005-v1)으로 저장된 탈퇴자 보존분은 합산되지 않는다.
+      VISIT_STATS_AGGREGATION_VERSION: grid-0.0001-v1
+      VISIT_STATS_BASE_CELL_SIZE_DEGREES: "0.0001"
+      VISIT_STATS_ZOOM_MULTIPLIERS: "19:1,18:2,17:5,16:10,15:50,13:100,11:400,9:1600,0:6400"
       VISIT_STATS_MIN_COUNT: "1"
       LOCATION_EVIDENCE_MAX_AGE: 2m
       LOCATION_EVIDENCE_MAX_FUTURE_SKEW: 30s
