@@ -33,6 +33,8 @@ import tools.jackson.databind.json.JsonMapper;
  * <ul>
  *   <li>방별 채널은 이 서버에 그 방 연결이 하나라도 있을 때만 구독하고, 마지막 연결이 닫히면 푼다. 구독·해제는 방 단위
  *       잠금(줄무늬) 아래에서 해 같은 방의 구독과 해제가 뒤바뀌지 않게 하고, 전달 경로는 이 잠금을 쓰지 않는다.</li>
+ *   <li>방 채널에는 MESSAGE_CREATED 와 여행방 변경 알림 ROOM_UPDATED({@link RoomUpdateEventListener})가 함께 흐르고,
+ *       종류와 관계없이 받은 본문을 그대로 전달한다.</li>
  *   <li>Redis 수신은 한 스레드로 받은 순서대로 각 연결의 보내기 줄에 넣기만 한다({@link ChatConnection}). 권한 재확인 전
  *       (READY 전) 연결에 온 방 메시지는 잡아 뒀다가 통과하면 보낸다. 실제 쓰기는
  *       연결마다 따로 해 느린 연결 하나가 다른 방·연결 전달을 막지 않는다. 서로 다른 요청이 커밋 직후 발행해 생기는

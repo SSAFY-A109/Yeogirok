@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import com.ssafy.yeogirok.domain.recommendation.RecommendationTestConfig;
 import com.ssafy.yeogirok.domain.recommendation.dto.PreferenceResponse;
@@ -19,6 +21,8 @@ import com.ssafy.yeogirok.domain.recommendation.dto.PreferenceSaveCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -28,6 +32,7 @@ import com.ssafy.yeogirok.support.TestUsers;
 
 @DataJpaTest
 @Import(RecommendationTestConfig.class)
+@RecordApplicationEvents
 class RecommendationPreferenceServiceTest {
 
 	static final Long OWNER = 7001L;
@@ -44,6 +49,8 @@ class RecommendationPreferenceServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	ApplicationEvents events;
 
 	Long roomId;
 
@@ -107,5 +114,21 @@ class RecommendationPreferenceServiceTest {
 			new PreferenceSaveCommand(1, "51150", List.of("CAFE"))))
 			.isInstanceOfSatisfying(BusinessException.class,
 				e -> assertThat(e.getExceptionType()).isEqualTo(ExceptionType.ROOM_NOT_MEMBER));
+	}
+
+	/* ── 실시간 알림(ROOM_UPDATED) 이벤트 ─────────────────────── */
+
+	@Test
+	void 조건을_저장하면_PREFERENCES_변경을_알리고_실패하면_알리지_않는다() {
+		int roomVersion = roomVersion();
+		events.clear();
+
+		preferenceService.save(FRIEND, roomId, new PreferenceSaveCommand(1, "51150", List.of("CAFE")));
+		assertThatThrownBy(() -> preferenceService.save(OWNER, roomId,
+			new PreferenceSaveCommand(1, "51210", List.of("FOOD")))).isInstanceOf(BusinessException.class);
+
+		// 여행방 version 은 오르지 않으므로 지금 값 그대로 싣는다.
+		assertThat(events.stream(RoomChangedEvent.class))
+			.containsExactly(RoomChangedEvent.of(roomId, FRIEND, roomVersion, RoomChange.PREFERENCES));
 	}
 }

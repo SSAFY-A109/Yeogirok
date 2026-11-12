@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +13,8 @@ import com.ssafy.yeogirok.domain.room.dto.RoomJoinResponse;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.RoomMemberId;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteProperties;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteTokenCipher;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
@@ -37,6 +40,7 @@ public class RoomInvitationService {
 	private final RoomFinder roomFinder;
 	private final RoomInviteTokenCipher cipher;
 	private final RoomInviteProperties properties;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	/** API-024. 링크가 없으면 만들고(created=true), 있으면 같은 링크를 돌려준다. 방이 가득 차도 링크는 보여 준다. */
@@ -83,6 +87,8 @@ public class RoomInvitationService {
 			member = roomMemberRepository.save(RoomMember.joined(roomId, userId, now));
 		}
 		roomMemberRepository.flush();
+		// 참여자 목록이 바뀌었다(방 version 은 오르지 않는다). 커밋 뒤 방에 연결된 참여자에게 알린다.
+		eventPublisher.publishEvent(RoomChangedEvent.of(roomId, userId, room.getVersion(), RoomChange.MEMBERS));
 		return RoomJoinResponse.joined(roomId, member.isCreator());
 	}
 

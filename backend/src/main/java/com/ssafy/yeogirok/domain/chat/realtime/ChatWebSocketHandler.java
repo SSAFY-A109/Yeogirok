@@ -37,6 +37,8 @@ import tools.jackson.databind.json.JsonMapper;
  *   <li>PING: 참여·방을 다시 확인하고 PONG 에 최신 저장 ID 를 담는다.</li>
  *   <li>READY 부터 연결이 닫힐 때까지 Redis 에 접속 상태를 둔다({@link ChatPresence}, PING 마다 연장). 푸시 생략 기준이다.</li>
  * </ol>
+ * 같은 연결로 여행방 변경 알림 ROOM_UPDATED 도 받는다({@link RoomUpdateEventListener}). 이 핸들러는 관여하지 않고
+ * {@link ChatHub} 가 방 채널에서 받은 그대로 전달한다.
  * 연결 이후 오류는 HTTP 상태가 아니라 ERROR 프레임으로 알린다. 방 없음·참여자 아님·계정 무효는 오류를 보낸 뒤 닫는다.
  */
 @Slf4j

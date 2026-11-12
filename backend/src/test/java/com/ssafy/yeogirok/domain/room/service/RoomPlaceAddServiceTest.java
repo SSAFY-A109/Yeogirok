@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,8 @@ import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.CommittedRoomData;
@@ -57,6 +61,7 @@ import com.ssafy.yeogirok.support.TestUsers;
 @DataJpaTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import(RecommendationTestConfig.class)
+@RecordApplicationEvents
 class RoomPlaceAddServiceTest {
 
 	static long nextUserId = 9000L;
@@ -82,6 +87,8 @@ class RoomPlaceAddServiceTest {
 	TransactionTemplate transactionTemplate;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	ApplicationEvents events;
 
 	Long owner;
 	Long friend;
@@ -264,5 +271,21 @@ class RoomPlaceAddServiceTest {
 
 		assertError(() -> addService.add(stranger, roomId, new RoomPlaceAddCommand(List.of(
 			new RoomPlaceAddCommand.Item(cafe, recommended.recommendationRequestId(), 1)))), ExceptionType.ROOM_NOT_MEMBER);
+	}
+
+	@Test
+	void 담으면_PLACES_변경을_올린_version_과_함께_한_번_알리고_실패하면_알리지_않는다() {
+		PlaceRecommendationResponse recommended = recommend(owner, roomId);
+		events.clear();
+
+		RoomPlaceAddResponse response = addService.add(friend, roomId, new RoomPlaceAddCommand(List.of(
+			new RoomPlaceAddCommand.Item(cafe, recommended.recommendationRequestId(), 1),
+			new RoomPlaceAddCommand.Item(bakery, recommended.recommendationRequestId(), 2))));
+		assertError(() -> addService.add(owner, roomId, new RoomPlaceAddCommand(List.of(
+			new RoomPlaceAddCommand.Item(bakery, recommended.recommendationRequestId(), 1)))),
+			ExceptionType.NOT_ALLOWED_VALUE);
+
+		assertThat(events.stream(RoomChangedEvent.class))
+			.containsExactly(RoomChangedEvent.of(roomId, friend, response.version(), RoomChange.PLACES));
 	}
 }

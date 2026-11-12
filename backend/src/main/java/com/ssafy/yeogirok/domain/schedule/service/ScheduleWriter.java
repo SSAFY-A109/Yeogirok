@@ -32,6 +32,11 @@ public class ScheduleWriter {
 	/**
 	 * 항목만 저장한다. 여행방 행(일정 옵션·version)은 건드리지 않는다. 중간 flush 마다 방 변경이 따로 나가 version 이
 	 * 두 번 오르지 않도록, 방 필드는 이 메서드가 끝난 뒤 부르는 쪽이 한 번에 바꾼다.
+	 *
+	 * <p>확정 일정을 바꾸는 경로는 모두 여기를 지난다. 부르는 쪽은 version 이 오른 뒤 그 값으로
+	 * {@link com.ssafy.yeogirok.domain.room.event.RoomChange#SCHEDULE} 알림을 발행해야 한다(실시간 ROOM_UPDATED).
+	 * version 을 올리는 방식(직접 올리기·dirty checking)이 경로마다 달라 여기서 대신 보내지 못한다. 지금 부르는 곳:
+	 * 일정 편집(API-040), 최종 저장(API-039), 방 정보 수정(API-023, {@link ScheduleRoomChanges#apply}).
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void write(Long roomId, Collection<ScheduleItem> toDelete, List<Placement> placements) {

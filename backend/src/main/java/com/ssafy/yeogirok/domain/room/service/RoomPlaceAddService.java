@@ -106,7 +106,8 @@ public class RoomPlaceAddService {
 				recommendedPlaces.recordAdd(roomId, userId, pick, roomPlace.getId(), now);
 				added.add(roomPlace);
 			}
-			int version = roomVersions.increaseAfterPlacesChanged(room, scheduleItemRepository.existsByRoomId(roomId));
+			int version = roomVersions.increaseAfterPlacesChanged(room, userId,
+				scheduleItemRepository.existsByRoomId(roomId));
 			return RoomPlaceAddResponse.of(responses(added), version);
 		});
 	}

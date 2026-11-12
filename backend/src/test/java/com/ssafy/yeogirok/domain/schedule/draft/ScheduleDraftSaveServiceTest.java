@@ -22,12 +22,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import com.ssafy.yeogirok.domain.job.JobError;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.domain.schedule.LastApplied;
@@ -51,6 +55,7 @@ import com.ssafy.yeogirok.support.TestUsers;
 /** API-039 최종 저장(검증·재계산·저장·재전송). 초안은 API-037 로 만든다. 길찾기는 구간마다 20분. */
 @DataJpaTest
 @Import(DraftTestConfig.class)
+@RecordApplicationEvents
 class ScheduleDraftSaveServiceTest {
 
 	static final Long OWNER = 7201L;
@@ -80,6 +85,8 @@ class ScheduleDraftSaveServiceTest {
 	TestEntityManager em;
 	@Autowired
 	MutableClock clock;
+	@Autowired
+	ApplicationEvents events;
 
 	Long roomId;
 	List<Long> places;
@@ -363,5 +370,19 @@ class ScheduleDraftSaveServiceTest {
 			draftLock.release(draft.draftKey(), token);
 		}
 		assertThat(save(asIs()).schedule()).isNotNull();
+	}
+
+	/* ── 실시간 알림(ROOM_UPDATED) 이벤트 ─────────────────────── */
+
+	@Test
+	void 최종_저장하면_SCHEDULE_변경을_알리고_같은_요청_재전송은_알리지_않는다() {
+		events.clear();
+		DraftSaveCommand command = asIs();
+
+		ScheduleResponse saved = save(command);
+		save(command);
+
+		assertThat(events.stream(RoomChangedEvent.class))
+			.containsExactly(RoomChangedEvent.of(roomId, OWNER, saved.version(), RoomChange.SCHEDULE));
 	}
 }

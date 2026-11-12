@@ -14,6 +14,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.domain.room.service.RoomVersions;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions;
@@ -56,12 +59,15 @@ public class ScheduleService {
 	private final TransactionTemplate transactionTemplate;
 	private final TransactionTemplate readOnlyTransactionTemplate;
 	private final EntityManager entityManager;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public ScheduleService(ScheduleReader scheduleReader, RoomFinder roomFinder, RoomVersions roomVersions,
 		ScheduleWriter scheduleWriter, TravelTimeProvider travelTimeProvider,
-		PlatformTransactionManager transactionManager, EntityManager entityManager, Clock clock) {
+		PlatformTransactionManager transactionManager, EntityManager entityManager,
+		ApplicationEventPublisher eventPublisher, Clock clock) {
 		this.entityManager = entityManager;
+		this.eventPublisher = eventPublisher;
 		this.scheduleReader = scheduleReader;
 		this.roomFinder = roomFinder;
 		this.roomVersions = roomVersions;
@@ -211,6 +217,7 @@ public class ScheduleService {
 			room.markScheduleRecalculated(clock.instant());
 			entityManager.flush();
 		}
+		eventPublisher.publishEvent(RoomChangedEvent.of(roomId, userId, room.getVersion(), RoomChange.SCHEDULE));
 		return response(room);
 	}
 

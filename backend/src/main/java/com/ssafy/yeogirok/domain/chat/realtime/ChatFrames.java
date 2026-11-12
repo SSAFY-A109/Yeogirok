@@ -1,6 +1,10 @@
 package com.ssafy.yeogirok.domain.chat.realtime;
 
+import java.util.List;
+
 import com.ssafy.yeogirok.domain.chat.dto.ChatMessage;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 /**
@@ -30,6 +34,17 @@ public final class ChatFrames {
 	public record MessageCreated(String type, Long roomId, ChatMessage message) {
 		public MessageCreated(Long roomId, ChatMessage message) {
 			this("MESSAGE_CREATED", roomId, message);
+		}
+	}
+
+	/**
+	 * 여행방 내용이 바뀌었다(커밋 뒤). 바뀐 데이터는 싣지 않으므로 앱은 changes 에 맞는 조회를 다시 한다.
+	 * 바꾼 사람의 연결에도 간다. changes 는 {@link RoomChange} 선언 순서로 정렬한다.
+	 */
+	public record RoomUpdated(String type, Long roomId, int version, List<RoomChange> changes, Long changedBy) {
+		public static RoomUpdated from(RoomChangedEvent event) {
+			return new RoomUpdated("ROOM_UPDATED", event.roomId(), event.version(),
+				List.copyOf(event.changes()), event.changedBy());
 		}
 	}
 
