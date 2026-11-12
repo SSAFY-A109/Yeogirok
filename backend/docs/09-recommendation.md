@@ -63,7 +63,7 @@
 
 ### 추천 기록 (recommendation_logs)
 
-- 테이블은 Flyway `V2__add_recommendation_logs.sql` 이 만든다. 노션 ERD 와 다른 점은 V1 과 같은 기준이다(ENUM 타입 대신
+- 테이블은 Flyway `V3__add_recommendation_logs.sql` 이 만든다. 노션 ERD 와 다른 점은 V1 과 같은 기준이다(ENUM 타입 대신
   varchar + 허용값 검사, 열 기본값·FK 없음, [08-flyway.md](08-flyway.md) 4절). 엔티티를 바꾸면 새 번호 파일을 함께 낸다.
 - 추천 한 번에 REQUEST 행 하나. 행 ID 가 `recommendationRequestId` 다. 동기 처리라 status 는 SUCCEEDED 만 쓴다.
 - `input_payload`: 지역·카테고리·조건 version·이동 수단·limit·excludedPlaces·담은 후보 수(roomPlaceCount)·
