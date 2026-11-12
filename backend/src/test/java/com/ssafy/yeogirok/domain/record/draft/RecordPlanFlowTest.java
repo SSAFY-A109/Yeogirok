@@ -91,6 +91,8 @@ class RecordPlanFlowTest {
 	@Autowired
 	HoldableExecutor executor;
 	@Autowired
+	RecordDraftTestConfig.FakePhotoMetadataReader metadataReader;
+	@Autowired
 	MutableClock clock;
 	@Autowired
 	TestEntityManager em;
@@ -100,6 +102,7 @@ class RecordPlanFlowTest {
 		TestRedis.flushAll();
 		clock.set(NOW);
 		executor.reset();
+		metadataReader.clear();
 		legalDongResolver.willReturn(LEGAL_DONG);
 		given(fileStorage.readPrefix(eq("photos"), anyString(), anyInt()))
 			.willAnswer(invocation -> invocation.<String>getArgument(1).getBytes(StandardCharsets.UTF_8));
