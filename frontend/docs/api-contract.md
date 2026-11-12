@@ -355,10 +355,29 @@ Swagger는 요청 필드 이름과 헤더·쿼리만 보여 주고 응답은 `{ 
 | 서버 → 앱 | `{ type: "MESSAGE_CREATED", roomId, message }` | 방의 모든 연결에(보낸 사람 포함). 순서가 바뀌거나 빠질 수 있어 `message.id`로 정렬·중복 제거한다 |
 | 앱 → 서버 | `{ type: "PING" }` | 25초마다. 서버는 60초 동안 프레임이 없으면 닫는다 |
 | 서버 → 앱 | `{ type: "PONG", roomId, latestMessageId }` | 최신 id가 받은 것보다 크면 API-076 복구 조회로 확인한다 |
+| 서버 → 앱 | `{ type: "ROOM_UPDATED", roomId, version, changes, changedBy }` | 여행방 내용이 바뀐 뒤 방의 모든 연결에(바꾼 사람 포함). 바뀐 데이터는 없다. 아래 "여행방 변경 알림" |
 | 서버 → 앱 | `{ type: "ERROR", roomId, clientMessageId, code, message, retryable }` | `code`로만 분기한다. `clientMessageId`가 있으면 그 메시지의 실패다 |
 
 - `message`는 API-076의 메시지와 같은 모양이다.
 - `ERROR` code: A001(AUTH 없음)·A003(티켓 무효·만료·재사용, 탈퇴)·RO001(방 없음)·RO002(참여자 아님)은 보낸 뒤 서버가 연결을 닫는다. C001·C002·C003(입력 오류), C005(같은 `clientMessageId`에 다른 본문)는 연결을 유지한다. C014만 `retryable: true`이고 같은 `clientMessageId`·같은 본문으로 다시 보낼 수 있다.
 - 나가기(087)·방 삭제·회원 탈퇴가 일어나면 서버가 `ERROR`(RO002·RO001·A003)를 보내고 닫는다.
+
+**여행방 변경 알림 `ROOM_UPDATED`** (2026-11-12, 백엔드 브랜치 `backend/feat/S15P31A109-206-room-realtime-updates` 39d5d96, 머지 전)
+
+백엔드 연동 안내와 `ChatFrames.RoomUpdated`·`backend/docs/07-chat.md`를 읽어 맞췄다. 서버에 반영되기 전이라 실제 수신은 확인하지 못했다(TBD).
+
+| `changes` 값 | 언제 오나 | 다시 받는 것 |
+| --- | --- | --- |
+| `ROOM` | 방 정보 수정(023) | 022 |
+| `PLACES` | 후보 담기·직접 추가·빼기·복원(029·031·032·094) | 022, 028 |
+| `SCHEDULE` | 일정 편집·최종 저장(040·039), 확정 일정이 있는 방의 날짜·이동 수단 변경 | 022, 036 |
+| `MEMBERS` | 참여·나가기·회원 탈퇴(025·087·009) | 022 |
+
+- `changes`는 하나 이상이고 ROOM → PLACES → SCHEDULE → MEMBERS 순이다. 모르는 값은 `UNKNOWN`으로 흡수하고 022만 다시 받는다.
+- `version`은 커밋된 뒤의 여행방 version이다(참여·나가기는 올리지 않는다). 알림 도착 순서가 바뀔 수 있어 `version`으로 알림을 거르지 않는다.
+- `changedBy`는 바꾼 사람의 사용자 id다. 앱은 쓰지 않고 내 변경도 다시 받는다.
+- 전달을 보장하지 않는다. 다시 연결돼 `READY`를 받았을 때(끊겼다 붙음·앱으로 돌아옴·화면에 다시 들어옴) 전부 다시 받는다.
+- 나가기를 요청한 방의 알림으로는 다시 받지 않는다. 나가는 사람이 자기 나가기의 `MEMBERS`를 먼저 받을 수 있고, 그대로 다시 받으면 RO002다.
+- 마지막 참여자가 나가 방이 지워지면 `MEMBERS` 대신 `ERROR` RO001로 닫힌다.
 - 앱 처리: RO001·RO002는 다시 연결하지 않는다. 그 밖에 닫히면 새 티켓으로 다시 연결하고(지수 백오프 + 무작위), 저장 완료를 받지 못한 메시지를 같은 `clientMessageId`로 다시 보낸다.
 - 서버에 없는 것: 접속 중인 인원 수, 타인 읽음 표시, 사진, 앱 푸시(API-095·096은 Notion에만 있다).
