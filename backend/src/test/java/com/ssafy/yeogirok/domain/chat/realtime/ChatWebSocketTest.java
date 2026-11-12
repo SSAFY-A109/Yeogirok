@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.chat.realtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
 import java.time.Duration;
@@ -35,9 +36,11 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.ssafy.yeogirok.domain.chat.cleanup.ChatCleanupJob;
 import com.ssafy.yeogirok.domain.chat.service.ChatTicketService;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
+import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
+import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestChatConfig;
@@ -72,6 +75,8 @@ class ChatWebSocketTest {
 	ChatTicketService chatTicketService;
 	@Autowired
 	ChatHub chatHub;
+	@Autowired
+	RoomUpdateEventListener roomUpdateEventListener;
 	@Autowired
 	ChatCleanupJob chatCleanupJob;
 	@Autowired
@@ -390,6 +395,52 @@ class ChatWebSocketTest {
 
 		assertThat(messageCount()).isZero();
 		assertThat(redis.opsForSet().members("chat-cleanup:rooms")).isEmpty();
+	}
+
+	@Test
+	void 여행방이_바뀌면_커밋_뒤_방에_연결된_모든_참여자가_ROOM_UPDATED_를_받는다() throws Exception {
+		Client ownerClient = new Client().authenticate(owner);
+		Client friendClient = new Client().authenticate(friend);
+
+		int version = roomService.update(friend, roomId,
+			new RoomUpdateCommand(1, "새 제목", false, null, null, null, false)).version();
+
+		for (Client client : List.of(ownerClient, friendClient)) {
+			JsonNode frame = client.nextOfType("ROOM_UPDATED");
+			assertThat(frame.get("roomId").longValue()).isEqualTo(roomId);
+			assertThat(frame.get("version").intValue()).isEqualTo(version);
+			assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("ROOM");
+			assertThat(frame.get("changedBy").longValue()).isEqualTo(friend);
+		}
+
+		// 실패한(롤백된) 변경은 알리지 않는다.
+		assertThatThrownBy(() -> roomService.update(owner, roomId,
+			new RoomUpdateCommand(1, "낡은 version", false, null, null, null, false)))
+			.isInstanceOf(BusinessException.class);
+		assertThat(ownerClient.frames.poll(500, TimeUnit.MILLISECONDS)).isNull();
+	}
+
+	@Test
+	void 참여자가_나가면_남은_참여자는_MEMBERS_변경을_받는다() throws Exception {
+		Client ownerClient = new Client().authenticate(owner);
+
+		roomService.leave(friend, roomId);
+
+		JsonNode frame = ownerClient.nextOfType("ROOM_UPDATED");
+		assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("MEMBERS");
+		assertThat(frame.get("changedBy").longValue()).isEqualTo(friend);
+	}
+
+	@Test
+	void 회원이_탈퇴하면_참여_중이던_방의_다른_참여자는_MEMBERS_변경을_받는다() throws Exception {
+		Client ownerClient = new Client().authenticate(owner);
+
+		// 탈퇴 커밋 뒤 발행 스레드가 하는 일. 이벤트 경로(제공자 연결 해제 등)를 피하려고 직접 부른다.
+		roomUpdateEventListener.publishWithdrawal(friend);
+
+		JsonNode frame = ownerClient.nextOfType("ROOM_UPDATED");
+		assertThat(frame.get("changes")).extracting(JsonNode::stringValue).containsExactly("MEMBERS");
+		assertThat(frame.get("changedBy").longValue()).isEqualTo(friend);
 	}
 
 	@Test

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -23,6 +24,8 @@ import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.domain.schedule.LastApplied;
 import com.ssafy.yeogirok.domain.schedule.ScheduleOptions;
@@ -69,12 +72,14 @@ public class ScheduleDraftSaveService {
 	private final EntityManager entityManager;
 	private final TransactionTemplate transaction;
 	private final TransactionTemplate readOnly;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public ScheduleDraftSaveService(RoomFinder roomFinder, ScheduleReader scheduleReader,
 		ScheduleWriter scheduleWriter, ScheduleDraftStore draftStore, ScheduleDraftLock draftLock,
 		TravelTimeProvider travelTimeProvider, JsonMapper jsonMapper, EntityManager entityManager,
-		PlatformTransactionManager transactionManager, Clock clock) {
+		PlatformTransactionManager transactionManager, ApplicationEventPublisher eventPublisher, Clock clock) {
+		this.eventPublisher = eventPublisher;
 		this.roomFinder = roomFinder;
 		this.scheduleReader = scheduleReader;
 		this.scheduleWriter = scheduleWriter;
@@ -270,6 +275,7 @@ public class ScheduleDraftSaveService {
 		if (room.getVersion() != resultVersion) {
 			throw new IllegalStateException("일정 저장 뒤 방 version 이 예상과 다릅니다: " + room.getVersion());
 		}
+		eventPublisher.publishEvent(RoomChangedEvent.of(roomId, userId, resultVersion, RoomChange.SCHEDULE));
 		return response(room);
 	}
 

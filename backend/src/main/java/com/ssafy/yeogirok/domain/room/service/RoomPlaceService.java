@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,8 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
 import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
@@ -46,7 +49,7 @@ import com.ssafy.yeogirok.global.geo.LegalDongResolver;
  *       API-028·방 상세의 sourceRecord 도 이때 채운다({@link com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse}).</li>
  * </ul>
  * 029·030 공통: Idempotency-Key 를 받고, 후보를 저장한 뒤 {@link #increaseVersion} 을 불러 방 version 과
- * scheduleNeedsRecalculation(확정 일정이 있으면 true)을 한 번에 갱신한다.
+ * scheduleNeedsRecalculation(확정 일정이 있으면 true)을 한 번에 갱신한다. 그러면 실시간 알림(ROOM_UPDATED)도 함께 나간다.
  */
 @Service
 public class RoomPlaceService {
@@ -59,12 +62,13 @@ public class RoomPlaceService {
 	private final ScheduleItemRepository scheduleItemRepository;
 	private final LegalDongResolver legalDongResolver;
 	private final TransactionTemplate transactionTemplate;
+	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
 		CategoryNames categoryNames, RoomFinder roomFinder, RoomVersions roomVersions,
 		ScheduleItemRepository scheduleItemRepository, LegalDongResolver legalDongResolver,
-		PlatformTransactionManager transactionManager, Clock clock) {
+		PlatformTransactionManager transactionManager, ApplicationEventPublisher eventPublisher, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.categoryNames = categoryNames;
@@ -73,6 +77,7 @@ public class RoomPlaceService {
 		this.scheduleItemRepository = scheduleItemRepository;
 		this.legalDongResolver = legalDongResolver;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
+		this.eventPublisher = eventPublisher;
 		this.clock = clock;
 	}
 
@@ -107,7 +112,8 @@ public class RoomPlaceService {
 				command.address(), legalDong.code(), legalDong.name(), now));
 			RoomPlace roomPlace = roomPlaceRepository.save(RoomPlace.manual(roomId, place, userId, now));
 			// 직접 추가 장소에는 카테고리가 없다.
-			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(roomPlace, Map.of()), increaseVersion(room));
+			return new CustomPlaceCreateResponse(RoomPlaceResponse.from(roomPlace, Map.of()),
+				increaseVersion(room, userId));
 		});
 	}
 
@@ -133,7 +139,7 @@ public class RoomPlaceService {
 		}
 		checkVersion(room, version);
 		place.remove(clock.instant());
-		return RoomPlaceRemoveResponse.of(increaseVersion(room), room.isScheduleNeedsRecalculation());
+		return RoomPlaceRemoveResponse.of(increaseVersion(room, userId), room.isScheduleNeedsRecalculation());
 	}
 
 	/**
@@ -149,7 +155,8 @@ public class RoomPlaceService {
 		}
 		checkVersion(room, version);
 		place.restore(clock.instant());
-		return RoomPlaceRestoreResponse.of(place.getId(), increaseVersion(room), room.isScheduleNeedsRecalculation());
+		int increased = increaseVersion(room, userId);
+		return RoomPlaceRestoreResponse.of(place.getId(), increased, room.isScheduleNeedsRecalculation());
 	}
 
 	private TravelRoom lockForMember(Long roomId, Long userId) {
@@ -172,8 +179,14 @@ public class RoomPlaceService {
 		}
 	}
 
-	/** 후보 목록이 바뀌었다. 확정 일정이 있으면 재계산 필요도 켠다(같은 UPDATE 로 version 은 한 번만 오른다). */
-	private int increaseVersion(TravelRoom room) {
-		return roomVersions.increaseAfterPlacesChanged(room, scheduleItemRepository.existsByRoomId(room.getId()));
+	/**
+	 * 후보 목록이 바뀌었다. 확정 일정이 있으면 재계산 필요도 켠다(같은 UPDATE 로 version 은 한 번만 오른다).
+	 * 커밋 뒤 방에 연결된 참여자에게 알린다({@link RoomChangedEvent}).
+	 */
+	private int increaseVersion(TravelRoom room, Long userId) {
+		int version = roomVersions.increaseAfterPlacesChanged(room,
+			scheduleItemRepository.existsByRoomId(room.getId()));
+		eventPublisher.publishEvent(RoomChangedEvent.of(room.getId(), userId, version, RoomChange.PLACES));
+		return version;
 	}
 }

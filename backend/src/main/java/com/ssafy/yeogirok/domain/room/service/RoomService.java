@@ -29,6 +29,8 @@ import com.ssafy.yeogirok.domain.room.entity.RoomMemberId;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.event.RoomChange;
+import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.event.RoomMemberLeftEvent;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
@@ -198,18 +200,28 @@ public class RoomService {
 
 		// 일정 항목을 먼저 저장하고 방 필드는 한 번에 바꾼다(version 이 한 번만 오르게).
 		Map<String, Object> scheduleOptions = scheduleRoomChanges.apply(room, startDate, endDate, recalculation);
+		TransportMode transportMode = command.transportMode() == null ? room.getTransportMode() : command.transportMode();
+		// 날짜·이동 수단이 바뀌면 날짜 밖 항목이 지워지거나 이동 시간·시각이 다시 계산된다.
+		boolean scheduleTouched = transportMode != room.getTransportMode()
+			|| !Objects.equals(startDate, room.getStartDate()) || !Objects.equals(endDate, room.getEndDate());
 		Instant now = clock.instant();
 		room.updateInfo(
 			newTitle == null ? room.getTitle() : newTitle,
 			startDate,
 			endDate,
-			command.transportMode() == null ? room.getTransportMode() : command.transportMode(),
+			transportMode,
 			now);
 		if (!scheduleOptions.equals(room.getScheduleOptions())) {
 			room.updateScheduleOptions(scheduleOptions, now);
 		}
 		// 응답에 올라간 version 을 담으려고 지금 반영한다.
 		travelRoomRepository.flush();
+		// 같은 값으로 보낸 요청은 바뀐 것이 없어 version 이 그대로다. 알리지 않는다.
+		if (!room.getVersion().equals(command.version())) {
+			eventPublisher.publishEvent(scheduleTouched
+				? RoomChangedEvent.of(roomId, userId, room.getVersion(), RoomChange.ROOM, RoomChange.SCHEDULE)
+				: RoomChangedEvent.of(roomId, userId, room.getVersion(), RoomChange.ROOM));
+		}
 		return RoomUpdateResponse.applied(room, affectedItems, scheduleRoomChanges.view(room));
 	}
 
@@ -235,6 +247,9 @@ public class RoomService {
 		boolean roomDeleted = roomMemberRepository.countCurrentMembers(roomId) == 0;
 		if (roomDeleted) {
 			room.softDelete(now);
+		} else {
+			// 남은 참여자에게 참여자 목록이 바뀌었다고 알린다. 나간 사람의 연결은 RoomMemberLeftEvent 로 끊긴다.
+			eventPublisher.publishEvent(RoomChangedEvent.of(roomId, userId, room.getVersion(), RoomChange.MEMBERS));
 		}
 		eventPublisher.publishEvent(new RoomMemberLeftEvent(roomId, userId, roomDeleted));
 	}
