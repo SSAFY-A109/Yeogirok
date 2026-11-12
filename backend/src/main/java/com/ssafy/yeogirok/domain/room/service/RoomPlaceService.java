@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +22,6 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
-import com.ssafy.yeogirok.domain.room.event.RoomChange;
-import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder.MemberRoom;
 import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
@@ -62,13 +59,12 @@ public class RoomPlaceService {
 	private final ScheduleItemRepository scheduleItemRepository;
 	private final LegalDongResolver legalDongResolver;
 	private final TransactionTemplate transactionTemplate;
-	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
 		CategoryNames categoryNames, RoomFinder roomFinder, RoomVersions roomVersions,
 		ScheduleItemRepository scheduleItemRepository, LegalDongResolver legalDongResolver,
-		PlatformTransactionManager transactionManager, ApplicationEventPublisher eventPublisher, Clock clock) {
+		PlatformTransactionManager transactionManager, Clock clock) {
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.categoryNames = categoryNames;
@@ -77,7 +73,6 @@ public class RoomPlaceService {
 		this.scheduleItemRepository = scheduleItemRepository;
 		this.legalDongResolver = legalDongResolver;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
-		this.eventPublisher = eventPublisher;
 		this.clock = clock;
 	}
 
@@ -181,12 +176,10 @@ public class RoomPlaceService {
 
 	/**
 	 * 후보 목록이 바뀌었다. 확정 일정이 있으면 재계산 필요도 켠다(같은 UPDATE 로 version 은 한 번만 오른다).
-	 * 커밋 뒤 방에 연결된 참여자에게 알린다({@link RoomChangedEvent}).
+	 * 실시간 알림(ROOM_UPDATED)은 {@link RoomVersions#increaseAfterPlacesChanged} 가 보낸다.
 	 */
 	private int increaseVersion(TravelRoom room, Long userId) {
-		int version = roomVersions.increaseAfterPlacesChanged(room,
+		return roomVersions.increaseAfterPlacesChanged(room, userId,
 			scheduleItemRepository.existsByRoomId(room.getId()));
-		eventPublisher.publishEvent(RoomChangedEvent.of(room.getId(), userId, version, RoomChange.PLACES));
-		return version;
 	}
 }

@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -29,8 +28,6 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceResponse;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
-import com.ssafy.yeogirok.domain.room.event.RoomChange;
-import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
 import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -67,15 +64,13 @@ public class RoomPlaceAddService {
 	private final LegalDongResolver legalDongResolver;
 	private final CategoryNames categoryNames;
 	private final TransactionTemplate transactionTemplate;
-	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public RoomPlaceAddService(RoomFinder roomFinder, RoomVersions roomVersions,
 		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
 		ScheduleItemRepository scheduleItemRepository, RecommendedPlaces recommendedPlaces,
 		LegalDongResolver legalDongResolver, CategoryNames categoryNames, PlatformTransactionManager transactionManager,
-		ApplicationEventPublisher eventPublisher, Clock clock) {
-		this.eventPublisher = eventPublisher;
+		Clock clock) {
 		this.roomFinder = roomFinder;
 		this.roomVersions = roomVersions;
 		this.roomPlaceRepository = roomPlaceRepository;
@@ -111,9 +106,8 @@ public class RoomPlaceAddService {
 				recommendedPlaces.recordAdd(roomId, userId, pick, roomPlace.getId(), now);
 				added.add(roomPlace);
 			}
-			int version = roomVersions.increaseAfterPlacesChanged(room, scheduleItemRepository.existsByRoomId(roomId));
-			// 커밋 뒤 방에 연결된 참여자에게 후보 목록이 바뀌었다고 알린다(ROOM_UPDATED).
-			eventPublisher.publishEvent(RoomChangedEvent.of(roomId, userId, version, RoomChange.PLACES));
+			int version = roomVersions.increaseAfterPlacesChanged(room, userId,
+				scheduleItemRepository.existsByRoomId(roomId));
 			return RoomPlaceAddResponse.of(responses(added), version);
 		});
 	}
