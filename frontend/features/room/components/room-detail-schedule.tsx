@@ -336,7 +336,7 @@ function ScheduleEmpty() {
       <View className="items-center gap-2 rounded-md bg-muted p-6" testID="room-detail.schedule-empty">
         <Icon as={Calendar} size={28} className="text-icon" />
         <Text className="text-label text-foreground">아직 일정이 없어요</Text>
-        <Text className="text-center text-caption text-foreground-secondary">후보 장소로 AI 일정 초안을 만들어 보세요</Text>
+        <Text className="text-center text-caption text-foreground-secondary">후보 장소로 일정 초안을 만들어 보세요</Text>
       </View>
     </View>
   );

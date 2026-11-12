@@ -199,7 +199,7 @@ export function NewRoomScreen({ carryOver, invalidCourseImport }: NewRoomScreenP
               setTransportMode(value);
               clearSaveError();
             }}
-            help="AI 일정 초안의 이동 시간 계산에 써요"
+            help="일정 초안의 이동 시간 계산에 써요"
             testID="new-room"
           />
           {carryOver !== null ? <CarryOverPlacesField carryOver={carryOver} /> : null}

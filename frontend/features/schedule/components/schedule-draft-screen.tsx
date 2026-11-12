@@ -31,7 +31,7 @@ type ScheduleDraftScreenProps = {
 };
 
 /**
- * 일정 초안(Figma W14, TRP-08·09·COM-05). 만든 초안을 검토·조정하거나("AI로 일정 만들기"),
+ * 일정 초안(Figma W14, TRP-08·09·COM-05). 만든 초안을 검토·조정하거나("일정 만들기"),
  * 저장된 일정을 이어받은 초안을 만들어 고친다("일정 조정하기", `draftKey` 없음). 저장하기 전에는 여행방 일정을 바꾸지 않는다.
  */
 export function ScheduleDraftScreen({ roomId, source }: ScheduleDraftScreenProps) {
@@ -86,7 +86,7 @@ function SavedScheduleAdjustment({ roomId }: { roomId: number }) {
       return <Redirect href={{ pathname: "/rooms/[roomId]/schedule/new", params: { roomId: String(roomId), keep: KEEP_SAVED_PARAM } }} />;
     case "NO_SCHEDULE":
       return (
-        <DraftMessage message="아직 정한 일정이 없어요. AI로 일정 초안을 먼저 만들어 주세요.">
+        <DraftMessage message="아직 정한 일정이 없어요. 일정 초안을 먼저 만들어 주세요.">
           <Button
             variant="outline"
 
@@ -96,7 +96,7 @@ function SavedScheduleAdjustment({ roomId }: { roomId: number }) {
 
             testID="schedule-draft.create"
           >
-            <Text>AI로 일정 만들기</Text>
+            <Text>일정 만들기</Text>
           </Button>
         </DraftMessage>
       );
