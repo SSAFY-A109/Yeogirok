@@ -67,7 +67,11 @@ export function useSignOut() {
     retry: false,
 
     onSuccess: () => {
-      queryClient.clear();
+      queryClient.removeQueries({
+        predicate: (query) => {
+          return query.queryKey[0] !== authKeys.session[0] || query.queryKey[1] !== authKeys.session[1];
+        },
+      });
       queryClient.setQueryData(authKeys.session, false);
     },
   });
