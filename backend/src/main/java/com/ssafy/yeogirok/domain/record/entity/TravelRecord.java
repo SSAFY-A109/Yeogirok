@@ -85,6 +85,11 @@ public class TravelRecord {
 		return record;
 	}
 
+	/** 만들 때만 부른다. 이후 방 일정이 바뀌어도 사본은 고치지 않는다(노션 057). */
+	public void attachReferencePlan(Map<String, Object> referencePlan) {
+		this.referencePlan = referencePlan;
+	}
+
 	public boolean isCompleted() {
 		return status == RecordStatus.COMPLETED;
 	}
