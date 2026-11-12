@@ -1,5 +1,6 @@
 package com.ssafy.yeogirok.domain.course.service;
 
+import static com.ssafy.yeogirok.domain.course.CourseFixture.DAY1;
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +23,7 @@ import com.ssafy.yeogirok.domain.course.CourseTestConfig;
 import com.ssafy.yeogirok.domain.course.dto.PopularPlaceListResponse;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -44,11 +46,20 @@ class PopularPlaceServiceTest {
 	TestEntityManager em;
 
 	CourseFixture fixture;
+	/** 후보를 가져온 원본 코스(게시 중). */
+	TravelRecord course;
 
 	@BeforeEach
 	void setUp() {
 		clock.set(NOW);
 		fixture = new CourseFixture(em);
+		course = publishedCourse();
+	}
+
+	private TravelRecord publishedCourse() {
+		TravelRecord record = fixture.record(fixture.room(DAY1, ME));
+		record.changeCourse("원본 코스", "", NOW, true, NOW);
+		return record;
 	}
 
 	private Place manual(String name, String latitude, String address) {
@@ -71,13 +82,18 @@ class PopularPlaceServiceTest {
 
 	/** room 이 공개 코스에서 place 를 at 시각에 가져온 후보(030 이 아직 없음). */
 	private RoomPlace imported(TravelRoom room, Place place, Instant at, boolean removed) {
+		return imported(course, room, place, at, removed);
+	}
+
+	private RoomPlace imported(TravelRecord from, TravelRoom room, Place place, Instant at, boolean removed) {
 		RoomPlace roomPlace = em.persist(RoomPlace.manual(room.getId(), place, ME, NOW));
 		if (removed) {
 			roomPlace.remove(NOW);
 		}
 		em.flush();
-		em.getEntityManager().createNativeQuery("UPDATE room_places SET source_type = 'COURSE', source_record_id = 1,"
-			+ " created_at = ?1 WHERE id = ?2").setParameter(1, at).setParameter(2, roomPlace.getId()).executeUpdate();
+		em.getEntityManager().createNativeQuery("UPDATE room_places SET source_type = 'COURSE', source_record_id = ?1,"
+				+ " created_at = ?2 WHERE id = ?3")
+			.setParameter(1, from.getId()).setParameter(2, at).setParameter(3, roomPlace.getId()).executeUpdate();
 		return roomPlace;
 	}
 
@@ -148,6 +164,23 @@ class PopularPlaceServiceTest {
 			.setParameter(1, deleted.getId()).executeUpdate();
 
 		assertThat(popular(null).items().getFirst().importCount30d()).isEqualTo(2);
+	}
+
+	@Test
+	void 원본_코스를_공개_해제했거나_원본_방이_지워졌으면_그_코스로_가져간_것은_세지_않는다() {
+		Place place = tour("1", null);
+		imported(room(), place);
+		TravelRecord unpublished = publishedCourse();
+		imported(unpublished, room(), place, RECENT, false);
+		unpublished.changeCourse("원본 코스", "", null, false, NOW);
+		TravelRecord deletedOrigin = publishedCourse();
+		imported(deletedOrigin, room(), place, RECENT, false);
+		em.find(TravelRoom.class, deletedOrigin.getRoomId()).softDelete(NOW);
+		Place onlyUnpublished = tour("2", null);
+		imported(unpublished, room(), onlyUnpublished, RECENT, false);
+
+		// 다른 공개 코스로 가져간 1곳만 남고, 공개 해제된 코스로만 가져간 장소는 나오지 않는다.
+		assertThat(rows(popular(null))).containsExactly(Tuple.tuple(1, "투어 1", 1L));
 	}
 
 	@Test

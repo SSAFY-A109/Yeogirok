@@ -27,7 +27,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 
 /**
  * 201 메인 흐름: 공개 코스의 장소를 여행방이 가져가면 015·093 에 잡히고, 30일이 지나거나 대상 방이 지워지면 빠지며, 공개를
- * 해제하면 015 노출에서도 빠진다. 030 이 아직 없어 가져온 후보는 직접 넣는다(코스 방문과 같은 place_id).
+ * 해제하면 015 노출과 093 집계에서 모두 빠진다. 030 이 아직 없어 가져온 후보는 직접 넣는다(코스 방문과 같은 place_id).
  */
 @DataJpaTest
 @Import({CourseTestConfig.class, MainCourseService.class, PopularPlaceService.class})
@@ -58,7 +58,7 @@ class MainApiFlowTest {
 	}
 
 	@Test
-	void 가져가면_015_093에_잡히고_30일이_지나거나_대상_방이_지워지면_빠지고_공개를_해제하면_015에서도_빠진다() {
+	void 가져가면_015_093에_잡히고_30일이_지나거나_대상_방이_지워지면_빠지고_공개를_해제하면_둘_다_빠진다() {
 		clock.set(NOW);
 		CourseFixture fixture = new CourseFixture(em);
 		TravelRoom origin = fixture.room(DAY1, ME);
@@ -99,8 +99,12 @@ class MainApiFlowTest {
 		assertThat(courses().items().getFirst().importCount30d()).isZero();
 		assertThat(places().items()).isEmpty();
 
-		// 공개를 해제하면 015 노출 대상이 아니다.
+		// 대상 방을 되살린 뒤 공개를 해제하면 015 노출 대상이 아니고, 093 도 그 코스로 가져간 것을 세지 않는다.
+		em.getEntityManager().createNativeQuery("UPDATE travel_rooms SET deleted_at = NULL WHERE id = ?1")
+			.setParameter(1, target.getId()).executeUpdate();
+		assertThat(places().items()).hasSize(1);
 		em.find(TravelRecord.class, course.getId()).changeCourse("강릉 당일", "", null, false, NOW);
 		assertThat(courses().items()).isEmpty();
+		assertThat(places().items()).isEmpty();
 	}
 }
