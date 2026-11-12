@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.record.draft;
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -315,6 +316,30 @@ class RecordDraftServiceTest {
 		});
 		assertThat(response.sourcePriority()).containsExactly(RecordDraft.SourceType.MANUAL,
 			RecordDraft.SourceType.RECEIPT, RecordDraft.SourceType.PHOTO, RecordDraft.SourceType.PLAN);
+	}
+
+	@Test
+	void 참고_계획이_있으면_항목_ID_를_입력으로_고정하고_계획_항목마다_PLAN_항목을_만든다() {
+		TravelRecord record = em.find(TravelRecord.class, recordId);
+		record.attachReferencePlan(RecordTestConfig.referencePlan(room.getId(), LocalDate.of(2026, 11, 2), 502L, 501L));
+		em.flush();
+
+		DraftJobResponse created = create();
+
+		assertThat(stored(created.draftKey()).sourceSnapshot().plannedItemIds()).containsExactly(502L, 501L);
+		RecordDraftResponse response = draftService.get(FRIEND, recordId, created.draftKey());
+		assertThat(response.items()).extracting(item -> item.plannedItemId(), item -> item.proposedVisitedAt(),
+				item -> item.needsReview())
+			.containsExactly(tuple(null, PAID_AT, false), tuple(502L, null, true), tuple(501L, null, true));
+		assertThat(response.items().get(1).evidence().sourceTypes()).containsExactly(RecordDraft.SourceType.PLAN);
+	}
+
+	@Test
+	void 참고_계획이_없으면_계획_항목도_없다() {
+		DraftJobResponse created = create();
+
+		assertThat(stored(created.draftKey()).sourceSnapshot().plannedItemIds()).isEmpty();
+		assertThat(stored(created.draftKey()).items()).extracting(RecordDraft.Item::plannedItemId).containsOnlyNulls();
 	}
 
 	@Test

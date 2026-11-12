@@ -15,11 +15,13 @@ import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder;
+import com.ssafy.yeogirok.domain.record.service.ReferencePlans;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
@@ -40,6 +42,7 @@ public class RecordDraftService {
 	private final RecordDraftGenerator generator;
 	private final JobRunner jobRunner;
 	private final JobProperties jobProperties;
+	private final ReferencePlans referencePlans;
 	private final Clock clock;
 
 	/** 판정 순서: RE001/RE003 → baseVersion C004 → 사진 RE008 → 영수증마다 RE008 → M005 → C004 → RE022. */
@@ -59,10 +62,13 @@ public class RecordDraftService {
 			snapshot.add(usable(ref, recordId, userId));
 		}
 
+		PlannedSchedule plan = referencePlans.read(record);
+		List<Long> plannedItemIds = plan == null ? List.of() : plan.itemIds();
+
 		Instant now = clock.instant();
 		String jobId = jobRunner.newId();
 		RecordDraft draft = RecordDraft.queued(UUID.randomUUID().toString(), jobId, recordId, userId,
-			command.baseVersion(), new RecordDraft.SourceSnapshot(command.imageIds(), snapshot, List.of()), now,
+			command.baseVersion(), new RecordDraft.SourceSnapshot(command.imageIds(), snapshot, plannedItemIds), now,
 			now.plus(jobProperties.maxLifetime()));
 		draftStore.save(draft);
 		draftStore.savePointer(draft);

@@ -23,6 +23,7 @@ import com.ssafy.yeogirok.domain.record.draft.RecordDraft.Item;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft.SnapshotMaterial;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft.SourceType;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftComposer.Photo;
+import com.ssafy.yeogirok.domain.record.draft.RecordDraftComposer.PlannedVisit;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
@@ -56,7 +57,7 @@ class RecordDraftComposerTest {
 	@Test
 	void 영수증마다_항목_하나이고_장소와_결제_시각을_그대로_쓴다() {
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", NOON, CAFE)), List.of(),
-			RULES);
+			List.of(), RULES);
 
 		assertThat(result.items()).containsExactly(new Item(1, List.of("m-1"), List.of(CAFE), LocalDate.of(2026, 11, 2),
 			NOON, false, new Evidence(List.of(SourceType.RECEIPT),
@@ -68,7 +69,7 @@ class RecordDraftComposerTest {
 	@Test
 	void EXIF_없는_사진은_근거로_쓰지_않고_경고를_한_번만_넣는다() {
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", NOON, CAFE)),
-			List.of(noExif(1), noExif(2)), RULES);
+			List.of(noExif(1), noExif(2)), List.of(), RULES);
 
 		assertThat(result.items()).singleElement().satisfies(item -> assertThat(item.sourcePhotoIds()).isEmpty());
 		assertThat(result.warnings()).containsExactly(RecordDraft.PHOTO_METADATA_MISSING);
@@ -78,7 +79,7 @@ class RecordDraftComposerTest {
 	void 결제_시각_60분_안의_사진은_영수증_근거로_붙고_필드_값은_그대로다() {
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", NOON, CAFE)),
 			List.of(photo(7, NOON.plus(Duration.ofMinutes(60)), LAT, LNG), photo(8, NOON.minusSeconds(600), null, null)),
-			RULES);
+			List.of(), RULES);
 
 		assertThat(result.items()).singleElement().satisfies(item -> {
 			assertThat(item.sourcePhotoIds()).containsExactly(8L, 7L);
@@ -93,7 +94,7 @@ class RecordDraftComposerTest {
 	void 사진은_가장_가까운_영수증에_붙는다() {
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(
 			List.of(receipt("m-1", NOON, CAFE), receipt("m-2", NOON.plus(Duration.ofMinutes(50)), CAFE)),
-			List.of(photo(7, NOON.plus(Duration.ofMinutes(30)), null, null)), RULES);
+			List.of(photo(7, NOON.plus(Duration.ofMinutes(30)), null, null)), List.of(), RULES);
 
 		assertThat(result.items()).extracting(Item::sourcePhotoIds).containsExactly(List.of(), List.of(7L));
 	}
@@ -104,7 +105,7 @@ class RecordDraftComposerTest {
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", NOON, CAFE)),
 			List.of(photo(7, NOON.plus(Duration.ofMinutes(61)), null, null),
 				photo(8, farAway, LAT.add(new BigDecimal("0.0100000")), LNG)),
-			RULES);
+			List.of(), RULES);
 
 		// 붙지 않은 두 사진은 51분 차이이고 한쪽에 GPS 가 없어 한 묶음이다.
 		assertThat(result.items()).hasSize(2);
@@ -126,7 +127,7 @@ class RecordDraftComposerTest {
 		Instant afterMidnight = Instant.parse("2026-11-02T15:10:00Z");
 
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", beforeMidnight, CAFE)),
-			List.of(photo(7, afterMidnight, null, null)), RULES);
+			List.of(photo(7, afterMidnight, null, null)), List.of(), RULES);
 
 		assertThat(result.items()).hasSize(2);
 		assertThat(result.items().get(1).visitDate()).isEqualTo(LocalDate.of(2026, 11, 3));
@@ -140,7 +141,7 @@ class RecordDraftComposerTest {
 			photo(2, start.plus(Duration.ofMinutes(60)), LAT, LNG),
 			photo(3, start.plus(Duration.ofMinutes(121)), LAT, LNG),
 			photo(4, start.plus(Duration.ofMinutes(125)), LAT.add(new BigDecimal("0.0050000")), LNG),
-			photo(5, start.plus(Duration.ofMinutes(126)), null, null)), RULES);
+			photo(5, start.plus(Duration.ofMinutes(126)), null, null)), List.of(), RULES);
 
 		assertThat(result.items()).extracting(Item::sourcePhotoIds)
 			.containsExactly(List.of(1L, 2L), List.of(3L), List.of(4L, 5L));
@@ -151,9 +152,48 @@ class RecordDraftComposerTest {
 	void 같은_장소여도_합치지_않고_시각순으로_번호를_매긴다() {
 		Instant later = NOON.plus(Duration.ofHours(3));
 		RecordDraftComposer.Result result = RecordDraftComposer.compose(
-			List.of(receipt("m-late", later, CAFE), receipt("m-early", NOON, CAFE)), List.of(), RULES);
+			List.of(receipt("m-late", later, CAFE), receipt("m-early", NOON, CAFE)), List.of(), List.of(), RULES);
 
 		assertThat(result.items()).extracting(Item::itemId, Item::sourceMaterialIds)
 			.containsExactly(tuple(1, List.of("m-early")), tuple(2, List.of("m-late")));
+	}
+
+	/* ── 참고 계획 항목(명세 specs/record-plan.md 3-4, 5절 4 A안·5) ───────────── */
+
+	static final LocalDate DAY = LocalDate.of(2026, 11, 2);
+
+	@Test
+	void 계획_항목마다_PLAN_항목이_생기고_시각은_비우고_확인_필요다() {
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(), List.of(),
+			List.of(new PlannedVisit(501L, DAY, CAFE), new PlannedVisit(502L, DAY, null)), RULES);
+
+		assertThat(result.items()).containsExactly(
+			new Item(1, List.of(), List.of(CAFE), DAY, null, true, new Evidence(List.of(SourceType.PLAN),
+				new FieldSources(SourceType.PLAN, SourceType.PLAN, null), List.of(RecordDraft.PLAN_NOT_CONFIRMED)),
+				List.of(), 501L, CAFE),
+			new Item(2, List.of(), List.of(), DAY, null, true, new Evidence(List.of(SourceType.PLAN),
+				new FieldSources(null, SourceType.PLAN, null), List.of(RecordDraft.PLAN_NOT_CONFIRMED)),
+				List.of(), 502L, null));
+	}
+
+	@Test
+	void 같은_날_같은_장소의_영수증이_있어도_계획_항목은_따로_남고_사진은_영수증에만_붙는다() {
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(List.of(receipt("m-1", NOON, CAFE)),
+			List.of(photo(7, NOON.plusSeconds(600), LAT, LNG)), List.of(new PlannedVisit(501L, DAY, CAFE)), RULES);
+
+		assertThat(result.items()).extracting(Item::sourceMaterialIds, Item::plannedItemId, Item::sourcePhotoIds)
+			.containsExactly(tuple(List.of("m-1"), null, List.of(7L)), tuple(List.of(), 501L, List.of()));
+	}
+
+	@Test
+	void 날짜_먼저_정렬하고_같은_날에는_시각_있는_항목_뒤에_계획_순서대로_둔다() {
+		LocalDate dayBefore = DAY.minusDays(1);
+		RecordDraftComposer.Result result = RecordDraftComposer.compose(
+			List.of(receipt("m-1", NOON, CAFE)), List.of(),
+			List.of(new PlannedVisit(503L, DAY, null), new PlannedVisit(501L, DAY, null),
+				new PlannedVisit(502L, dayBefore, null)), RULES);
+
+		assertThat(result.items()).extracting(Item::itemId, Item::visitDate, Item::plannedItemId)
+			.containsExactly(tuple(1, dayBefore, 502L), tuple(2, DAY, null), tuple(3, DAY, 503L), tuple(4, DAY, 501L));
 	}
 }
