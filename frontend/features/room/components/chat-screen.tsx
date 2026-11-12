@@ -1,7 +1,7 @@
-import { router } from "expo-router";
+import { router, useFocusEffect, useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import { useMemo, useRef, type ReactNode } from "react";
-import { View } from "react-native";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
+import { BackHandler, View } from "react-native";
 
 import { isApiError } from "@/api/errors";
 import { Button } from "@/components/ui/button";
@@ -34,19 +34,56 @@ function isRoomAccessError(error: unknown): boolean {
   return isApiError(error) && ROOM_ACCESS_ERROR_CODES.includes(error.code);
 }
 
-/** 이전 화면으로 돌아간다. 돌아갈 화면이 없으면(딥링크 진입) 여행방 상세로, 여행방을 모르면 목록으로 바꿔 이동한다. */
-function leaveChat(roomId: number | null) {
-  if (router.canGoBack()) {
-    router.back();
-    return;
-  }
+/** 여행방 상세 라우트(`app/rooms/[roomId]/index.tsx`)의 내비게이션 이름. */
+const ROOM_DETAIL_ROUTE_NAME = "rooms/[roomId]/index";
 
-  if (roomId === null) {
-    router.replace("/rooms");
-    return;
-  }
+/** 바로 아래 화면이 이 여행방의 상세인지. 여행방 상세에서 들어왔으면 그렇고, 알림·링크로 들어왔으면 아니다. */
+function isRoomDetailBelow(routes: readonly { name: string; params?: object }[], index: number, roomId: number): boolean {
+  const below = index > 0 ? routes[index - 1] : undefined;
+  const params: { roomId?: unknown } | undefined = below?.params;
+  return below?.name === ROOM_DETAIL_ROUTE_NAME && String(params?.roomId) === String(roomId);
+}
 
-  router.replace({ pathname: "/rooms/[roomId]", params: { roomId: String(roomId) } });
+/**
+ * 채팅을 닫고 그 여행방 상세로 가는 함수를 돌려준다. Android의 뒤로 가기 버튼·제스처도 같은 곳으로 보낸다.
+ * 알림을 눌러 들어오면 채팅 아래에 알림을 누르기 전 화면이 있어, 그대로 뒤로 가면 여행방이 아닌 엉뚱한 화면으로 돌아갔다.
+ * 그래서 바로 아래가 이 여행방 상세일 때만 뒤로 가고, 아니면 채팅을 여행방 상세로 바꾼다. 여행방을 모르면 이전 화면이나 목록으로 간다.
+ */
+function useLeaveChat(roomId: number | null): () => void {
+  const navigation = useNavigation();
+
+  const leave = useCallback(() => {
+    if (roomId === null) {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/rooms");
+      }
+
+      return;
+    }
+
+    const state = navigation.getState();
+
+    if (state !== undefined && isRoomDetailBelow(state.routes, state.index, roomId)) {
+      router.back();
+    } else {
+      router.replace({ pathname: "/rooms/[roomId]", params: { roomId: String(roomId) } });
+    }
+  }, [navigation, roomId]);
+
+  useFocusEffect(useCallback(() => {
+    const backPress = BackHandler.addEventListener("hardwareBackPress", () => {
+      leave();
+      return true;
+    });
+
+    return () => {
+      backPress.remove();
+    };
+  }, [leave]));
+
+  return leave;
 }
 
 /**
@@ -187,6 +224,8 @@ type ChatFrameProps = {
  * Figma의 "N명 실시간 연결됨"은 서버가 접속 중인 인원을 주지 않아, 내 연결 상태(초록 점)와 참여 인원으로 보여 준다.
  */
 function ChatFrame({ roomId, title, subtitle, connected = false, children }: ChatFrameProps) {
+  const leaveChat = useLeaveChat(roomId);
+
   return (
     <Screen>
       <View className="h-14 flex-row items-center justify-between border-b border-border bg-card px-2" testID="chat.header">
@@ -194,9 +233,7 @@ function ChatFrame({ roomId, title, subtitle, connected = false, children }: Cha
           icon={ChevronLeft}
           accessibilityLabel="뒤로 가기"
 
-          onPress={() => {
-            leaveChat(roomId);
-          }}
+          onPress={leaveChat}
 
           testID="chat.header.back"
         />
