@@ -5,7 +5,7 @@ import { MyUnavailable } from "@/features/user/components/my-page";
 import { MyMockProvider } from "@/features/user/mocks/my-provider";
 
 export default function MyLayout() {
-  return <MyMockProvider><Stack screenOptions={{ headerShown: false }} /></MyMockProvider>;
+  return <MyMockProvider><Stack screenOptions={{ headerShown: false, animation: "none" }} /></MyMockProvider>;
 }
 
 export function ErrorBoundary({ retry }: ErrorBoundaryProps) {

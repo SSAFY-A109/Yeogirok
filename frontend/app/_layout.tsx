@@ -115,7 +115,7 @@ function RootNavigator() {
   return (
     <View className="flex-1 bg-background">
       <View className="flex-1">
-        <Stack>
+        <Stack screenOptions={{ animation: "none" }}>
           <Stack.Protected guard={session.data} redirectTo="/login">
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="courses/index" options={{ headerShown: false }} />
