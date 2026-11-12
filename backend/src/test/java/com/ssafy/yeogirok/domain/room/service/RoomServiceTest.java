@@ -397,7 +397,7 @@ class RoomServiceTest {
 	}
 
 	@Test
-	void 방_정보를_바꾸면_ROOM_변경을_알리고_날짜나_이동_수단이_바뀌면_SCHEDULE_도_알린다() {
+	void 방_정보를_바꾸면_ROOM_변경을_알리고_확정_일정이_없으면_이동_수단이_바뀌어도_SCHEDULE_은_알리지_않는다() {
 		Long roomId = createRoom(OWNER);
 		join(FRIEND, roomId);
 		events.clear();
@@ -410,7 +410,7 @@ class RoomServiceTest {
 		RoomUpdateResponse moved = roomService.update(OWNER, roomId,
 			new RoomUpdateCommand(titled.version(), null, false, null, null, TransportMode.TRANSIT, false));
 		assertThat(roomEvents()).containsExactly(
-			RoomChangedEvent.of(roomId, OWNER, moved.version(), RoomChange.ROOM, RoomChange.SCHEDULE));
+			RoomChangedEvent.of(roomId, OWNER, moved.version(), RoomChange.ROOM));
 	}
 
 	@Test

@@ -198,12 +198,15 @@ public class RoomService {
 			return RoomUpdateResponse.preview(room, affectedItems);
 		}
 
+		TransportMode transportMode = command.transportMode() == null ? room.getTransportMode() : command.transportMode();
+		// 날짜·이동 수단이 바뀌면 날짜 밖 항목이 지워지거나(affectedItems) 남은 항목이 다시 계산된다(recalculation).
+		// 둘 다 없으면 확정 일정이 없어 바뀔 것이 없다. recalculation 은 잠금 밖에서 같은 version 으로 읽은 것이고
+		// 위에서 version 을 다시 확인했으므로 지금 일정과 같다.
+		boolean scheduleTouched = (transportMode != room.getTransportMode()
+			|| !Objects.equals(startDate, room.getStartDate()) || !Objects.equals(endDate, room.getEndDate()))
+			&& (recalculation != null || !affectedItems.isEmpty());
 		// 일정 항목을 먼저 저장하고 방 필드는 한 번에 바꾼다(version 이 한 번만 오르게).
 		Map<String, Object> scheduleOptions = scheduleRoomChanges.apply(room, startDate, endDate, recalculation);
-		TransportMode transportMode = command.transportMode() == null ? room.getTransportMode() : command.transportMode();
-		// 날짜·이동 수단이 바뀌면 날짜 밖 항목이 지워지거나 이동 시간·시각이 다시 계산된다.
-		boolean scheduleTouched = transportMode != room.getTransportMode()
-			|| !Objects.equals(startDate, room.getStartDate()) || !Objects.equals(endDate, room.getEndDate());
 		Instant now = clock.instant();
 		room.updateInfo(
 			newTitle == null ? room.getTitle() : newTitle,

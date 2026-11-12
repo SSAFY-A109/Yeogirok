@@ -533,4 +533,29 @@ class ScheduleServiceTest {
 		assertThat(events.stream(RoomChangedEvent.class))
 			.containsExactly(RoomChangedEvent.of(roomId, FRIEND, response.version(), RoomChange.SCHEDULE));
 	}
+
+	@Test
+	void 확정_일정이_있는_방의_이동_수단을_바꾸면_ROOM_과_SCHEDULE_을_함께_알린다() {
+		update(newItem(placeA, DAY1, 1, 60), newItem(placeB, DAY1, 2, 60));
+		events.clear();
+
+		RoomUpdateResponse response = roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(version(), null, false, null, null, TransportMode.TRANSIT, false));
+
+		assertThat(events.stream(RoomChangedEvent.class)).containsExactly(
+			RoomChangedEvent.of(roomId, OWNER, response.version(), RoomChange.ROOM, RoomChange.SCHEDULE));
+	}
+
+	@Test
+	void 날짜를_줄여_확정_일정이_모두_지워져도_SCHEDULE_을_알린다() {
+		update(newItem(placeA, DAY2, 1, 60));
+		events.clear();
+
+		RoomUpdateResponse response = roomService.update(OWNER, roomId,
+			new RoomUpdateCommand(version(), null, true, DAY1, DAY1, null, false));
+
+		assertThat(response.schedule()).isNull();
+		assertThat(events.stream(RoomChangedEvent.class)).containsExactly(
+			RoomChangedEvent.of(roomId, OWNER, response.version(), RoomChange.ROOM, RoomChange.SCHEDULE));
+	}
 }
