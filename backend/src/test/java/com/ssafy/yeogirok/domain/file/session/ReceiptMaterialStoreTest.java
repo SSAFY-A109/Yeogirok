@@ -19,6 +19,7 @@ import com.ssafy.yeogirok.support.TestRedis;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** 영수증 자료는 노션 Redis 4절 필드로 저장하고, 삭제 확인 전에는 수명을 걸지 않다가 확인 뒤 24시간 둔다. 실제 Redis. */
 class ReceiptMaterialStoreTest {
@@ -50,6 +51,27 @@ class ReceiptMaterialStoreTest {
 		assertThat(stored.get("objectKey").stringValue()).isEqualTo("receipt/abc");
 		assertThat(stored.get("jobId").isNull()).isTrue();
 		assertThat(TestRedis.template().getExpire("material:m-1")).isEqualTo(-1L);
+	}
+
+	/** 주소 칸(210)이 생기기 전에 저장된 자료도 읽는다. */
+	@Test
+	void 주소_칸이_없는_예전_자료는_null_false_로_읽는다() {
+		ReceiptMaterial material = ReceiptMaterial.uploaded(100L, 7L, "receipt/abc", ACCEPTED,
+			ACCEPTED.plusSeconds(86_400)).linked("RECEIPT", "job-1", ACCEPTED).extracting()
+			.ocrSucceeded(new ReceiptMaterial.Extracted("가게", null, null, null, List.of(), null, "서울 노원구 동일로", true));
+		store.save("m-1", material);
+		ObjectNode stored = (ObjectNode) JSON.readTree(
+			TestRedis.template().opsForValue().get("material:m-1"));
+		ObjectNode extracted = (ObjectNode) stored.get("extracted");
+		extracted.remove("address");
+		extracted.remove("addressComplete");
+		TestRedis.template().opsForValue().set("material:m-1", JSON.writeValueAsString(stored));
+
+		ReceiptMaterial.Extracted read = store.find("m-1").orElseThrow().extracted();
+
+		assertThat(read.merchantName()).isEqualTo("가게");
+		assertThat(read.address()).isNull();
+		assertThat(read.addressComplete()).isFalse();
 	}
 
 	@Test

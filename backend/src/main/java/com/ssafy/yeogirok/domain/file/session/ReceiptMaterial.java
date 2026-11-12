@@ -53,10 +53,12 @@ public record ReceiptMaterial(
 	 * OCR 제안. paidAt 은 날짜·시각이 둘 다 있을 때만 +09:00 으로 조합한다(명세 5절 6). placeCandidates 는 TourAPI 전까지 비어 있다.
 	 */
 	public record Extracted(String merchantName, LocalDate paidDate, LocalTime paidTime, Instant paidAt,
-		List<RecordPlaceView> placeCandidates, Double confidence) {
+		List<RecordPlaceView> placeCandidates, Double confidence, String address, Boolean addressComplete) {
 
+		/** address·addressComplete 가 없는 예전 Redis 값은 null·false 로 읽는다(063 에는 내보내지 않음). */
 		public Extracted {
 			placeCandidates = placeCandidates == null ? List.of() : List.copyOf(placeCandidates);
+			addressComplete = Boolean.TRUE.equals(addressComplete) && address != null;
 		}
 	}
 

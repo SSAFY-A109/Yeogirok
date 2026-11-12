@@ -148,6 +148,21 @@ class MaterialRetryServiceTest {
 	}
 
 	@Test
+	void 다시_맡긴_OCR_이_성공하면_주소도_새_값으로_바뀐다() {
+		given(ocrClient.recognize(any())).willReturn(
+			new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "서울 노원구 동일로", false));
+		linked();
+		assertThat(stored().extracted().address()).isEqualTo("서울 노원구 동일로");
+		willReturn(new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "서울 노원구 노해로", true))
+			.given(ocrClient).recognize(any());
+
+		retryService.retry(ME, recordId, MATERIAL_ID, 2);
+
+		assertThat(stored().extracted().address()).isEqualTo("서울 노원구 노해로");
+		assertThat(stored().extracted().addressComplete()).isTrue();
+	}
+
+	@Test
 	void 처리_중이면_RE022_작업이_끊겼으면_다시_맡길_수_있다() {
 		executor.hold();
 		linked();

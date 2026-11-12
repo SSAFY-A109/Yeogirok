@@ -129,7 +129,7 @@ public class ReceiptOcrRunner {
 		var paidAt = result.paidDate() == null || result.paidTime() == null ? null
 			: LocalDateTime.of(result.paidDate(), result.paidTime()).atZone(ApiDateTime.ZONE).toInstant();
 		return new ReceiptMaterial.Extracted(result.merchantName(), result.paidDate(), result.paidTime(), paidAt,
-			List.of(), null);
+			List.of(), null, result.address(), result.addressComplete());
 	}
 
 	private void fail(String materialId, String jobId, String code, String message) {

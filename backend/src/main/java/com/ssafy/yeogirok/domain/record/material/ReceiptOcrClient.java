@@ -23,7 +23,8 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * 영수증 OCR 서버 호출(ai/dev {@code ai/ocr/app.py}). {@code POST /ocr/receipt}, multipart 필드 {@code file}, 10MB 이하.
- * 응답 {@code {status, placeName, date, time}} 에서 상호·날짜·시각만 쓰고 모르는 필드(v3 address 등)는 무시한다.
+ * 응답에서 상호·날짜·시각과 v3 주소({@code address}·{@code addressComplete}, 명세 {@code specs/draft-merge.md} 1절)를 쓴다.
+ * 주소 칸이 없는 지금 응답도 그대로 받고(null·false), status 는 읽지 않는다.
  *
  * <p>실패는 예외로 알린다. 400(읽을 수 없는 이미지) → M003, 413(10MB 초과) → M001 은 다시 시도해도 같아 업무 오류로,
  * 5xx·시간 초과·연결 실패·주소 없음은 일시 오류로 던진다(작업이 C014·다시 시도 가능으로 바꾼다). 로그에는 상태 코드·예외 종류만 남긴다.
@@ -88,8 +89,10 @@ public class ReceiptOcrClient {
 		if (response == null) {
 			return new OcrResult(null, null, null);
 		}
+		JsonNode complete = response.get("addressComplete");
 		return new OcrResult(text(response.get("placeName")), date(text(response.get("date"))),
-			time(text(response.get("time"))));
+			time(text(response.get("time"))), text(response.get("address")),
+			complete != null && complete.isBoolean() && complete.booleanValue());
 	}
 
 	private static String text(JsonNode value) {

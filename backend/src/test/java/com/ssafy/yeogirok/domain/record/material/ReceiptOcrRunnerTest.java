@@ -136,6 +136,17 @@ class ReceiptOcrRunnerTest {
 	}
 
 	@Test
+	void OCR_응답의_주소를_자료에_함께_저장한다() {
+		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("해운대 커피", LocalDate.of(2026, 11, 8),
+			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+
+		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
+
+		assertThat(stored().extracted().address()).isEqualTo("부산 해운대구 해운대로");
+		assertThat(stored().extracted().addressComplete()).isTrue();
+	}
+
+	@Test
 	void 날짜나_시각이_하나라도_없으면_paidAt_은_null() {
 		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("가게", LocalDate.of(2026, 11, 8), null));
 

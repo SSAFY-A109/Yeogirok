@@ -293,7 +293,7 @@ class RecordDraftServiceTest {
 		materialStore.save(MATERIAL_ID, ReceiptMaterial.uploaded(recordId, ME, "receipt/u", NOW,
 			NOW.plus(Duration.ofHours(24))).linked("RECEIPT", "job-ocr", NOW)
 			.ocrSucceeded(new ReceiptMaterial.Extracted("가게", LocalDate.of(2026, 11, 2), LocalTime.NOON, PAID_AT,
-				List.of(), null)));
+				List.of(), null, null, null)));
 
 		assertError(() -> draftService.create(ME, recordId, command(1, List.of(imageId), 2)),
 			ExceptionType.RECEIPT_NOT_READY);
