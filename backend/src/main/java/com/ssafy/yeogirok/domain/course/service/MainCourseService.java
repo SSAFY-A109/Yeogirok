@@ -50,16 +50,13 @@ public class MainCourseService {
 		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
 			throw new BusinessException(ExceptionType.COURSE_RECOMMENDATION_CATEGORY_NOT_SUPPORTED);
 		}
-		if (regionCode != null && !CourseSearchCondition.isRegionCode(regionCode)) {
-			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
-				"regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
-		}
+		String regionPrefix = CourseSearchCondition.regionPrefix(regionCode, ExceptionType.NOT_ALLOWED_VALUE);
 		int size = PageSize.resolve(limit);
 		MainCourseCursor after = MainCourseCursor.decodeOrNull(cursor, clock.instant());
 		ImportWindow window = after == null ? ImportWindow.now(clock) : ImportWindow.endingAt(after.windowEnd());
 
-		List<CourseCandidate> found = publicCourseRepository.findMainCourses(
-			regionCode == null ? null : regionCode + "%", category, window.start(), window.end(),
+		List<CourseCandidate> found = publicCourseRepository.findMainCourses(regionPrefix, category, window.start(),
+			window.end(),
 			after == null ? Long.MAX_VALUE : after.importCount(), after == null ? Long.MAX_VALUE : after.id(),
 			Limit.of(size + 1));
 		List<CourseCandidate> page = found.size() > size ? found.subList(0, size) : found;

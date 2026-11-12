@@ -49,14 +49,12 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 		if (query.codePointCount(0, query.length()) > QUERY_MAX_LENGTH) {
 			throw unsupported("q: 최대 %d자입니다.".formatted(QUERY_MAX_LENGTH));
 		}
-		if (regionCode != null && !isRegionCode(regionCode)) {
-			throw unsupported("regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
-		}
+		String regionPrefix = regionPrefix(regionCode, ExceptionType.COURSE_FILTER_NOT_SUPPORTED);
 		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
 			throw unsupported("category: 없는 카테고리입니다.");
 		}
 		return new CourseSearchCondition(query.isEmpty() ? null : "%" + escape(query.toLowerCase(Locale.ROOT)) + "%",
-			regionCode == null ? null : regionCode + "%", category,
+			regionPrefix, category,
 			duration == null ? Duration.ALL : parse(Duration.class, duration, "duration"),
 			transportMode == null ? null : parse(TransportMode.class, transportMode, "transportMode"));
 	}
@@ -66,9 +64,19 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 		return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
 	}
 
-	/** 시·도 2자리 또는 시·군·구 5자리(014·015 공통). */
-	public static boolean isRegionCode(String regionCode) {
-		return REGION_CODE.matcher(regionCode).matches();
+	/**
+	 * regionCode 를 법정동 코드 앞자리 LIKE 패턴으로(014·015 공통). 오류 코드는 API 마다 달라(014 CO002, 015 C003) 받는다.
+	 *
+	 * @return regionCode 가 null 이면 null
+	 */
+	public static String regionPrefix(String regionCode, ExceptionType onInvalid) {
+		if (regionCode == null) {
+			return null;
+		}
+		if (!REGION_CODE.matcher(regionCode).matches()) {
+			throw new BusinessException(onInvalid, "regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
+		}
+		return regionCode + "%";
 	}
 
 	private static <E extends Enum<E>> E parse(Class<E> type, String value, String field) {

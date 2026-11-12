@@ -131,7 +131,6 @@ public class CourseController {
 	@Operation(summary = "API-015 메인 추천 코스 조회")
 	@GetMapping("/courses/recommendations")
 	public ResponseEntity<ApiResponseBody<MainCourseListResponse>> recommend(
-		@AuthenticationPrincipal AuthenticatedUser user,
 		@Parameter(description = "공통 카테고리 코드") @RequestParam(required = false) String category,
 		@Parameter(description = "시·도 2자리 또는 시·군·구 5자리") @RequestParam(required = false) String regionCode,
 		@Parameter(description = "다음 페이지 커서(최초 조회 시각을 담아 같은 30일 구간을 쓴다)") @RequestParam(required = false)

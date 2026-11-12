@@ -208,7 +208,7 @@ class MainCourseServiceTest {
 	@ParameterizedTest
 	@ValueSource(longs = {1L, 99_999_999_999_999_999L})
 	void 커서의_최초_조회_시각이_지금보다_뒤면_C006(long secondsAfterNow) {
-		String cursor = CourseSearchCursor.encodeParts(NOW.getEpochSecond() + secondsAfterNow, 0, 1);
+		String cursor = CourseCursors.encode(NOW.getEpochSecond() + secondsAfterNow, 0, 1);
 
 		assertThatThrownBy(() -> recommend(null, null, cursor, null)).isInstanceOf(BusinessException.class)
 			.extracting("exceptionType").isEqualTo(ExceptionType.INVALID_CURSOR);
