@@ -554,15 +554,16 @@ docker compose exec redis redis-cli config get maxmemory-policy
   | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. `LOCATION_*`는 TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다. `VISIT_STATS_*`(방문 분포 격자)는 11/12에 지도를 가장 가까이 당기면 발자취가 남긴 자리(약 11m 칸)에 찍히도록 바꿨다. 단계별 칸 크기와 주의점은 compose 주석에 있다 |
 
 - 구글·카카오 키가 아직 없으면 임시 문자열을 넣습니다. 백엔드는 뜨고 그 제공자 로그인만 실패합니다.
-- 선택 키 3개는 비어 있어도 백엔드가 뜹니다. 값을 받으면 서버 `.env`에 넣고 `docker compose up -d backend`로 백엔드만 다시 켭니다(다시 빌드하지 않음).
+- 선택 키 4개는 비어 있어도 백엔드가 뜹니다. 값을 받으면 서버 `.env`에 넣고 `docker compose up -d backend`로 백엔드만 다시 켭니다(다시 빌드하지 않음).
 
   | 값 | 없으면 |
   | --- | --- |
   | `GOOGLE_WEB_CLIENT_SECRET` (구글 웹 클라이언트 secret) | 구글 회원은 탈퇴할 수 없다 |
   | `KAKAO_ADMIN_KEY` (카카오 어드민 키) | 카카오 회원 탈퇴 때 연결을 끊지 않고 재시도 대상으로만 남긴다 |
   | `KAKAO_REST_API_KEY` (카카오 REST API 키) | 발자취 주소와 후보 장소 법정동이 비어 저장된다 |
+  | `FIREBASE_SERVICE_ACCOUNT_BASE64` (Firebase 서비스 계정 키 JSON을 Base64 한 줄로) | 채팅 앱 푸시(FCM)를 보내지 않는다. 백엔드 시작 로그에 `FCM 서비스 계정 키(FIREBASE_SERVICE_ACCOUNT_BASE64)가 없어 앱 푸시를 보내지 않습니다`가 남는다 |
 
-- 백엔드 팀원의 로컬 `backend/.env`를 그대로 옮기지 않습니다. `JWT_SECRET`, `ROOM_INVITE_TOKEN_KEY`, DB·Redis 값은 로컬 개발용이고, 서버는 서버에서 만든 값을 씁니다. 옮길 것은 구글 웹 클라이언트 ID, 카카오 네이티브 앱 키, 위 선택 키 3개뿐입니다.
+- 백엔드 팀원의 로컬 `backend/.env`를 그대로 옮기지 않습니다. `JWT_SECRET`, `ROOM_INVITE_TOKEN_KEY`, DB·Redis 값은 로컬 개발용이고, 서버는 서버에서 만든 값을 씁니다. 옮길 것은 구글 웹 클라이언트 ID, 카카오 네이티브 앱 키, 위 선택 키 4개뿐입니다.
 - 비밀 값은 명령 기록에 남지 않게 `read -rs`로 입력합니다.
 
 ```bash
