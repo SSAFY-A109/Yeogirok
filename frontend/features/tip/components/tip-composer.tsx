@@ -1,10 +1,12 @@
 import { Pressable, ScrollView, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { Button } from "@/components/ui/button";
 import { DesignAsset } from "@/components/ui/design-asset";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
+import { useKeyboardFollowingScroll } from "@/hooks/use-keyboard-following-scroll";
 import { isPlacementExpired, type CloudPlacement, type TipPhoto } from "../native/ar/contracts";
 import { TIP_TYPE_LABELS, TIP_TYPE_VALUES, type TipTypeDto } from "../model";
 
@@ -39,6 +41,7 @@ type Props = {
 
 export function TipComposer(props: Props) {
   const { placement, photo, body, tipType, busy, error, failed } = props;
+  const keyboard = useKeyboardFollowingScroll();
   const disabled = busy !== null;
   const editingDisabled = disabled || props.editingLocked === true;
   const expired = isPlacementExpired(placement);
@@ -51,7 +54,7 @@ export function TipComposer(props: Props) {
     <View className="flex-1 bg-background" testID="ar-tip.composer">
       <ScreenHeader title={failed ? "팁 등록" : "팁 쓰기"} leading={failed ? null : closeButton} trailing={failed ? closeButton : undefined} />
       {failed ? (
-        <ScrollView contentContainerClassName="gap-6 px-5 pb-8 pt-8">
+        <ScrollView className="flex-1" contentContainerClassName="gap-6 px-5 pb-8 pt-8">
           <View className="items-center gap-6">
             <View className="h-16 w-16 items-center justify-center rounded-full bg-highlight-muted"><DesignAsset source={icons.alert} className="h-8 w-8" accessible={false} /></View>
             <View className="gap-3"><Text className="text-center text-h2">팁을 저장하지 못했어요</Text><Text accessibilityRole="alert" className="text-center text-body-sm text-foreground-secondary">{error ?? "입력한 내용과 사진을 유지했어요. 다시 시도해 주세요."}</Text></View>
@@ -64,7 +67,7 @@ export function TipComposer(props: Props) {
           <View className="flex-row gap-2"><DesignAsset source={icons.info} className="h-4 w-4" accessible={false} /><Text className="flex-1 text-caption text-muted-foreground">다시 시도하면 준비된 사진과 공간 정보는 그대로 사용해요. 공개 게시 전에는 다른 사람에게 보이지 않아요.</Text></View>
         </ScrollView>
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-6 px-5 pb-4 pt-4">
+        <ScrollView {...keyboard.scrollViewProps} className="flex-1" keyboardShouldPersistTaps="handled" contentContainerClassName="gap-6 px-5 pb-4 pt-4">
           <View className="min-h-button-lg flex-row items-center gap-2 rounded-md bg-muted px-4 py-1">
             <DesignAsset source={icons.check} className="h-5 w-5" accessible={false} />
             <Text className="flex-1 text-label" numberOfLines={2}>{expired ? "자리 다시 확인 필요" : "자리 저장됨 · 현재 장소"}</Text>
@@ -94,9 +97,9 @@ export function TipComposer(props: Props) {
               </Pressable>
             </View>
           </View>
-          <View className="gap-3">
+          <View className="gap-3" onLayout={keyboard.onInputLayout}>
             <FieldLabel label="내용" required />
-            <Textarea className="px-4 py-3 web:outline-none" value={body} onChangeText={props.onBody} maxLength={120} editable={!editingDisabled} accessibilityLabel="팁 내용 (필수, 최대 120자)" placeholder="이 장소에 온 사람에게 알려 줄 팁을 남겨 주세요." testID="ar-tip.body" />
+            <Textarea className="px-4 py-3 web:outline-none" value={body} onChangeText={props.onBody} onFocus={keyboard.followInput} onBlur={keyboard.stopFollowing} maxLength={120} editable={!editingDisabled} accessibilityLabel="팁 내용 (필수, 최대 120자)" placeholder="이 장소에 온 사람에게 알려 줄 팁을 남겨 주세요." testID="ar-tip.body" />
             <Text className="text-right text-caption text-muted-foreground tabular-nums">{body.length} / 120</Text>
           </View>
           <View className="flex-row gap-2 rounded-md bg-brand-muted p-4"><DesignAsset source={icons.eye} className="h-5 w-5" accessible={false} /><Text className="flex-1 text-caption text-primary">등록이 완료되면 이 장소에서 볼 수 있는 공개 팁이 돼요. 사진은 선택이며 위치 정보는 지우고 첨부해요.</Text></View>
@@ -104,13 +107,14 @@ export function TipComposer(props: Props) {
           {props.editingLocked && <Text className="text-body-sm text-muted-foreground">등록 결과를 확인하지 못했어요. 다시 시도하면 같은 등록 요청의 결과를 확인해요.</Text>}
         </ScrollView>
       )}
-      <View className="gap-2 px-5 pb-3 pt-3">
+      <View className="gap-2 px-5 pb-5 pt-3">
         {busy && <Text accessibilityLiveRegion="polite" className="text-center text-caption text-muted-foreground">{busy}</Text>}
         <View className="flex-row gap-3">
           {failed && <Button variant="outline" size="lg" className="w-1/3" disabled={disabled} onPress={props.onClose} testID="ar-tip.later"><Text>나중에</Text></Button>}
           <Button size="lg" className="flex-1" loading={disabled} loadingLabel="등록 중" disabled={disabled || (!expired && (!tipType || !body.trim() || body.length > 120))} onPress={expired ? props.onReplace : props.onSave} testID="ar-tip.save"><Text>{expired ? "위치 다시 놓기" : failed ? "다시 시도" : "팁 등록"}</Text></Button>
         </View>
       </View>
+      <Animated.View style={keyboard.keyboardSpacerStyle} />
     </View>
   );
 }

@@ -44,7 +44,7 @@ export async function measureTipLocation(): Promise<LocationEvidenceDto> {
   const native = bridge();
 
   const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
-    title: "주변 AR 팁을 위한 현재 위치", message: "50m 안의 팁을 찾고 5m 이내 현장 조건을 확인하는 데 현재 위치를 사용해요.", buttonPositive: "위치 확인",
+    title: "주변 AR 팁을 위한 현재 위치", message: "50m 안의 팁을 찾고 상세 보기나 반응을 남길 수 있는 거리인지 확인하는 데 현재 위치를 사용해요.", buttonPositive: "위치 확인",
   });
 
   if (permission !== PermissionsAndroid.RESULTS.GRANTED) {

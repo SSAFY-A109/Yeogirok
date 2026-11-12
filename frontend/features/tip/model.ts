@@ -3,7 +3,7 @@ import { assertId, ContractMismatchError, toKnownEnum } from "../../lib/contract
 import { parseServerDateTime } from "../../lib/date";
 
 export const TIP_SEARCH_RADIUS_METERS = 50;
-export const TIP_INTERACTION_RADIUS_METERS = 5;
+export const TIP_INTERACTION_RADIUS_METERS = 50;
 export const TIP_BODY_MAX_LENGTH = 120;
 export const TIP_TYPE_LABELS = { PHOTO: "포토", FOOD: "맛집", CAFE: "카페", TIP: "꿀팁", TMI: "TMI" } as const;
 export type TipTypeDto = keyof typeof TIP_TYPE_LABELS;
@@ -87,7 +87,7 @@ export type SearchTipsResponseDto = {
   nextCursor: string | null;
   appliedRadiusMeters: 50;
   totalCount: number;
-  interactionRadiusMeters: 5;
+  interactionRadiusMeters: 5 | typeof TIP_INTERACTION_RADIUS_METERS;
 };
 export type PublicTipPhotoDto = { imageId: number; url: string; attribution: string | null };
 export type TipReactionsDto = { likes: number; dislikes: number; myReaction: string | null };
@@ -265,8 +265,10 @@ export function toTipReactions(value: unknown) {
 
 export function toTipSearchPage(value: unknown) {
   const dto = object(value, "tipSearch");
+  const { interactionRadiusMeters } = dto;
 
-  if (!Array.isArray(dto.items) || dto.items.length > 10 || dto.appliedRadiusMeters !== 50 || dto.interactionRadiusMeters !== 5) {
+  if (!Array.isArray(dto.items) || dto.items.length > 10 || dto.appliedRadiusMeters !== TIP_SEARCH_RADIUS_METERS ||
+    (interactionRadiusMeters !== 5 && interactionRadiusMeters !== TIP_INTERACTION_RADIUS_METERS)) {
     throw new ContractMismatchError("tipSearch");
   }
 
@@ -275,7 +277,7 @@ export function toTipSearchPage(value: unknown) {
     const distanceMeters = number(item.distanceMeters, "distanceMeters", TIP_SEARCH_RADIUS_METERS);
     const canInteract = boolean(item.canInteract, "canInteract");
 
-    if (canInteract !== (distanceMeters <= TIP_INTERACTION_RADIUS_METERS)) {
+    if (canInteract !== (distanceMeters <= interactionRadiusMeters)) {
       throw new ContractMismatchError("canInteract");
     }
 
@@ -291,7 +293,7 @@ export function toTipSearchPage(value: unknown) {
     };
   });
 
-  return { items, nextCursor: cursor(dto.nextCursor), totalCount: count(dto.totalCount, "totalCount"), appliedRadiusMeters: 50, interactionRadiusMeters: 5 };
+  return { items, nextCursor: cursor(dto.nextCursor), totalCount: count(dto.totalCount, "totalCount"), appliedRadiusMeters: TIP_SEARCH_RADIUS_METERS, interactionRadiusMeters };
 }
 
 export function toTipDetail(value: unknown) {

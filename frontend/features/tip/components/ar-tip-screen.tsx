@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Alert, KeyboardAvoidingView, Linking, Platform, View } from "react-native";
+import { Alert, Linking, Platform, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -213,30 +213,28 @@ function PublicArTipScreen() {
     });
   }
 
-  return <SafeAreaView edges={placement ? ["top", "bottom"] : ["top"]} className="flex-1 bg-background" testID="ar-tip.screen">
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-      {pendingId !== null ? <TipPublication tipId={pendingId} recoveryStored={recoveryStored} onClose={returnToCamera} onComplete={returnToCamera} /> : placement ? <TipComposer placement={placement} body={body} tipType={tipType} photo={photo} busy={busy} error={error} failed={failed} editingLocked={uncertain}
-        onBody={(value) => {
-          setBody(value.replace(/\r\n?/g, "\n"));
-        }} onType={setTipType} onPhoto={selectPhoto}
-        onRemovePhoto={() => {
-          setPhoto(null); uploadFile.current = null;
-        }} onReplace={() => {
-          void run("현장에서 위치를 다시 놓아 주세요", async () => {
-            acceptPlacement(await placeTip(false));
-          });
-        }} onClose={closeComposer} onSave={save} /> : <View className="flex-1 justify-center gap-6 px-5 py-6">
-        {busy ? <PageLoading type="spinner" title="AR 팁을 준비하고 있어요" description={busy} /> : <>
-          <Text className="text-h2">{error ? "AR 카메라를 열지 못했어요" : "AR 카메라가 닫혔어요"}</Text>
-          {error && <Text accessibilityRole="alert" className="text-body-sm text-destructive">{error}</Text>}
-          <Button size="lg" testID="ar-tip.explore" onPress={() => {
-            void run("주변 팁을 확인하고 있어요", explore);
-          }}><Text>{error ? "다시 시도" : "AR 카메라 다시 열기"}</Text></Button>
-          {error && Platform.OS !== "web" && <Button variant="outline" onPress={() => {
-            void Linking.openSettings();
-          }}><Text>앱 권한 설정</Text></Button>}
-        </>}
-      </View>}
-    </KeyboardAvoidingView>
+  return <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background" testID="ar-tip.screen">
+    {pendingId !== null ? <TipPublication tipId={pendingId} recoveryStored={recoveryStored} onClose={returnToCamera} onComplete={returnToCamera} /> : placement ? <TipComposer placement={placement} body={body} tipType={tipType} photo={photo} busy={busy} error={error} failed={failed} editingLocked={uncertain}
+      onBody={(value) => {
+        setBody(value.replace(/\r\n?/g, "\n"));
+      }} onType={setTipType} onPhoto={selectPhoto}
+      onRemovePhoto={() => {
+        setPhoto(null); uploadFile.current = null;
+      }} onReplace={() => {
+        void run("현장에서 위치를 다시 놓아 주세요", async () => {
+          acceptPlacement(await placeTip(false));
+        });
+      }} onClose={closeComposer} onSave={save} /> : <View className="flex-1 justify-center gap-6 px-5 py-6">
+      {busy ? <PageLoading type="spinner" title="AR 팁을 준비하고 있어요" description={busy} /> : <>
+        <Text className="text-h2">{error ? "AR 카메라를 열지 못했어요" : "AR 카메라가 닫혔어요"}</Text>
+        {error && <Text accessibilityRole="alert" className="text-body-sm text-destructive">{error}</Text>}
+        <Button size="lg" testID="ar-tip.explore" onPress={() => {
+          void run("주변 팁을 확인하고 있어요", explore);
+        }}><Text>{error ? "다시 시도" : "AR 카메라 다시 열기"}</Text></Button>
+        {error && Platform.OS !== "web" && <Button variant="outline" onPress={() => {
+          void Linking.openSettings();
+        }}><Text>앱 권한 설정</Text></Button>}
+      </>}
+    </View>}
   </SafeAreaView>;
 }
