@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.InterruptedIOException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPairGenerator;
 import java.time.Duration;
 import java.util.Base64;
 
@@ -15,6 +16,35 @@ import com.google.firebase.messaging.MessagingErrorCode;
 
 /** 서비스 계정 키를 읽지 못하면 시작을 멈추고, 오류에 키 내용을 담지 않는다. 실제 FCM 은 부르지 않는다. */
 class FcmPushSenderTest {
+
+	/**
+	 * 키가 있을 때만 타는 길이라 로컬·테스트(키 없음)에서는 드러나지 않았다(서버에 키를 넣자 NoClassDefFoundError
+	 * JacksonFactory 로 시작 실패). 테스트에서 만든 RSA 키로 서비스 계정 키 형식을 맞춰 실제 초기화를 돌린다. 네트워크는 쓰지 않는다.
+	 */
+	@Test
+	void 올바른_서비스_계정_키면_FirebaseApp_을_초기화한다() throws Exception {
+		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+		generator.initialize(2048);
+		// 실제 키 JSON 처럼 PEM 줄바꿈은 JSON 문자열 안에서 \n 으로 적는다.
+		String pem = ("-----BEGIN PRIVATE KEY-----\n"
+			+ Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII))
+				.encodeToString(generator.generateKeyPair().getPrivate().getEncoded())
+			+ "\n-----END PRIVATE KEY-----\n").replace("\n", "\\n");
+		String json = """
+			{"type": "service_account", "project_id": "test-project", "private_key_id": "test-key-id",
+			 "private_key": "%s", "client_email": "push@test-project.iam.gserviceaccount.com",
+			 "client_id": "1", "token_uri": "https://oauth2.googleapis.com/token"}
+			""".formatted(pem);
+
+		PushSender sender = new PushConfig().pushSender(
+			properties(Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8))));
+		try {
+			assertThat(sender).isInstanceOf(FcmPushSender.class);
+			assertThat(sender.isEnabled()).isTrue();
+		} finally {
+			sender.close();
+		}
+	}
 
 	@Test
 	void Base64_가_아니면_시작을_멈춘다() {

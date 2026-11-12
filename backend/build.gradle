@@ -54,6 +54,9 @@ dependencies {
 		exclude group: 'com.google.cloud', module: 'google-cloud-firestore'
 		exclude group: 'com.google.cloud', module: 'google-cloud-storage'
 	}
+	// firebase-admin 이 기본 JSON 처리기로 JacksonFactory 를 쓰는데 이 모듈은 POM 에 없다(Firestore 쪽으로 들어오던 것이
+	// 위 제외로 빠진다). 없으면 키를 넣었을 때 FirebaseApp 초기화가 NoClassDefFoundError 로 실패한다. google-http-client 와 버전을 맞춘다.
+	implementation 'com.google.http-client:google-http-client-jackson2:2.2.0'
 
 	/* Lombok */
 	compileOnly 'org.projectlombok:lombok'
