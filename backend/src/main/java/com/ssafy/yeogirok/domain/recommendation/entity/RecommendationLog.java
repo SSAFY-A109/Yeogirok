@@ -25,7 +25,7 @@ import lombok.NoArgsConstructor;
  * 추천 결과·담기 이력. 노션 DDL {@code recommendation_logs} 와 맞춘다. REQUEST 행의 ID 가 API-034 의
  * recommendationRequestId 다. 같은 멱등키 재전송은 result_payload 로 같은 응답을 다시 만든다.
  *
- * <p>테이블은 Flyway {@code V2__add_recommendation_logs.sql} 이 만든다. 이 엔티티를 바꾸면 새 번호 파일도 함께 낸다.
+ * <p>테이블은 Flyway {@code V3__add_recommendation_logs.sql} 이 만든다. 이 엔티티를 바꾸면 새 번호 파일도 함께 낸다.
  * DDL 과 다른 점: users·travel_rooms FK 는 엔티티 관계 없이 ID 만 둔다(다른 도메인과 같다). ENUM 타입·컬럼 기본값은
  * V1 과 같은 기준으로 넣지 않았다(backend/docs/08-flyway.md).
  */
