@@ -6,11 +6,11 @@ import org.springframework.stereotype.Service;
 
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterial;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
+import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
 import com.ssafy.yeogirok.domain.record.dto.MaterialReviewCommand;
 import com.ssafy.yeogirok.domain.record.dto.MaterialReviewResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.domain.record.dto.VisitPlaceInput;
-import com.ssafy.yeogirok.domain.record.repository.RecordPlaceRepository;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -29,7 +29,7 @@ public class MaterialReviewService {
 
 	private final RecordFinder recordFinder;
 	private final ReceiptMaterials materials;
-	private final RecordPlaceRepository recordPlaceRepository;
+	private final PlaceRepository placeRepository;
 
 	/** 판정 순서: RE001/RE003 → RE008 → M005 → RE022(OCR 처리 중) → C004 → 투어API 장소 없음 C003. */
 	public MaterialReviewResponse review(Long userId, Long recordId, String materialId, MaterialReviewCommand command) {
@@ -58,7 +58,7 @@ public class MaterialReviewService {
 	/** 투어API 장소는 places 에 이미 있는 행만 받는다(1차 5절 6, 투어API 클라이언트 전까지). 없으면 empty. */
 	private Optional<RecordPlaceView> place(VisitPlaceInput input) {
 		return switch (input) {
-			case VisitPlaceInput.TourPlace tour -> recordPlaceRepository
+			case VisitPlaceInput.TourPlace tour -> placeRepository
 				.findByProviderAndProviderPlaceId(PlaceProvider.TOUR_API, tour.providerPlaceId())
 				.map(RecordPlaceView::from);
 			case VisitPlaceInput.CustomPlace custom -> Optional.of(new RecordPlaceView(PlaceProvider.MANUAL, null,

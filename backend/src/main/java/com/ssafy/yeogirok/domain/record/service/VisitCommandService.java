@@ -267,7 +267,7 @@ public class VisitCommandService {
 	 */
 	private Long placeId(VisitPlaceInput input, Map<VisitPlaceInput.CustomPlace, LegalDong> legalDongs, Instant now) {
 		return switch (input) {
-			case VisitPlaceInput.TourPlace tour -> recordPlaceRepository
+			case VisitPlaceInput.TourPlace tour -> placeRepository
 				.findByProviderAndProviderPlaceId(PlaceProvider.TOUR_API, tour.providerPlaceId())
 				.orElseThrow(() -> new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
 					"placeRef: 아직 저장되지 않은 투어API 장소입니다."))
