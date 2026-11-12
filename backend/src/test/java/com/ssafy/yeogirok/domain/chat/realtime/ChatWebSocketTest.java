@@ -38,7 +38,8 @@ import com.ssafy.yeogirok.domain.chat.service.ChatTicketService;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomUpdateCommand;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
-import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
+import com.ssafy.yeogirok.domain.room.entity.RoomMember;
+import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -70,7 +71,7 @@ class ChatWebSocketTest {
 	@Autowired
 	RoomService roomService;
 	@Autowired
-	RoomInvitationService roomInvitationService;
+	RoomMemberRepository roomMemberRepository;
 	@Autowired
 	ChatTicketService chatTicketService;
 	@Autowired
@@ -102,8 +103,8 @@ class ChatWebSocketTest {
 		owner = newUser();
 		friend = newUser();
 		roomId = roomService.create(owner, new RoomCreateCommand("채팅", null, null, TransportMode.CAR)).id();
-		String token = roomInvitationService.getOrCreateInvitation(owner, roomId).inviteToken();
-		roomInvitationService.accept(friend, token);
+		// 참여 API(API-025)는 MEMBERS 알림을 비동기로 보내 클라이언트가 연결된 뒤에 늦게 도착할 수 있다. 참여 행을 직접 넣는다.
+		roomMemberRepository.save(RoomMember.joined(roomId, friend, clock.instant()));
 	}
 
 	@AfterEach
