@@ -92,7 +92,7 @@ public class RecordDraftGenerator {
 		}
 		return plan.days().stream()
 			.flatMap(day -> day.items().stream().filter(item -> ids.contains(item.id()))
-				.map(item -> new PlannedVisit(item.id(), day.date(), item.place())))
+				.map(item -> new PlannedVisit(item.id(), day.date(), item.place(), item.arrivalAt())))
 			.toList();
 	}
 

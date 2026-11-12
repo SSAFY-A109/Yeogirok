@@ -29,16 +29,17 @@ public record RecordProperties(Duration draftRetention, Duration materialRetenti
 	 * @param receiptPhotoMaxMeters 사진 GPS 와 영수증 장소가 이보다 멀면 붙이지 않는다
 	 * @param photoGroupGap         남은 사진을 시각순으로 볼 때 앞 사진과 이보다 벌어지면 새 묶음
 	 * @param photoGroupMaxMeters   앞 사진과 이보다 멀면(둘 다 GPS 가 있을 때) 새 묶음
+	 * @param planReceiptMaxMeters  계획 장소와 영수증 확정 장소가 이 거리 이하면 같은 방문으로 합친다(투어API 같은 장소는 거리 무관)
 	 */
 	public record Draft(Duration receiptPhotoWindow, int receiptPhotoMaxMeters, Duration photoGroupGap,
-		int photoGroupMaxMeters) {
+		int photoGroupMaxMeters, int planReceiptMaxMeters) {
 
 		public Draft {
 			requirePositive(receiptPhotoWindow, "draft.receipt-photo-window");
 			requirePositive(photoGroupGap, "draft.photo-group-gap");
-			if (receiptPhotoMaxMeters <= 0 || photoGroupMaxMeters <= 0) {
-				throw new IllegalArgumentException(
-					"yeogirok.record.draft.receipt-photo-max-meters·photo-group-max-meters 값이 필요합니다(0보다 커야 합니다).");
+			if (receiptPhotoMaxMeters <= 0 || photoGroupMaxMeters <= 0 || planReceiptMaxMeters <= 0) {
+				throw new IllegalArgumentException("yeogirok.record.draft.receipt-photo-max-meters·photo-group-max-meters·"
+					+ "plan-receipt-max-meters 값이 필요합니다(0보다 커야 합니다).");
 			}
 		}
 	}

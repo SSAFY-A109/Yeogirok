@@ -56,7 +56,8 @@ import com.ssafy.yeogirok.support.TestRedis;
 import com.ssafy.yeogirok.support.TestUsers;
 
 /**
- * 196 참고 계획 흐름: 057 사본 → 방 일정 변경(사본 그대로) → 064 PLAN 항목 → 066 반영·plannedItemId → 059 → 067 해제.
+ * 196 참고 계획 흐름: 057 사본 → 방 일정 변경(사본 그대로) → 064 계획 항목(같은 곳 영수증에 합쳐짐·나머지 PLAN) → 066 반영·plannedItemId
+ * → 059 → 067 해제.
  * 서비스를 이어 확인한다(명세 {@code specs/record-plan.md} 3절).
  */
 @DataJpaTest
@@ -140,7 +141,7 @@ class RecordPlanFlowTest {
 		assertThat(planned.days()).extracting(PlannedSchedule.Day::date).containsExactly(DAY1, DAY2);
 		assertThat(planned.days().getFirst().items().getFirst().stayMinutes()).isEqualTo(60);
 
-		// 064: 사진·영수증 입력에 계획 항목이 PLAN 항목으로 더해진다.
+		// 064: 계획 카페는 같은 좌표의 영수증 항목에 합쳐지고(208), 해변 계획은 PLAN 항목으로 남는다.
 		materialStore.save(MATERIAL_ID, ReceiptMaterial.uploaded(recordId, ME, "receipt/u", NOW,
 				NOW.plus(Duration.ofHours(24)))
 			.linked("RECEIPT", "job-ocr", NOW)
@@ -156,14 +157,13 @@ class RecordPlanFlowTest {
 		RecordDraftResponse draft = draftService.get(ME, recordId, draftKey);
 		assertThat(draft.items()).extracting(item -> item.itemId(), item -> item.visitDate(),
 				item -> item.plannedItemId(), item -> item.proposedVisitedAt())
-			.containsExactly(tuple(1, DAY1, null, PAID_AT), tuple(2, DAY1, cafePlan.getId(), null),
-				tuple(3, DAY2, beachPlan.getId(), null));
+			.containsExactly(tuple(1, DAY1, cafePlan.getId(), PAID_AT), tuple(2, DAY2, beachPlan.getId(), null));
 
-		// 066: 사용자가 시각을 직접 넣어 PLAN 항목을 반영한다. 요청의 plannedItemId 가 방문에 저장된다.
-		Instant visitedAt = Instant.parse("2026-11-07T06:00:00Z");
+		// 066: 합쳐진 영수증 항목을 반영한다. 요청의 plannedItemId 가 방문에 저장된다.
+		Instant visitedAt = PAID_AT;
 		VisitPlaceInput cafe = new VisitPlaceInput.CustomPlace("안목 카페", LAT, LNG, null);
 		Long visitId = visitCommandService.add(ME, recordId, new VisitAddCommand(version(recordId), draftKey, 1,
-				List.of(new VisitAddCommand.Item(cafe, DAY1, visitedAt, 1, 2, cafePlan.getId()))))
+				List.of(new VisitAddCommand.Item(cafe, DAY1, visitedAt, 1, 1, cafePlan.getId()))))
 			.visitIds().getFirst();
 		flush();
 		RecordDetailResponse detail = recordQueryService.getDetail(ME, recordId);
