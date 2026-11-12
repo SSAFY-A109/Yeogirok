@@ -126,6 +126,28 @@ yeogirok:
       service-account-base64: ${FIREBASE_SERVICE_ACCOUNT_BASE64:}
       connect-timeout: 5s
       read-timeout: 10s
+  tour-api:
+    # 한국관광공사 국문 관광정보(KorService2). 공공데이터포털 일반 인증키의 Decoding 값을 환경 변수로만 넣는다.
+    # 비어 있으면 앱은 뜨고 장소 추천(API-034)만 C014 로 실패한다.
+    service-key: ${TOUR_API_KEY:}
+    base-url: https://apis.data.go.kr/B551011/KorService2
+    mobile-app: Yeogirok
+    connect-timeout: 2s
+    read-timeout: 3s
+  recommendation:
+    # API-034 limit 기본값·상한(11/11 제안값). TourAPI 조회 한 번에 받을 항목 수.
+    default-limit: 20
+    max-limit: 50
+    rows-per-query: 100
+    # 추천 한 번의 TourAPI 호출 상한(일일 한도 보호, 8 이상). 호출은 동시에 하고 전체를 fetch-timeout 까지만 기다린다.
+    # fetch-timeout 은 멱등키 처리 중 표시 수명(30s)보다 충분히 짧게 둔다. 넘긴 호출은 실패로 보고 나머지로 추천한다.
+    max-tour-api-calls: 12
+    fetch-timeout: 8s
+    # 인기 점수: 이 기간 안에 이 장소를 담은 여행방 수(담은 경로 무관). 기간만 메인 인기 장소(API-093)와 같은 30일이다.
+    popular-window: 30d
+    # 동선 점수 기준거리. 담은 후보 중심점에서 이 거리면 0점이다(직선거리).
+    car-radius-meters: 20000
+    transit-radius-meters: 7000
   kakao:
     local:
       # 역지오코딩(API-041 주소 표시, API-031 후보 법정동). 키가 없으면 해당 값을 null 로 저장하고 앱은 그대로 뜬다.

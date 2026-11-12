@@ -61,7 +61,11 @@ public class TravelRoom {
 	@Column(name = "transport_mode", nullable = false, length = 20)
 	private TransportMode transportMode;
 
-	/** 추천 조건. API-033 에서 채운다. */
+	/**
+	 * 추천 조건. API-033 에서 채운다. 구조는 {@code RecommendationPreferences} 를 따르며 조건 자체의 version 을 함께 둔다.
+	 * 조건 저장으로 다른 참여자가 보던 여행방 version 이 낡지 않도록 여행방 version 계산에서 뺀다(11/11 결정).
+	 */
+	@OptimisticLock(excluded = true)
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(nullable = false)
 	private Map<String, Object> preferences = new HashMap<>();
@@ -145,6 +149,12 @@ public class TravelRoom {
 	 */
 	public void markScheduleRecalculated(Instant now) {
 		this.scheduleNeedsRecalculation = false;
+		this.updatedAt = now;
+	}
+
+	/** API-033. 조건 version 비교는 서비스가 방 행을 잠근 뒤 끝낸다. 여행방 version 은 오르지 않는다. */
+	public void updatePreferences(Map<String, Object> preferences, Instant now) {
+		this.preferences = new HashMap<>(preferences);
 		this.updatedAt = now;
 	}
 

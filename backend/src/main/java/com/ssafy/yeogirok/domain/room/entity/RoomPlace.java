@@ -79,11 +79,20 @@ public class RoomPlace {
 
 	/** API-031 지도 핀 직접 추가. {@code place} 는 새로 만든 MANUAL 장소다. */
 	public static RoomPlace manual(Long roomId, Place place, Long addedBy, Instant now) {
+		return of(roomId, place, addedBy, PlaceSourceType.MANUAL, now);
+	}
+
+	/** API-029 추천 담기. {@code place} 는 재사용하거나 처음 저장한 투어API 장소다. */
+	public static RoomPlace recommended(Long roomId, Place place, Long addedBy, Instant now) {
+		return of(roomId, place, addedBy, PlaceSourceType.AI, now);
+	}
+
+	private static RoomPlace of(Long roomId, Place place, Long addedBy, PlaceSourceType sourceType, Instant now) {
 		RoomPlace roomPlace = new RoomPlace();
 		roomPlace.roomId = roomId;
 		roomPlace.place = place;
 		roomPlace.addedBy = addedBy;
-		roomPlace.sourceType = PlaceSourceType.MANUAL;
+		roomPlace.sourceType = sourceType;
 		roomPlace.createdAt = now;
 		roomPlace.updatedAt = now;
 		return roomPlace;

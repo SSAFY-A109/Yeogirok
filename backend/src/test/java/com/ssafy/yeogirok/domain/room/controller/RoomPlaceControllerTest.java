@@ -45,6 +45,9 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddCommand;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddResponse;
+import com.ssafy.yeogirok.domain.room.service.RoomPlaceAddService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -68,6 +71,9 @@ class RoomPlaceControllerTest {
 
 	@MockitoBean
 	RoomPlaceService roomPlaceService;
+
+	@MockitoBean
+	RoomPlaceAddService roomPlaceAddService;
 
 	@MockitoBean
 	IdempotencyService idempotencyService;
@@ -129,6 +135,76 @@ class RoomPlaceControllerTest {
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("C003"));
 		verifyNoInteractions(roomPlaceService);
+	}
+
+	/* ── API-029 ────────────────────────────────────────────── */
+
+	private ResultActions postPlaces(String json) throws Exception {
+		return mockMvc.perform(post("/api/v1/rooms/7/places").with(asUser(USER_ID))
+			.header("Idempotency-Key", "key-1").contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	@Test
+	void 추천_담기는_201과_명세의_응답을_주고_멱등키는_방_단위다() throws Exception {
+		PlaceInfo tourPlace = new PlaceInfo(PlaceProvider.TOUR_API, "126508", "경포해변", LAT, LNG, "강릉시 창해로 514",
+			"NATURE", null, "4215010100", "강릉동", "http://img/1.jpg", "한국관광공사");
+		given(roomPlaceAddService.add(eq(USER_ID), eq(7L), any())).willReturn(RoomPlaceAddResponse.of(
+			List.of(new RoomPlaceResponse(402L, tourPlace, PlaceSourceType.AI, null, USER_ID)), 5));
+
+		postPlaces("""
+			{"items": [{"placeRef": {"provider": "TOUR_API", "providerPlaceId": "126508"},
+			            "sourceType": "AI", "recommendationRequestId": 31, "rank": 1}]}
+			""")
+			.andExpect(status().isCreated())
+			.andExpect(content().json("""
+				{"success": true, "data": {"added": [{
+				  "id": 402,
+				  "place": {"provider": "TOUR_API", "providerPlaceId": "126508", "name": "경포해변",
+				    "latitude": 37.7519000, "longitude": 128.8761000, "address": "강릉시 창해로 514",
+				    "categoryCode": "NATURE", "categoryName": null, "regionCode": "4215010100", "regionName": "강릉동",
+				    "imageUrl": "http://img/1.jpg", "imageAttribution": "한국관광공사"},
+				  "sourceType": "AI", "sourceRecordId": null, "addedBy": 1
+				}], "addedCount": 1, "version": 5}}
+				""", JsonCompareMode.STRICT));
+
+		RoomPlaceAddCommand expected = new RoomPlaceAddCommand(List.of(new RoomPlaceAddCommand.Item("126508", 31L, 1)));
+		ArgumentCaptor<IdempotencyKey> key = ArgumentCaptor.forClass(IdempotencyKey.class);
+		verify(idempotencyService).execute(key.capture(), eq(expected), any(), any(), any());
+		assertThat(key.getValue()).isEqualTo(new IdempotencyKey(USER_ID, RoomPlaceController.ADD_PLACES_SCOPE, "7",
+			"key-1"));
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+		"{}|C001",
+		"{\"items\":null}|C001",
+		"{\"items\":{}}|C002",
+		"{\"items\":[]}|C003",
+		"{\"items\":[1]}|C002",
+		"{\"items\":[{\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C001",
+		"{\"items\":[{\"placeRef\":\"126508\",\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C002",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"MANUAL\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C003",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\" \"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C003",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"recommendationRequestId\":1,\"rank\":1}]}|C001",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"SEARCH\"}]}|C003",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"COURSE\"}]}|C003",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"rank\":1}]}|C001",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1}]}|C001",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":\"1\",\"rank\":1}]}|C002",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":0}]}|C003"
+	})
+	void 담기_요청_형식_오류(String json, String code) throws Exception {
+		postPlaces(json).andExpect(jsonPath("$.code").value(code));
+		verifyNoInteractions(roomPlaceAddService);
+	}
+
+	@Test
+	void 담기는_한_번에_50개까지() throws Exception {
+		String item = "{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\","
+			+ "\"recommendationRequestId\":1,\"rank\":1}";
+		postPlaces("{\"items\":[" + String.join(",", java.util.Collections.nCopies(51, item)) + "]}")
+			.andExpect(jsonPath("$.code").value("C003"));
+		verifyNoInteractions(roomPlaceAddService);
 	}
 
 	/* ── API-031 ────────────────────────────────────────────── */
