@@ -1,5 +1,6 @@
 package com.ssafy.yeogirok.domain.room.event;
 
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -18,7 +19,8 @@ public record RoomChangedEvent(Long roomId, Long changedBy, int version, Set<Roo
 		if (changes.isEmpty()) {
 			throw new IllegalArgumentException("changes 가 비었습니다.");
 		}
-		changes = Set.copyOf(EnumSet.copyOf(changes));
+		// 선언 순서(ROOM, PLACES, SCHEDULE, MEMBERS)로 돈다. 프레임의 changes 도 이 순서다.
+		changes = Collections.unmodifiableSet(EnumSet.copyOf(changes));
 	}
 
 	public static RoomChangedEvent of(Long roomId, Long changedBy, int version, RoomChange first, RoomChange... rest) {

@@ -44,7 +44,7 @@ public final class ChatFrames {
 	public record RoomUpdated(String type, Long roomId, int version, List<RoomChange> changes, Long changedBy) {
 		public static RoomUpdated from(RoomChangedEvent event) {
 			return new RoomUpdated("ROOM_UPDATED", event.roomId(), event.version(),
-				event.changes().stream().sorted().toList(), event.changedBy());
+				List.copyOf(event.changes()), event.changedBy());
 		}
 	}
 
