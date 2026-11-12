@@ -50,7 +50,7 @@ function getReadinessContent(readiness: ScheduleReadiness, room: RoomDetail, pla
         tone: "muted",
         message: "여행 날짜를 정하면 일정을 만들 수 있어요",
         link: { label: "날짜 정하기", action: "setDates" },
-        button: { label: "AI로 일정 만들기", variant: "default", disabled: true },
+        button: { label: "일정 만들기", variant: "default", disabled: true },
       };
     case "NOT_ENOUGH_PLACES":
       return {
@@ -58,7 +58,7 @@ function getReadinessContent(readiness: ScheduleReadiness, room: RoomDetail, pla
         tone: "muted",
         message: `후보 장소를 ${readiness.minimum}곳 이상 담아 주세요`,
         link: { label: "장소 담기", action: "addPlace" },
-        button: { label: "AI로 일정 만들기", variant: "default", disabled: true },
+        button: { label: "일정 만들기", variant: "default", disabled: true },
       };
     case "READY":
       return {
@@ -66,7 +66,7 @@ function getReadinessContent(readiness: ScheduleReadiness, room: RoomDetail, pla
         tone: "ready",
         message: getReadyMessage(room, placeCount),
         link: null,
-        button: { label: "AI로 일정 만들기", variant: "default", disabled: false },
+        button: { label: "일정 만들기", variant: "default", disabled: false },
       };
   }
 }
