@@ -15,10 +15,6 @@ record MainCourseCursor(Instant windowEnd, long importCount, long id) {
 		return CourseSearchCursor.encodeParts(windowEnd.getEpochSecond(), importCount, id);
 	}
 
-	boolean precedes(long otherImportCount, long otherId) {
-		return new CourseSearchCursor(importCount, id).precedes(otherImportCount, otherId);
-	}
-
 	/**
 	 * 최초 조회 시각이 지금보다 뒤면 C006(이 서버가 만든 커서가 아니다). 이 검사로 시각 변환·DB 시각 범위를 넘는 값도 막는다.
 	 *

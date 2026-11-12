@@ -1,9 +1,9 @@
 package com.ssafy.yeogirok.domain.course.repository;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -24,35 +24,59 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 		+ " and rp.sourceType = com.ssafy.yeogirok.domain.room.entity.PlaceSourceType.COURSE"
 		+ " and rp.createdAt >= :importedFrom and rp.createdAt < :importedTo";
 
+	/* 아래 조각은 별칭 r(TravelRecord)·room(원본 방)을 쓴다. */
+
+	String FIRST_VISIT = "(select min(v.visitDate) from ActualVisit v where v.recordId = r.id)";
+	String LAST_VISIT = "(select max(v.visitDate) from ActualVisit v where v.recordId = r.id)";
+	/** 기간 안에 이 코스에서 장소를 가져간 미삭제 방 수(같은 방 1회). */
+	String IMPORT_COUNT = "(select count(distinct rp.roomId) from RoomPlace rp, TravelRoom target"
+		+ " where rp.sourceRecordId = r.id and " + COURSE_IMPORT_ROWS + ")";
+
+	String CANDIDATE = "select new com.ssafy.yeogirok.domain.course.repository.CourseCandidate(r.id, r.title, room.id,"
+		+ " room.startDate, room.endDate, room.transportMode, " + FIRST_VISIT + ", " + LAST_VISIT + ", " + IMPORT_COUNT + ")";
+
+	/** 게시 중 + 원본 방 미삭제, regionCode·category(null 이면 거르지 않음). 014·015 공통. */
+	String PUBLISHED_FILTERED = " from TravelRecord r, TravelRoom room"
+		+ " where room.id = r.roomId and room.deletedAt is null and r.publishedAt is not null"
+		+ " and (:regionPrefix is null or exists (select 1 from ActualVisit v, Place p"
+		+ "   where p.id = v.placeId and v.recordId = r.id and p.regionCode like :regionPrefix))"
+		+ " and (:category is null or exists (select 1 from ActualVisit v, Place p"
+		+ "   where p.id = v.placeId and v.recordId = r.id and p.categoryCode = :category))";
+
+	/** 여행 첫날·마지막 날({@code CoursePeriod} 와 같은 규칙: 방 날짜와 방문 날짜 중 이른 날·늦은 날). */
+	String FIRST_DAY = "case when room.startDate is null or " + FIRST_VISIT + " < room.startDate then " + FIRST_VISIT
+		+ " else room.startDate end";
+	String LAST_DAY = "case when room.endDate is null or " + LAST_VISIT + " > room.endDate then " + LAST_VISIT
+		+ " else room.endDate end";
+	/** 공개 선택된 사진이 연결된 방문 날짜 수. */
+	String PUBLIC_PHOTO_DAYS = "(select count(distinct v.visitDate) from ActualVisit v where v.recordId = r.id"
+		+ " and exists (select 1 from VisitImage i where i.visitId = v.id and i.publicSelected = true))";
+
 	/**
-	 * 게시 중 + 원본 방 미삭제. 조건이 null 이면 거르지 않는다. importCount 는 기간 안에 이 코스에서 장소를 가져간 미삭제 방 수
-	 * (같은 방 1회).
+	 * API-014 후보. 기간·정렬·페이지는 서비스가 정한다.
 	 *
 	 * @param pattern      소문자 LIKE 패턴(이스케이프 문자 '!'). 제목 또는 방문 장소 이름
 	 * @param regionPrefix 법정동 코드 앞자리 LIKE 패턴. 방문 장소 중 하나라도
 	 */
-	@Query("select new com.ssafy.yeogirok.domain.course.repository.CourseCandidate(r.id, r.title, room.id,"
-		+ " room.startDate, room.endDate, room.transportMode,"
-		+ " (select min(v.visitDate) from ActualVisit v where v.recordId = r.id),"
-		+ " (select max(v.visitDate) from ActualVisit v where v.recordId = r.id),"
-		+ " (select count(distinct rp.roomId) from RoomPlace rp, TravelRoom target where rp.sourceRecordId = r.id and "
-		+ COURSE_IMPORT_ROWS + "))"
-		+ " from TravelRecord r, TravelRoom room"
-		+ " where room.id = r.roomId and room.deletedAt is null and r.publishedAt is not null"
+	@Query(CANDIDATE + PUBLISHED_FILTERED
 		+ " and (:transportMode is null or room.transportMode = :transportMode)"
 		+ " and (:pattern is null or lower(r.title) like :pattern escape '!' or exists (select 1 from ActualVisit v, Place p"
-		+ "   where p.id = v.placeId and v.recordId = r.id and lower(p.name) like :pattern escape '!'))"
-		+ " and (:regionPrefix is null or exists (select 1 from ActualVisit v, Place p"
-		+ "   where p.id = v.placeId and v.recordId = r.id and p.regionCode like :regionPrefix))"
-		+ " and (:category is null or exists (select 1 from ActualVisit v, Place p"
-		+ "   where p.id = v.placeId and v.recordId = r.id and p.categoryCode = :category))")
+		+ "   where p.id = v.placeId and v.recordId = r.id and lower(p.name) like :pattern escape '!'))")
 	List<CourseCandidate> findCandidates(@Param("pattern") String pattern, @Param("regionPrefix") String regionPrefix,
 		@Param("category") String category, @Param("transportMode") TransportMode transportMode,
 		@Param("importedFrom") Instant importedFrom, @Param("importedTo") Instant importedTo);
 
-	/** 코스별로 공개 선택된 사진이 연결된 방문 날짜(API-015 "모든 날짜에 공개 사진", 명세 main-api.md 5절 2). */
-	@Query("select distinct new com.ssafy.yeogirok.domain.course.repository.PublicPhotoDate(v.recordId, v.visitDate)"
-		+ " from ActualVisit v where v.recordId in :recordIds"
-		+ " and exists (select 1 from VisitImage i where i.visitId = v.id and i.publicSelected = true)")
-	List<PublicPhotoDate> findPublicPhotoDates(@Param("recordIds") Collection<Long> recordIds);
+	/**
+	 * API-015 한 페이지(명세 main-api.md 2). 여행 첫날~마지막 날 모든 날짜에 공개 사진이 연결된 방문이 있는 코스만, 가져간 방 수
+	 * 내림차순·id 내림차순으로 커서 뒤부터. 방문 날짜는 늘 기간 안이라 "공개 사진 있는 날 수 = 기간 일수"면 모든 날짜다.
+	 * 첫 페이지는 afterCount·afterId 에 Long.MAX_VALUE 를 넘긴다(null 은 PostgreSQL 이 타입을 정하지 못함).
+	 */
+	@Query(CANDIDATE + PUBLISHED_FILTERED
+		+ " and exists (select 1 from ActualVisit v where v.recordId = r.id)"
+		+ " and " + PUBLIC_PHOTO_DAYS + " = (" + LAST_DAY + " - " + FIRST_DAY + ") by day + 1"
+		+ " and (" + IMPORT_COUNT + " < :afterCount or " + IMPORT_COUNT + " = :afterCount and r.id < :afterId)"
+		+ " order by " + IMPORT_COUNT + " desc, r.id desc")
+	List<CourseCandidate> findMainCourses(@Param("regionPrefix") String regionPrefix, @Param("category") String category,
+		@Param("importedFrom") Instant importedFrom, @Param("importedTo") Instant importedTo,
+		@Param("afterCount") long afterCount, @Param("afterId") long afterId, Limit limit);
 }

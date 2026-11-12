@@ -1,19 +1,14 @@
 package com.ssafy.yeogirok.domain.course.service;
 
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.mapping;
-import static java.util.stream.Collectors.toSet;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +18,6 @@ import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
 import com.ssafy.yeogirok.domain.course.repository.CourseCandidate;
 import com.ssafy.yeogirok.domain.course.repository.PublicCourseRepository;
-import com.ssafy.yeogirok.domain.course.repository.PublicPhotoDate;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
@@ -35,25 +29,20 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 메인 추천 코스(API-015, 명세 {@code specs/main-api.md} 2). 게시 중인 코스 중 여행 첫날~마지막 날 모든 날짜에 공개 사진이 있는
- * 코스를 최근 30일 가져간 방 수 내림차순(같으면 id 내림차순)으로 준다. 후보·가져간 방 수는 014 와 같은 쿼리, 카드 재료는
- * {@link CourseCards} 로 읽는다. 014 처럼 후보를 한 번에 읽어 노출 조건·정렬·커서를 서비스에서 처리한다.
+ * 코스를 최근 30일 가져간 방 수 내림차순(같으면 id 내림차순)으로 준다. 노출 조건·정렬·커서는 쿼리가 처리해 한 페이지만 읽고
+ * (PR #107 리뷰), 카드 재료는 {@link CourseCards} 로 읽는다.
  */
 @Service
 @RequiredArgsConstructor
 public class MainCourseService {
 
 	static final int PREVIEW_PLACE_SIZE = 3;
-	private static final Comparator<Ranked> POPULAR = Comparator.comparingLong((Ranked ranked) -> ranked.importCount())
-		.thenComparingLong(ranked -> ranked.candidate().id()).reversed();
 
 	private final PublicCourseRepository publicCourseRepository;
 	private final CourseCards courseCards;
 	private final PublicCourseReader publicCourseReader;
 	private final CategoryNames categoryNames;
 	private final Clock clock;
-
-	private record Ranked(CourseCandidate candidate, List<LocalDate> dates, long importCount) {
-	}
 
 	/** 없는 category CO004, regionCode 형식 C003, 커서 C006, limit 20·50(C007). */
 	@Transactional(readOnly = true)
@@ -69,47 +58,29 @@ public class MainCourseService {
 		MainCourseCursor after = MainCourseCursor.decodeOrNull(cursor, clock.instant());
 		ImportWindow window = after == null ? ImportWindow.now(clock) : ImportWindow.endingAt(after.windowEnd());
 
-		List<Ranked> eligible = eligible(publicCourseRepository.findCandidates(null,
-			regionCode == null ? null : regionCode + "%", category, null, window.start(), window.end()));
-		List<Ranked> rest = after == null ? eligible : eligible.stream()
-			.filter(ranked -> after.precedes(ranked.importCount(), ranked.candidate().id()))
-			.toList();
-		List<Ranked> page = rest.size() > size ? rest.subList(0, size) : rest;
-		String nextCursor = rest.size() > size ? new MainCourseCursor(window.end(), page.getLast().importCount(),
-			page.getLast().candidate().id()).encode() : null;
+		List<CourseCandidate> found = publicCourseRepository.findMainCourses(
+			regionCode == null ? null : regionCode + "%", category, window.start(), window.end(),
+			after == null ? Long.MAX_VALUE : after.importCount(), after == null ? Long.MAX_VALUE : after.id(),
+			Limit.of(size + 1));
+		List<CourseCandidate> page = found.size() > size ? found.subList(0, size) : found;
+		String nextCursor = found.size() > size ? new MainCourseCursor(window.end(), page.getLast().importCount(),
+			page.getLast().id()).encode() : null;
 		return new MainCourseListResponse(items(page), nextCursor, window.basis());
 	}
 
-	/** 여행 첫날~마지막 날 모든 날짜에 공개 사진이 연결된 방문이 있는 코스만, 정렬해서(명세 2 노출 대상 2). */
-	private List<Ranked> eligible(List<CourseCandidate> candidates) {
-		if (candidates.isEmpty()) {
-			return List.of();
-		}
-		Map<Long, Set<LocalDate>> photoDates = publicCourseRepository
-			.findPublicPhotoDates(candidates.stream().map(CourseCandidate::id).toList()).stream()
-			.collect(groupingBy(PublicPhotoDate::recordId, mapping(PublicPhotoDate::visitDate, toSet())));
-		return candidates.stream()
-			.map(candidate -> new Ranked(candidate, CoursePeriod.dates(candidate.roomStart(), candidate.roomEnd(),
-				candidate.firstVisit(), candidate.lastVisit()), candidate.importCount()))
-			.filter(ranked -> !ranked.dates().isEmpty()
-				&& photoDates.getOrDefault(ranked.candidate().id(), Set.of()).containsAll(ranked.dates()))
-			.sorted(POPULAR)
-			.toList();
-	}
-
-	private List<MainCourseListResponse.Item> items(List<Ranked> page) {
-		CourseCards.Sources sources = courseCards.load(page.stream().map(Ranked::candidate).toList());
+	private List<MainCourseListResponse.Item> items(List<CourseCandidate> page) {
+		CourseCards.Sources sources = courseCards.load(page);
 		Map<String, String> names = categoryNames.of(sources.places().values().stream()
 			.map(Place::getCategoryCode).toList());
-		return page.stream().map(ranked -> {
-			CourseCandidate course = ranked.candidate();
+		return page.stream().map(course -> {
 			List<ActualVisit> visits = sources.visitsOf(course.id());
-			LocalDate firstDay = ranked.dates().getFirst();
+			List<LocalDate> dates = CoursePeriod.dates(course.roomStart(), course.roomEnd(), course.firstVisit(),
+				course.lastVisit());
 			return new MainCourseListResponse.Item(course.id(), course.title(), sources.authorsOf(course.roomId()),
 				CourseRegions.nameOf(visits.isEmpty() ? null : sources.placeOf(visits.getFirst())),
 				sources.firstPhoto(course.id()).map(publicCourseReader::photoUrl).orElse(null), visits.size(),
-				ranked.dates().size(), ranked.dates().size() - 1, course.transportMode(), ranked.importCount(),
-				previewPlaces(sources, visits, firstDay, names));
+				dates.size(), dates.size() - 1, course.transportMode(), course.importCount(),
+				previewPlaces(sources, visits, dates.getFirst(), names));
 		}).toList();
 	}
 

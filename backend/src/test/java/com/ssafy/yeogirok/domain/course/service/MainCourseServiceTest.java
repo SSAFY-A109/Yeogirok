@@ -140,6 +140,28 @@ class MainCourseServiceTest {
 		assertThat(ids(recommend(null, null, null, null))).containsExactly(draft.getId(), full.getId());
 	}
 
+	/** 노출 조건을 쿼리로 옮기며 기간 계산(CoursePeriod 와 같은 규칙)이 같은지 본다(PR #107 리뷰). */
+	@Test
+	void 기간은_방_날짜와_방문_날짜를_합쳐_세고_같은_날_사진_여러_장은_하루로_센다() {
+		// 방 시작일보다 이른 방문: 그날부터 기간이라 그날과 방 날짜 모두 사진이 있어야 한다.
+		TravelRecord early = course("이른 방문", 1);
+		visit(early, "전날", DAY1.minusDays(1), 1, true);
+		visit(early, "첫날", DAY1, 1, true);
+		TravelRecord earlyGap = course("이른 방문 빔", 1);
+		visit(earlyGap, "전날", DAY1.minusDays(1), 1, true);
+		// 방 날짜가 없으면 방문 날짜만으로 기간을 정한다.
+		TravelRecord undated = fixture.record(fixture.room(null, ME));
+		undated.changeCourse("날짜 미정", "", NOW, true, NOW);
+		visit(undated, "하루", DAY1, 1, true);
+		visit(undated, "이틀", DAY1.plusDays(1), 1, true);
+		// 같은 날 사진이 여러 장이어도 하루라 2일 여행의 둘째 날이 비면 빠진다.
+		TravelRecord sameDay = course("같은 날만", 2);
+		visit(sameDay, "첫 번째", DAY1, 1, true);
+		visit(sameDay, "두 번째", DAY1, 2, true);
+
+		assertThat(ids(recommend(null, null, null, null))).containsExactly(undated.getId(), early.getId());
+	}
+
 	@Test
 	void 최근_30일_가져간_방_수가_많은_순_같으면_최근_코스_순이고_기간은_조회_시각까지() {
 		TravelRecord one = shown("한 방", 1);
