@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.record.dto;
 import static com.ssafy.yeogirok.global.request.JsonFields.invalidFormat;
 import static com.ssafy.yeogirok.global.request.JsonFields.isAbsent;
 import static com.ssafy.yeogirok.global.request.JsonFields.missing;
+import static com.ssafy.yeogirok.global.request.JsonFields.optionalLong;
 import static com.ssafy.yeogirok.global.request.JsonFields.optionalString;
 
 import java.math.BigDecimal;
@@ -119,7 +120,16 @@ final class VisitRequestFields {
 		return value.booleanValue();
 	}
 
-	/** 1차에서 받지 않는 값(초안 반영·AI 이야기·계획 연결)이 있으면 C003(명세 5절 8·12, 노션 066). */
+	/** 참고 계획 항목 ID. 생략·null 이면 null, 정수 아님 C002, 1 미만 C003(명세 {@code specs/record-plan.md} 3-3). */
+	static Long plannedItemId(JsonNode value) {
+		Long id = optionalLong(value, "plannedItemId");
+		if (id != null && id < 1) {
+			throw notAllowed("plannedItemId: 1 이상이어야 합니다.");
+		}
+		return id;
+	}
+
+	/** 받지 않는 값(AI 이야기 등)이 있으면 C003(명세 5절 12, 노션 066). */
 	static void reject(JsonNode value, String field) {
 		if (!isAbsent(value)) {
 			throw notAllowed(field + ": 지금은 보낼 수 없는 값입니다.");

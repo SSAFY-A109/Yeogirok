@@ -186,18 +186,19 @@ class RecordControllerTest {
 		}
 
 		@Test
-		void 초안_반영은_draftKey_draftVersion_itemId_를_넘기고_plannedItemId_null_은_받는다() throws Exception {
+		void 초안_반영은_draftKey_draftVersion_itemId_plannedItemId_를_넘긴다() throws Exception {
 			VisitPlaceInput place = new VisitPlaceInput.CustomPlace("경포대", new BigDecimal("37.7950000"),
 				new BigDecimal("128.9000000"), null);
 			VisitAddCommand expected = new VisitAddCommand(3, "22222222-3333-4444-8555-666666666666", 1, List.of(
-				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, 2),
+				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, 2,
+					501L),
 				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1)));
 			given(visitCommandService.add(USER_ID, 9L, expected))
 				.willReturn(new VisitAddResponse(List.of(701L, 702L), 4, RecordStatus.DRAFT));
 
 			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\","
-					+ " \"draftVersion\": 1, \"items\": [{\"itemId\": 2, \"plannedItemId\": null, " + VALID_ITEM + "}, {"
-					+ VALID_ITEM + "}]}"))
+					+ " \"draftVersion\": 1, \"items\": [{\"itemId\": 2, \"plannedItemId\": 501, " + VALID_ITEM + "}, {"
+					+ "\"plannedItemId\": null, " + VALID_ITEM + "}]}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.data.visitIds[1]").value(702));
 		}
@@ -219,7 +220,9 @@ class RecordControllerTest {
 			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": 1, \"items\": [{ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"itemId\": 1, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"story\": \"x\", ITEM}]}|C003",
-			"{\"version\": 3, \"items\": [{\"plannedItemId\": 5, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 0, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": \"5\", ITEM}]}|C002",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 1.5, ITEM}]}|C002",
 			"{\"version\": 3, \"items\": [{\"placeRef\": {\"provider\": \"TOUR_API\", \"providerPlaceId\": \"1\"}, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|RE018",
 			"{\"version\": 3, \"items\": [{\"placeRef\": {\"provider\": \"MANUAL\", \"providerPlaceId\": \"1\"}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|C003",
@@ -273,6 +276,23 @@ class RecordControllerTest {
 		}
 
 		@Test
+		void plannedItemId_는_생략_null_값을_구분해_넘긴다() throws Exception {
+			LocalDate date = LocalDate.parse("2026-11-01");
+			Instant at = Instant.parse("2026-11-01T00:30:00Z");
+			VisitUpdateCommand expected = new VisitUpdateCommand(3, List.of(
+				new VisitUpdateCommand.Item(701L, null, date, at, null, false, null),
+				new VisitUpdateCommand.Item(702L, null, date, at, null, true, null),
+				new VisitUpdateCommand.Item(703L, null, date, at, null, true, 501L)), List.of(), false);
+			given(visitCommandService.update(USER_ID, 9L, expected))
+				.willReturn(new VisitUpdateResponse(List.of(), 4, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + ITEM + "}, {"
+					+ ITEM.replace("701", "702") + ", \"plannedItemId\": null}, {" + ITEM.replace("701", "703")
+					+ ", \"plannedItemId\": 501}]}"))
+				.andExpect(status().isOk());
+		}
+
+		@Test
 		void 삭제만_하면_items_는_빈_배열이어도_된다() throws Exception {
 			given(visitCommandService.update(eq(USER_ID), eq(9L), any()))
 				.willReturn(new VisitUpdateResponse(List.of(), 4, RecordStatus.DRAFT));
@@ -291,7 +311,8 @@ class RecordControllerTest {
 			"{\"version\": 3, \"items\": [], \"removeVisitIds\": 701}|C002",
 			"{\"version\": 3, \"items\": [], \"removeVisitIds\": [\"a\"]}|C002",
 			"{\"version\": 3, \"items\": [], \"confirmDeleteStories\": \"true\"}|C002",
-			"{\"version\": 3, \"items\": [{\"plannedItemId\": 1, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 0, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": \"1\", ITEM}]}|C002",
 			"{\"version\": 3, \"items\": [{\"order\": 0, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"visitId\": 701, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-10-31 23:00:00+09\"}]}|C012"
 		})

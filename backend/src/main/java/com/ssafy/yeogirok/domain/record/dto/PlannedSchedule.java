@@ -43,6 +43,11 @@ public record PlannedSchedule(Long roomId, int version, List<Day> days) {
 	) {
 	}
 
+	/** 사본 안의 모든 일정 항목 ID(방문 순서대로). */
+	public List<Long> itemIds() {
+		return days.stream().flatMap(day -> day.items().stream()).map(Item::id).toList();
+	}
+
 	/** @param places 후보 ID → 후보(뺀 후보 포함). 항목이 가리키는 후보가 없으면 place 는 null */
 	public static PlannedSchedule of(Long roomId, int version, ScheduleView schedule, Map<Long, RoomPlace> places) {
 		List<Day> days = schedule.days().stream()

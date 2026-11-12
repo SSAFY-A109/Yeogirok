@@ -1,7 +1,6 @@
 package com.ssafy.yeogirok.domain.record.dto;
 
 import static com.ssafy.yeogirok.domain.record.dto.VisitRequestFields.notAllowed;
-import static com.ssafy.yeogirok.domain.record.dto.VisitRequestFields.reject;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -21,7 +20,8 @@ import tools.jackson.databind.JsonNode;
  *   <li>version 생략 C001, null·정수 아님 C002. items 생략 C001, 배열 아님 C002(빈 배열은 삭제만 하는 요청)</li>
  *   <li>items[].visitId 필수. 같은 방문을 두 번 보내거나 수정과 삭제에 함께 넣으면 C003</li>
  *   <li>장소는 선택(둘 다 C003, 생략하면 유지). visitDate·visitedAt 은 066 과 같은 규칙, order 는 선택·1 이상</li>
- *   <li>plannedItemId 값은 1차에서 C003(명세 5절 8). removeVisitIds 는 정수 배열, confirmDeleteStories 는 boolean(기본 false)</li>
+ *   <li>plannedItemId 는 생략이면 유지, null 이면 연결 해제, 값이면 변경(066 과 같은 형식 검사, 명세 {@code specs/record-plan.md} 3-3).
+ *   removeVisitIds 는 정수 배열, confirmDeleteStories 는 boolean(기본 false)</li>
  *   <li>items·removeVisitIds 는 각각 최대 50개(넘으면 C003)</li>
  * </ul>
  */
@@ -63,12 +63,14 @@ public class VisitUpdateRequest {
 
 	private static VisitUpdateCommand.Item item(JsonNode item) {
 		long visitId = VisitRequestFields.requiredId(item.get("visitId"), "visitId");
-		reject(item.get("plannedItemId"), "plannedItemId");
+		JsonNode planned = item.get("plannedItemId");
+		Long plannedItemId = VisitRequestFields.plannedItemId(planned);
 		VisitPlaceInput place = VisitRequestFields.place(item.get("placeRef"), item.get("customPlace"));
 		LocalDate visitDate = VisitRequestFields.date(item.get("visitDate"), "visitDate");
 		OffsetDateTime visitedAt = VisitRequestFields.dateTime(item.get("visitedAt"), "visitedAt");
 		Integer order = VisitRequestFields.order(item.get("order"), false);
 		VisitRequestFields.checkSameDate(visitDate, visitedAt);
-		return new VisitUpdateCommand.Item(visitId, place, visitDate, visitedAt.toInstant(), order);
+		return new VisitUpdateCommand.Item(visitId, place, visitDate, visitedAt.toInstant(), order, planned != null,
+			plannedItemId);
 	}
 }

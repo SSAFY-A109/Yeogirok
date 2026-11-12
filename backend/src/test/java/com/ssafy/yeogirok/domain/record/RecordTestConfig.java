@@ -6,6 +6,10 @@ import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +24,7 @@ import com.ssafy.yeogirok.domain.job.service.JobStore;
 import com.ssafy.yeogirok.domain.record.draft.DraftApplication;
 import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftStore;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
 import com.ssafy.yeogirok.domain.record.service.RecordAuthors;
@@ -44,6 +49,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestFileProperties;
 import com.ssafy.yeogirok.support.TestRedis;
 
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -70,6 +76,18 @@ public class RecordTestConfig {
 	/** application.yaml 과 같은 값(초안 24시간, 연결한 영수증 자료 30일, 사진 묶음 기준). */
 	public static final RecordProperties RECORD_PROPERTIES = new RecordProperties(Duration.ofHours(24), Duration.ofDays(30),
 		new RecordProperties.Draft(Duration.ofMinutes(60), 1000, Duration.ofMinutes(60), 500));
+
+	/** 기록에 붙일 참고 계획 사본(API-057). 하루에 계획 항목 ID 를 순서대로 넣는다. */
+	public static Map<String, Object> referencePlan(Long roomId, LocalDate date, Long... itemIds) {
+		List<PlannedSchedule.Item> items = new ArrayList<>();
+		for (int i = 0; i < itemIds.length; i++) {
+			items.add(new PlannedSchedule.Item(itemIds[i], 100L + i, i + 1, null, null, 60, false, null));
+		}
+		PlannedSchedule plan = new PlannedSchedule(roomId, 1,
+			List.of(new PlannedSchedule.Day(date, null, null, items, List.of(), List.of())));
+		return JsonMapper.builder().build().convertValue(plan, new TypeReference<Map<String, Object>>() {
+		});
+	}
 
 	@Bean
 	MutableClock clock() {

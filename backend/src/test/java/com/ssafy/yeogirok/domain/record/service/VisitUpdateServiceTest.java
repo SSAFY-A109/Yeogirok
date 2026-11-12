@@ -76,7 +76,9 @@ class VisitUpdateServiceTest {
 		em.persist(RoomMember.creator(room.getId(), MEMBER, NOW));
 		em.persist(RoomMember.joined(room.getId(), FRIEND, NOW));
 		em.persist(RoomMember.joined(room.getId(), LEFT, NOW)).leave(NOW);
-		recordId = em.persist(TravelRecord.create(room.getId(), "강릉 여행", NOW)).getId();
+		TravelRecord record = TravelRecord.create(room.getId(), "강릉 여행", NOW);
+		record.attachReferencePlan(RecordTestConfig.referencePlan(room.getId(), DAY1, 501L, 502L));
+		recordId = em.persist(record).getId();
 		placeId = em.persist(Place.manual("경포대", new BigDecimal("37.7951000"), new BigDecimal("128.9087000"), null,
 			null, null, NOW)).getId();
 		a = visit(DAY1, 1);
@@ -310,5 +312,52 @@ class VisitUpdateServiceTest {
 		update(1, List.of(keep(c, 1)), List.of(a.getId()), false);
 
 		assertThat(layout()).containsExactly(DAY1 + ":1:" + c.getId(), DAY1 + ":2:" + b.getId());
+	}
+
+	/* ── 참고 계획 연결(명세 specs/record-plan.md 3-3) ───────────── */
+
+	private static VisitUpdateCommand.Item plan(ActualVisit visit, Long plannedItemId) {
+		return new VisitUpdateCommand.Item(visit.getId(), null, visit.getVisitDate(), visit.getVisitedAt(), null, true,
+			plannedItemId);
+	}
+
+	private Long plannedItemOf(ActualVisit visit) {
+		return em.find(ActualVisit.class, visit.getId()).getPlannedItemId();
+	}
+
+	@Test
+	void 값을_보내면_연결하고_생략하면_유지하고_null_이면_해제한다() {
+		VisitUpdateResponse linked = update(1, List.of(plan(a, 501L), plan(b, 502L)), List.of(), false);
+
+		assertThat(linked.version()).isEqualTo(2);
+		assertThat(linked.actualVisits()).extracting(ActualVisitView::plannedItemId).containsExactly(501L, 502L, null);
+
+		VisitUpdateResponse changed = update(2, List.of(keep(a, null), plan(b, null)), List.of(), false);
+
+		assertThat(changed.version()).isEqualTo(3);
+		assertThat(plannedItemOf(a)).isEqualTo(501L);
+		assertThat(plannedItemOf(b)).isNull();
+	}
+
+	@Test
+	void 같은_항목을_다시_보내면_바뀐_것이_없어_version_그대로다() {
+		update(1, List.of(plan(a, 501L)), List.of(), false);
+		em.find(TravelRecord.class, recordId).complete(NOW);
+		em.flush();
+
+		VisitUpdateResponse response = update(3, List.of(plan(a, 501L)), List.of(), false);
+
+		assertThat(response.version()).isEqualTo(3);
+		assertThat(response.status()).isEqualTo(RecordStatus.COMPLETED);
+	}
+
+	@Test
+	void 사본에_없는_항목이면_C003이고_아무것도_바꾸지_않는다() {
+		assertError(() -> update(1, List.of(keep(c, 1), plan(a, 999L)), List.of(), false),
+			ExceptionType.NOT_ALLOWED_VALUE);
+
+		assertThat(plannedItemOf(a)).isNull();
+		assertThat(layout()).containsExactly(DAY1 + ":1:" + a.getId(), DAY1 + ":2:" + b.getId(),
+			DAY1 + ":3:" + c.getId());
 	}
 }

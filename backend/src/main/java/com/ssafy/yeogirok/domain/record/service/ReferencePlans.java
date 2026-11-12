@@ -1,6 +1,9 @@
 package com.ssafy.yeogirok.domain.record.service;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
@@ -10,6 +13,8 @@ import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.schedule.dto.ScheduleView;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleReader;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleViews;
+import com.ssafy.yeogirok.global.exception.BusinessException;
+import com.ssafy.yeogirok.global.exception.ExceptionType;
 
 import lombok.RequiredArgsConstructor;
 import tools.jackson.core.type.TypeReference;
@@ -39,6 +44,23 @@ public class ReferencePlans {
 		PlannedSchedule plan = PlannedSchedule.of(room.getId(), room.getVersion(), schedule,
 			scheduleReader.places(room.getId()));
 		return jsonMapper.convertValue(plan, MAP);
+	}
+
+	/**
+	 * 실제 방문에 연결하려는 계획 항목이 이 기록의 사본에 있는지(API-066·067). 사본이 없거나 없는 항목이면 C003.
+	 *
+	 * @param plannedItemIds null(연결 안 함·해제)은 건너뛴다
+	 */
+	public void checkLinkable(TravelRecord record, Collection<Long> plannedItemIds) {
+		Set<Long> wanted = new HashSet<>(plannedItemIds);
+		wanted.remove(null);
+		if (wanted.isEmpty()) {
+			return;
+		}
+		PlannedSchedule plan = read(record);
+		if (plan == null || !plan.itemIds().containsAll(wanted)) {
+			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "plannedItemId: 이 기록의 참고 계획에 없는 항목입니다.");
+		}
 	}
 
 	/** @return 사본이 없으면 null */

@@ -56,6 +56,7 @@ public class VisitCommandService {
 	private final PlaceRepository placeRepository;
 	private final LegalDongResolver legalDongResolver;
 	private final DraftApplication draftApplication;
+	private final ReferencePlans referencePlans;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
@@ -63,7 +64,8 @@ public class VisitCommandService {
 		ActualVisitRepository actualVisitRepository,
 		VisitImageRepository visitImageRepository, VisitStoryRepository visitStoryRepository,
 		RecordPlaceRepository recordPlaceRepository, PlaceRepository placeRepository, LegalDongResolver legalDongResolver,
-		DraftApplication draftApplication, PlatformTransactionManager transactionManager, Clock clock) {
+		DraftApplication draftApplication, ReferencePlans referencePlans, PlatformTransactionManager transactionManager,
+		Clock clock) {
 		this.recordFinder = recordFinder;
 		this.recordVisitViews = recordVisitViews;
 		this.actualVisitRepository = actualVisitRepository;
@@ -73,6 +75,7 @@ public class VisitCommandService {
 		this.placeRepository = placeRepository;
 		this.legalDongResolver = legalDongResolver;
 		this.draftApplication = draftApplication;
+		this.referencePlans = referencePlans;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 	}
@@ -89,6 +92,8 @@ public class VisitCommandService {
 			if (command.fromDraft()) {
 				draftApplication.check(recordId, command);
 			}
+			referencePlans.checkLinkable(record,
+				command.items().stream().map(VisitAddCommand.Item::plannedItemId).toList());
 			Instant now = clock.instant();
 			VisitLayout layout = new VisitLayout(
 				actualVisitRepository.findByRecordIdOrderByVisitDateAscPositionAsc(recordId));
@@ -99,6 +104,7 @@ public class VisitCommandService {
 					? ActualVisit.manual(recordId, placeId, item.visitDate(), item.visitedAt(), now)
 					: ActualVisit.fromDraft(recordId, placeId, item.visitDate(), item.visitedAt(), command.draftKey(),
 						item.itemId(), now);
+				visit.linkPlannedItem(item.plannedItemId(), now);
 				layout.insert(visit, item.order());
 				added.add(visit);
 			}
@@ -137,6 +143,8 @@ public class VisitCommandService {
 				command.removeVisitIds().stream()).anyMatch(id -> !byId.containsKey(id))) {
 				throw new BusinessException(ExceptionType.VISIT_NOT_FOUND);
 			}
+			referencePlans.checkLinkable(record, command.items().stream()
+				.filter(VisitUpdateCommand.Item::plannedItemGiven).map(VisitUpdateCommand.Item::plannedItemId).toList());
 			VisitLayout layout = new VisitLayout(visits);
 			Set<Long> released = new HashSet<>();
 			boolean changed = remove(command, byId, layout, released);
@@ -148,6 +156,9 @@ public class VisitCommandService {
 				}
 				boolean dateChanged = !visit.getVisitDate().equals(item.visitDate());
 				changed |= visit.change(placeId, item.visitDate(), item.visitedAt(), now);
+				if (item.plannedItemGiven()) {
+					changed |= visit.linkPlannedItem(item.plannedItemId(), now);
+				}
 				if (item.order() != null || dateChanged) {
 					layout.insert(visit, item.order());
 				}

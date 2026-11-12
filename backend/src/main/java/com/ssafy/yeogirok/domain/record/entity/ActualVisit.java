@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.record.entity;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 
 import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
@@ -125,6 +126,21 @@ public class ActualVisit {
 		this.placeId = placeId;
 		this.visitDate = visitDate;
 		this.visitedAt = visitedAt;
+		this.updatedAt = now;
+		return true;
+	}
+
+	/**
+	 * 참고 계획 항목 연결(API-066·067). 항목이 사본에 있는지는 부르는 쪽이 확인한다.
+	 *
+	 * @param plannedItemId null 이면 연결 해제
+	 * @return 바뀌었으면 true
+	 */
+	public boolean linkPlannedItem(Long plannedItemId, Instant now) {
+		if (Objects.equals(this.plannedItemId, plannedItemId)) {
+			return false;
+		}
+		this.plannedItemId = plannedItemId;
 		this.updatedAt = now;
 		return true;
 	}

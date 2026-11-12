@@ -10,8 +10,16 @@ public record VisitUpdateCommand(int version, List<Item> items, List<Long> remov
 
 	/**
 	 * @param place null 이면 기존 장소를 유지한다
-	 * @param order null 이면 날짜가 그대로일 때 자리를 유지하고, 날짜가 바뀌면 새 날짜의 맨 뒤에 붙는다(명세 5절 7)
+	 * @param order             null 이면 날짜가 그대로일 때 자리를 유지하고, 날짜가 바뀌면 새 날짜의 맨 뒤에 붙는다(명세 5절 7)
+	 * @param plannedItemGiven  plannedItemId 를 보냈는지(null 포함). false 면 지금 연결을 유지한다
+	 * @param plannedItemId     plannedItemGiven 일 때 새 연결. null 이면 해제
 	 */
-	public record Item(Long visitId, VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, Integer order) {
+	public record Item(Long visitId, VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, Integer order,
+		boolean plannedItemGiven, Long plannedItemId) {
+
+		/** plannedItemId 생략. */
+		public Item(Long visitId, VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, Integer order) {
+			this(visitId, place, visitDate, visitedAt, order, false, null);
+		}
 	}
 }
