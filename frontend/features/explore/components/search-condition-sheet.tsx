@@ -82,7 +82,7 @@ function ConditionForm({ query, filters, onApply }: Omit<SearchConditionSheetPro
               onPress={() => {
                 update({ transport: selected ? "all" : option.value });
               }}
-              className={cn("min-h-touch flex-1 flex-row items-center justify-center gap-2 rounded-md border bg-card py-3", selected ? "border-ring bg-chip-selected" : "border-border")}
+              className={cn("min-h-touch flex-1 flex-row items-center justify-center gap-2 rounded-md border bg-card py-3", selected ? "border-ring bg-brand-muted" : "border-border")}
               testID={`course-search.sheet.transport.${option.value}`}
             >
               <Icon as={transportIcons[option.value]} size={20} className={selected ? "text-primary" : "text-icon"} />

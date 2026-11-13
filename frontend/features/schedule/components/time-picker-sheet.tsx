@@ -56,7 +56,7 @@ export function TimePickerSheet({ title, value, onSelect, onClose }: TimePickerS
                       accessibilityRole="button"
                       accessibilityLabel={time}
                       accessibilityState={{ selected }}
-                      className={cn("h-11 flex-1 items-center justify-center rounded-sm border", selected ? "border-ring bg-chip-selected" : "border-border bg-card active:bg-muted")}
+                      className={cn("h-11 flex-1 items-center justify-center rounded-sm border", selected ? "border-ring bg-brand-muted" : "border-border bg-card active:bg-muted")}
 
                       onPress={() => {
                         onSelect(time);

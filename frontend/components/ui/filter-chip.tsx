@@ -48,6 +48,7 @@ type FilterChipProps = Omit<ComponentProps<typeof Pressable>, "children"> & {
 /**
  * 선택 필터 칩(Figma `Selection / FilterChip`). 선택된 글자·아이콘은 `primary-pressed`(#145C83)다.
  * DESIGN.md의 `text-primary-hover`는 토큰으로 생성되지 않아 색이 비었으므로 같은 값의 `primary-pressed`를 쓴다.
+ * 선택 배경 `bg-chip-selected`도 생성되지 않아, `bg-card`가 지워지고 배경이 투명해졌다. 선택된 칩 배경용 토큰 `brand-muted`를 쓴다.
  */
 export function FilterChip({ children, className, textClassName, icon, size = "sm", selected = false, disabled = false, onSelectedChange, onPress, ...props }: FilterChipProps) {
   return (
@@ -55,7 +56,7 @@ export function FilterChip({ children, className, textClassName, icon, size = "s
       accessibilityRole="button"
       accessibilityState={{ selected, disabled }}
       hitSlop={{ top: size === "sm" ? 6 : 4, bottom: size === "sm" ? 6 : 4, left: 8, right: 8 }}
-      className={cn("items-center justify-center rounded-sm border border-border-strong bg-card px-3 py-1", size === "sm" ? "h-chip-sm" : "h-chip-md", selected && "border-ring bg-chip-selected", disabled && "border-transparent bg-muted", className)}
+      className={cn("items-center justify-center rounded-sm border border-border-strong bg-card px-3 py-1", size === "sm" ? "h-chip-sm" : "h-chip-md", selected && "border-ring bg-brand-muted", disabled && "border-transparent bg-muted", className)}
       disabled={disabled}
       onPress={(event) => {
         onSelectedChange?.(!selected);
