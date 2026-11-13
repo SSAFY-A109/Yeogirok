@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -31,7 +30,7 @@ public class KakaoKeywordPlaceSearch implements PlaceKeywordSearch {
 
 	@Autowired
 	public KakaoKeywordPlaceSearch(KakaoLocalProperties properties) {
-		this(createBuilder(properties), properties);
+		this(KakaoLocalClients.builder(properties), properties);
 	}
 
 	KakaoKeywordPlaceSearch(RestClient.Builder builder, KakaoLocalProperties properties) {
@@ -40,13 +39,6 @@ public class KakaoKeywordPlaceSearch implements PlaceKeywordSearch {
 		if (!properties.hasRestApiKey()) {
 			log.warn("KAKAO_REST_API_KEY 가 없어 영수증 장소 후보를 찾지 않습니다(API-091 에서 장소를 직접 검색해 고릅니다).");
 		}
-	}
-
-	private static RestClient.Builder createBuilder(KakaoLocalProperties properties) {
-		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-		requestFactory.setConnectTimeout(properties.connectTimeout());
-		requestFactory.setReadTimeout(properties.readTimeout());
-		return RestClient.builder().requestFactory(requestFactory);
 	}
 
 	@Override
