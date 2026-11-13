@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useCategories } from "@/features/common/api/queries";
+import { categoryIconOf } from "@/features/explore/components/category-icons";
 import { FootprintEntryCard } from "@/features/footprint/components/footprint-entry-card";
 import { toVisitQueryArea, useVisitStatistics } from "@/features/statistics/api/queries";
 import { getStatisticsErrorMessage } from "@/features/statistics/errors";
@@ -265,6 +266,7 @@ function MapFilters({ categoryCode, onChangeCategory, periodLabel, isFetching }:
     <View pointerEvents="box-none" className="absolute left-0 right-0 top-0 gap-2" style={{ paddingTop: insets.top + MAP_FILTERS_TOP_GAP }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-4">
         <FilterChip
+          tone="solid"
           selected={categoryCode === null}
           onPress={() => {
             onChangeCategory(null);
@@ -277,6 +279,9 @@ function MapFilters({ categoryCode, onChangeCategory, periodLabel, isFetching }:
           return (
             <FilterChip
               key={category.code}
+              tone="solid"
+              icon={categoryIconOf(category.code)}
+              className="flex-row gap-1"
               selected={categoryCode === category.code}
               onPress={() => {
                 onChangeCategory(category.code);
