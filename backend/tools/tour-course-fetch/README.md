@@ -79,7 +79,7 @@ cd C:\Users\SSAFY\Desktop\Yeogirok\backend
 # 로그에서 "공식 코스 적재 끝. 넣음=…, 건너뜀=…, 실패=…" 를 확인한다
 ```
 
-- 다시 띄워도 이미 넣은 코스는 건너뛴다. 내리기는 `$env:COURSE_SEED_UNPUBLISH = "2916281"`(또는 `ALL`), 다시 넣기는 `$env:COURSE_SEED_RESEED = "2916281"`.
+- 다시 띄워도 이미 넣은 코스는 건너뛴다. 내리기는 `$env:COURSE_SEED_UNPUBLISH = "2916281"`(또는 `ALL`), 다시 넣기는 `$env:COURSE_SEED_RESEED = "2916281"`. 같은 값은 한 번만 처리하고 묶음 폴더 `.done/` 에 표시를 남긴다.
 - 끝나면 `Remove-Item Env:COURSE_SEED_*` 로 꺼 둔다.
 
 ## 넣은 뒤 015·014·016 응답 보기
@@ -104,9 +104,15 @@ Remove-Item Env:JWT_SECRET
 
 ## 서버에 넣기 (S15P31A109-223, 사용자 작업)
 
+서버 compose 가 `COURSE_SEED_*` 를 backend 에 넘겨야 한다(infra PR #131). 켜고 끄는 법은 `infra/README.md` 9단계 "공식 코스 적재"도 본다.
+
 1. 묶음 폴더 내용을 운영 사진 버킷의 `course-seed/` 아래로 올린다(`bundle-{bundleId}.json` 은 `course-seed/` 바로 아래, 사진은 `course-seed/photos/`).
-2. 서버 `.env` 에 `COURSE_SEED_ENABLED=true`, `COURSE_SEED_LOCATION=course-seed/` 를 넣고 backend 를 다시 띄운다(compose backend `environment` 에 `COURSE_SEED_*` 6개가 연결돼 있어야 한다 — 인프라).
-3. 로그 확인 뒤 `COURSE_SEED_ENABLED=false` 로 되돌린다. 비상시 DB 에서 내리기: `update travel_rooms set deleted_at = now() where deleted_at is null and title like 'tourapi-course:%';`
+2. 서버 `.env` 에 `COURSE_SEED_ENABLED=true`, `COURSE_SEED_LOCATION=course-seed/` 를 넣고 **`docker compose up -d backend`** 로 다시 띄운다(`restart` 는 바뀐 `.env` 를 읽지 않는다).
+3. 로그에서 "공식 코스 적재 끝" 줄을 확인한다.
+4. **끝나면 바로 끈다**: `COURSE_SEED_ENABLED=false` 로 바꾸고 `COURSE_SEED_UNPUBLISH`·`COURSE_SEED_RESEED` 를 지운 뒤 `docker compose up -d backend` 한 번 더. `backend/dev` 머지 때마다 배포로 백엔드가 새로 뜨므로 켜 둔 채면 배포마다 다시 돈다.
+
+- 끄는 걸 잊어도: 같은 `UNPUBLISH`·`RESEED` 값(과 주인)은 한 번만 처리한다. 처리하면 `course-seed/.done/{해시}.json` 표시를 남기고, 같은 값이면 다음 실행에서 내리기·다시 넣기를 건너뛴다(새 코스 넣기는 두 번 돌아도 결과가 같다). 같은 값으로 다시 처리하려면 그 표시 파일을 지운다.
+- 비상시 DB 에서 내리기: `update travel_rooms set deleted_at = now() where deleted_at is null and title like 'tourapi-course:%';`
 
 ## 테스트
 

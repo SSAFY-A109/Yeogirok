@@ -387,6 +387,56 @@ class CourseSeedFlowTest {
 		assertThat(run().failed()).containsEntry("c-one", "PHOTO_MISSING_DAY");
 	}
 
+	/** 끄는 걸 잊어 배포마다 다시 돌아도 같은 내리기·다시 넣기 설정은 한 번만(명세 6-6, PR #131 인프라 리뷰). */
+	@Test
+	void 같은_코스를_내리기와_다시_넣기에_둘_다_두고_여러_번_돌려도_한_번만_처리한다() throws IOException {
+		bundle("b1", List.of(twoDays("강릉 1박2일")));
+		run();
+		bundle("b2", List.of(twoDays("강릉 1박2일 (고침)")));
+
+		CourseSeedJob.Report first = run(null, List.of("c-two"), List.of("c-two"));
+		long rooms = count("SELECT COUNT(*) FROM travel_rooms");
+		int photos = storage.keys("photos").size();
+		Long current = recordOf("c-two");
+		CourseSeedJob.Report again = run(null, List.of("c-two"), List.of("c-two"));
+		run(null, List.of("c-two"), List.of("c-two"));
+
+		assertThat(List.of(first.unpublished(), first.reseeded())).containsExactly(1, 1);
+		assertThat(again.commandSkipped()).isTrue();
+		assertThat(List.of(again.unpublished(), again.reseeded())).containsExactly(0, 0);
+		assertThat(count("SELECT COUNT(*) FROM travel_rooms")).isEqualTo(rooms);
+		assertThat(storage.keys("photos")).hasSize(photos);
+		assertThat(recordOf("c-two")).isEqualTo(current);
+		assertThat(dir.resolve(".done").toFile().list()).hasSize(1);
+	}
+
+	@Test
+	void ALL_내리기가_남아_있어도_나중에_넣은_코스는_내려가지_않는다() throws IOException {
+		bundle("b1", List.of(oneDay()));
+		run();
+		assertThat(run(null, List.of(CourseSeedProperties.ALL), List.of()).unpublished()).isEqualTo(1);
+		bundle("b2", List.of(twoDays("강릉 1박2일")));
+
+		CourseSeedJob.Report next = run(null, List.of(CourseSeedProperties.ALL), List.of());
+
+		assertThat(List.of(next.inserted(), next.unpublished())).containsExactly(1, 0);
+		assertThat(recordOf("c-two")).isNotNull();
+		run(null, List.of(CourseSeedProperties.ALL), List.of());
+		assertThat(recordOf("c-two")).isNotNull();
+	}
+
+	@Test
+	void 내리기_다시_넣기_값이_바뀌면_다시_처리한다() throws IOException {
+		bundle("b1", List.of(twoDays("강릉 1박2일"), oneDay()));
+		run();
+
+		assertThat(run(null, List.of("c-two"), List.of()).unpublished()).isEqualTo(1);
+		assertThat(run(null, List.of("c-one", "c-two"), List.of()).unpublished()).isEqualTo(1);
+		assertThat(CourseSeedJob.commandHash(1L, new CourseSeedProperties(true, null, "x", null,
+			List.of("b", "a"), List.of()))).isEqualTo(CourseSeedJob.commandHash(1L,
+			new CourseSeedProperties(true, null, "x", null, List.of("a", "b"), List.of())));
+	}
+
 	@Test
 	void 위치가_없으면_아무것도_하지_않는다() {
 		assertThat(job.run(new CourseSeedProperties(true, null, " ", null, null, null)))

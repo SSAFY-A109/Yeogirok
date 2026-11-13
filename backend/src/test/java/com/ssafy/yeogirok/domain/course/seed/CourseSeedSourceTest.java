@@ -29,6 +29,12 @@ class CourseSeedSourceTest {
 
 		assertThat(source.bundles()).containsExactly("bundle-b1.json", "bundle-b2.json");
 		assertThat(source.read("photos/p1.jpg", 10)).containsExactly(3);
+
+		assertThat(source.exists(".done/abc.json")).isFalse();
+		source.write(".done/abc.json", new byte[] {7});
+		assertThat(source.exists(".done/abc.json")).isTrue();
+		assertThat(storage.get("photos", "course-seed/.done/abc.json")).isPresent();
+		assertThat(source.bundles()).containsExactly("bundle-b1.json", "bundle-b2.json");  // 표시는 묶음이 아니다
 	}
 
 	@Test
@@ -40,6 +46,9 @@ class CourseSeedSourceTest {
 			TestFileProperties.VALUE);
 
 		assertThat(source.bundles()).containsExactly("bundle-b1.json");
+		source.write(".done/abc.json", new byte[] {7});
+		assertThat(source.exists(".done/abc.json")).isTrue();
+		assertThatThrownBy(() -> source.write("../outside.json", new byte[] {1})).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> source.read("../outside.json", 10)).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> source.read("bundle-b1.json", 2)).isInstanceOf(IllegalArgumentException.class);
 	}
