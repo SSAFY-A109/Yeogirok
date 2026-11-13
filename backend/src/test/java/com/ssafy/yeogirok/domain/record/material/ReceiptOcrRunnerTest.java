@@ -152,25 +152,25 @@ class ReceiptOcrRunnerTest {
 	@Test
 	void OCR_응답의_주소를_자료에_함께_저장한다() {
 		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("해운대 커피", LocalDate.of(2026, 11, 8),
-			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+			LocalTime.of(14, 5), "부산 해운대구 해운대로 570", true));
 
 		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
 
-		assertThat(stored().extracted().address()).isEqualTo("부산 해운대구 해운대로");
+		assertThat(stored().extracted().address()).isEqualTo("부산 해운대구 해운대로 570");
 		assertThat(stored().extracted().addressComplete()).isTrue();
 	}
 
 	@Test
 	void OCR_이_끝나면_주소_상호로_찾은_장소를_후보로_저장하고_확정하지는_않는다() {
 		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("해운대 커피", LocalDate.of(2026, 11, 8),
-			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+			LocalTime.of(14, 5), "부산 해운대구 해운대로 570", true));
 		placeSearch.willReturn(PlaceKeywordSearch.Result.found(List.of(new PlaceKeywordSearch.Place("해운대 커피 본점",
 			new BigDecimal("35.1631"), new BigDecimal("129.1603"), "부산 해운대구 해운대로 570", null))));
 
 		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
 
 		ReceiptMaterial saved = stored();
-		assertThat(placeSearch.queries()).containsExactly("부산 해운대구 해운대로 해운대 커피");
+		assertThat(placeSearch.queries()).containsExactly("부산 해운대구 해운대로 570 해운대 커피");
 		assertThat(saved.extracted().placeCandidates()).extracting(RecordPlaceView::provider, RecordPlaceView::name)
 			.containsExactly(tuple(PlaceProvider.MANUAL, "해운대 커피 본점"));
 		assertThat(saved.values().place()).isNull();
@@ -181,7 +181,7 @@ class ReceiptOcrRunnerTest {
 	@Test
 	void 장소_검색이_실패해도_OCR_결과는_그대로_저장된다() {
 		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("가게", LocalDate.of(2026, 11, 8),
-			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+			LocalTime.of(14, 5), "부산 해운대구 해운대로 570", true));
 		placeSearch.willReturn(PlaceKeywordSearch.Result.failed("SocketTimeoutException"));
 
 		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
@@ -196,7 +196,7 @@ class ReceiptOcrRunnerTest {
 	@Test
 	void 장소_검색은_OCR_슬롯을_반납하고_자료_잠금_밖에서_한다() throws Exception {
 		when(ocrClient.recognize(IMAGE)).thenReturn(new OcrResult("가게", LocalDate.of(2026, 11, 8),
-			LocalTime.of(14, 5), "부산 해운대구 해운대로", true));
+			LocalTime.of(14, 5), "부산 해운대구 해운대로 570", true));
 		Field slotField = ReceiptOcrRunner.class.getDeclaredField("ocrSlot");
 		slotField.setAccessible(true);
 		Semaphore slot = (Semaphore) slotField.get(runner);
