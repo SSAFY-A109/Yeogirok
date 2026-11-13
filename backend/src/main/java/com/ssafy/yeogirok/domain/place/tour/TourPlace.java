@@ -26,8 +26,22 @@ public record TourPlace(
 	String lclsSystm3
 ) {
 
+	/** TourAPI 사진의 출처 표기. */
+	public static final String IMAGE_ATTRIBUTION = "한국관광공사";
+
 	/** 확정 매핑({@link TourCategoryMapper})의 공통 카테고리. 카테고리 없음이면 null. */
 	public TravelCategory category() {
 		return TourCategoryMapper.categoryOf(lclsSystm2, lclsSystm3);
+	}
+
+	/** {@link #category()} 의 코드. 카테고리 없음이면 null. */
+	public String categoryCode() {
+		TravelCategory category = category();
+		return category == null ? null : category.name();
+	}
+
+	/** 사진이 있으면 {@link #IMAGE_ATTRIBUTION}, 없으면 null. */
+	public String imageAttribution() {
+		return imageUrl == null ? null : IMAGE_ATTRIBUTION;
 	}
 }

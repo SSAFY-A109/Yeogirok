@@ -144,4 +144,72 @@ class HttpTourApiClientTest {
 		assertThatThrownBy(() -> client.areaBasedList(CAFE_IN_GANGNEUNG)).isInstanceOf(TourApiException.class);
 		server.verify();
 	}
+
+	@Test
+	void 키워드_검색은_검색어를_인코딩하고_쪽_번호와_전체_수를_다룬다() {
+		HttpTourApiClient client = client(PROPERTIES);
+		server.expect(requestTo(allOf(
+				containsString("https://tour.test/KorService2/searchKeyword2?"),
+				containsString("serviceKey=ab%2Bcd%2Fef%3D%3D"),
+				containsString("keyword=%EA%B2%BD%ED%8F%AC%20%26%20%EC%B9%B4%ED%8E%98"),
+				containsString("arrange=A"), containsString("numOfRows=20"), containsString("pageNo=3"),
+				containsString("lDongRegnCd=51"), not(containsString("lDongSignguCd")))))
+			.andRespond(withSuccess("""
+				{"response":{"header":{"resultCode":"0000","resultMsg":"OK"},
+				 "body":{"items":{"item":[{"contentid":"1","title":"경포 카페","mapx":"128.9","mapy":"37.7"},
+				  {"contentid":"2","title":"좌표 없음","mapx":"0","mapy":"0"}]},
+				 "numOfRows":20,"pageNo":3,"totalCount":42}}}
+				""", MediaType.APPLICATION_JSON));
+
+		TourSearchPage page = client.searchKeyword(new TourKeywordQuery("경포 & 카페", "51", null, 3, 20));
+
+		assertThat(page.totalCount()).isEqualTo(42);
+		assertThat(page.places()).extracting(TourPlace::contentId).containsExactly("1");
+		server.verify();
+	}
+
+	@Test
+	void 키워드_검색_결과가_없으면_빈_쪽과_0건() {
+		HttpTourApiClient client = client(PROPERTIES);
+		server.expect(anything()).andRespond(withSuccess("""
+			{"response":{"header":{"resultCode":"0000","resultMsg":"OK"},
+			 "body":{"items":"","numOfRows":20,"pageNo":1,"totalCount":0}}}
+			""", MediaType.APPLICATION_JSON));
+
+		assertThat(client.searchKeyword(new TourKeywordQuery("없는곳", null, null, 1, 20)))
+			.isEqualTo(new TourSearchPage(List.of(), 0));
+	}
+
+	@Test
+	void 상세는_콘텐츠_ID_로_한_곳을_읽고_없거나_좌표가_없으면_비어_있다() {
+		HttpTourApiClient client = client(PROPERTIES);
+		server.expect(requestTo(allOf(containsString("/detailCommon2?"), containsString("contentId=126508"))))
+			.andRespond(withSuccess(body("""
+				{"item":[{"contentid":"126508","title":"경포해변","addr1":"강릉시","mapx":"128.9087","mapy":"37.8055",
+				 "lclsSystm1":"NA","lclsSystm2":"NA04","lclsSystm3":"NA040100"}]}"""), MediaType.APPLICATION_JSON));
+		assertThat(client.detail("126508")).contains(new TourPlace("126508", "경포해변", "강릉시",
+			new BigDecimal("37.8055"), new BigDecimal("128.9087"), null, "NA", "NA04", "NA040100"));
+
+		HttpTourApiClient emptyClient = client(PROPERTIES);
+		server.expect(anything()).andRespond(withSuccess(body("\"\""), MediaType.APPLICATION_JSON));
+		assertThat(emptyClient.detail("1")).isEmpty();
+
+		HttpTourApiClient unlocatedClient = client(PROPERTIES);
+		server.expect(anything()).andRespond(withSuccess(body("""
+			{"item":{"contentid":"2","title":"좌표 없음","mapx":"0","mapy":"0"}}"""), MediaType.APPLICATION_JSON));
+		assertThat(unlocatedClient.detail("2")).isEmpty();
+	}
+
+	@Test
+	void 검색_상세도_HTTP_오류는_실패하고_인증키를_메시지에_넣지_않는다() {
+		HttpTourApiClient client = client(PROPERTIES);
+		server.expect(anything()).andRespond(withServerError());
+		assertThatThrownBy(() -> client.searchKeyword(new TourKeywordQuery("카페", null, null, 1, 20)))
+			.isInstanceOf(TourApiException.class).hasMessageContaining("HTTP 500").hasMessageNotContaining(KEY);
+
+		HttpTourApiClient detailClient = client(PROPERTIES);
+		server.expect(anything()).andRespond(withServerError());
+		assertThatThrownBy(() -> detailClient.detail("1"))
+			.isInstanceOf(TourApiException.class).hasMessageNotContaining(KEY);
+	}
 }

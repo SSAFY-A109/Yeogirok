@@ -72,7 +72,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class PlaceRecommendationService {
 
-	static final String TOUR_IMAGE_ATTRIBUTION = "한국관광공사";
+	static final String TOUR_IMAGE_ATTRIBUTION = TourPlace.IMAGE_ATTRIBUTION;
 
 	private final RoomFinder roomFinder;
 	private final RoomPlaceRepository roomPlaceRepository;
