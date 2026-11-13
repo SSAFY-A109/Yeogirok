@@ -644,7 +644,8 @@ curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보�
   | `COURSE_SEED_UNPUBLISH` | 내릴 코스의 contentId. 쉼표로 여러 개, `ALL`이면 공식 코스 전부 | 내리지 않는다 |
   | `COURSE_SEED_RESEED` | 지우고 다시 넣을 코스의 contentId. 쉼표로 여러 개 | 다시 넣지 않는다 |
 
-- 서버 `.env`에 `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`가 있어야 사진 버킷을 읽습니다. `S3_PHOTO_BUCKET`과 `S3_RECEIPT_BUCKET`은 서로 다른 버킷이어야 합니다. 영수증 정리 작업은 영수증 버킷의 오래된 파일을 접두어 없이 모두 지웁니다. 두 버킷이 같으면 `course-seed/`도 같이 지워집니다.
+- 적재 파일은 백엔드가 S3에 접근하는 권한 그대로 읽습니다. 2026-11-13 확인: 서버 `.env`에 접근 키(`AWS_ACCESS_KEY_ID`)는 없고, 서버와 백엔드 컨테이너 모두에서 Lightsail 인스턴스 역할(`AmazonLightsailInstanceRole`)이 보입니다. 백엔드는 AWS SDK 기본 순서로 자격 증명을 찾으므로 키가 없으면 이 역할을 씁니다. 이 역할에 사진 버킷 권한(Get·Put·Delete·List)이 있는지는 백엔드 담당 설명 기준이고, 정책은 직접 확인하지 않았습니다.
+- `S3_PHOTO_BUCKET`과 `S3_RECEIPT_BUCKET`은 서로 다른 버킷이어야 합니다. 영수증 정리 작업은 영수증 버킷의 오래된 파일을 접두어 없이 모두 지웁니다. 두 버킷이 같으면 `course-seed/`도 같이 지워집니다.
 - **`.env`를 고친 뒤에는 `docker compose up -d backend`로 컨테이너를 새로 만듭니다.** `docker compose restart backend`는 바뀐 `.env`를 읽지 않습니다.
 - **다 돌면 바로 끕니다.** 켜 둔 채로 두면 백엔드가 새로 뜰 때마다 다시 돕니다. Jenkins는 `backend/dev` 머지 때마다 백엔드를 새로 띄웁니다.
   - 이미 넣은 코스는 건너뛰어서 넣기만 반복될 때는 괜찮습니다.
@@ -653,7 +654,6 @@ curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보�
 
 ```bash
 cd ~/yeogirok/infra-src/infra
-grep -cE '^AWS_ACCESS_KEY_ID=.+' .env              # 1 이어야 한다(0 이면 사진 버킷을 읽지 못한다)
 grep -E '^S3_(PHOTO|RECEIPT)_BUCKET=' .env         # 두 버킷 이름이 달라야 한다
 setenv() { sed -i "/^$1=/d" .env; printf '\n%s=%s\n' "$1" "$2" >> .env; }
 setenv COURSE_SEED_ENABLED true
