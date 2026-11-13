@@ -46,10 +46,6 @@ class Store:
     def save_info_page(self, content_id, page, response):
         self.write(response, "courses", content_id, f"info-p{page}.json")
 
-    def info_pages(self, content_id):
-        folder = self.root / "courses" / content_id
-        return sorted(int(p.stem[len("info-p"):]) for p in folder.glob("info-p*.json")) if folder.exists() else []
-
     def intro(self, content_id):
         return self.read("courses", content_id, "intro.json")
 
@@ -68,7 +64,7 @@ class Store:
 
     # 상태·실행 기록
     def state(self):
-        return self.read("state.json", default={"seed": None, "calls": 0, "courses": {}})
+        return self.read("state.json", default={"seed": None, "calls": 0})
 
     def save_state(self, state):
         self.write(state, "state.json")

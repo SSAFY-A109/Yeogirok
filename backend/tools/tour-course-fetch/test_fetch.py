@@ -10,14 +10,18 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import tour_fetch
+from unittest import mock
 
 KEY = "fake+Key/=="  # 인코딩되면 모양이 바뀌는 문자를 넣는다
 
 
-def ok(items, total):
+TRUNCATED = object()  # 본문을 Content-Length 보다 짧게 보내고 끊는다(IncompleteRead)
+
+
+def ok(items, total, rows=None):
     return {"response": {"header": {"resultCode": "0000", "resultMsg": "OK"},
-                         "body": {"items": {"item": items} if items else "", "numOfRows": len(items),
-                                  "pageNo": 1, "totalCount": total}}}
+                         "body": {"items": {"item": items} if items else "",
+                                  "numOfRows": len(items) if rows is None else rows, "pageNo": 1, "totalCount": total}}}
 
 
 def place(content_id, type_id="12", photo=True, mapx="127.0"):
@@ -51,6 +55,13 @@ class FakeTourApi:
                 with fake.lock:
                     fake.requests.append((path.rsplit("/", 1)[-1], params))
                 status, body = fake.respond(path.rsplit("/", 1)[-1], params)
+                if body is TRUNCATED:
+                    self.send_response(200)
+                    self.send_header("Content-Length", "100")
+                    self.end_headers()
+                    self.wfile.write(b'{"respo')
+                    self.close_connection = True
+                    return
                 data = body if isinstance(body, bytes) else (
                     body.encode() if isinstance(body, str) else json.dumps(body).encode())
                 self.send_response(status)
@@ -70,10 +81,10 @@ class FakeTourApi:
         page = int(params.get("pageNo", 1))
         rows = int(params.get("numOfRows", 10))
         if api == "areaBasedList2":
-            return 200, ok(self.dictionary[(page - 1) * rows: page * rows], len(self.dictionary))
+            return 200, ok(self.dictionary[(page - 1) * rows: page * rows], len(self.dictionary), rows)
         if api == "detailInfo2":
             items = self.courses.get(params["contentId"], [])
-            return 200, ok(items[(page - 1) * rows: page * rows], len(items))
+            return 200, ok(items[(page - 1) * rows: page * rows], len(items), rows)
         if api == "detailCommon2":
             cid = params["contentId"]
             return 200, ok([{"contentid": cid, "overview": self.overviews.get(cid, "")}], 1)
@@ -246,6 +257,65 @@ class FetchTest(unittest.TestCase):
                     self.assertNotIn(secret, text, name)
         for secret in secrets:
             self.assertFalse(any(secret in line for line in self.logs))
+
+    def test_body_cut_while_reading_is_retried_and_counted(self):
+        # 리뷰(PR #129): 본문을 읽다 끊기면(IncompleteRead) 예외로 끝나 멈춘 이유가 안 남았다.
+        first = {"done": False}
+
+        def cut_once(api, params):
+            if api == "areaBasedList2" and not first["done"]:
+                first["done"] = True
+                return True
+            return False
+
+        self.fake.override = (cut_once, 200, TRUNCATED)
+        self.assertEqual(self.run_fetch("--max-calls", "100"), 0)
+        self.assertEqual(self.last_run()["stopReason"], "ALL_DONE")
+        self.assertEqual(self.report()["passTotal"], 2)
+
+    def test_body_always_cut_stops_with_reason_and_report(self):
+        self.fake.override = (lambda api, params: True, 200, TRUNCATED)
+        self.assertEqual(self.run_fetch("--max-calls", "100"), 0)
+        run = self.last_run()
+        self.assertEqual((run["stopReason"], run["stopDetail"]["kind"], run["calls"]),
+                         ("STOPPED_BY_RESPONSE", "RETRY_EXHAUSTED", 3))
+        self.assertTrue(any("판정 보고" in line for line in self.logs))
+
+    def test_any_4xx_stops(self):
+        self.fake.override = (lambda api, params: True, 404, "not found")
+        self.run_fetch("--max-calls", "50")
+        self.assertEqual((self.fake.count(), self.last_run()["stopDetail"]["status"]), (1, 404))
+
+    def test_unexpected_error_is_recorded_and_report_printed(self):
+        with mock.patch.object(tour_fetch.Fetcher, "process", side_effect=RuntimeError("boom")):
+            self.assertEqual(self.run_fetch("--max-calls", "100"), 1)
+        run = self.last_run()
+        self.assertEqual((run["stopReason"], run["stopDetail"]), ("UNEXPECTED_ERROR", {"kind": "RuntimeError"}))
+        self.assertTrue(any("판정 보고" in line for line in self.logs))
+
+    def test_info_page_size_follows_first_page_not_argument(self):
+        many = [place(str(100 + i)) for i in range(230)]
+        self.fake.dictionary = many + [place("big", "25")]
+        self.fake.courses = {"big": sub(*[str(100 + i) for i in range(230)])}
+        # 첫 실행: 사전 3쪽 + 장소 목록 1쪽(100건)에서 멈춤
+        self.run_fetch("--max-calls", "4", "--dict-rows", "100", "--info-rows", "100")
+        # 다음 실행은 다른 --info-rows 로: 첫 쪽 크기(100) 기준으로 2·3쪽을 받는다(겹치거나 빠지지 않게)
+        self.run_fetch("--max-calls", "100", "--dict-rows", "100", "--info-rows", "50")
+
+        pages = [(p["pageNo"], p["numOfRows"]) for api, p in self.fake.requests if api == "detailInfo2"]
+        self.assertEqual(pages, [("1", "100"), ("2", "100"), ("3", "100")])
+        with open(os.path.join(self.data_dir, "judged", "big.json"), encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)["places"]), 230)
+        # judge 를 또 다른 --info-rows 로 돌려도 전부 읽는다
+        self.assertEqual(tour_fetch.main(["judge", "--data-dir", self.data_dir, "--info-rows", "10"],
+                                         self.logs.append), 0)
+        with open(os.path.join(self.data_dir, "judged", "big.json"), encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)["places"]), 230)
+
+    def test_state_keeps_only_seed_and_calls(self):
+        self.run_fetch("--max-calls", "100")
+        with open(os.path.join(self.data_dir, "state.json"), encoding="utf-8") as f:
+            self.assertEqual(sorted(json.load(f)), ["calls", "seed"])
 
     def test_no_key_no_calls(self):
         os.environ.pop("TOUR_API_KEY")
