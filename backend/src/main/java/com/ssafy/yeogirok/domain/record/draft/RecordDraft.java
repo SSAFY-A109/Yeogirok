@@ -45,7 +45,10 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 	public record SnapshotMaterial(String materialId, int version, ReceiptMaterial.Values values) {
 	}
 
-	/** 노션 065 items[]. storyDraft 는 없다. plannedItemId 는 PLAN 항목에만 있다(영수증·사진 항목과 합치지 않음). */
+	/**
+	 * 노션 065 items[]. storyDraft 는 없다. plannedItemId 는 PLAN 항목과, 같은 방문으로 보고 계획을 합친 영수증·사진 항목에 있다
+	 * (명세 {@code specs/draft-merge.md} 3절).
+	 */
 	public record Item(int itemId, List<String> sourceMaterialIds, List<RecordPlaceView> placeCandidates,
 		LocalDate visitDate, Instant proposedVisitedAt, boolean needsReview, Evidence evidence, List<Long> sourcePhotoIds,
 		Long plannedItemId, RecordPlaceView proposedPlace) {
