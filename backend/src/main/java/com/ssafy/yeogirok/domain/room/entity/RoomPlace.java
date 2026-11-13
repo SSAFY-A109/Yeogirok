@@ -25,8 +25,8 @@ import lombok.NoArgsConstructor;
  * 여행방 후보 장소. 노션 DDL {@code room_places} 와 맞춘다. 장소 정보는 공통 {@link Place} 에 두고 place_id 로 참조하며,
  * 이 행은 누가·어떤 경로로 담았는지와 삭제 상태만 갖는다. 같은 장소를 여러 번 담으면 후보도 여러 개다.
  *
- * <p>DDL 과 다른 점: travel_records 엔티티를 아직 참조하지 않아 {@code source_record_id} FK 를 걸지 않는다.
- * TODO 기록 도메인이 들어오면 {@code source_record_id → travel_records(id)} FK 를 건다.
+ * <p>DDL 과 다른 점: {@code source_record_id} FK 를 걸지 않는다. API-030 이 원본 기록을 확인한 뒤에만 채운다.
+ * TODO {@code source_record_id → travel_records(id)} FK 는 기록 삭제 정책과 함께 정해 새 Flyway 파일로 건다.
  * 부분 인덱스(WHERE removed_at IS NULL)·컬럼 기본값은 H2 비호환이라 일반 인덱스로 두고 Flyway V1 에 맡긴다.
  *
  * <p>후보를 빼면 {@code removed_at} 만 채우고 행은 지우지 않는다. 일정 항목이 이 행을 계속 참조하고, 언제든 복원할 수 있다.
@@ -90,6 +90,13 @@ public class RoomPlace {
 	/** API-029 검색 담기. {@code place} 는 재사용하거나 TourAPI 상세로 처음 저장한 투어API 장소다. */
 	public static RoomPlace searched(Long roomId, Place place, Long addedBy, Instant now) {
 		return of(roomId, place, addedBy, PlaceSourceType.SEARCH, now);
+	}
+
+	/** API-030 공개 코스에서 가져오기. {@code place} 는 원본 방문의 장소 행을 그대로 쓴다. */
+	public static RoomPlace imported(Long roomId, Place place, Long addedBy, Long sourceRecordId, Instant now) {
+		RoomPlace roomPlace = of(roomId, place, addedBy, PlaceSourceType.COURSE, now);
+		roomPlace.sourceRecordId = sourceRecordId;
+		return roomPlace;
 	}
 
 	private static RoomPlace of(Long roomId, Place place, Long addedBy, PlaceSourceType sourceType, Instant now) {

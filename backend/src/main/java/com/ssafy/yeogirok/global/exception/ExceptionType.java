@@ -136,6 +136,10 @@ public enum ExceptionType {
 	COURSE_RECOMMENDATION_CATEGORY_NOT_SUPPORTED(BAD_REQUEST, "CO004", "지원하지 않는 코스 추천 카테고리"),
 	/** 노션에 발생 조건이 "일시 불가"뿐이라 던지는 곳이 없다(명세 main-api.md 5절 7). */
 	COURSE_RECOMMENDATION_UNAVAILABLE(SERVICE_UNAVAILABLE, "CO005", "추천 코스 조회 일시 불가"),
+	/** API-030. visitIds 생략·null·빈 배열. */
+	COURSE_IMPORT_NOTHING_SELECTED(BAD_REQUEST, "CO006", "가져올 코스 장소를 선택하지 않음"),
+	/** API-030. 다른 기록의 방문이거나 공개 대상이 아닌 방문. */
+	COURSE_IMPORT_VISIT_NOT_IN_COURSE(BAD_REQUEST, "CO007", "선택한 장소 항목이 원본 코스에 속하지 않음"),
 	COURSE_NOT_MEMBER(FORBIDDEN, "CO008", "해당 여행 기록의 현재 참여자가 아님"),
 	/** 부분 선택 필드를 받던 계약의 오류. 지금은 전체 공개라 생기지 않는다(명세 course-publish-api.md 5절 7). */
 	COURSE_SELECTION_NOT_IN_RECORD(UNPROCESSABLE_CONTENT, "CO009", "공개 대상으로 선택한 자원이 원본 기록에 속하지 않음"),

@@ -36,14 +36,9 @@ import com.ssafy.yeogirok.global.geo.LegalDongResolver;
  * <p>후보를 바꾸는 요청은 방 행을 잠가 한 줄로 세우고, 실제로 바뀐 경우에만 여행방 version 을 1 올린다. 이미 뺀 후보 빼기·
  * 이미 있는 후보 복원은 바꾸는 것이 없어 version 을 보지도 올리지도 않고 성공한다(동시에 같은 요청이 와도 오류 없이).
  *
- * <p>API-029(검색·AI 추천 담기)는 {@link RoomPlaceAddService} 에 있다.
- * TODO API-030(공개 코스에서 가져오기): 여행 기록·방문·공개 코스가 생기면 만든다.
- * <ul>
- *   <li>원본 기록 행과 대상 방 행을 잠그고, 저장 직전에 게시 여부·원본 방 미삭제·방문 소속을 다시 확인한다.</li>
- *   <li>선택한 방문의 place_id 를 새 후보에 연결하고 sourceType=COURSE, sourceRecordId=원본 기록 ID 를 남긴다.
- *       API-028·방 상세의 sourceRecord 도 이때 채운다({@link com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse}).</li>
- * </ul>
- * 029·030 공통: Idempotency-Key 를 받고, 후보를 저장한 뒤 {@link #increaseVersion} 을 불러 방 version 과
+ * <p>API-029(검색·AI 추천 담기)는 {@link RoomPlaceAddService}, API-030(공개 코스에서 가져오기)은
+ * {@link RoomPlaceImportService} 에 있다.
+ * 029·030 공통: Idempotency-Key 를 받고, 후보를 저장한 뒤 {@link RoomVersions#increaseAfterPlacesChanged} 로 방 version 과
  * scheduleNeedsRecalculation(확정 일정이 있으면 true)을 한 번에 갱신한다. 그러면 실시간 알림(ROOM_UPDATED)도 함께 나간다.
  */
 @Service
