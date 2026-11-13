@@ -35,6 +35,7 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import com.ssafy.yeogirok.domain.course.dto.PublicAuthor;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.PlaceInfo;
@@ -43,6 +44,7 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
+import com.ssafy.yeogirok.domain.room.dto.SourceRecordResponse;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddCommand;
@@ -122,6 +124,24 @@ class RoomPlaceControllerTest {
 				  "removedAt": "2026-11-05 10:30:00+09"
 				}], "version": 4}}
 				""", JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 코스에서_가져온_후보의_sourceRecord_는_id_title_authors() throws Exception {
+		given(roomPlaceService.getPlaces(USER_ID, 7L, RoomPlaceState.ACTIVE)).willReturn(new RoomPlaceListResponse(
+			List.of(new RoomPlaceListResponse.Item(402L, MANUAL_PLACE, PlaceSourceType.COURSE, 201L,
+				new SourceRecordResponse(201L, "강릉 1박", List.of(new PublicAuthor(11L, "https://img/11.jpg"),
+					new PublicAuthor(12L, null))), 2L, null)), 4));
+
+		mockMvc.perform(get("/api/v1/rooms/7/places").with(asUser(USER_ID)))
+			.andExpect(status().isOk())
+			.andExpect(content().json("""
+				{"data": {"items": [{
+				  "sourceType": "COURSE", "sourceRecordId": 201,
+				  "sourceRecord": {"id": 201, "title": "강릉 1박", "authors": [
+				    {"id": 11, "profileImageUrl": "https://img/11.jpg"}, {"id": 12, "profileImageUrl": null}]}
+				}]}}
+				""", JsonCompareMode.LENIENT));
 	}
 
 	@Test

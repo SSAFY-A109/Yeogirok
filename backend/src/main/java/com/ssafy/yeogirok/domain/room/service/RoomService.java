@@ -57,13 +57,16 @@ public class RoomService {
 	private final ScheduleRoomChanges scheduleRoomChanges;
 	private final TransactionTemplate transactionTemplate;
 	private final ChatReadStates chatReadStates;
+	private final RoomPlaceSources roomPlaceSources;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public RoomService(TravelRoomRepository travelRoomRepository, RoomMemberRepository roomMemberRepository,
 		RoomPlaceRepository roomPlaceRepository, CategoryNames categoryNames, RoomFinder roomFinder,
 		ScheduleRoomChanges scheduleRoomChanges, PlatformTransactionManager transactionManager,
-		ChatReadStates chatReadStates, ApplicationEventPublisher eventPublisher, Clock clock) {
+		ChatReadStates chatReadStates, RoomPlaceSources roomPlaceSources, ApplicationEventPublisher eventPublisher,
+		Clock clock) {
+		this.roomPlaceSources = roomPlaceSources;
 		this.travelRoomRepository = travelRoomRepository;
 		this.roomMemberRepository = roomMemberRepository;
 		this.roomPlaceRepository = roomPlaceRepository;
@@ -143,7 +146,8 @@ public class RoomService {
 		List<RoomPlace> places = roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
 		List<String> categoryCodes = places.stream().map(place -> place.getPlace().getCategoryCode()).toList();
 		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)), places,
-			categoryNames.of(categoryCodes), chatReadStates.of(found.member()), scheduleRoomChanges.view(found.room()));
+			categoryNames.of(categoryCodes), roomPlaceSources.of(places), chatReadStates.of(found.member()),
+			scheduleRoomChanges.view(found.room()));
 	}
 
 	/**

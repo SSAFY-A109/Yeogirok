@@ -10,9 +10,11 @@ import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.chat.service.ChatReadStates;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteProperties;
 import com.ssafy.yeogirok.domain.room.invite.RoomInviteTokenCipher;
+import com.ssafy.yeogirok.domain.course.service.CourseAuthors;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
 import com.ssafy.yeogirok.domain.room.service.RoomInvitationService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
+import com.ssafy.yeogirok.domain.room.service.RoomPlaceSources;
 import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.domain.room.service.RoomVersions;
 import com.ssafy.yeogirok.domain.schedule.service.ScheduleRoomChanges;
@@ -28,7 +30,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 @TestConfiguration
 @Import({RoomService.class, RoomInvitationService.class, RoomPlaceService.class, RoomFinder.class,
 	RoomVersions.class, CategoryNames.class, ScheduleService.class, ScheduleRoomChanges.class, ScheduleWriter.class,
-	ScheduleReader.class, ChatReadStates.class})
+	ScheduleReader.class, ChatReadStates.class, RoomPlaceSources.class, CourseAuthors.class})
 public class RoomTestConfig {
 
 	/** 가짜 길찾기의 기본 구간 이동 시간(분). */
