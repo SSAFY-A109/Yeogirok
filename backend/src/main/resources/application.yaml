@@ -32,6 +32,15 @@ yeogirok:
   schedule:
     # 일정 초안(API-037~039·084) 보관 기간. 정해진 값이 없어 제안값이다(backend/docs/06-schedule.md).
     draft-retention: 24h
+  # 투어API 공식 코스 적재(S15P31A109-221, .handoff/specs/tour-course-seed.md 6-2). 켜져 있을 때만 서버 시작 뒤 한 번 돈다.
+  # 서버에서 쓰려면 compose backend environment 에 같은 이름의 환경 변수를 넘겨야 한다(값이 없으면 꺼짐).
+  course-seed:
+    enabled: ${COURSE_SEED_ENABLED:false}
+    source: ${COURSE_SEED_SOURCE:s3}
+    location: ${COURSE_SEED_LOCATION:}
+    owner-user-id: ${COURSE_SEED_OWNER_USER_ID:}
+    unpublish: ${COURSE_SEED_UNPUBLISH:}
+    reseed: ${COURSE_SEED_RESEED:}
   record:
     # 통합 기록 초안(API-064·065) 보관 기간. 노션 제안값이다(팀 미확정).
     draft-retention: 24h
