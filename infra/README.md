@@ -631,6 +631,40 @@ curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보�
 
 - 이미 앱을 설치한 폰은 설치할 때 읽은 결과를 기억합니다. 앱을 다시 설치하거나 `adb shell pm verify-app-links --re-verify com.ssafya109.yeogirok`로 다시 확인시킵니다.
 
+**공식 코스 적재 (2026-11-13, 백엔드 S15P31A109-221)**
+- 투어API 여행코스를 공식 계정의 공개 코스로 넣는 일회성 작업입니다. `COURSE_SEED_ENABLED=true`일 때만 백엔드가 뜬 뒤 한 번 돌고, 값이 없으면 꺼져 있어 아무 일도 하지 않습니다. 비밀 값이 아니고, 평소에는 서버 `.env`에 넣지 않습니다.
+- `docker-compose.yml`이 아래 6개를 넘깁니다. compose 기본값은 백엔드 `application.yaml` 기본값과 같습니다. 그래서 백엔드 PR과 이 변경 중 어느 쪽이 먼저 머지돼도 백엔드는 멈추지 않습니다.
+
+  | 값 | 뜻 | 비우면 |
+  | --- | --- | --- |
+  | `COURSE_SEED_ENABLED` | `true`면 백엔드가 뜬 뒤 한 번 돈다 | 꺼짐 |
+  | `COURSE_SEED_SOURCE` | 적재 파일을 읽을 곳. 서버는 `s3` | `s3` |
+  | `COURSE_SEED_LOCATION` | 사진 버킷(`S3_PHOTO_BUCKET`) 안 접두어. 예: `course-seed/` | 아무것도 하지 않는다 |
+  | `COURSE_SEED_OWNER_USER_ID` | 코스 주인 회원 번호. 회원이 없거나 탈퇴했으면 적재하지 않는다 | 로그인할 수 없는 시스템 계정("한국관광공사 여행코스")을 만들어 쓴다 |
+  | `COURSE_SEED_UNPUBLISH` | 내릴 코스의 contentId. 쉼표로 여러 개, `ALL`이면 공식 코스 전부 | 내리지 않는다 |
+  | `COURSE_SEED_RESEED` | 지우고 다시 넣을 코스의 contentId. 쉼표로 여러 개 | 다시 넣지 않는다 |
+
+- 적재 파일은 백엔드가 S3에 접근하는 권한 그대로 읽습니다. 2026-11-13 확인: 서버 `.env`에 접근 키(`AWS_ACCESS_KEY_ID`)는 없고, 서버와 백엔드 컨테이너 모두에서 Lightsail 인스턴스 역할(`AmazonLightsailInstanceRole`)이 보입니다. 백엔드는 AWS SDK 기본 순서로 자격 증명을 찾으므로 키가 없으면 이 역할을 씁니다. 이 역할에 사진 버킷 권한(Get·Put·Delete·List)이 있는지는 백엔드 담당 설명 기준이고, 정책은 직접 확인하지 않았습니다.
+- `S3_PHOTO_BUCKET`과 `S3_RECEIPT_BUCKET`은 서로 다른 버킷이어야 합니다. 영수증 정리 작업은 영수증 버킷의 오래된 파일을 접두어 없이 모두 지웁니다. 두 버킷이 같으면 `course-seed/`도 같이 지워집니다.
+- **`.env`를 고친 뒤에는 `docker compose up -d backend`로 컨테이너를 새로 만듭니다.** `docker compose restart backend`는 바뀐 `.env`를 읽지 않습니다.
+- **다 돌면 바로 끕니다.** 켜 둔 채로 두면 백엔드가 새로 뜰 때마다 다시 돕니다. Jenkins는 `backend/dev` 머지 때마다 백엔드를 새로 띄웁니다.
+  - 이미 넣은 코스는 건너뛰어서 넣기만 반복될 때는 괜찮습니다.
+  - `UNPUBLISH`·`RESEED`가 남아 있으면 배포 때마다 내렸다가 다시 넣습니다. 그때마다 사진을 새로 올리고 지워진 방이 쌓입니다.
+  - `UNPUBLISH=ALL`이 남아 있으면 그 뒤에 새로 넣은 코스도 다음 배포 때 내려갑니다.
+
+```bash
+cd ~/yeogirok/infra-src/infra
+grep -E '^S3_(PHOTO|RECEIPT)_BUCKET=' .env         # 두 버킷 이름이 달라야 한다
+setenv() { sed -i "/^$1=/d" .env; printf '\n%s=%s\n' "$1" "$2" >> .env; }
+setenv COURSE_SEED_ENABLED true
+setenv COURSE_SEED_LOCATION course-seed/
+docker compose up -d backend
+docker compose logs -f --since 5m backend | grep '공식 코스'   # "공식 코스 적재 끝. 넣음=…" 이 보이면 Ctrl+C
+setenv COURSE_SEED_ENABLED false
+sed -i '/^COURSE_SEED_\(UNPUBLISH\|RESEED\)=/d' .env
+docker compose up -d backend
+```
+
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
 2. `docker-compose.yml`의 해당 서비스 `environment`에 `KEY: ${KEY}` 한 줄 추가 (이 파일은 `infra/dev`로 커밋)
