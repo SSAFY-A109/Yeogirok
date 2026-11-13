@@ -87,7 +87,7 @@ def test_orientation_off():
     assert r.calls == 1 and meta["angle"] == 0 and texts == [t for t, _ in BAD]
 
 
-def test_api_keys_unchanged():
+def test_api_keys_v3():
     old = server.get_runner
     server.get_runner = lambda: FakeRunner()
     try:
@@ -96,7 +96,7 @@ def test_api_keys_unchanged():
     finally:
         server.get_runner = old
     assert r.status_code == 200
-    assert set(r.json()) == {"status", "placeName", "date", "time"}
+    assert tuple(r.json()) == ("status", "placeName", "date", "time", "address", "addressComplete")   # S15P31A109-95
 
 
 def test_rec_model_dir_default_official_and_missing():

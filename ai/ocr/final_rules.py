@@ -1,20 +1,27 @@
-"""운영 후처리 v3 (S15P31A109-49): 날짜 혼동 문자 보정 + 상호명 v3.
+"""운영 후처리 v3 (S15P31A109-49·95): 날짜 혼동 문자 보정 + 상호명 v3 + 주소 (도로명 혼동 문자 보정·건물번호).
 
 아래 '옮긴 코드' 부분은 ocr_v3/ocrlab/fields.py (md5 04704bf4, 실험 E9·E13·E18 에서 쓴 코드)에서
 그대로 옮겼다. 주석의 '실험 옵션 … 기본 legacy' 설명도 원문 그대로이며, 운영에서는 apply_final_rules 로 항상 켠다.
-도로명 혼동 문자 보정은 주소가 응답에 들어갈 때(S15P31A109-95) 함께 반영한다.
+도로명 혼동 문자 보정(fix_road_lookalikes, E18)도 같은 파일에서 그대로 옮겼다 (S15P31A109-95).
+주소는 고친 줄로 address_parser 를 다시 불러 구하고, 건물번호를 읽었으면 건물번호까지 돌려준다.
 """
 from __future__ import annotations
 
+import os
 import re
 
 import receipt_parser as rp
+from address_parser import AddressPolicy, extract_address
+
+# 주소 반환 범위 (S15P31A109-95): building(기본) = 건물번호를 읽었으면 건물번호까지 / road = 도로명까지 (-94 와 같음, 되돌리기용)
+ADDRESS_POLICY = AddressPolicy(return_level=os.getenv("OCR_ADDRESS_LEVEL", "building").strip().lower() or "building")
 
 
 def apply_final_rules(d: dict, lines) -> dict:
     """parse_receipt(lines).to_dict() 결과에 후처리 v3 를 적용한다. ocr_v3 fields.extract 와 같은 순서·조건.
     - 상호명 v3: 찾았을 때만 기존 값을 바꾼다
-    - 날짜 혼동 문자 보정: 기존 규칙으로 날짜를 못 찾았을 때만. 시간은 기존 규칙에서도 못 찾았을 때만 채운다"""
+    - 날짜 혼동 문자 보정: 기존 규칙으로 날짜를 못 찾았을 때만. 시간은 기존 규칙에서도 못 찾았을 때만 채운다
+    - 주소: final_address 값으로 바꾼다 (receipt_parser 의 도로명까지 값 대신). 주소 처리 오류는 주소만 null"""
     d = dict(d)
     n3, _ = name_v3(lines)
     if n3 and n3 != d.get("placeName"):
@@ -25,7 +32,19 @@ def apply_final_rules(d: dict, lines) -> dict:
             d["date"] = date2
             if d.get("time") is None and time2:
                 d["time"] = time2
+    try:                                            # 주소 처리 오류가 상호명·날짜·시간 응답을 막지 않게 (receipt_parser 와 같음)
+        d["address"], d["addressComplete"] = final_address(lines)
+    except Exception:
+        d["address"], d["addressComplete"] = None, False
     return d
+
+
+def final_address(lines, policy: AddressPolicy | None = None):
+    """(주소 | None, addressComplete). 도로명 혼동 문자를 고친 줄로 address_parser 를 다시 부른다.
+    고친 줄은 주소에만 쓰고 상호명·날짜·시간에는 쓰지 않는다 (ocr_v3 fields.extract 의 addr_lookalike_fix=on 과 같음).
+    addressComplete 는 고친 줄 기준으로 도로명과 건물번호를 모두 읽었는지."""
+    addr_lines = [(fix_road_lookalikes(t), sc) for t, sc in lines]
+    return extract_address(addr_lines, policy or ADDRESS_POLICY)
 
 
 # ---------------- 옮긴 코드 (ocr_v3/ocrlab/fields.py) ----------------
@@ -236,3 +255,12 @@ def name_v3(lines, limit: int = 12):
             return hit[0], why
     return cands[0], "첫 후보"
 
+
+# ---------- 도로명 혼동 문자 보정 (실험 옵션 fields.addr_lookalike_fix=on, 기본 legacy = 운영과 같음) ----------
+# 근거: 11/09 dev3 '논현로85일 25' ('길'을 '일'로 읽음) → 도로명이 '논현로', 건물번호 85 로 잘못 잡힘.
+# '…로' 바로 뒤 숫자 + '일' + (띄어쓰기) 숫자 모양만 '…로 숫자 길' 로 바꾼다. 주소 추출에만 쓰고 상호·날짜에는 쓰지 않는다.
+_ROAD_GIL_RE = re.compile(r"([가-힣]로)(\d{1,3})일(?=\s*\d)")
+
+
+def fix_road_lookalikes(text: str) -> str:
+    return _ROAD_GIL_RE.sub(r"\1\2길", text)
