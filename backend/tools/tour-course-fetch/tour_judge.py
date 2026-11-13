@@ -75,13 +75,14 @@ def first_stage(info_items, dictionary):
 
 
 def parse_days(schedule):
-    """(일수, 읽었는지). "당일" 1, "N박M일" M, "M일" M, 그 밖 1."""
+    """(일수, 읽었는지). "N박M일" M, "당일" 1, "M일" M(일정 글 속 날짜일 수도 있어 보고서의 schedule 값으로 확인), 그 밖 1."""
     text = re.sub(r"\s+", "", schedule or "")
-    if "당일" in text:
-        return 1, True
+    # "1박2일 (당일 예약 가능)"처럼 '당일'이 섞여도 N박M일 을 먼저 본다.
     match = re.search(r"(\d+)박(\d+)일", text)
     if match:
         return max(1, int(match.group(2))), True
+    if "당일" in text:
+        return 1, True
     match = re.search(r"(\d+)일", text)
     if match:
         return max(1, int(match.group(1))), True

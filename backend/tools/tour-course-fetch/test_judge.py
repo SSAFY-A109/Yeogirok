@@ -25,6 +25,7 @@ class ParseDays(unittest.TestCase):
 
     def test_schedule_values(self):
         cases = {"당일": (1, True), "당일코스": (1, True), "1박2일": (2, True), "2박 3일": (3, True),
+                 "1박2일 (당일 예약 가능)": (2, True),
                  "3일": (3, True), "": (1, False), None: (1, False), "코스": (1, False), "0박0일": (1, True)}
         for schedule, expected in cases.items():
             with self.subTest(schedule=schedule):
