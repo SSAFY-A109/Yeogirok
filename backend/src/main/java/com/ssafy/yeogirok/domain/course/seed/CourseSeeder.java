@@ -108,20 +108,20 @@ class CourseSeeder {
 	}
 
 	/** 내린 방까지 포함해 한 번이라도 넣은 코스인지. 내린 코스가 다음 실행에서 다시 들어가지 않게 한다. */
-	boolean insertedEver(String contentId) {
-		return seedRooms.existsEverByTitlePrefix(SeedRoomRepository.coursePattern(contentId));
+	boolean insertedEver(String contentId, Long ownerId) {
+		return seedRooms.existsEverByTitlePrefix(SeedRoomRepository.coursePattern(contentId), ownerId);
 	}
 
 	/** 이 묶음으로 이미 넣은 코스인지(다시 넣기를 같은 묶음으로 반복하지 않게, 명세 6-6). */
-	boolean insertedFrom(String contentId, String bundleId) {
+	boolean insertedFrom(String contentId, String bundleId, Long ownerId) {
 		String title = SeedRoomRepository.titleOf(contentId, bundleId);
-		return seedRooms.findActiveByTitlePrefix(SeedRoomRepository.coursePattern(contentId)).stream()
+		return seedRooms.findActiveByTitlePrefix(SeedRoomRepository.coursePattern(contentId), ownerId).stream()
 			.anyMatch(room -> room.getTitle().equals(title));
 	}
 
 	/** 넣은 적 없는 코스만 넣는다(이미 있거나 내린 코스면 SKIPPED — 내린 코스를 되돌리려면 다시 넣기). */
 	Outcome seed(String bundleId, SeedBundle.Course course, Long ownerId, CourseSeedSource source) {
-		if (insertedEver(course.contentId())) {
+		if (insertedEver(course.contentId(), ownerId)) {
 			return Outcome.SKIPPED;
 		}
 		return insert(bundleId, course, ownerId, source);
@@ -129,18 +129,19 @@ class CourseSeeder {
 
 	/** 지금 방을 내리고 새로 넣는다. 새로 넣기가 실패하면 내린 것도 되돌린다(한 트랜잭션). */
 	Outcome reseed(String bundleId, SeedBundle.Course course, Long ownerId, CourseSeedSource source) {
-		if (insertedFrom(course.contentId(), bundleId)) {
+		if (insertedFrom(course.contentId(), bundleId, ownerId)) {
 			return Outcome.SKIPPED;
 		}
 		return insert(bundleId, course, ownerId, source);
 	}
 
 	/** @return 내린 방 수. 이미 내렸거나 없으면 0(오류 아님) */
-	int unpublish(List<String> contentIds, boolean all) {
+	int unpublish(List<String> contentIds, boolean all, Long ownerId) {
 		return transaction.execute(status -> {
-			List<TravelRoom> rooms = all ? seedRooms.findActiveByTitlePrefix(SeedRoomRepository.allPattern())
+			List<TravelRoom> rooms = all ? seedRooms.findActiveByTitlePrefix(SeedRoomRepository.allPattern(), ownerId)
 				: contentIds.stream()
-					.flatMap(id -> seedRooms.findActiveByTitlePrefix(SeedRoomRepository.coursePattern(id)).stream())
+					.flatMap(id -> seedRooms.findActiveByTitlePrefix(SeedRoomRepository.coursePattern(id), ownerId)
+						.stream())
 					.toList();
 			Instant now = clock.instant();
 			rooms.forEach(room -> room.softDelete(now));
@@ -174,7 +175,7 @@ class CourseSeeder {
 	/** 한 트랜잭션 안. 다시 넣기면 지금 방을 먼저 내린다. */
 	private void write(String bundleId, SeedBundle.Course course, Long ownerId, Map<Integer, SeedPhotos.Photo> photos) {
 		Instant now = clock.instant();
-		seedRooms.findActiveByTitlePrefix(SeedRoomRepository.coursePattern(course.contentId()))
+		seedRooms.findActiveByTitlePrefix(SeedRoomRepository.coursePattern(course.contentId()), ownerId)
 			.forEach(room -> room.softDelete(now));
 		List<SeedBundle.Place> places = sorted(course.places());
 		LocalDate first = places.getFirst().visitDate();

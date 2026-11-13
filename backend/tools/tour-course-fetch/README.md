@@ -62,8 +62,9 @@ python tour_fetch.py bundle --count 10 --bundle-id 20261115-01 --max-calls 50
 Remove-Item Env:TOUR_API_KEY, Env:KAKAO_REST_API_KEY
 ```
 
-- 결과: `bundles/{bundleId}/bundle-{bundleId}.json` + `bundles/{bundleId}/photos/`. 묶음 ID 기본값은 `오늘날짜-순번`. 만든 묶음 목록은 `bundles/index.json`(다음 `--count` 는 여기 있는 코스를 뺀다).
+- 결과: `bundles/{bundleId}/bundle-{bundleId}.json` + `bundles/{bundleId}/photos/{bundleId}/`(묶음마다 사진 폴더가 달라 여러 묶음을 같은 곳에 올려도 겹치지 않는다). 묶음 ID 기본값은 `오늘날짜-순번`. 만든 묶음 목록은 `bundles/index.json`(다음 `--count` 는 여기 있는 코스를 뺀다).
 - 사진을 못 받아 어떤 날의 사진이 0장이 되면 그 코스는 묶음에서 빠진다(출력에 사유).
+- 소개 글을 다 받지 못하고 멈추면 묶음을 만들지 않고 종료 코드 1 로 끝난다(받은 소개 글·지역 코드는 저장돼 다시 실행하면 이어 간다).
 - 투어API 글의 `<br>`·태그·HTML 엔티티는 정리해서 담는다.
 
 ## 로컬 백엔드에 넣어 보기
@@ -80,7 +81,7 @@ cd C:\Users\SSAFY\Desktop\Yeogirok\backend
 # 로그에서 "공식 코스 적재 끝. 넣음=…, 건너뜀=…, 실패=…" 를 확인한다
 ```
 
-- 다시 띄워도 이미 넣은 코스는 건너뛴다. 내리기는 `$env:COURSE_SEED_UNPUBLISH = "2916281"`(또는 `ALL`), 다시 넣기는 `$env:COURSE_SEED_RESEED = "2916281"`. 같은 값은 한 번만 처리하고 묶음 폴더 `.done/` 에 표시를 남긴다.
+- 다시 띄워도 이미 넣은 코스는 건너뛴다. 내리기는 `$env:COURSE_SEED_UNPUBLISH = "2916281"`(또는 `ALL`), 다시 넣기는 `$env:COURSE_SEED_RESEED = "2916281"`(마지막 묶음 내용으로). 같은 내리기 값은 한 번만 처리하고 묶음 폴더 `.done/` 에 표시를 남긴다. 다시 넣기는 같은 묶음으로 이미 넣었으면 건너뛰고, 실패하면 다음 실행에서 다시 시도한다.
 - 끝나면 `Remove-Item Env:COURSE_SEED_*` 로 꺼 둔다.
 
 ## 넣은 뒤 015·014·016 응답 보기
@@ -107,13 +108,18 @@ Remove-Item Env:JWT_SECRET
 
 서버 compose 가 `COURSE_SEED_*` 를 backend 에 넘겨야 한다(infra PR #131). 켜고 끄는 법은 `infra/README.md` 9단계 "공식 코스 적재"도 본다.
 
-1. 묶음 폴더 내용을 운영 사진 버킷의 `course-seed/` 아래로 올린다(`bundle-{bundleId}.json` 은 `course-seed/` 바로 아래, 사진은 `course-seed/photos/`).
+1. 묶음 폴더 내용을 운영 사진 버킷의 `course-seed/` 아래로 올린다(`bundle-{bundleId}.json` 은 `course-seed/` 바로 아래, 사진은 `course-seed/photos/{bundleId}/`).
 2. 서버 `.env` 에 `COURSE_SEED_ENABLED=true`, `COURSE_SEED_LOCATION=course-seed/` 를 넣고 **`docker compose up -d backend`** 로 다시 띄운다(`restart` 는 바뀐 `.env` 를 읽지 않는다).
 3. 로그에서 "공식 코스 적재 끝" 줄을 확인한다.
 4. **끝나면 바로 끈다**: `COURSE_SEED_ENABLED=false` 로 바꾸고 `COURSE_SEED_UNPUBLISH`·`COURSE_SEED_RESEED` 를 지운 뒤 `docker compose up -d backend` 한 번 더. `backend/dev` 머지 때마다 배포로 백엔드가 새로 뜨므로 켜 둔 채면 배포마다 다시 돈다.
 
-- 끄는 걸 잊어도: 같은 `UNPUBLISH`·`RESEED` 값(과 주인)은 한 번만 처리한다. 처리하면 `course-seed/.done/{해시}.json` 표시를 남기고, 같은 값이면 다음 실행에서 내리기·다시 넣기를 건너뛴다(새 코스 넣기는 두 번 돌아도 결과가 같다). 같은 값으로 다시 처리하려면 그 표시 파일을 지운다.
-- 비상시 DB 에서 내리기: `update travel_rooms set deleted_at = now() where deleted_at is null and title like 'tourapi-course:%';`
+- 끄는 걸 잊어도:
+  - 같은 `UNPUBLISH` 값(과 주인)은 한 번만 처리한다. 처리하면 `course-seed/.done/{해시}.json` 표시를 남기고, 같은 값이면 다음 실행에서 내리기를 건너뛴다. 같은 값으로 다시 내리려면 그 표시 파일을 지운다.
+  - `RESEED` 는 같은 묶음으로 이미 넣은 코스면 건너뛴다(새 묶음을 올리면 그 내용으로 다시 넣는다).
+  - 새 코스 넣기는 두 번 돌아도 결과가 같다. 다만 `UNPUBLISH=ALL` 로 실제로 내린 실행에서는 새 코스를 넣지 않고, 다음 실행부터 넣는다.
+- 적재는 주인(`COURSE_SEED_OWNER_USER_ID`, 없으면 시스템 계정)이 만든 방만 공식 코스로 본다. 회원이 `tourapi-course:` 로 시작하는 제목을 붙인 방은 건드리지 않는다. 그래서 적재 중간에 주인을 바꾸면 이전 주인이 넣은 코스는 내리기·다시 넣기 대상이 아니다.
+- 적재 잠금은 30분 고정이다. 코스 수십 개면 몇 분이라 넉넉하다. 적재 중 서버가 꺼지면 잠금이 최대 30분 남아 그동안 다시 뜬 서버는 적재를 건너뛴다(코스 하나씩 한 트랜잭션이라 끊긴 코스만 빠지고, 다음 실행에서 들어간다).
+- 비상시 DB 에서 내리기(주인이 만든 방만): `update travel_rooms set deleted_at = now() where deleted_at is null and title like 'tourapi-course:%' and id in (select room_id from room_members where user_id = <주인 회원 번호> and is_creator);`
 
 ## 테스트
 

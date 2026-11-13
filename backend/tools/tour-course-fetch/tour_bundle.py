@@ -1,7 +1,7 @@
 """통과 코스로 묶음 파일 만들기(Jira S15P31A109-222, 명세 tour-course-seed.md 6-3·6-7).
 
 고른 코스의 소개 글(detailCommon2, 투어API 호출 상한에 포함)·장소 사진(원본 그대로)·지역 코드(카카오 법정동)를 붙여
-bundles/{bundleId}/ 아래에 bundle-{bundleId}.json 과 photos/ 를 만든다. 서버에는 이 폴더 내용을 S3 course-seed/ 아래로 올린다.
+bundles/{bundleId}/ 아래에 bundle-{bundleId}.json 과 photos/{bundleId}/ 를 만든다. 서버에는 이 폴더 내용을 S3 course-seed/ 아래로 올린다.
 """
 
 import hashlib
@@ -88,6 +88,8 @@ class Bundler:
         self.api = api
         self.kakao = kakao
         self.log = log
+        self.regions = None  # 지역 코드 캐시. 묶음 하나에 한 번 읽고 save_regions 로 한 번 쓴다(PR #130 리뷰)
+        self.regions_changed = False
 
     def index(self):
         return self.store.read("bundles", "index.json", default={"bundles": []})
@@ -133,15 +135,21 @@ class Bundler:
         return (f"{place['contentId']}.{ext}", hashlib.sha256(data).hexdigest()) if ext else (None, None)
 
     def region(self, place):
-        cache = self.store.read("region-cache.json", default={})
-        if place["contentId"] not in cache:
+        if self.regions is None:
+            self.regions = self.store.read("region-cache.json", default={})
+        if place["contentId"] not in self.regions:
             code, name = self.kakao.region(place.get("mapx"), place.get("mapy"))
             if code is None:
                 return None, None  # 키가 없거나 실패하면 캐시에 남기지 않는다(다음에 다시)
-            cache[place["contentId"]] = {"code": code, "name": name}
-            self.store.write(cache, "region-cache.json")
-        found = cache[place["contentId"]]
+            self.regions[place["contentId"]] = {"code": code, "name": name}
+            self.regions_changed = True
+        found = self.regions[place["contentId"]]
         return found["code"], found["name"]
+
+    def save_regions(self):
+        if self.regions_changed:
+            self.store.write(self.regions, "region-cache.json")
+            self.regions_changed = False
 
     def build(self, judged, bundle_id):
         """코스 하나를 묶음 모양으로. 사진을 못 받아 어떤 날의 사진이 0장이면 (None, 사유)."""
@@ -158,7 +166,8 @@ class Bundler:
                 "regionCode": code, "regionName": name, "lclsSystm2": p.get("lclsSystm2"),
                 "lclsSystm3": p.get("lclsSystm3"), "imageUrl": p.get("firstimage") or None,
                 "cpyrhtDivCd": p.get("cpyrhtDivCd") or None,
-                "photo": f"photos/{file_name}" if file_name else None, "photoSha256": digest,
+                # 묶음별 폴더: S3 course-seed/photos/ 에 여러 묶음을 올려도 같은 장소 사진이 겹치지 않게(PR #130 리뷰)
+                "photo": f"photos/{bundle_id}/{file_name}" if file_name else None, "photoSha256": digest,
             })
             if file_name:
                 photo_files.append(file_name)
@@ -214,15 +223,16 @@ def cmd_bundle(args, log, fetcher_class, store):
     except (BudgetExhausted, StopRun) as e:
         detail = e.to_dict() if isinstance(e, StopRun) else {"kind": "MAX_CALLS"}
         log(f"[멈춤] 소개 글을 다 받지 못해 묶음을 만들지 않았습니다: {detail}. 받은 소개 글은 저장해 두었습니다.")
-        return 0
+        return 1
     finally:
+        bundler.save_regions()
         state = store.state()
         state["calls"] = state.get("calls", 0) + api.calls
         store.save_state(state)
     folder = store.root / "bundles" / bundle_id
-    (folder / "photos").mkdir(parents=True, exist_ok=True)
+    (folder / "photos" / bundle_id).mkdir(parents=True, exist_ok=True)
     for name in photos:
-        shutil.copyfile(store.root / "photo-cache" / name, folder / "photos" / name)
+        shutil.copyfile(store.root / "photo-cache" / name, folder / "photos" / bundle_id / name)
     bundle = {"bundleId": bundle_id, "createdAt": datetime.now().astimezone().isoformat(timespec="seconds"),
               "source": "tour-course-fetch", "courses": courses}
     store.write(bundle, "bundles", bundle_id, f"bundle-{bundle_id}.json")

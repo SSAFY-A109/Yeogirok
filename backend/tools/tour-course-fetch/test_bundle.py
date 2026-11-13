@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import tour_bundle
 import tour_fetch
@@ -85,9 +86,9 @@ class BundleTest(unittest.TestCase):
         self.assertEqual((bundle["bundleId"], course["contentId"], course["overview"]), ("b1", "c1", "강릉\n바다 코스"))
         first = course["places"][0]
         self.assertEqual((first["photo"], first["regionCode"], first["regionName"], first["visitTime"]),
-                         ("photos/1.jpg", "5115010100", "가짜동", "09:00"))
+                         ("photos/b1/1.jpg", "5115010100", "가짜동", "09:00"))
         self.assertEqual(first["photoSha256"], hashlib.sha256(JPEG).hexdigest())
-        self.assertEqual((Path(self.data_dir) / "bundles" / "b1" / "photos" / "1.jpg").read_bytes(), JPEG)
+        self.assertEqual((Path(self.data_dir) / "bundles" / "b1" / "photos" / "b1" / "1.jpg").read_bytes(), JPEG)
         self.assertIsNone(course["places"][1]["photo"])
 
     def test_course_dropped_when_photo_download_fails(self):
@@ -120,6 +121,34 @@ class BundleTest(unittest.TestCase):
         os.environ["KAKAO_REST_API_KEY"] = "fake-kakao"
         self.cli("bundle", "--ids", "c1", "--bundle-id", "b2")
         self.assertEqual(self.bundle_file("b2")["courses"][0]["places"][0]["regionCode"], "5115010100")
+
+    def test_region_cache_is_read_and_written_once_per_bundle(self):
+        # 리뷰(PR #130): 장소마다 지역 코드 캐시 파일 전체를 읽고 썼다.
+        reads, writes = [], []
+        original_read, original_write = tour_fetch.Store.read, tour_fetch.Store.write
+
+        def counting_read(store, *parts, **kwargs):
+            if parts == ("region-cache.json",):
+                reads.append(1)
+            return original_read(store, *parts, **kwargs)
+
+        def counting_write(store, data, *parts):
+            if parts == ("region-cache.json",):
+                writes.append(1)
+            return original_write(store, data, *parts)
+
+        with mock.patch.object(tour_fetch.Store, "read", counting_read), \
+                mock.patch.object(tour_fetch.Store, "write", counting_write):
+            self.cli("bundle", "--ids", "c1,c2", "--bundle-id", "b1")
+        self.assertEqual((len(reads), len(writes)), (1, 1))
+        cache = json.loads((Path(self.data_dir) / "region-cache.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(cache), 6)
+
+    def test_stop_without_bundle_exits_1_and_keeps_region_cache(self):
+        # 리뷰(PR #130): 묶음을 못 만들고 멈춰도 종료 코드가 0 이었다.
+        self.assertEqual(self.cli("bundle", "--ids", "c1", "--bundle-id", "b1", "--max-calls", "0"), 1)
+        self.assertFalse((Path(self.data_dir) / "bundles" / "b1").exists())
+        self.assertTrue((Path(self.data_dir) / "region-cache.json").exists())
 
     def test_existing_bundle_id_is_refused(self):
         self.cli("bundle", "--ids", "c1", "--bundle-id", "b1")
