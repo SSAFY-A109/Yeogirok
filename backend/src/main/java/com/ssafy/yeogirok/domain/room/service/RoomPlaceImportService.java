@@ -42,7 +42,7 @@ import lombok.RequiredArgsConstructor;
  *   <li>원본 기록 행을 잠그고 지금 게시 중인지·원본 방이 삭제되지 않았는지 본다. 아니면 CO001(공개 코스 상세 API-016 과 같은
  *       기준). 잠가 두므로 확인한 뒤 저장 전에 게시가 풀리지 않는다. 코스 수정(API-075)은 기록 행만 잠그고 방 행은 잠그지 않아
  *       방 → 기록 순서로 잠가도 서로 기다리다 멈추지 않는다.</li>
- *   <li>고른 방문이 모두 그 기록의 공개 대상 방문이고 장소 행이 있어야 한다. 하나라도 아니면 아무것도 만들지 않고 CO007.</li>
+ *   <li>고른 방문이 모두 그 기록의 방문(공개 코스 상세 API-016 이 보여 주는 방문)이고 장소 행이 있어야 한다. 하나라도 아니면 아무것도 만들지 않고 CO007.</li>
  *   <li>방문마다 그 장소로 후보를 만들고(sourceType=COURSE, sourceRecordId=원본 기록), 여행방 version 을 1 올린다.
  *       확정 일정이 있으면 재계산 필요도 켜고, 커밋 뒤 실시간 알림(ROOM_UPDATED)이 나간다.</li>
  * </ol>
@@ -69,9 +69,10 @@ public class RoomPlaceImportService {
 		TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
 		TravelRecord record = lockPublishedRecord(command.recordId());
 
+		// 고를 수 있는 방문은 공개 코스 상세(API-016, PublicCourseReader#snapshot)가 보여 주는 것과 같아야 한다. 상세는 기록의
+		// 방문을 모두 보여 주므로 여기서도 거르지 않는다. 방문별 공개 여부를 쓰게 되면 두 곳을 함께 바꾼다.
 		Map<Long, ActualVisit> visits = actualVisitRepository.findByRecordIdOrderByVisitDateAscPositionAsc(record.getId())
-			.stream().filter(ActualVisit::isPublicSelected)
-			.collect(toMap(ActualVisit::getId, Function.identity()));
+			.stream().collect(toMap(ActualVisit::getId, Function.identity()));
 		List<ActualVisit> selected = command.visitIds().stream().map(visits::get).toList();
 		if (selected.contains(null)) {
 			throw new BusinessException(ExceptionType.COURSE_IMPORT_VISIT_NOT_IN_COURSE);
