@@ -53,6 +53,11 @@ class ReceiptPlaceCandidatesTest {
 		return new Place(name, new BigDecimal("37.65"), new BigDecimal("127.06"), roadAddress, address);
 	}
 
+	ReceiptPlaceCandidates upTo(int count) {
+		return new ReceiptPlaceCandidates(search, new RecordProperties(Duration.ofHours(24), Duration.ofDays(30), count,
+			RecordTestConfig.RECORD_PROPERTIES.draft()));
+	}
+
 	List<String> names(OcrResult result, Place... places) {
 		search.willReturn(PlaceKeywordSearch.Result.found(List.of(places)));
 		return candidates.find("m-1", result).stream().map(RecordPlaceView::name).toList();
@@ -64,10 +69,12 @@ class ReceiptPlaceCandidatesTest {
 
 		@Test
 		void AC01_건물번호까지_같은_결과를_도로명만_맞는_결과보다_먼저_준다() {
-			assertThat(names(complete("서울시 노원구 동일로 123"),
+			search.willReturn(PlaceKeywordSearch.Result.found(List.of(
 				place("도로명만", "서울 노원구 동일로 1234", null),
-				place("번호까지", "서울 노원구 동일로 123", "서울 노원구 상계동 1")))
-				.containsExactly("번호까지");
+				place("번호까지", "서울 노원구 동일로 123", "서울 노원구 상계동 1"))));
+
+			assertThat(upTo(3).find("m-1", complete("서울시 노원구 동일로 123"))).extracting(RecordPlaceView::name)
+				.containsExactly("번호까지", "도로명만");
 		}
 
 		@Test
@@ -84,8 +91,6 @@ class ReceiptPlaceCandidatesTest {
 
 		@Test
 		void AC04_건물번호는_도로명_바로_다음_단어로만_같다고_본다() {
-			ReceiptPlaceCandidates two = new ReceiptPlaceCandidates(search, new RecordProperties(Duration.ofHours(24),
-				Duration.ofDays(30), 3, RecordTestConfig.RECORD_PROPERTIES.draft()));
 			search.willReturn(PlaceKeywordSearch.Result.found(List.of(
 				place("다른 길 번호 3", "서울 노원구 동일로12길 3", null),
 				place("1234", "서울 노원구 동일로 1234", null),
@@ -93,7 +98,7 @@ class ReceiptPlaceCandidatesTest {
 				place("123", "서울 노원구 동일로 123", null))));
 
 			// "동일로12길 3" 은 도로명도 달라 빠지고, 1234·123-4 는 도로명만 맞는 결과로 뒤에 선다.
-			assertThat(two.find("m-1", complete("서울시 노원구 동일로 123"))).extracting(RecordPlaceView::name)
+			assertThat(upTo(3).find("m-1", complete("서울시 노원구 동일로 123"))).extracting(RecordPlaceView::name)
 				.containsExactly("123", "1234", "부번");
 		}
 
@@ -113,12 +118,70 @@ class ReceiptPlaceCandidatesTest {
 			assertThat(names(ocr("가나식당", "서울시 노원구"), nowon, nowon2)).isEmpty();
 		}
 
-		@ParameterizedTest
-		@ValueSource(strings = {"경기도 양평군 양평읍", "서울시 노원구 동일로 123"})
-		void 규격_밖_모양이면_후보가_없다(String address) {
-			// 읍으로 끝나는 주소, 건물번호가 붙었는데 addressComplete false 인 주소.
-			assertThat(names(ocr("가나식당", address), place("가나식당", "서울 노원구 동일로 123", "경기 양평군 양평읍 1")))
+		@Test
+		void 건물번호가_붙었는데_addressComplete_false_면_도로명까지로_본다() {
+			// 번호를 다 못 읽은 것일 수 있어 번호는 순서에도 쓰지 않는다.
+			search.willReturn(PlaceKeywordSearch.Result.found(List.of(
+				place("다른 번호", "서울 노원구 동일로 1234", null),
+				place("같은 번호", "서울 노원구 동일로 123", null),
+				place("다른 도로", "서울 노원구 노해로 123", null))));
+
+			assertThat(upTo(3).find("m-1", ocr("가나식당", "서울시 노원구 동일로 123"))).extracting(RecordPlaceView::name)
+				.containsExactly("다른 번호", "같은 번호");
+		}
+
+		@Test
+		void 규격_밖_모양이면_후보가_없다() {
+			// 읍으로 끝나는 주소.
+			assertThat(names(ocr("가나식당", "경기도 양평군 양평읍"), place("가나식당", null, "경기 양평군 양평읍 1"))).isEmpty();
+		}
+	}
+
+	/** 리뷰 반영: 같은 이름의 구·도로명이 다른 시·도에 있을 수 있어 시·도·시·군·구까지 맞아야 같은 지점이다. */
+	@Nested
+	class 같은_지역 {
+
+		@Test
+		void 도로명이_같아도_시도가_다르면_후보가_아니다() {
+			assertThat(names(ocr("가나식당", "부산시 중구 중앙로"),
+				place("대전점", "대전 중구 중앙로 10", null),
+				place("부산점", "부산 중구 중앙로 20", null)))
+				.containsExactly("부산점");
+		}
+
+		@Test
+		void 시군구까지만이면_다른_시도의_같은_구는_세지_않는다() {
+			assertThat(names(ocr("가나식당", "부산시 중구"), place("서울점", null, "서울 중구 명동 1"))).isEmpty();
+			assertThat(names(ocr("가나식당", "부산시 중구"), place("서울점", null, "서울 중구 명동 1"),
+				place("부산점", null, "부산 중구 남포동 1"))).containsExactly("부산점");
+		}
+
+		@Test
+		void 시군구가_다르면_후보가_아니다() {
+			assertThat(names(ocr("가나식당", "서울시 노원구 동일로"), place("도봉점", "서울 도봉구 동일로 100", null)))
 				.isEmpty();
+		}
+
+		@Test
+		void 시군구가_두_단어면_둘_다_맞아야_한다() {
+			assertThat(names(ocr("가나식당", "경기도 수원시 장안구 정조로"),
+				place("팔달구", "경기 수원시 팔달구 정조로 1", null),
+				place("장안구", "경기 수원시 장안구 정조로 900", null)))
+				.containsExactly("장안구");
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"부산 중구 중앙로 20", "부산광역시 중구 중앙로 20"})
+		void 시도_표기가_달라도_같은_시도로_본다(String roadAddress) {
+			assertThat(names(ocr("가나식당", "부산시 중구 중앙로"), place("부산점", roadAddress, null)))
+				.containsExactly("부산점");
+		}
+
+		@Test
+		void 이름_표에_없는_시도면_시도는_비교하지_않고_시군구로만_맞춘다() {
+			assertThat(names(ocr("가나식당", "전남광주통합특별시 목포시 영산로"),
+				place("목포점", "전남 목포시 영산로 1", null)))
+				.containsExactly("목포점");
 		}
 	}
 
