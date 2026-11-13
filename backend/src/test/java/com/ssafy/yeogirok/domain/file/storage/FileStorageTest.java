@@ -24,6 +24,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -31,6 +32,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -182,6 +184,47 @@ class FileStorageTest {
 
 		given(s3Client.getObject(any(Consumer.class))).willThrow(s3Error(500));
 		assertError(() -> storage().readAll("receipts", "receipt/a", 3), ExceptionType.FILE_STORAGE_UNAVAILABLE);
+	}
+
+	/** 공식 코스 적재가 쓰는 직접 올리기(명세 tour-course-seed.md 6-1, AC-02). */
+	@Test
+	@SuppressWarnings("unchecked")
+	void 직접_올리기는_받은_바이트를_그대로_지정한_key_와_형식으로_보낸다() throws Exception {
+		byte[] original = {(byte)0xFF, (byte)0xD8, (byte)0xFF, 1, 2, 3, 0, (byte)0x80};
+		ArgumentCaptor<Consumer<PutObjectRequest.Builder>> request = ArgumentCaptor.forClass(Consumer.class);
+		ArgumentCaptor<RequestBody> body = ArgumentCaptor.forClass(RequestBody.class);
+
+		storage().put("photos", "record-photo/abc", original, "image/jpeg");
+
+		verify(s3Client).putObject(request.capture(), body.capture());
+		PutObjectRequest.Builder builder = PutObjectRequest.builder();
+		request.getValue().accept(builder);
+		PutObjectRequest sent = builder.build();
+		assertThat(sent.bucket()).isEqualTo("photos");
+		assertThat(sent.key()).isEqualTo("record-photo/abc");
+		assertThat(sent.contentType()).isEqualTo("image/jpeg");
+		assertThat(sent.contentLength()).isEqualTo(original.length);
+		try (var stream = body.getValue().contentStreamProvider().newStream()) {
+			assertThat(stream.readAllBytes()).isEqualTo(original);
+		}
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void 직접_올리기_실패는_M012() {
+		given(s3Client.putObject(any(Consumer.class), any(RequestBody.class))).willThrow(s3Error(500));
+
+		assertError(() -> storage().put("photos", "record-photo/abc", new byte[] {1}, "image/png"),
+			ExceptionType.FILE_STORAGE_UNAVAILABLE);
+	}
+
+	/** AC-01: 직접 올린 key 도 기존 조회 흐름(서명 GET URL)으로 받는다. */
+	@Test
+	void 직접_올린_key_는_기존_조회_URL_로_받을_수_있다() {
+		storage().put("photos", "record-photo/abc", new byte[] {1}, "image/png");
+
+		assertThat(storage().presignGet("photos", "record-photo/abc", Duration.ofMinutes(15)))
+			.startsWith("https://photos.s3.ap-northeast-2.amazonaws.com/record-photo/abc?");
 	}
 
 	private static void assertError(Runnable call, ExceptionType expected) {

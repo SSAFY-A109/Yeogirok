@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -145,6 +146,19 @@ public class FileStorage {
 				.destinationBucket(bucket).destinationKey(targetKey).copySourceIfMatch(eTag));
 		} catch (SdkException e) {
 			throw translate(e);
+		}
+	}
+
+	/**
+	 * 서버가 가진 바이트를 그대로 올린다(공식 코스 적재, 명세 tour-course-seed.md 6-1). 크기를 줄이거나 다시 압축하지 않는다.
+	 * 업로드 세션·검증 흐름(012·086)을 거치지 않으므로 부르는 쪽이 형식·크기를 확인한다.
+	 */
+	public void put(String bucket, String key, byte[] bytes, String contentType) {
+		try {
+			s3Client.putObject(builder -> builder.bucket(bucket).key(key).contentType(contentType)
+				.contentLength((long)bytes.length), RequestBody.fromBytes(bytes));
+		} catch (SdkException e) {
+			throw unavailable(e);
 		}
 	}
 
