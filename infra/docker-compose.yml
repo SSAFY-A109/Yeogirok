@@ -89,6 +89,9 @@ services:
       # 멱등키 보관 기간(11/3 결정)과 처리 중 표시 수명(백엔드 제안값). 비밀 값이 아니라 여기에 바로 적는다.
       IDEMPOTENCY_RETENTION: 24h
       IDEMPOTENCY_PROCESSING_TIMEOUT: 30s
+      # 영수증 OCR 서버(아래 ai 서비스) 내부 주소(백엔드 S15P31A109-164). 비밀 값이 아니라 여기에 바로 적는다.
+      # 비어 있으면 백엔드는 뜨고 영수증 OCR 작업만 바로 실패한다(사용자는 API-091 로 직접 입력). ai 가 꺼져 있어도 백엔드는 뜬다.
+      OCR_BASE_URL: http://ai:8000
       # S3 파일 저장소 (값은 .env)
       AWS_REGION: ${AWS_REGION}
       S3_PHOTO_BUCKET: ${S3_PHOTO_BUCKET}
@@ -104,22 +107,40 @@ services:
       # - GOOGLE_WEB_CLIENT_SECRET: 구글 회원 탈퇴 때 구글 연결 해제. 없으면 구글 회원은 탈퇴할 수 없다.
       # - KAKAO_ADMIN_KEY: 카카오 회원 탈퇴 때 카카오 연결 해제. 없으면 해제하지 않고 재시도 대상으로만 남는다.
       # - KAKAO_REST_API_KEY: 발자취 주소·후보 장소 법정동(카카오 로컬 API). 없으면 주소가 비어 저장된다.
+      # - FIREBASE_SERVICE_ACCOUNT_BASE64: 채팅 앱 푸시(FCM). 없으면 푸시만 보내지 않는다.
+      # - TOUR_API_KEY: 장소 추천(API-034, 한국관광공사 TourAPI). 없으면 장소 추천만 C014 로 실패한다.
       # :- 는 .env 에 없을 때 경고 없이 빈 값으로 넘긴다는 뜻이다.
       GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
       KAKAO_ADMIN_KEY: ${KAKAO_ADMIN_KEY:-}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      FIREBASE_SERVICE_ACCOUNT_BASE64: ${FIREBASE_SERVICE_ACCOUNT_BASE64:-}
+      TOUR_API_KEY: ${TOUR_API_KEY:-}
       # 여행방 초대 (백엔드 #55, 11/6). 둘 중 하나라도 빠지면 백엔드가 바로 멈춘다.
       # 초대 토큰 암호화 키는 비밀 값이라 .env 에 둔다. 한 번 만든 뒤에는 바꾸지 않는다.
       ROOM_INVITE_TOKEN_KEY: ${ROOM_INVITE_TOKEN_KEY}
       # 초대 링크 앞부분(뒤에 /{초대 토큰}이 붙는다). 비밀 값이 아니라 여기에 바로 적는다.
       # TBD: 앱 딥링크 주소가 정해지면 바꾼다. 지금 앱은 이 링크를 복사·공유만 하고, 눌렀을 때 열리는 화면은 없다.
       ROOM_INVITE_URL_BASE: https://k15a109.p.ssafy.io/invite
+      # 초대 링크를 앱으로 여는 Android App Links(백엔드 /.well-known/assetlinks.json). 앱 서명 인증서 SHA-256 지문을 쉼표로 잇는다.
+      # 비밀 값이 아니라 여기에 바로 적는다. 여기 없는 키로 서명한 앱에서는 초대 링크가 앱이 아니라 브라우저로 열린다.
+      # 첫째는 Expo 템플릿 debug.keystore(개발 빌드), 둘째는 배포 키(yeogirok-release.p12, alias yeogirok) 지문이다.
+      # 값을 통째로 바꾸므로 백엔드 기본값(debug 지문)도 여기에 같이 적어야 한다. 빈 값으로 넘기면 모든 앱에서 링크가 안 열린다.
+      ANDROID_APP_SHA256_FINGERPRINTS: "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C,80:91:94:BA:C4:9D:FD:C0:3D:B6:D1:66:3D:03:EB:49:62:26:B2:94:E9:F1:EC:65:C7:C6:F6:BA:FF:F3:D7:F1"
       # 방문 분포(API-046)와 현재 위치 증거(DEC-01). 비밀 값이 아니라 여기에 바로 적는다. 하나라도 빠지면 백엔드가 바로 멈춘다.
-      # TBD: 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다. 팀이 정하면 바꾼다.
+      # TBD: 위치 증거 값(LOCATION_*)은 팀이 아직 정하지 않아 백엔드 로컬 제안값(11/4, application-local.yaml)을 임시로 넣었다.
       # 셀 크기를 바꾸면 VISIT_STATS_AGGREGATION_VERSION 도, 위치 기준을 바꾸면 LOCATION_POLICY_VERSION 도 함께 바꾼다.
-      VISIT_STATS_AGGREGATION_VERSION: grid-0.005-v1
-      VISIT_STATS_BASE_CELL_SIZE_DEGREES: "0.005"
-      VISIT_STATS_ZOOM_MULTIPLIERS: "15:1,13:2,11:8,9:32,0:128"
+      #
+      # 방문 분포 격자(11/12, 백엔드와 공유): 지도를 가장 가까이 당겼을 때(카카오 지도 20m 기준, zoom 19) 발자취가 남긴 자리에
+      # 찍히도록 기본 셀을 0.0001도(약 11m x 9m)로 두고, 멀리 볼수록 "최소zoom:배수"로 셀을 키운다. 마커는 셀 중심에 찍힌다.
+      #   zoom 19 -> 0.0001도(약 11m)   18 -> 0.0002도   17 -> 0.0005도   16 -> 0.001도(약 110m)
+      #   zoom 15 -> 0.005도(약 550m)   13 -> 0.01도     11 -> 0.04도     9 -> 0.16도     그 아래 -> 0.64도
+      # zoom 15 이하는 이전 값(기본 셀 0.005도, 배수 15:1,13:2,11:8,9:32,0:128)과 셀 크기가 같다.
+      # 주의 1) 셀이 작아 한 사람이 남긴 발자취 하나의 위치도 그대로 보인다(누가 남겼는지는 나오지 않는다, DEC-07).
+      # 주의 2) 기본 셀을 더 줄이면 가까이 본 화면이 한 번에 조회할 수 있는 셀 수(백엔드 max-cells 2500)를 넘어 C013 이 난다.
+      # 주의 3) 집계 버전을 바꿨으므로 이전 버전(grid-0.005-v1)으로 저장된 탈퇴자 보존분은 합산되지 않는다.
+      VISIT_STATS_AGGREGATION_VERSION: grid-0.0001-v1
+      VISIT_STATS_BASE_CELL_SIZE_DEGREES: "0.0001"
+      VISIT_STATS_ZOOM_MULTIPLIERS: "19:1,18:2,17:5,16:10,15:50,13:100,11:400,9:1600,0:6400"
       VISIT_STATS_MIN_COUNT: "1"
       LOCATION_EVIDENCE_MAX_AGE: 2m
       LOCATION_EVIDENCE_MAX_FUTURE_SKEW: 30s
@@ -127,8 +148,17 @@ services:
       # AR 팁 위치 정확도 기준(미터, 백엔드 #64 AR 팁 API). TBD: 백엔드 로컬 제안값(11/8)을 임시로 넣었다.
       # #64 가 머지되기 전에 서버에 있어야 한다. 그 전에는 백엔드가 이 값을 읽지 않아 넣어 둬도 영향이 없다.
       LOCATION_EVIDENCE_MAX_ACCURACY_METERS: "30"
+      # 투어API 공식 코스 적재(백엔드 S15P31A109-221, 일회성). 값은 .env. 비어 있으면 꺼져 있어 아무 일도 하지 않는다.
+      # 켜 두면 백엔드가 새로 뜰 때마다(Jenkins 자동 배포 포함) 다시 돈다. 다 돌면 ENABLED=false 로 돌리고 UNPUBLISH·RESEED 를 비운다.
+      # 기본값은 백엔드 application.yaml 기본값과 같다. 켜고 끄는 법은 README 9단계 "공식 코스 적재".
+      COURSE_SEED_ENABLED: ${COURSE_SEED_ENABLED:-false}
+      COURSE_SEED_SOURCE: ${COURSE_SEED_SOURCE:-s3}
+      COURSE_SEED_LOCATION: ${COURSE_SEED_LOCATION:-}
+      COURSE_SEED_OWNER_USER_ID: ${COURSE_SEED_OWNER_USER_ID:-}
+      COURSE_SEED_UNPUBLISH: ${COURSE_SEED_UNPUBLISH:-}
+      COURSE_SEED_RESEED: ${COURSE_SEED_RESEED:-}
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
-      # TOUR_API_KEY: ${TOUR_API_KEY}
+      # GMS_KEY: ${GMS_KEY}
     ports:
       - "127.0.0.1:8080:8080"   # Nginx만 접근
 

@@ -278,6 +278,24 @@ sudo certbot renew --dry-run        # 자동 갱신이 되는지 시험
 
 - 프론트에 알릴 값: `EXPO_PUBLIC_API_URL=https://<도메인>`. 프론트는 `EXPO_PUBLIC_LIVE_DOMAINS`로 배포된 도메인(예: `auth`)부터 실서버로 바꿀 수 있습니다.
 
+### 5-1. 이미 HTTPS 를 붙인 서버에 채팅 WebSocket 설정 추가
+
+`yeogirok.conf`에 채팅용 `location /ws/` 블록이 추가됐습니다(채팅 API-077). 서버 파일은 certbot이 HTTPS 설정을 덧붙여 저장소 파일과 다르므로 **다시 복사하지 않습니다**(복사하면 HTTPS 설정이 사라집니다). 서버 파일을 직접 고칩니다.
+
+```bash
+sudo cp /etc/nginx/sites-available/yeogirok ~/yeogirok-nginx.bak   # 되돌릴 때 쓸 백업
+sudo nano /etc/nginx/sites-available/yeogirok
+```
+
+`listen 443 ssl` 이 들어 있는 `server { ... }` 안, `location / {` 바로 위에 저장소 `infra/nginx/yeogirok.conf`의 `location /ws/ { ... }` 블록을 그대로 붙여 넣습니다. 그다음 문법을 확인하고 다시 읽습니다.
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx   # "syntax is ok" 확인
+curl -s -o /dev/null -w '%{http_code}\n' https://<도메인>/ws/v1   # 400 (WebSocket 요청이 아니라서). 404·502 면 설정 확인
+```
+
+앱에서 API-077로 티켓을 받아 `wss://<도메인>/ws/v1`에 연결하고 AUTH를 보냈을 때 READY가 오면 정상입니다.
+
 ---
 
 ## 6단계. 자동 배포 (1시간)
@@ -436,7 +454,7 @@ bash scripts/restore-db.sh ~/yeogirok/backups/<파일>.sql.gz  # restore 를 입
 
 **AI 서버 (영수증 OCR)**
 - 이미지는 `ai/dev`의 `ai/ocr/Dockerfile`(AI 파트 리뷰)로 만들고, `docker-compose.yml`의 `ai` 서비스가 띄웁니다. 서버에 GPU가 없어 CPU용 paddle로 돌립니다.
-- 백엔드는 내부망 `http://ai:8000/ocr/receipt`로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다. 지금(11/9) 백엔드에는 AI를 부르는 코드가 아직 없습니다.
+- 백엔드는 내부망 `http://ai:8000/ocr/receipt`로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다. 백엔드는 `OCR_BASE_URL`(compose에 `http://ai:8000`으로 적음, 백엔드 S15P31A109-164)로 이 주소를 찾습니다. 값이 없으면 백엔드 시작 로그에 `OCR_BASE_URL 이 없어 영수증 OCR 작업이 바로 실패합니다`가 남습니다.
 - OCR 모델(약 100MB)은 처음 켤 때 받아 `ai-models` 볼륨에 둡니다. 다시 배포해도 새로 받지 않습니다.
 - 메모리는 `mem_limit: 3g`로 묶었습니다. 휴대폰 원본 크기 사진 한 장에 7GB 가까이 써서 서버 전체가 흔들릴 수 있기 때문입니다. 넘으면 AI 컨테이너만 다시 켜집니다.
 
@@ -447,7 +465,18 @@ bash scripts/restore-db.sh ~/yeogirok/backups/<파일>.sql.gz  # restore 를 입
   | 3024×4032 (휴대폰 원본) | 17초 | 6.9GB | 실패 |
   | 3024×4032, 검출 입력을 긴 변 1600으로 제한 | 2.4초 | 2.0GB | 성공 |
 
-  서버는 노트북보다 코어가 적어 더 느립니다. 큰 사진은 AI 파트에 검출 입력 크기 제한을 요청했습니다(마지막 줄). 반영 전에는 큰 사진에서 3GB를 넘어 그 요청이 실패할 수 있습니다.
+  큰 사진 요청은 반영됐습니다. 지금 AI 서버는 사진 긴 변을 1280px(`OCR_MAX_SIDE`)로 줄인 뒤 읽습니다(`ai/dev` c4cc345).
+
+  | 서버 첫 실행 (11/13, 4코어) | 걸린 시간 | 메모리 최고 | 결과 |
+  | --- | --- | --- | --- |
+  | 빌드(`docker compose build ai`) | 4분 | — | 이미지 2.38GB |
+  | 켠 직후 | 23초 안에 (healthy) | 0.7GB | — |
+  | 640×360 시험 그림(`check-ai.sh`) | 4.1초 | — | 응답은 옴. 날짜는 아래 주의 |
+  | 3024×4032 (휴대폰 원본 크기) | 16.7초 | 2.0GB | 응답 옴, 재시작 없음 |
+
+  두 시험 그림에는 영수증 단어가 없어서, 사진을 돌려 다시 읽는 방향 보정이 돌아 느렸을 수 있습니다. 백엔드 OCR 응답 제한(`yeogirok.ocr.read-timeout`)이 20초라 큰 사진은 여유가 적습니다. 실제 영수증으로 다시 재고 백엔드와 맞춥니다.
+
+- **`check-ai.sh` 주의 (11/13)**: 운영 인식 모델이 B30(`ai/dev`, S15P31A109-49)으로 바뀐 뒤, 시험 그림(Pillow 기본 글꼴)의 `2026-11-09`를 `2026-1-09`로 읽어 `[ai] 실패: 시험 그림의 날짜(2026-11-09)를 읽지 못했습니다`로 끝납니다. 같은 그림을 공식 모델은 맞게 읽습니다. `[ai] 응답 …` 줄에 JSON이 찍히면 OCR 서버 자체는 돌고 있는 것입니다. AI 파트가 확인하기 전까지 스크립트는 그대로 둡니다.
 
 - **순서**: AI 파트의 Dockerfile PR이 `ai/dev`에 먼저 머지되고, 그다음 이 compose 변경을 `infra/dev`에 머지합니다. 서버에서는 `ai-src`를 먼저 받습니다. `ai-src`가 없으면 `docker compose up -d`(서비스 이름 없이 전체)가 ai를 빌드하지 못해 멈춥니다. 서비스 이름을 붙인 명령(`up -d backend` 등)과 배포·백업 스크립트는 영향이 없습니다.
 
@@ -457,8 +486,9 @@ cd ~/yeogirok/infra-src && git pull
 cd infra
 docker compose up -d --build ai      # 첫 빌드 3~5분 (paddle 설치, 이미지 약 2.4GB)
 docker compose ps ai                 # (healthy) 가 보일 때까지 기다린다. 처음에는 모델을 받느라 1~2분
-bash scripts/check-ai.sh             # 마지막 줄이 "[ai] 성공" 이면 끝
+bash scripts/check-ai.sh             # 마지막 줄이 "[ai] 성공" 이면 끝 (11/13 B30 모델은 날짜 때문에 실패할 수 있다, 위 주의)
 docker stats --no-stream             # ai 메모리 확인
+docker compose up -d backend         # 백엔드가 OCR_BASE_URL 을 받는다. 시작 로그에 OCR_BASE_URL 경고가 없으면 끝
 ```
 
 - `/health`는 모델을 불러오기만 하면 200이라, OCR이 실제로 도는지는 `check-ai.sh`로 봅니다. 시험 그림을 컨테이너 안에서 만들어 읽힙니다.
@@ -533,18 +563,20 @@ docker compose exec redis redis-cli config get maxmemory-policy
   | `JWT_SECRET` | 서버 `.env` | `openssl rand -base64 48`. 서버에서만 만든다 |
   | `GOOGLE_WEB_CLIENT_ID` | 서버 `.env` | 구글 **웹** 클라이언트 ID. 앱의 `webClientId`와 같은 값 |
   | `KAKAO_APP_KEY` | 서버 `.env` | 카카오 **네이티브 앱 키**. 앱 카카오 SDK와 같은 값 |
-  | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다 |
+  | `VISIT_STATS_*` 4개, `LOCATION_*` 3개 | `docker-compose.yml` | 비밀 값이 아니다. `LOCATION_*`는 TBD: 팀이 정하기 전이라 백엔드 로컬 제안값(11/4)을 임시로 넣었다. `VISIT_STATS_*`(방문 분포 격자)는 11/12에 지도를 가장 가까이 당기면 발자취가 남긴 자리(약 11m 칸)에 찍히도록 바꿨다. 단계별 칸 크기와 주의점은 compose 주석에 있다 |
 
 - 구글·카카오 키가 아직 없으면 임시 문자열을 넣습니다. 백엔드는 뜨고 그 제공자 로그인만 실패합니다.
-- 선택 키 3개는 비어 있어도 백엔드가 뜹니다. 값을 받으면 서버 `.env`에 넣고 `docker compose up -d backend`로 백엔드만 다시 켭니다(다시 빌드하지 않음).
+- 선택 키 5개는 비어 있어도 백엔드가 뜹니다. 값을 받으면 서버 `.env`에 넣고 `docker compose up -d backend`로 백엔드만 다시 켭니다(다시 빌드하지 않음).
 
   | 값 | 없으면 |
   | --- | --- |
   | `GOOGLE_WEB_CLIENT_SECRET` (구글 웹 클라이언트 secret) | 구글 회원은 탈퇴할 수 없다 |
   | `KAKAO_ADMIN_KEY` (카카오 어드민 키) | 카카오 회원 탈퇴 때 연결을 끊지 않고 재시도 대상으로만 남긴다 |
   | `KAKAO_REST_API_KEY` (카카오 REST API 키) | 발자취 주소와 후보 장소 법정동이 비어 저장된다 |
+  | `FIREBASE_SERVICE_ACCOUNT_BASE64` (Firebase 서비스 계정 키 JSON을 Base64 한 줄로) | 채팅 앱 푸시(FCM)를 보내지 않는다. 백엔드 시작 로그에 `FCM 서비스 계정 키(FIREBASE_SERVICE_ACCOUNT_BASE64)가 없어 앱 푸시를 보내지 않습니다`가 남는다 |
+  | `TOUR_API_KEY` (한국관광공사 TourAPI 인증키. 공공데이터포털 "국문 관광정보 서비스" 일반 인증키의 **Decoding** 값) | 장소 추천(API-034)이 C014로 실패한다. 백엔드 시작 로그에 `TOUR_API_KEY 가 없어 TourAPI 를 부르지 않습니다`가 남는다 |
 
-- 백엔드 팀원의 로컬 `backend/.env`를 그대로 옮기지 않습니다. `JWT_SECRET`, `ROOM_INVITE_TOKEN_KEY`, DB·Redis 값은 로컬 개발용이고, 서버는 서버에서 만든 값을 씁니다. 옮길 것은 구글 웹 클라이언트 ID, 카카오 네이티브 앱 키, 위 선택 키 3개뿐입니다.
+- 백엔드 팀원의 로컬 `backend/.env`를 그대로 옮기지 않습니다. `JWT_SECRET`, `ROOM_INVITE_TOKEN_KEY`, DB·Redis 값은 로컬 개발용이고, 서버는 서버에서 만든 값을 씁니다. 옮길 것은 구글 웹 클라이언트 ID, 카카오 네이티브 앱 키, 위 선택 키 5개뿐입니다.
 - 비밀 값은 명령 기록에 남지 않게 `read -rs`로 입력합니다.
 
 ```bash
@@ -591,6 +623,62 @@ bash scripts/deploy-backend.sh                    # 마지막에 "[deploy] 성�
 
 - 마지막 확인에서 `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`만 남으면 백엔드는 뜹니다. 파일 업로드만 접근 키를 넣은 뒤에 동작합니다.
 - 같은 변경에 `LOCATION_EVIDENCE_MAX_ACCURACY_METERS`(AR 팁 위치 정확도, `30`)도 넣었습니다. 11/8 백엔드 AR 팁 PR(#64)이 prod 프로필에 기본값 없이 추가하는 값이라, #64가 머지되기 전에 서버에 있어야 합니다. 비밀 값이 아니라 compose에 바로 적었고(TBD: 백엔드 로컬 제안값), `.env`에는 넣을 것이 없습니다.
+
+**초대 링크 앱 연결 지문 (2026-11-12)**
+- 백엔드는 `https://<도메인>/.well-known/assetlinks.json`으로 "이 도메인의 초대 링크를 열어도 되는 앱"을 알려 줍니다. 안드로이드는 앱을 설치할 때 이 주소를 읽고, 앱 서명 지문이 목록에 있을 때만 초대 링크를 앱으로 엽니다. 목록에 없으면 브라우저로 열립니다.
+- 백엔드 기본값에는 개발 빌드용 지문(Expo 템플릿 `debug.keystore`)만 있어서, 배포 키로 서명한 APK에서는 링크가 앱으로 열리지 않았습니다. `docker-compose.yml`의 `ANDROID_APP_SHA256_FINGERPRINTS`에 개발 빌드 지문과 배포 키 지문을 쉼표로 이어 넣었습니다. 비밀 값이 아니라 compose에 바로 적었고, `.env`에는 넣을 것이 없습니다.
+- 서명 키가 바뀌거나 늘면 이 줄에 지문을 더합니다. 지문은 서명한 APK에서 읽습니다.
+
+```bash
+apksigner verify --print-certs <APK 파일> | grep SHA-256   # 64자를 대문자로 바꾸고 두 글자마다 : 를 넣는다
+```
+
+- 반영과 확인(서버):
+
+```bash
+cd ~/yeogirok/infra-src && git pull
+cd infra
+docker compose up -d backend                      # 설정이 바뀐 백엔드만 다시 만들어진다
+curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보이면 끝
+```
+
+- 이미 앱을 설치한 폰은 설치할 때 읽은 결과를 기억합니다. 앱을 다시 설치하거나 `adb shell pm verify-app-links --re-verify com.ssafya109.yeogirok`로 다시 확인시킵니다.
+
+**공식 코스 적재 (2026-11-13, 백엔드 S15P31A109-221)**
+- 투어API 여행코스를 공식 계정의 공개 코스로 넣는 일회성 작업입니다. `COURSE_SEED_ENABLED=true`일 때만 백엔드가 뜬 뒤 한 번 돌고, 값이 없으면 꺼져 있어 아무 일도 하지 않습니다. 비밀 값이 아니고, 평소에는 서버 `.env`에 넣지 않습니다.
+- `docker-compose.yml`이 아래 6개를 넘깁니다. compose 기본값은 백엔드 `application.yaml` 기본값과 같습니다. 그래서 백엔드 PR과 이 변경 중 어느 쪽이 먼저 머지돼도 백엔드는 멈추지 않습니다.
+
+  | 값 | 뜻 | 비우면 |
+  | --- | --- | --- |
+  | `COURSE_SEED_ENABLED` | `true`면 백엔드가 뜬 뒤 한 번 돈다 | 꺼짐 |
+  | `COURSE_SEED_SOURCE` | 적재 파일을 읽을 곳. 서버는 `s3` | `s3` |
+  | `COURSE_SEED_LOCATION` | 사진 버킷(`S3_PHOTO_BUCKET`) 안 접두어. 예: `course-seed/` | 아무것도 하지 않는다 |
+  | `COURSE_SEED_OWNER_USER_ID` | 코스 주인 회원 번호. 회원이 없거나 탈퇴했으면 적재하지 않는다 | 로그인할 수 없는 시스템 계정("한국관광공사 여행코스")을 만들어 쓴다 |
+  | `COURSE_SEED_UNPUBLISH` | 내릴 코스의 contentId. 쉼표로 여러 개, `ALL`이면 공식 코스 전부 | 내리지 않는다 |
+  | `COURSE_SEED_RESEED` | 지우고 다시 넣을 코스의 contentId. 쉼표로 여러 개 | 다시 넣지 않는다 |
+
+- 적재 파일은 백엔드가 S3에 접근하는 권한 그대로 읽습니다. 서버는 위 "파일 저장소"대로 서버 전용 IAM 사용자의 접근 키(`AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`)로 S3에 접근하므로, **켜기 전에 서버 `.env`에 이 키가 있어야 합니다.**
+- 2026-11-13 확인: 서버 `.env`에 이 키가 없었습니다. 키가 없으면 백엔드(AWS SDK)는 Lightsail이 기본으로 붙이는 역할(`AmazonLightsailInstanceRole`)로 S3를 부릅니다. 이 상태에서 매시간 도는 팁 사진·영수증 정리 작업이 14:52·15:52 모두 `… 정리에 실패해 다음 주기에 다시 시도합니다: BusinessException`을 남겼습니다(백엔드는 S3 오류를 이렇게 감싸고, 바로 앞에 `S3 요청에 실패했습니다`를 남긴다). 키를 넣기 전에는 적재도, 앱의 사진·영수증 업로드도 동작하지 않는다고 보고 키부터 넣습니다.
+- `S3_PHOTO_BUCKET`과 `S3_RECEIPT_BUCKET`은 서로 다른 버킷이어야 합니다. 영수증 정리 작업은 영수증 버킷의 오래된 파일을 접두어 없이 모두 지웁니다. 두 버킷이 같으면 `course-seed/`도 같이 지워집니다.
+- **`.env`를 고친 뒤에는 `docker compose up -d backend`로 컨테이너를 새로 만듭니다.** `docker compose restart backend`는 바뀐 `.env`를 읽지 않습니다.
+- **다 돌면 바로 끕니다.** 켜 둔 채로 두면 백엔드가 새로 뜰 때마다 다시 돕니다. Jenkins는 `backend/dev` 머지 때마다 백엔드를 새로 띄웁니다.
+  - 이미 넣은 코스는 건너뛰어서 넣기만 반복될 때는 괜찮습니다.
+  - `UNPUBLISH`·`RESEED`가 남아 있으면 배포 때마다 내렸다가 다시 넣습니다. 그때마다 사진을 새로 올리고 지워진 방이 쌓입니다.
+  - `UNPUBLISH=ALL`이 남아 있으면 그 뒤에 새로 넣은 코스도 다음 배포 때 내려갑니다.
+
+```bash
+cd ~/yeogirok/infra-src/infra
+grep -cE '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)=.+' .env   # 2 여야 한다(0 이면 위 "파일 저장소"대로 키부터 넣는다)
+grep -E '^S3_(PHOTO|RECEIPT)_BUCKET=' .env         # 두 버킷 이름이 달라야 한다
+setenv() { sed -i "/^$1=/d" .env; printf '\n%s=%s\n' "$1" "$2" >> .env; }
+setenv COURSE_SEED_ENABLED true
+setenv COURSE_SEED_LOCATION course-seed/
+docker compose up -d backend
+docker compose logs -f --since 5m backend | grep '공식 코스'   # "공식 코스 적재 끝. 넣음=…" 이 보이면 Ctrl+C
+setenv COURSE_SEED_ENABLED false
+sed -i '/^COURSE_SEED_\(UNPUBLISH\|RESEED\)=/d' .env
+docker compose up -d backend
+```
 
 **외부 키 추가하는 법**
 1. 서버 `.env`에 `KEY=값` 추가
