@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.room.service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,6 +9,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -40,6 +48,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.global.geo.LegalDongResolver;
 
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -55,11 +64,15 @@ import lombok.extern.slf4j.Slf4j;
  *       필요도 켠다), AI 후보마다 recommendation_logs ADD 를 남긴다.</li>
  * </ol>
  * 같은 장소를 새 요청으로 여러 번 담을 수 있고, 한 요청 안에 같은 장소가 두 번 있어도 후보를 두 개 만든다(팀 확정 정책).
- * 중간 항목에서 실패하면 후보·version 은 바뀌지 않는다. 그 전에 새로 만든 places 행은 남지만 다음 담기에 재사용된다.
+ * 추천 기록 확인과 TourAPI 상세 확인(places 에 없는 SEARCH 장소만, 동시에·전체 마감 시간 안에)을 places 행을 만들기 전에
+ * 모두 끝내므로, 확인에 실패하면 places·후보·version 모두 그대로다.
  */
 @Slf4j
 @Service
 public class RoomPlaceAddService {
+
+	/** 검색 담기에서 TourAPI 상세 확인 전체에 쓰는 시간. 추천의 TourAPI 마감 시간(fetch-timeout)과 같다. */
+	static final Duration DETAIL_TIMEOUT = Duration.ofSeconds(8);
 
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
@@ -72,6 +85,8 @@ public class RoomPlaceAddService {
 	private final CategoryNames categoryNames;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
+	/** 검색 담기의 TourAPI 상세 동시 호출용. 호출은 대부분 응답을 기다리는 시간이라 가상 스레드를 쓴다(추천과 같은 방식). */
+	private final ExecutorService detailExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
 	public RoomPlaceAddService(RoomFinder roomFinder, RoomVersions roomVersions,
 		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
@@ -91,6 +106,11 @@ public class RoomPlaceAddService {
 		this.clock = clock;
 	}
 
+	@PreDestroy
+	void shutdown() {
+		detailExecutor.shutdownNow();
+	}
+
 	/** 멱등키는 컨트롤러가 이 밖에서 처리한다. */
 	public RoomPlaceAddResponse add(Long userId, Long roomId, RoomPlaceAddCommand command) {
 		roomFinder.getForMember(roomId, userId);
@@ -106,14 +126,25 @@ public class RoomPlaceAddService {
 			verifiedByItem.add(item.isAi() ? verified.next() : null);
 		}
 
+		// SEARCH 장소는 이미 있는 행을 먼저 찾고, 없는 것만 TourAPI 로 확인한다. 확인을 장소 행을 하나라도 만들기 전에
+		// 끝내므로 확인에 실패하면 아무 행도 남지 않는다.
 		Map<String, Place> places = new HashMap<>();
+		List<String> missing = new ArrayList<>();
+		transactionTemplate.executeWithoutResult(status -> items.stream().filter(item -> !item.isAi())
+			.map(Item::providerPlaceId).distinct().forEach(id -> {
+				Place existing = find(id);
+				if (existing != null) {
+					places.put(id, existing);
+				} else {
+					missing.add(id);
+				}
+			}));
+		Map<String, TourPlace> details = fetchDetails(missing);
+
 		for (int i = 0; i < items.size(); i++) {
 			Verified pick = verifiedByItem.get(i);
-			if (pick != null) {
-				places.computeIfAbsent(pick.place().providerPlaceId(), id -> findOrCreate(pick.place()));
-			} else {
-				places.computeIfAbsent(items.get(i).providerPlaceId(), this::findOrCreateSearched);
-			}
+			String id = items.get(i).providerPlaceId();
+			places.computeIfAbsent(id, key -> findOrCreate(pick != null ? pick.place() : placeOf(details.get(key))));
 		}
 
 		return transactionTemplate.execute(status -> {
@@ -187,25 +218,53 @@ public class RoomPlaceAddService {
 	}
 
 	/**
-	 * 검색 담기. 이미 있는 행이면 TourAPI 를 부르지 않는다. 없으면 TourAPI 상세로 장소가 실제로 있는지 확인하고 그 정보로 만든다.
-	 * 없는 콘텐츠(또는 좌표 없음)면 C003, TourAPI 를 쓰지 못하면 P003.
+	 * 검색 담기에서 places 에 없는 장소를 TourAPI 상세로 확인한다. 동시에 부르고 전체를 {@link #DETAIL_TIMEOUT} 안에 끝낸다
+	 * (항목이 많아도 요청 하나가 호출 수만큼 길어지지 않게).
+	 * 없는 콘텐츠(좌표 없음·TourAPI 가 파라미터 오류로 거절한 ID 포함)면 C003, 실패·시간 초과면 P003.
 	 */
-	private Place findOrCreateSearched(String providerPlaceId) {
-		Place existing = transactionTemplate.execute(status -> find(providerPlaceId));
-		if (existing != null) {
-			return existing;
+	private Map<String, TourPlace> fetchDetails(List<String> contentIds) {
+		if (contentIds.isEmpty()) {
+			return Map.of();
 		}
-		TourPlace detail;
+		List<Future<Optional<TourPlace>>> futures = contentIds.stream()
+			.map(id -> detailExecutor.submit(() -> tourApiClient.detail(id))).toList();
+		long deadline = System.nanoTime() + DETAIL_TIMEOUT.toNanos();
+		Map<String, TourPlace> details = new HashMap<>();
 		try {
-			detail = tourApiClient.detail(providerPlaceId).orElseThrow(() -> new BusinessException(
-				ExceptionType.NOT_ALLOWED_VALUE, "items.placeRef.providerPlaceId: 담을 수 있는 투어API 장소가 아닙니다."));
-		} catch (TourApiException e) {
-			log.warn("검색 담기 중 TourAPI 를 쓰지 못했습니다: {}", e.getMessage());
+			for (int i = 0; i < contentIds.size(); i++) {
+				Optional<TourPlace> detail = futures.get(i)
+					.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+				details.put(contentIds.get(i), detail.orElseThrow(RoomPlaceAddService::notSearchable));
+			}
+			return details;
+		} catch (ExecutionException e) {
+			if (e.getCause() instanceof TourApiException tourApiException && tourApiException.isInvalidRequest()) {
+				throw notSearchable();
+			}
+			log.warn("검색 담기 중 TourAPI 를 쓰지 못했습니다: {}", e.getCause().getMessage());
 			throw new BusinessException(ExceptionType.PLACE_PROVIDER_UNAVAILABLE);
+		} catch (TimeoutException e) {
+			log.warn("검색 담기 중 TourAPI 상세 조회 시간 초과({}곳)", contentIds.size());
+			throw new BusinessException(ExceptionType.PLACE_PROVIDER_UNAVAILABLE);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new BusinessException(ExceptionType.PLACE_PROVIDER_UNAVAILABLE);
+		} finally {
+			// 하나라도 실패하면 남은 호출은 필요 없다. 끝난 호출에는 아무 일도 하지 않는다.
+			futures.forEach(future -> future.cancel(true));
 		}
-		return findOrCreate(new RecommendedPlace(PlaceProvider.TOUR_API.name(), detail.contentId(), detail.title(),
+	}
+
+	private static BusinessException notSearchable() {
+		return new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
+			"items.placeRef.providerPlaceId: 담을 수 있는 투어API 장소가 아닙니다.");
+	}
+
+	/** TourAPI 상세를 장소 만들기 입력(추천 결과와 같은 모양)으로. */
+	private static RecommendedPlace placeOf(TourPlace detail) {
+		return new RecommendedPlace(PlaceProvider.TOUR_API.name(), detail.contentId(), detail.title(),
 			detail.latitude(), detail.longitude(), detail.address(), detail.categoryCode(), detail.imageUrl(),
-			detail.imageAttribution()));
+			detail.imageAttribution());
 	}
 
 	private Place find(String providerPlaceId) {

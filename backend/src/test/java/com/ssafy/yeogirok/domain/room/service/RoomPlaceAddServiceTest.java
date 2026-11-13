@@ -375,4 +375,38 @@ class RoomPlaceAddServiceTest {
 		assertThat(roomVersion()).isEqualTo(before);
 		assertThat(placeRows(missing)).isZero();
 	}
+
+	@Test
+	void TourAPI_가_콘텐츠_ID_를_파라미터_오류로_거절하면_C003() {
+		tourApi.willRejectSearch();
+
+		assertError(() -> addService.add(owner, roomId, new RoomPlaceAddCommand(List.of(
+			RoomPlaceAddCommand.Item.search("not-a-content-id")))), ExceptionType.NOT_ALLOWED_VALUE);
+	}
+
+	@Test
+	void 검색_장소_확인이_실패하면_같이_보낸_추천_장소의_행도_만들지_않는다() {
+		PlaceRecommendationResponse recommended = recommend(owner, roomId);
+		String missing = String.valueOf(nextContentId++);
+
+		assertError(() -> addService.add(owner, roomId, new RoomPlaceAddCommand(List.of(
+			RoomPlaceAddCommand.Item.ai(cafe, recommended.recommendationRequestId(), 1),
+			RoomPlaceAddCommand.Item.search(missing)))), ExceptionType.NOT_ALLOWED_VALUE);
+
+		assertThat(placeRows(cafe)).isZero();
+	}
+
+	@Test
+	void 없는_검색_장소의_상세는_한_번에_동시에_확인한다() {
+		TourPlace first = beach();
+		TourPlace second = beach();
+		tourApi.willDetail(first);
+		tourApi.willDetail(second);
+
+		addService.add(owner, roomId, new RoomPlaceAddCommand(List.of(RoomPlaceAddCommand.Item.search(first.contentId()),
+			RoomPlaceAddCommand.Item.search(second.contentId()), RoomPlaceAddCommand.Item.search(first.contentId()))));
+
+		// 같은 ID 는 한 번만 확인한다.
+		assertThat(tourApi.detailCalls()).containsExactlyInAnyOrder(first.contentId(), second.contentId());
+	}
 }
