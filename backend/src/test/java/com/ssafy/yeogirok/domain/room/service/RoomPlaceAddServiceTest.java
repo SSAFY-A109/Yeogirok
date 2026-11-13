@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -51,6 +52,7 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.CommittedRoomData;
 import com.ssafy.yeogirok.support.FakeTourApiClient;
+import com.ssafy.yeogirok.support.FixedLegalDongResolver;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestUsers;
 
@@ -89,6 +91,8 @@ class RoomPlaceAddServiceTest {
 	MutableClock clock;
 	@Autowired
 	ApplicationEvents events;
+	@Autowired
+	FixedLegalDongResolver legalDongResolver;
 
 	Long owner;
 	Long friend;
@@ -109,6 +113,8 @@ class RoomPlaceAddServiceTest {
 	void setUp() {
 		clock.set(NOW);
 		tourApi.reset();
+		legalDongResolver.willReturn(LEGAL_DONG);
+		addService.externalTimeout(RoomPlaceAddService.DEFAULT_EXTERNAL_TIMEOUT);
 		owner = newUserId();
 		friend = newUserId();
 		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), owner, friend));
@@ -124,6 +130,8 @@ class RoomPlaceAddServiceTest {
 
 	@AfterEach
 	void tearDown() {
+		addService.externalTimeout(RoomPlaceAddService.DEFAULT_EXTERNAL_TIMEOUT);
+		legalDongResolver.willReturn(LEGAL_DONG);
 		CommittedRoomData.delete(new JdbcTemplate(dataSource), createdUsers);
 	}
 
@@ -408,5 +416,38 @@ class RoomPlaceAddServiceTest {
 
 		// 같은 ID 는 한 번만 확인한다.
 		assertThat(tourApi.detailCalls()).containsExactlyInAnyOrder(first.contentId(), second.contentId());
+	}
+
+	@Test
+	void 상세_확인이_마감_시간을_넘기면_P003_이고_아무것도_만들지_않는다() {
+		TourPlace beach = beach();
+		tourApi.willDetail(beach);
+		tourApi.willDelayDetail(Duration.ofSeconds(5));
+		addService.externalTimeout(Duration.ofMillis(200));
+		int before = roomVersion();
+
+		long started = System.nanoTime();
+		assertError(() -> addService.add(owner, roomId, new RoomPlaceAddCommand(List.of(
+			RoomPlaceAddCommand.Item.search(beach.contentId())))), ExceptionType.PLACE_PROVIDER_UNAVAILABLE);
+
+		assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(3));
+		assertThat(roomVersion()).isEqualTo(before);
+		assertThat(placeRows(beach.contentId())).isZero();
+	}
+
+	@Test
+	void 법정동을_마감_시간_안에_못_찾으면_비워_두고_담는다() {
+		TourPlace beach = beach();
+		tourApi.willDetail(beach);
+		legalDongResolver.willDelay(Duration.ofSeconds(5));
+		addService.externalTimeout(Duration.ofMillis(300));
+
+		long started = System.nanoTime();
+		RoomPlaceAddResponse response = addService.add(owner, roomId, new RoomPlaceAddCommand(List.of(
+			RoomPlaceAddCommand.Item.search(beach.contentId()))));
+
+		assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(3));
+		assertThat(response.added().getFirst().place().regionCode()).isNull();
+		assertThat(response.added().getFirst().place().regionName()).isNull();
 	}
 }

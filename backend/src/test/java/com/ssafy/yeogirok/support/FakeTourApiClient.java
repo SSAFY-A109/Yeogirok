@@ -30,6 +30,7 @@ public class FakeTourApiClient implements TourApiClient {
 	private final Map<String, TourPlace> details = new ConcurrentHashMap<>();
 	private final List<String> detailCalls = new CopyOnWriteArrayList<>();
 	private volatile TourApiException searchFailure;
+	private volatile Duration detailDelay = Duration.ZERO;
 
 	public void willReturn(String classification, TourPlace... places) {
 		results.put(classification, List.of(places));
@@ -74,6 +75,7 @@ public class FakeTourApiClient implements TourApiClient {
 		details.clear();
 		detailCalls.clear();
 		searchFailure = null;
+		detailDelay = Duration.ZERO;
 	}
 
 	public List<TourAreaQuery> calls() {
@@ -117,9 +119,22 @@ public class FakeTourApiClient implements TourApiClient {
 		return keywordResults.getOrDefault(query.keyword(), new TourSearchPage(List.of(), 0));
 	}
 
+	/** 상세 조회가 응답 전에 기다린다(마감 시간 확인용). */
+	public void willDelayDetail(Duration delay) {
+		detailDelay = delay;
+	}
+
 	@Override
 	public Optional<TourPlace> detail(String contentId) {
 		detailCalls.add(contentId);
+		if (!detailDelay.isZero()) {
+			try {
+				Thread.sleep(detailDelay);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new TourApiException("가짜 호출 중단");
+			}
+		}
 		if (searchFailure != null) {
 			throw searchFailure;
 		}

@@ -5,15 +5,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -58,21 +62,27 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>참여 확인 → AI 항목은 추천 기록 확인(이 방의 추천 결과에 그 순위·장소가 있었는지). 틀리면 아무것도 바꾸지 않고 C003</li>
  *   <li>장소: 같은 투어API 장소는 places 한 행을 재사용한다. 없으면 AI 는 추천 결과에 저장된 정보로, SEARCH 는 TourAPI 상세로
  *       확인한 정보로 만든다(TourAPI 에 없으면 C003, 부르지 못하면 P003). 법정동 코드·이름은 직접 추가(API-031)와 같은 단위로
- *       좌표에서 찾는다(외부 호출이라 트랜잭션·잠금 밖). 두 요청이 동시에 처음 만들면 한쪽이
+ *       좌표에서 찾고, 시간 안에 못 찾으면 비워 둔다. 두 요청이 동시에 처음 만들면 한쪽이
  *       UNIQUE(provider, provider_place_id)에 걸리므로 새 트랜잭션에서 먼저 만든 행을 다시 읽는다.</li>
  *   <li>방 행을 잠그고 참여를 다시 확인한 뒤 후보를 요청 순서대로 만들고, 여행방 version 을 1 올리고(확정 일정이 있으면 재계산
  *       필요도 켠다), AI 후보마다 recommendation_logs ADD 를 남긴다.</li>
  * </ol>
  * 같은 장소를 새 요청으로 여러 번 담을 수 있고, 한 요청 안에 같은 장소가 두 번 있어도 후보를 두 개 만든다(팀 확정 정책).
- * 추천 기록 확인과 TourAPI 상세 확인(places 에 없는 SEARCH 장소만, 동시에·전체 마감 시간 안에)을 places 행을 만들기 전에
- * 모두 끝내므로, 확인에 실패하면 places·후보·version 모두 그대로다.
+ *
+ * <p>외부 호출(TourAPI 상세·법정동 조회)은 트랜잭션·잠금 밖에서 동시에 하고, 둘을 합쳐 {@link #DEFAULT_EXTERNAL_TIMEOUT} 안에
+ * 끝낸다. 항목이 50개여도 요청이 멱등키 '처리 중' 표시 수명(30초)을 넘지 않게 하려는 것이다. 동시 호출 수는 서비스 전체에서
+ * {@link #MAX_CONCURRENT_CALLS} 개로 묶어 외부 API 호출 제한에 걸리지 않게 한다. 시간 초과로 취소한 호출이 응답을 기다리며 남아
+ * 있어도 끝날 때까지 자리를 차지하므로, 남은 호출이 쌓여 외부로 나가는 연결이 늘지는 않는다.
+ * TourAPI 확인은 places 행을 만들기 전에 모두 끝내므로, 확인에 실패하면 places·후보·version 모두 그대로다.
  */
 @Slf4j
 @Service
 public class RoomPlaceAddService {
 
-	/** 검색 담기에서 TourAPI 상세 확인 전체에 쓰는 시간. 추천의 TourAPI 마감 시간(fetch-timeout)과 같다. */
-	static final Duration DETAIL_TIMEOUT = Duration.ofSeconds(8);
+	/** 외부 호출 전체 마감 시간. 멱등키 '처리 중' 표시 수명(30초)보다 충분히 짧게 둔다. */
+	static final Duration DEFAULT_EXTERNAL_TIMEOUT = Duration.ofSeconds(15);
+	/** 서비스 전체에서 동시에 나가는 외부 호출 수. */
+	static final int MAX_CONCURRENT_CALLS = 8;
 
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
@@ -85,8 +95,10 @@ public class RoomPlaceAddService {
 	private final CategoryNames categoryNames;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
-	/** 검색 담기의 TourAPI 상세 동시 호출용. 호출은 대부분 응답을 기다리는 시간이라 가상 스레드를 쓴다(추천과 같은 방식). */
-	private final ExecutorService detailExecutor = Executors.newVirtualThreadPerTaskExecutor();
+	/** 외부 동시 호출용. 호출은 대부분 응답을 기다리는 시간이라 가상 스레드를 쓴다(추천과 같은 방식). */
+	private final ExecutorService externalExecutor = Executors.newVirtualThreadPerTaskExecutor();
+	private final Semaphore externalCalls = new Semaphore(MAX_CONCURRENT_CALLS);
+	private Duration externalTimeout = DEFAULT_EXTERNAL_TIMEOUT;
 
 	public RoomPlaceAddService(RoomFinder roomFinder, RoomVersions roomVersions,
 		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
@@ -108,7 +120,12 @@ public class RoomPlaceAddService {
 
 	@PreDestroy
 	void shutdown() {
-		detailExecutor.shutdownNow();
+		externalExecutor.shutdownNow();
+	}
+
+	/** 테스트가 시간 초과를 짧게 확인할 때만 바꾼다. */
+	void externalTimeout(Duration timeout) {
+		this.externalTimeout = timeout;
 	}
 
 	/** 멱등키는 컨트롤러가 이 밖에서 처리한다. */
@@ -126,26 +143,7 @@ public class RoomPlaceAddService {
 			verifiedByItem.add(item.isAi() ? verified.next() : null);
 		}
 
-		// SEARCH 장소는 이미 있는 행을 먼저 찾고, 없는 것만 TourAPI 로 확인한다. 확인을 장소 행을 하나라도 만들기 전에
-		// 끝내므로 확인에 실패하면 아무 행도 남지 않는다.
-		Map<String, Place> places = new HashMap<>();
-		List<String> missing = new ArrayList<>();
-		transactionTemplate.executeWithoutResult(status -> items.stream().filter(item -> !item.isAi())
-			.map(Item::providerPlaceId).distinct().forEach(id -> {
-				Place existing = find(id);
-				if (existing != null) {
-					places.put(id, existing);
-				} else {
-					missing.add(id);
-				}
-			}));
-		Map<String, TourPlace> details = fetchDetails(missing);
-
-		for (int i = 0; i < items.size(); i++) {
-			Verified pick = verifiedByItem.get(i);
-			String id = items.get(i).providerPlaceId();
-			places.computeIfAbsent(id, key -> findOrCreate(pick != null ? pick.place() : placeOf(details.get(key))));
-		}
+		Map<String, Place> places = preparePlaces(items, verifiedByItem);
 
 		return transactionTemplate.execute(status -> {
 			TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
@@ -195,13 +193,51 @@ public class RoomPlaceAddService {
 		return added.stream().map(roomPlace -> RoomPlaceResponse.from(roomPlace, names)).toList();
 	}
 
-	/** 있으면 그 행(값을 고치지 않는다), 없으면 추천 결과의 정보로 만든다. 법정동 조회는 새로 만들 때만 한다. */
-	private Place findOrCreate(RecommendedPlace recommended) {
-		Place existing = transactionTemplate.execute(status -> find(recommended.providerPlaceId()));
-		if (existing != null) {
-			return existing;
+	/**
+	 * 항목마다 연결할 places 행(providerPlaceId → 행). 있는 행은 고치지 않고 쓴다. 없는 장소는 외부 확인을 모두 끝낸 뒤 만든다.
+	 * <ol>
+	 *   <li>이미 있는 행 찾기(DB)</li>
+	 *   <li>없는 SEARCH 장소의 TourAPI 상세(동시). 하나라도 실패하면 아무것도 만들지 않고 C003·P003</li>
+	 *   <li>새로 만들 장소의 법정동(동시). 시간 안에 못 찾으면 비워 둔다</li>
+	 *   <li>장소 행 만들기(DB)</li>
+	 * </ol>
+	 * 2·3 은 같은 마감 시각을 쓴다.
+	 */
+	private Map<String, Place> preparePlaces(List<Item> items, List<Verified> verifiedByItem) {
+		long deadline = System.nanoTime() + externalTimeout.toNanos();
+		Map<String, Place> places = new HashMap<>();
+		transactionTemplate.executeWithoutResult(status -> items.stream().map(Item::providerPlaceId).distinct()
+			.forEach(id -> {
+				Place existing = find(id);
+				if (existing != null) {
+					places.put(id, existing);
+				}
+			}));
+
+		// 새로 만들 장소의 정보. AI 는 추천 결과에 저장된 정보가 있어 TourAPI 를 부르지 않는다.
+		Map<String, RecommendedPlace> sources = new LinkedHashMap<>();
+		List<String> searchIds = new ArrayList<>();
+		for (int i = 0; i < items.size(); i++) {
+			String id = items.get(i).providerPlaceId();
+			Verified pick = verifiedByItem.get(i);
+			if (places.containsKey(id) || sources.containsKey(id)) {
+				continue;
+			}
+			if (pick != null) {
+				sources.put(id, pick.place());
+			} else if (!searchIds.contains(id)) {
+				searchIds.add(id);
+			}
 		}
-		LegalDong legalDong = legalDongResolver.resolve(recommended.latitude(), recommended.longitude());
+		fetchDetails(searchIds, deadline).forEach((id, detail) -> sources.putIfAbsent(id, placeOf(detail)));
+
+		Map<String, LegalDong> legalDongs = resolveLegalDongs(sources.values(), deadline);
+		sources.forEach((id, source) -> places.put(id, create(source, legalDongs.get(id))));
+		return places;
+	}
+
+	/** 만든다. 그사이 다른 요청이 같은 장소를 먼저 만들었으면 그 행을 쓴다. */
+	private Place create(RecommendedPlace recommended, LegalDong legalDong) {
 		try {
 			return transactionTemplate.execute(status -> {
 				Place found = find(recommended.providerPlaceId());
@@ -218,22 +254,19 @@ public class RoomPlaceAddService {
 	}
 
 	/**
-	 * 검색 담기에서 places 에 없는 장소를 TourAPI 상세로 확인한다. 동시에 부르고 전체를 {@link #DETAIL_TIMEOUT} 안에 끝낸다
-	 * (항목이 많아도 요청 하나가 호출 수만큼 길어지지 않게).
+	 * 검색 담기에서 places 에 없는 장소를 TourAPI 상세로 확인한다(동시, 마감 시각까지).
 	 * 없는 콘텐츠(좌표 없음·TourAPI 가 파라미터 오류로 거절한 ID 포함)면 C003, 실패·시간 초과면 P003.
 	 */
-	private Map<String, TourPlace> fetchDetails(List<String> contentIds) {
+	private Map<String, TourPlace> fetchDetails(List<String> contentIds, long deadline) {
 		if (contentIds.isEmpty()) {
 			return Map.of();
 		}
 		List<Future<Optional<TourPlace>>> futures = contentIds.stream()
-			.map(id -> detailExecutor.submit(() -> tourApiClient.detail(id))).toList();
-		long deadline = System.nanoTime() + DETAIL_TIMEOUT.toNanos();
-		Map<String, TourPlace> details = new HashMap<>();
+			.map(id -> submit(() -> tourApiClient.detail(id))).toList();
+		Map<String, TourPlace> details = new LinkedHashMap<>();
 		try {
 			for (int i = 0; i < contentIds.size(); i++) {
-				Optional<TourPlace> detail = futures.get(i)
-					.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+				Optional<TourPlace> detail = futures.get(i).get(remaining(deadline), TimeUnit.NANOSECONDS);
 				details.put(contentIds.get(i), detail.orElseThrow(RoomPlaceAddService::notSearchable));
 			}
 			return details;
@@ -253,6 +286,53 @@ public class RoomPlaceAddService {
 			// 하나라도 실패하면 남은 호출은 필요 없다. 끝난 호출에는 아무 일도 하지 않는다.
 			futures.forEach(future -> future.cancel(true));
 		}
+	}
+
+	/**
+	 * 새로 만들 장소의 법정동(동시, 마감 시각까지). 법정동은 판정 못 해도 저장하는 값이라(직접 추가와 같다) 실패·시간 초과는
+	 * 오류로 만들지 않고 {@link LegalDong#EMPTY} 로 둔다.
+	 */
+	private Map<String, LegalDong> resolveLegalDongs(Collection<RecommendedPlace> sources, long deadline) {
+		Map<String, Future<LegalDong>> futures = new LinkedHashMap<>();
+		sources.forEach(source -> futures.put(source.providerPlaceId(),
+			submit(() -> legalDongResolver.resolve(source.latitude(), source.longitude()))));
+		Map<String, LegalDong> legalDongs = new HashMap<>();
+		try {
+			for (Map.Entry<String, Future<LegalDong>> entry : futures.entrySet()) {
+				legalDongs.put(entry.getKey(), awaitLegalDong(entry.getKey(), entry.getValue(), deadline));
+			}
+			return legalDongs;
+		} finally {
+			futures.values().forEach(future -> future.cancel(true));
+		}
+	}
+
+	private static LegalDong awaitLegalDong(String providerPlaceId, Future<LegalDong> future, long deadline) {
+		try {
+			return future.get(remaining(deadline), TimeUnit.NANOSECONDS);
+		} catch (TimeoutException | ExecutionException e) {
+			log.warn("담을 장소의 법정동을 시간 안에 찾지 못해 비워 둡니다. providerPlaceId={}", providerPlaceId);
+			return LegalDong.EMPTY;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new BusinessException(ExceptionType.SERVER_ERROR, "장소 정보 확인이 중단되었습니다.");
+		}
+	}
+
+	/** 동시 호출 수({@link #MAX_CONCURRENT_CALLS})를 지키며 외부 호출을 맡긴다. 자리는 호출이 실제로 끝나야 돌려준다. */
+	private <T> Future<T> submit(Callable<T> call) {
+		return externalExecutor.submit(() -> {
+			externalCalls.acquire();
+			try {
+				return call.call();
+			} finally {
+				externalCalls.release();
+			}
+		});
+	}
+
+	private static long remaining(long deadline) {
+		return Math.max(0, deadline - System.nanoTime());
 	}
 
 	private static BusinessException notSearchable() {
