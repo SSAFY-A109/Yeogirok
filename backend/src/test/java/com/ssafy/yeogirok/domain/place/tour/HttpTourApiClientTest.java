@@ -117,7 +117,8 @@ class HttpTourApiClientTest {
 			""", MediaType.APPLICATION_JSON));
 
 		assertThatThrownBy(() -> client.areaBasedList(CAFE_IN_GANGNEUNG)).isInstanceOf(TourApiException.class)
-			.hasMessageContaining("10");
+			.hasMessageContaining("10")
+			.satisfies(e -> assertThat(((TourApiException) e).isInvalidRequest()).isTrue());
 	}
 
 	@Test

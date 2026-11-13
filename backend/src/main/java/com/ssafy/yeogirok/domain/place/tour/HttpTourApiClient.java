@@ -142,7 +142,7 @@ public class HttpTourApiClient implements TourApiClient {
 		JsonNode header = path(response, "response", "header");
 		String resultCode = text(header, "resultCode");
 		if (!SUCCESS_CODE.equals(resultCode)) {
-			throw new TourApiException("TourAPI 오류 응답: " + resultCode + " " + text(header, "resultMsg"));
+			throw new TourApiException("TourAPI 오류 응답: " + resultCode + " " + text(header, "resultMsg"), resultCode);
 		}
 		return path(response, "response", "body");
 	}

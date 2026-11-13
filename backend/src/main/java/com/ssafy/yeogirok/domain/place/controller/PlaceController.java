@@ -26,7 +26,7 @@ public class PlaceController {
 	public ResponseEntity<ApiResponseBody<PlaceSearchResponse>> search(
 		@Parameter(description = "검색어(앞뒤 공백 제외 1~100자)") @RequestParam(required = false) String q,
 		@Parameter(description = "법정동 시·도 2자리 또는 시·군·구 5자리") @RequestParam(required = false) String regionCode,
-		@Parameter(description = "다음 쪽 커서. 같은 limit 로 이어 받는다") @RequestParam(required = false) String cursor,
+		@Parameter(description = "다음 쪽 커서. 받은 때와 같은 limit 로 보낸다(다르면 C006)") @RequestParam(required = false) String cursor,
 		@Parameter(description = "한 쪽 개수. 기본 20, 최대 50") @RequestParam(required = false) Integer limit) {
 		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
 			placeSearchService.search(q, regionCode, cursor, limit)));

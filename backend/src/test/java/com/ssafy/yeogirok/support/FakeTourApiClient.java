@@ -29,7 +29,7 @@ public class FakeTourApiClient implements TourApiClient {
 	private final List<TourKeywordQuery> keywordCalls = new CopyOnWriteArrayList<>();
 	private final Map<String, TourPlace> details = new ConcurrentHashMap<>();
 	private final List<String> detailCalls = new CopyOnWriteArrayList<>();
-	private volatile boolean searchFailing;
+	private volatile TourApiException searchFailure;
 
 	public void willReturn(String classification, TourPlace... places) {
 		results.put(classification, List.of(places));
@@ -56,7 +56,12 @@ public class FakeTourApiClient implements TourApiClient {
 
 	/** 키워드 검색·상세 조회가 모두 실패한다. */
 	public void willFailSearch() {
-		searchFailing = true;
+		searchFailure = new TourApiException("가짜 실패");
+	}
+
+	/** 키워드 검색·상세 조회를 TourAPI 가 파라미터 오류(결과 코드 10)로 거절한다. */
+	public void willRejectSearch() {
+		searchFailure = new TourApiException("가짜 파라미터 오류", "10");
 	}
 
 	public void reset() {
@@ -68,7 +73,7 @@ public class FakeTourApiClient implements TourApiClient {
 		keywordCalls.clear();
 		details.clear();
 		detailCalls.clear();
-		searchFailing = false;
+		searchFailure = null;
 	}
 
 	public List<TourAreaQuery> calls() {
@@ -106,8 +111,8 @@ public class FakeTourApiClient implements TourApiClient {
 	@Override
 	public TourSearchPage searchKeyword(TourKeywordQuery query) {
 		keywordCalls.add(query);
-		if (searchFailing) {
-			throw new TourApiException("가짜 실패");
+		if (searchFailure != null) {
+			throw searchFailure;
 		}
 		return keywordResults.getOrDefault(query.keyword(), new TourSearchPage(List.of(), 0));
 	}
@@ -115,8 +120,8 @@ public class FakeTourApiClient implements TourApiClient {
 	@Override
 	public Optional<TourPlace> detail(String contentId) {
 		detailCalls.add(contentId);
-		if (searchFailing) {
-			throw new TourApiException("가짜 실패");
+		if (searchFailure != null) {
+			throw searchFailure;
 		}
 		return Optional.ofNullable(details.get(contentId));
 	}

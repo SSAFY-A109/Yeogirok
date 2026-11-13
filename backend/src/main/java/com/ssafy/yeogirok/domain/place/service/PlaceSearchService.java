@@ -24,9 +24,9 @@ import lombok.extern.slf4j.Slf4j;
  * <ul>
  *   <li>q: 필수. 앞뒤 공백을 빼고 1~{@value #QUERY_MAX_LENGTH}자가 아니면 P002</li>
  *   <li>regionCode: 선택. 법정동 시·도 2자리 또는 시·군·구 5자리 숫자(코스 검색 API-014 와 같은 단위)가 아니면 P002</li>
- *   <li>cursor: base64url("{다음 쪽 번호}"). 해석할 수 없으면 C006. 쪽 크기는 limit 로 정하므로 같은 limit 로 이어 받는다</li>
+ *   <li>cursor: base64url("{다음 쪽 번호}:{쪽 크기}"). 해석할 수 없거나 지금 limit 과 쪽 크기가 다르면 C006</li>
  *   <li>limit: 기본 20, 1~50 밖이면 C007</li>
- *   <li>TourAPI 실패(키 없음 포함)는 P003</li>
+ *   <li>TourAPI 가 검색 조건을 파라미터 오류로 거절하면 P002, 그 밖의 실패(키 없음 포함)는 P003</li>
  * </ul>
  * 좌표가 없는 항목은 담을 수 없어 빼므로 한 쪽이 limit 보다 적을 수 있다. totalCount 는 TourAPI 값 그대로다.
  */
@@ -44,7 +44,7 @@ public class PlaceSearchService {
 		String keyword = keyword(q);
 		checkRegionCode(regionCode);
 		int size = PageSize.resolve(limit);
-		int pageNo = decodePage(cursor);
+		int pageNo = decodePage(cursor, size);
 
 		TourSearchPage page;
 		try {
@@ -53,12 +53,17 @@ public class PlaceSearchService {
 				regionCode == null || regionCode.length() == 2 ? null : regionCode.substring(2),
 				pageNo, size));
 		} catch (TourApiException e) {
+			if (e.isInvalidRequest()) {
+				// 검색 조건(특수문자 섞인 검색어 등)을 TourAPI 가 받지 않았다. 다시 시도해도 같으므로 장애(P003)가 아니라 조건 오류다.
+				throw new BusinessException(ExceptionType.PLACE_SEARCH_CONDITION_INVALID,
+					"q·regionCode: 장소 정보 공급자가 받지 않는 검색 조건입니다.");
+			}
 			log.warn("장소 검색 중 TourAPI 를 쓰지 못했습니다: {}", e.getMessage());
 			throw new BusinessException(ExceptionType.PLACE_PROVIDER_UNAVAILABLE);
 		}
 		boolean hasNext = (long) pageNo * size < page.totalCount();
 		return new PlaceSearchResponse(page.places().stream().map(PlaceSearchResponse.Item::from).toList(),
-			hasNext ? encodePage(pageNo + 1) : null, page.totalCount());
+			hasNext ? encodePage(pageNo + 1, size) : null, page.totalCount());
 	}
 
 	private static String keyword(String q) {
@@ -77,19 +82,26 @@ public class PlaceSearchService {
 		}
 	}
 
-	static String encodePage(int pageNo) {
+	static String encodePage(int pageNo, int size) {
 		return Base64.getUrlEncoder().withoutPadding()
-			.encodeToString(Integer.toString(pageNo).getBytes(StandardCharsets.UTF_8));
+			.encodeToString((pageNo + ":" + size).getBytes(StandardCharsets.UTF_8));
 	}
 
-	/** 없으면 첫 쪽(1). */
-	private static int decodePage(String cursor) {
+	/**
+	 * 없으면 첫 쪽(1). TourAPI 는 쪽 번호×쪽 크기로 자르므로, 커서를 만든 쪽 크기와 지금 limit 이 다르면 결과가 빠지거나 겹친다.
+	 * 그래서 쪽 크기가 다른 커서는 C006 이다.
+	 */
+	private static int decodePage(String cursor, int size) {
 		if (cursor == null) {
 			return 1;
 		}
 		try {
-			int pageNo = Integer.parseInt(new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8));
-			if (pageNo < 2) {
+			String[] parts = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).split(":", -1);
+			if (parts.length != 2) {
+				throw new BusinessException(ExceptionType.INVALID_CURSOR);
+			}
+			int pageNo = Integer.parseInt(parts[0]);
+			if (pageNo < 2 || Integer.parseInt(parts[1]) != size) {
 				throw new BusinessException(ExceptionType.INVALID_CURSOR);
 			}
 			return pageNo;

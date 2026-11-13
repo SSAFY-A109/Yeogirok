@@ -46,7 +46,7 @@ class PlaceSearchServiceTest {
 			new PlaceSearchResponse.Item(PlaceProvider.TOUR_API, "7", "경포 어딘가", new BigDecimal("37.8"),
 				new BigDecimal("128.9"), null, null, null, null));
 		assertThat(response.totalCount()).isEqualTo(45);
-		assertThat(response.nextCursor()).isEqualTo(PlaceSearchService.encodePage(2));
+		assertThat(response.nextCursor()).isEqualTo(PlaceSearchService.encodePage(2, 20));
 		assertThat(tourApi.keywordCalls()).containsExactly(new TourKeywordQuery("경포", null, null, 1, 20));
 	}
 
@@ -54,11 +54,11 @@ class PlaceSearchServiceTest {
 	void 커서로_다음_쪽을_받고_마지막_쪽이면_커서가_없다() {
 		tourApi.willFind("경포", 45, BEACH);
 
-		PlaceSearchResponse third = service.search("경포", null, PlaceSearchService.encodePage(3), 20);
-		PlaceSearchResponse second = service.search("경포", null, PlaceSearchService.encodePage(2), 20);
+		PlaceSearchResponse third = service.search("경포", null, PlaceSearchService.encodePage(3, 20), 20);
+		PlaceSearchResponse second = service.search("경포", null, PlaceSearchService.encodePage(2, 20), 20);
 
 		assertThat(third.nextCursor()).isNull();
-		assertThat(second.nextCursor()).isEqualTo(PlaceSearchService.encodePage(3));
+		assertThat(second.nextCursor()).isEqualTo(PlaceSearchService.encodePage(3, 20));
 		assertThat(tourApi.keywordCalls()).extracting(TourKeywordQuery::pageNo).containsExactly(3, 2);
 	}
 
@@ -102,11 +102,28 @@ class PlaceSearchServiceTest {
 		assertThat(tourApi.keywordCalls()).isEmpty();
 	}
 
-	/** YWJj 는 "abc", MQ 는 "1"(첫 쪽은 커서 없이 받는다), MA 는 "0". */
+	/** YWJj 는 "abc", Mg 는 "2"(쪽 크기 없음), Mjp4 는 "2:x", MToyMA 는 "1:20"(첫 쪽은 커서 없이 받는다). */
 	@ParameterizedTest
-	@ValueSource(strings = {"!!", "YWJj", "MQ", "MA"})
+	@ValueSource(strings = {"!!", "YWJj", "Mg", "Mjp4", "MToyMA"})
 	void 해석할_수_없는_커서는_C006(String cursor) {
 		assertError(() -> service.search("카페", null, cursor, null), ExceptionType.INVALID_CURSOR);
+		assertThat(tourApi.keywordCalls()).isEmpty();
+	}
+
+	@Test
+	void 커서를_만든_때와_limit_이_다르면_C006() {
+		String cursor = PlaceSearchService.encodePage(2, 20);
+
+		assertError(() -> service.search("카페", null, cursor, 50), ExceptionType.INVALID_CURSOR);
+		service.search("카페", null, cursor, null);
+		assertThat(tourApi.keywordCalls()).containsExactly(new TourKeywordQuery("카페", null, null, 2, 20));
+	}
+
+	@Test
+	void TourAPI_가_검색_조건을_파라미터_오류로_거절하면_P002() {
+		tourApi.willRejectSearch();
+
+		assertError(() -> service.search("카페%%", null, null, null), ExceptionType.PLACE_SEARCH_CONDITION_INVALID);
 	}
 
 	@ParameterizedTest
