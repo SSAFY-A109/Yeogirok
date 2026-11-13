@@ -123,6 +123,17 @@ class PopularPlaceServiceTest {
 		assertThat(rows(popular(null))).containsExactly(Tuple.tuple(1, "투어 126508", 2L));
 	}
 
+	/** S15P31A109-224: 작성자가 자기 코스를 원본 기록의 방으로 가져온 것은 인기 장소에 세지 않는다. */
+	@Test
+	void 원본_기록의_방으로_가져온_후보는_세지_않는다() {
+		Place tour = tour("126509", null);
+		imported(em.find(TravelRoom.class, course.getRoomId()), tour);
+		assertThat(popular(null).items()).isEmpty();
+
+		imported(room(), tour);
+		assertThat(rows(popular(null))).containsExactly(Tuple.tuple(1, "투어 126509", 1L));
+	}
+
 	@Test
 	void 직접_입력은_이름_좌표_주소가_모두_같을_때만_묶는다() {
 		imported(room(), manual("우리 카페", "37.7000000", "강릉시 교동"));

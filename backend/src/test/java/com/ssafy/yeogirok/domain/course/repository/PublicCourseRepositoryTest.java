@@ -12,11 +12,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.data.domain.Limit;
 
 import com.ssafy.yeogirok.domain.course.CourseFixture;
 import com.ssafy.yeogirok.domain.course.service.ImportWindow;
 import com.ssafy.yeogirok.domain.place.entity.Place;
+import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
+import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 
@@ -83,5 +86,36 @@ class PublicCourseRepositoryTest {
 
 		assertThat(count(WINDOW.start(), WINDOW.end())).isEqualTo(3);
 		assertThat(count(ImportWindow.ALL.start(), ImportWindow.ALL.end())).isEqualTo(5);
+	}
+
+	/** S15P31A109-224: 작성자가 자기 코스를 원본 기록의 방으로 가져온 것은 세지 않는다(014·015 공통 조건). */
+	@Test
+	void 원본_기록의_방으로_가져온_후보는_세지_않는다() {
+		TravelRoom origin = em.find(TravelRoom.class, course.getRoomId());
+		imported(origin, WINDOW.start().plusSeconds(60), false);
+		imported(WINDOW.start().plusSeconds(120), false);
+
+		assertThat(count(WINDOW.start(), WINDOW.end())).isEqualTo(1);
+	}
+
+	/** 015 메인 추천도 같은 조건이라 원본 방 가져오기로는 정렬이 바뀌지 않는다. */
+	@Test
+	void 메인_추천의_가져간_방_수에도_원본_방은_들어가지_않는다() {
+		TravelRoom origin = em.find(TravelRoom.class, course.getRoomId());
+		Long placeId = fixture.place("경포대");
+		ActualVisit visit = fixture.visit(course.getId(), placeId, DAY1, 1);
+		VisitImage photo = fixture.photo(course.getId(), visit.getId(), 1);
+		em.flush();
+		em.getEntityManager().createNativeQuery("UPDATE travel_rooms SET end_date = start_date WHERE id = ?1")
+			.setParameter(1, origin.getId()).executeUpdate();
+		em.getEntityManager().createNativeQuery("UPDATE visit_images SET is_public_selected = TRUE WHERE id = ?1")
+			.setParameter(1, photo.getId()).executeUpdate();
+		imported(origin, WINDOW.start().plusSeconds(60), false);
+		em.flush();
+		em.clear();
+
+		assertThat(repository.findMainCourses(null, null, WINDOW.start(), WINDOW.end(), Long.MAX_VALUE, Long.MAX_VALUE,
+			Limit.of(10))).singleElement()
+			.satisfies(candidate -> assertThat(candidate.importCount()).isZero());
 	}
 }
