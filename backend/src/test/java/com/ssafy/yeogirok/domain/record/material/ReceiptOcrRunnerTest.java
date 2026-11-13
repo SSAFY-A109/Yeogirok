@@ -295,6 +295,19 @@ class ReceiptOcrRunnerTest {
 	}
 
 	@Test
+	void OCR_도중_jobId_가_바뀌면_장소를_찾지_않는다() {
+		when(ocrClient.recognize(IMAGE)).thenAnswer(invocation -> {
+			retriedDuringOcr();
+			return new OcrResult("가게", LocalDate.of(2026, 11, 8), LocalTime.of(9, 0), "부산 해운대구 해운대로 570", true);
+		});
+
+		runner.submit(MATERIAL_ID, JOB_ID, linkedMaterial(JOB_ID));
+
+		assertThat(placeSearch.queries()).isEmpty();
+		assertThat(stored().jobId()).isEqualTo("job-2");
+	}
+
+	@Test
 	void OCR_도중_jobId_가_바뀌면_늦게_실패한_작업도_자료를_실패로_바꾸지_않는다() {
 		when(ocrClient.recognize(IMAGE)).thenAnswer(invocation -> {
 			retriedDuringOcr();

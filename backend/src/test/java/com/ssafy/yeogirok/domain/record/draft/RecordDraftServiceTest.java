@@ -39,6 +39,7 @@ import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand.MaterialRef;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
+import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
@@ -332,6 +333,23 @@ class RecordDraftServiceTest {
 				item -> item.needsReview())
 			.containsExactly(tuple(null, PAID_AT, false), tuple(502L, null, true), tuple(501L, null, true));
 		assertThat(response.items().get(1).evidence().sourceTypes()).containsExactly(RecordDraft.SourceType.PLAN);
+	}
+
+	@Test
+	void 이미_방문에_연결된_계획_항목은_초안에_다시_넣지_않는다() {
+		TravelRecord record = em.find(TravelRecord.class, recordId);
+		record.attachReferencePlan(RecordTestConfig.referencePlan(room.getId(), LocalDate.of(2026, 11, 2), 502L, 501L));
+		ActualVisit visit = ActualVisit.manual(recordId, 1L, LocalDate.of(2026, 11, 2), PAID_AT, NOW);
+		visit.moveTo(1, NOW);
+		visit.linkPlannedItem(502L, NOW);
+		em.persist(visit);
+		em.flush();
+
+		DraftJobResponse created = create();
+
+		assertThat(stored(created.draftKey()).sourceSnapshot().plannedItemIds()).containsExactly(501L);
+		assertThat(stored(created.draftKey()).items()).extracting(RecordDraft.Item::plannedItemId)
+			.containsExactly(null, 501L);
 	}
 
 	@Test

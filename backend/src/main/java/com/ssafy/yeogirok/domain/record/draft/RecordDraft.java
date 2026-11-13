@@ -32,7 +32,7 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 
 	public enum SourceType { MANUAL, RECEIPT, PHOTO, PLAN }
 
-	/** 접수 때 고정한 입력. plannedItemIds 는 기록의 참고 계획 사본 항목 전부(사본이 없으면 빈 목록). */
+	/** 접수 때 고정한 입력. plannedItemIds 는 참고 계획 사본 항목 중 아직 방문에 연결되지 않은 것(사본이 없으면 빈 목록). */
 	public record SourceSnapshot(List<Long> imageIds, List<SnapshotMaterial> materials, List<Long> plannedItemIds) {
 
 		public SourceSnapshot {
@@ -45,7 +45,10 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 	public record SnapshotMaterial(String materialId, int version, ReceiptMaterial.Values values) {
 	}
 
-	/** 노션 065 items[]. storyDraft 는 없다. plannedItemId 는 PLAN 항목에만 있다(영수증·사진 항목과 합치지 않음). */
+	/**
+	 * 노션 065 items[]. storyDraft 는 없다. plannedItemId 는 PLAN 항목과, 같은 방문으로 보고 계획을 합친 영수증·사진 항목에 있다
+	 * (명세 {@code specs/draft-merge.md} 3절).
+	 */
 	public record Item(int itemId, List<String> sourceMaterialIds, List<RecordPlaceView> placeCandidates,
 		LocalDate visitDate, Instant proposedVisitedAt, boolean needsReview, Evidence evidence, List<Long> sourcePhotoIds,
 		Long plannedItemId, RecordPlaceView proposedPlace) {

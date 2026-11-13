@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.util.function.Predicate;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -29,7 +28,7 @@ public class KakaoReverseGeocoder implements ReverseGeocoder, LegalDongResolver 
 
 	@Autowired
 	public KakaoReverseGeocoder(KakaoLocalProperties properties) {
-		this(createRestClient(properties), properties);
+		this(KakaoLocalClients.builder(properties).build(), properties);
 	}
 
 	KakaoReverseGeocoder(RestClient restClient, KakaoLocalProperties properties) {
@@ -39,13 +38,6 @@ public class KakaoReverseGeocoder implements ReverseGeocoder, LegalDongResolver 
 			log.warn("KAKAO_REST_API_KEY 가 없어 역지오코딩을 하지 않습니다. 발자취의 주소·위치명·법정동 코드와"
 				+ " 지도 핀으로 직접 추가한 후보 장소의 법정동 코드·읍·면·동 이름은 null 로 저장됩니다.");
 		}
-	}
-
-	private static RestClient createRestClient(KakaoLocalProperties properties) {
-		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-		requestFactory.setConnectTimeout(properties.connectTimeout());
-		requestFactory.setReadTimeout(properties.readTimeout());
-		return RestClient.builder().baseUrl(properties.baseUrl()).requestFactory(requestFactory).build();
 	}
 
 	/** 주소는 도로명 → 지번, 위치명은 건물 이름 → 법정리 → 법정동 순으로 있는 값을 쓴다. */

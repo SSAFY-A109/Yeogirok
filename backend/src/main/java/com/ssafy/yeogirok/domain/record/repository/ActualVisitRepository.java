@@ -28,6 +28,10 @@ public interface ActualVisitRepository extends JpaRepository<ActualVisit, Long> 
 
 	long countByRecordId(Long recordId);
 
+	/** 이 기록의 방문에 이미 연결된 계획 항목(API-064 초안이 다시 제안하지 않게). */
+	@Query("select distinct v.plannedItemId from ActualVisit v where v.recordId = :recordId and v.plannedItemId is not null")
+	List<Long> findLinkedPlannedItemIds(@Param("recordId") Long recordId);
+
 	/** 장소 행이 없는 방문 수(API-071 완성 조건). FK 가 없어 서비스에서 확인한다. */
 	@Query("select count(v) from ActualVisit v where v.recordId = :recordId"
 		+ " and not exists (select 1 from Place p where p.id = v.placeId)")
