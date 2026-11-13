@@ -645,7 +645,8 @@ curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보�
   | `COURSE_SEED_UNPUBLISH` | 내릴 코스의 contentId. 쉼표로 여러 개, `ALL`이면 공식 코스 전부 | 내리지 않는다 |
   | `COURSE_SEED_RESEED` | 지우고 다시 넣을 코스의 contentId. 쉼표로 여러 개 | 다시 넣지 않는다 |
 
-- 적재 파일은 백엔드가 S3에 접근하는 권한 그대로 읽습니다. 2026-11-13 확인: 서버 `.env`에 접근 키(`AWS_ACCESS_KEY_ID`)는 없고, 서버와 백엔드 컨테이너 모두에서 Lightsail 인스턴스 역할(`AmazonLightsailInstanceRole`)이 보입니다. 백엔드는 AWS SDK 기본 순서로 자격 증명을 찾으므로 키가 없으면 이 역할을 씁니다. 이 역할에 사진 버킷 권한(Get·Put·Delete·List)이 있는지는 백엔드 담당 설명 기준이고, 정책은 직접 확인하지 않았습니다.
+- 적재 파일은 백엔드가 S3에 접근하는 권한 그대로 읽습니다. 서버는 위 "파일 저장소"대로 서버 전용 IAM 사용자의 접근 키(`AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`)로 S3에 접근하므로, **켜기 전에 서버 `.env`에 이 키가 있어야 합니다.**
+- 2026-11-13 확인: 서버 `.env`에 이 키가 없었습니다. 키가 없으면 백엔드(AWS SDK)는 Lightsail이 기본으로 붙이는 역할(`AmazonLightsailInstanceRole`)로 S3를 부릅니다. 이 상태에서 매시간 도는 팁 사진·영수증 정리 작업이 14:52·15:52 모두 `… 정리에 실패해 다음 주기에 다시 시도합니다: BusinessException`을 남겼습니다(백엔드는 S3 오류를 이렇게 감싸고, 바로 앞에 `S3 요청에 실패했습니다`를 남긴다). 키를 넣기 전에는 적재도, 앱의 사진·영수증 업로드도 동작하지 않는다고 보고 키부터 넣습니다.
 - `S3_PHOTO_BUCKET`과 `S3_RECEIPT_BUCKET`은 서로 다른 버킷이어야 합니다. 영수증 정리 작업은 영수증 버킷의 오래된 파일을 접두어 없이 모두 지웁니다. 두 버킷이 같으면 `course-seed/`도 같이 지워집니다.
 - **`.env`를 고친 뒤에는 `docker compose up -d backend`로 컨테이너를 새로 만듭니다.** `docker compose restart backend`는 바뀐 `.env`를 읽지 않습니다.
 - **다 돌면 바로 끕니다.** 켜 둔 채로 두면 백엔드가 새로 뜰 때마다 다시 돕니다. Jenkins는 `backend/dev` 머지 때마다 백엔드를 새로 띄웁니다.
@@ -655,6 +656,7 @@ curl -s https://<도메인>/.well-known/assetlinks.json   # 지문 2개가 보�
 
 ```bash
 cd ~/yeogirok/infra-src/infra
+grep -cE '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)=.+' .env   # 2 여야 한다(0 이면 위 "파일 저장소"대로 키부터 넣는다)
 grep -E '^S3_(PHOTO|RECEIPT)_BUCKET=' .env         # 두 버킷 이름이 달라야 한다
 setenv() { sed -i "/^$1=/d" .env; printf '\n%s=%s\n' "$1" "$2" >> .env; }
 setenv COURSE_SEED_ENABLED true
