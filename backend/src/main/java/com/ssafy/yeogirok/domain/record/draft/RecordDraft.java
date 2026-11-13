@@ -27,10 +27,12 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 	public static final String PHOTO_METADATA_MISSING = "PHOTO_METADATA_MISSING";
 	/** 사진만으로는 장소를 정하지 않았다(PHOTO 항목). */
 	public static final String PHOTO_PLACE_UNRESOLVED = "PHOTO_PLACE_UNRESOLVED";
+	/** 계획에만 있는 항목이라 실제로 갔는지·언제 갔는지 모른다(PLAN 항목). */
+	public static final String PLAN_NOT_CONFIRMED = "PLAN_NOT_CONFIRMED";
 
 	public enum SourceType { MANUAL, RECEIPT, PHOTO, PLAN }
 
-	/** 접수 때 고정한 입력. 계획 항목은 057 계획 사본 전까지 늘 비어 있다. */
+	/** 접수 때 고정한 입력. plannedItemIds 는 참고 계획 사본 항목 중 아직 방문에 연결되지 않은 것(사본이 없으면 빈 목록). */
 	public record SourceSnapshot(List<Long> imageIds, List<SnapshotMaterial> materials, List<Long> plannedItemIds) {
 
 		public SourceSnapshot {
@@ -43,7 +45,10 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 	public record SnapshotMaterial(String materialId, int version, ReceiptMaterial.Values values) {
 	}
 
-	/** 노션 065 items[]. storyDraft 는 없다. plannedItemId 는 계획 항목이 생기기 전까지 null. */
+	/**
+	 * 노션 065 items[]. storyDraft 는 없다. plannedItemId 는 PLAN 항목과, 같은 방문으로 보고 계획을 합친 영수증·사진 항목에 있다
+	 * (명세 {@code specs/draft-merge.md} 3절).
+	 */
 	public record Item(int itemId, List<String> sourceMaterialIds, List<RecordPlaceView> placeCandidates,
 		LocalDate visitDate, Instant proposedVisitedAt, boolean needsReview, Evidence evidence, List<Long> sourcePhotoIds,
 		Long plannedItemId, RecordPlaceView proposedPlace) {

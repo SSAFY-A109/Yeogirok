@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -15,11 +16,14 @@ import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
 import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
+import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.domain.record.service.RecordFinder;
+import com.ssafy.yeogirok.domain.record.service.ReferencePlans;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
@@ -35,11 +39,13 @@ public class RecordDraftService {
 
 	private final RecordFinder recordFinder;
 	private final VisitImageRepository visitImageRepository;
+	private final ActualVisitRepository actualVisitRepository;
 	private final ReceiptMaterials materials;
 	private final RecordDraftStore draftStore;
 	private final RecordDraftGenerator generator;
 	private final JobRunner jobRunner;
 	private final JobProperties jobProperties;
+	private final ReferencePlans referencePlans;
 	private final Clock clock;
 
 	/** 판정 순서: RE001/RE003 → baseVersion C004 → 사진 RE008 → 영수증마다 RE008 → M005 → C004 → RE022. */
@@ -59,10 +65,16 @@ public class RecordDraftService {
 			snapshot.add(usable(ref, recordId, userId));
 		}
 
+		PlannedSchedule plan = referencePlans.read(record);
+		// 이미 방문에 연결된 계획은 다시 제안하지 않는다. 그대로 반영하면 같은 계획의 방문이 또 생긴다.
+		Set<Long> linked = Set.copyOf(actualVisitRepository.findLinkedPlannedItemIds(recordId));
+		List<Long> plannedItemIds = plan == null ? List.of()
+			: plan.itemIds().stream().filter(id -> !linked.contains(id)).toList();
+
 		Instant now = clock.instant();
 		String jobId = jobRunner.newId();
 		RecordDraft draft = RecordDraft.queued(UUID.randomUUID().toString(), jobId, recordId, userId,
-			command.baseVersion(), new RecordDraft.SourceSnapshot(command.imageIds(), snapshot, List.of()), now,
+			command.baseVersion(), new RecordDraft.SourceSnapshot(command.imageIds(), snapshot, plannedItemIds), now,
 			now.plus(jobProperties.maxLifetime()));
 		draftStore.save(draft);
 		draftStore.savePointer(draft);

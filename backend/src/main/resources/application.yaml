@@ -37,13 +37,20 @@ yeogirok:
     draft-retention: 24h
     # 기록에 연결한 영수증 자료(정제 값)를 원본 삭제 뒤 두는 기간(11/10 결정). 연결 안 된 자료는 멱등키 보관 기간(24h).
     material-retention: 30d
+    # 영수증 주소·상호로 카카오에서 찾은 장소 후보를 091 화면(063 placeCandidates)에 몇 개까지 줄지(specs/draft-merge.md 5절).
+    receipt-place-candidates: 1
     draft:
       # 사진을 영수증 항목 근거로 붙이는 기준(결제 시각 앞뒤, 사진 GPS 와 영수증 장소 거리)과
-      # 남은 사진을 묶는 기준(앞 사진과의 시간 차·거리). 제안값이다(specs/record-api-2.md 5절 14).
+      # 남은 사진을 묶는 기준(앞 사진과의 시간 차·거리). 거리는 모두 "이하"면 같은 곳으로 본다.
+      # 거리 500m 는 11/12 팀 합의(전에는 사진-영수증 1000m). 시간은 머무는 길이라 넉넉하게 둔다.
       receipt-photo-window: 60m
-      receipt-photo-max-meters: 1000
+      receipt-photo-max-meters: 500
       photo-group-gap: 60m
       photo-group-max-meters: 500
+      # 계획 항목과 영수증 항목을 같은 방문으로 합치는 거리(091 확정 장소와 계획 장소). 시간 조건이 없어 더 엄격하게(specs/draft-merge.md).
+      plan-receipt-max-meters: 150
+      # 계획 항목과 사진 묶음을 합치는 거리(묶음 안 GPS 사진 중 계획 장소와 가장 가까운 사진). 넓은 장소를 생각해 영수증보다 넉넉하게.
+      plan-photo-max-meters: 300
   visit-statistics:
     # API-046 한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013.
     max-cells: 2500

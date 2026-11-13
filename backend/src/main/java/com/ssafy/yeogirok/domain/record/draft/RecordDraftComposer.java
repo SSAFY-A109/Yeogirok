@@ -5,23 +5,23 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.record.draft.PhotoMetadataReader.PhotoMetadata;
-import com.ssafy.yeogirok.domain.record.draft.RecordDraft.Evidence;
-import com.ssafy.yeogirok.domain.record.draft.RecordDraft.FieldSources;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft.Item;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraft.SnapshotMaterial;
-import com.ssafy.yeogirok.domain.record.draft.RecordDraft.SourceType;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.global.geo.GeoDistance;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /**
- * 영수증·사진으로 초안 항목을 만든다(명세 {@code specs/record-api-2.md} 4-7 생성 규칙 1·2·4·5). 계획 항목은 057 계획 사본 전까지
- * 없다. 같은 장소라고 항목을 합치지 않고, 사진만으로 장소나 시각을 지어내지 않는다.
+ * 영수증·사진·참고 계획으로 초안 항목을 만든다(명세 {@code specs/record-api-2.md} 4-7 생성 규칙 1·2·4·5,
+ * {@code specs/draft-merge.md} 3절). 순서: 사진을 영수증 근거로 붙임 → 남은 사진 묶기 → 같은 방문인 계획 합치기
+ * ({@link DraftPlanMatcher}) → 남은 계획은 PLAN 항목 → 정렬·번호. 항목 모양은 {@link DraftItemBuilder} 가 정한다.
  */
 final class RecordDraftComposer {
 
@@ -32,11 +32,26 @@ final class RecordDraftComposer {
 	record Photo(Long imageId, Optional<PhotoMetadata> metadata) {
 	}
 
+	/**
+	 * 참고 계획 사본의 항목 하나.
+	 *
+	 * @param place     사본에 장소가 없으면 null
+	 * @param arrivalAt 계획 도착 시각. 없으면 null. 같은 방문 후보가 여럿일 때 고르는 데만 쓴다
+	 */
+	record PlannedVisit(Long plannedItemId, LocalDate date, RecordPlaceView place, Instant arrivalAt) {
+	}
+
 	record Result(List<Item> items, List<String> warnings) {
 	}
 
-	static Result compose(List<SnapshotMaterial> receipts, List<Photo> photos, RecordProperties.Draft rules) {
-		List<ItemBuilder> builders = new ArrayList<>(receipts.stream().map(ItemBuilder::receipt).toList());
+	/** 촬영 시각을 읽은 사진. */
+	record TimedPhoto(Long imageId, PhotoMetadata metadata) {
+	}
+
+	/** @param plans 계획 순서대로 */
+	static Result compose(List<SnapshotMaterial> receipts, List<Photo> photos, List<PlannedVisit> plans,
+		RecordProperties.Draft rules) {
+		List<DraftItemBuilder> builders = new ArrayList<>(receipts.stream().map(DraftItemBuilder::receipt).toList());
 		List<String> warnings = new ArrayList<>();
 		if (photos.stream().anyMatch(photo -> photo.metadata().isEmpty())) {
 			warnings.add(RecordDraft.PHOTO_METADATA_MISSING);
@@ -48,10 +63,21 @@ final class RecordDraftComposer {
 			.sorted(Comparator.comparing((TimedPhoto photo) -> photo.metadata().takenAt()).thenComparing(TimedPhoto::imageId))
 			.forEach(photo -> nearestReceipt(builders, photo, rules)
 				.ifPresentOrElse(receipt -> receipt.attach(photo.imageId()), () -> remaining.add(photo)));
-		groups(remaining, rules).forEach(group -> builders.add(ItemBuilder.photos(group)));
+		List<DraftItemBuilder> receiptItems = List.copyOf(builders);
+		List<DraftItemBuilder> photoItems = groups(remaining, rules).stream().map(DraftItemBuilder::photos).toList();
+		builders.addAll(photoItems);
+		Set<Integer> merged = new HashSet<>(DraftPlanMatcher.mergeIntoReceipts(plans, receiptItems, rules));
+		merged.addAll(DraftPlanMatcher.mergeIntoPhotos(plans, merged, photoItems, rules));
+		for (int i = 0; i < plans.size(); i++) {
+			if (!merged.contains(i)) {
+				builders.add(DraftItemBuilder.plan(plans.get(i)));
+			}
+		}
 
-		List<ItemBuilder> sorted = builders.stream()
-			.sorted(Comparator.comparing(ItemBuilder::visitedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+		// 안정 정렬이라 같은 날 시각이 없는 계획 항목은 영수증·사진 항목 뒤에 계획 순서대로 남는다.
+		List<DraftItemBuilder> sorted = builders.stream()
+			.sorted(Comparator.comparing(DraftItemBuilder::visitDate, Comparator.nullsLast(Comparator.naturalOrder()))
+				.thenComparing(DraftItemBuilder::visitedAt, Comparator.nullsLast(Comparator.naturalOrder())))
 			.toList();
 		List<Item> items = new ArrayList<>();
 		for (int i = 0; i < sorted.size(); i++) {
@@ -61,15 +87,15 @@ final class RecordDraftComposer {
 	}
 
 	/** 같은 날이고 결제 시각 앞뒤 기준 안인 영수증 중 가장 가까운 것. 둘 다 좌표가 있고 기준보다 멀면 붙이지 않는다. */
-	private static Optional<ItemBuilder> nearestReceipt(List<ItemBuilder> builders, TimedPhoto photo,
+	private static Optional<DraftItemBuilder> nearestReceipt(List<DraftItemBuilder> builders, TimedPhoto photo,
 		RecordProperties.Draft rules) {
 		Instant takenAt = photo.metadata().takenAt();
 		return builders.stream()
-			.filter(builder -> builder.visitedAt != null && builder.visitDate.equals(seoulDate(takenAt)))
-			.filter(builder -> !Duration.between(builder.visitedAt, takenAt).abs().minus(rules.receiptPhotoWindow())
+			.filter(builder -> builder.visitedAt() != null && builder.visitDate().equals(seoulDate(takenAt)))
+			.filter(builder -> !Duration.between(builder.visitedAt(), takenAt).abs().minus(rules.receiptPhotoWindow())
 				.isPositive())
-			.filter(builder -> !farther(photo.metadata(), builder.place, rules.receiptPhotoMaxMeters()))
-			.min(Comparator.comparing(builder -> Duration.between(builder.visitedAt, takenAt).abs()));
+			.filter(builder -> !farther(photo.metadata(), builder.place(), rules.receiptPhotoMaxMeters()))
+			.min(Comparator.comparing(builder -> Duration.between(builder.visitedAt(), takenAt).abs()));
 	}
 
 	/** 시각순 사진을 앞 사진과의 시간 차·거리로 끊는다. */
@@ -100,65 +126,7 @@ final class RecordDraftComposer {
 			&& GeoDistance.meters(a.latitude(), a.longitude(), b.latitude(), b.longitude()) > maxMeters;
 	}
 
-	private static LocalDate seoulDate(Instant instant) {
+	static LocalDate seoulDate(Instant instant) {
 		return instant.atZone(ApiDateTime.ZONE).toLocalDate();
-	}
-
-	private record TimedPhoto(Long imageId, PhotoMetadata metadata) {
-	}
-
-	/** 항목을 만드는 중간 값. 영수증 항목은 사진을 근거로 더 붙일 수 있다(필드 값은 바꾸지 않는다, RECEIPT > PHOTO). */
-	private static final class ItemBuilder {
-
-		private final List<String> materialIds;
-		private final RecordPlaceView place;
-		private final LocalDate visitDate;
-		private final Instant visitedAt;
-		private final boolean photoOnly;
-		private final List<Long> photoIds = new ArrayList<>();
-
-		private ItemBuilder(List<String> materialIds, RecordPlaceView place, LocalDate visitDate, Instant visitedAt,
-			boolean photoOnly) {
-			this.materialIds = materialIds;
-			this.place = place;
-			this.visitDate = visitDate;
-			this.visitedAt = visitedAt;
-			this.photoOnly = photoOnly;
-		}
-
-		static ItemBuilder receipt(SnapshotMaterial material) {
-			return new ItemBuilder(List.of(material.materialId()), material.values().place(),
-				material.values().paidDate(), material.values().paidAt(), false);
-		}
-
-		static ItemBuilder photos(List<TimedPhoto> group) {
-			Instant first = group.getFirst().metadata().takenAt();
-			ItemBuilder builder = new ItemBuilder(List.of(), null, seoulDate(first), first, true);
-			group.forEach(photo -> builder.attach(photo.imageId()));
-			return builder;
-		}
-
-		Instant visitedAt() {
-			return visitedAt;
-		}
-
-		void attach(Long imageId) {
-			photoIds.add(imageId);
-		}
-
-		Item build(int itemId) {
-			if (photoOnly) {
-				return new Item(itemId, List.of(), List.of(), visitDate, visitedAt, true,
-					new Evidence(List.of(SourceType.PHOTO), new FieldSources(null, SourceType.PHOTO, SourceType.PHOTO),
-						List.of(RecordDraft.PHOTO_PLACE_UNRESOLVED)),
-					List.copyOf(photoIds), null, null);
-			}
-			List<SourceType> sources = photoIds.isEmpty() ? List.of(SourceType.RECEIPT)
-				: List.of(SourceType.RECEIPT, SourceType.PHOTO);
-			return new Item(itemId, materialIds, place == null ? List.of() : List.of(place), visitDate, visitedAt, false,
-				new Evidence(sources, new FieldSources(SourceType.RECEIPT, SourceType.RECEIPT, SourceType.RECEIPT),
-					List.of()),
-				List.copyOf(photoIds), null, place);
-		}
 	}
 }

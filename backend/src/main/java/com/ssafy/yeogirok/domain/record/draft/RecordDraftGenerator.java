@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.record.draft;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -14,9 +15,13 @@ import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.job.Job;
 import com.ssafy.yeogirok.domain.job.JobError;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftComposer.Photo;
+import com.ssafy.yeogirok.domain.record.draft.RecordDraftComposer.PlannedVisit;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
+import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
 import com.ssafy.yeogirok.domain.record.service.RecordAccess;
+import com.ssafy.yeogirok.domain.record.service.ReferencePlans;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
@@ -42,6 +47,8 @@ public class RecordDraftGenerator {
 	private final FileProperties fileProperties;
 	private final PhotoMetadataReader metadataReader;
 	private final RecordProperties properties;
+	private final TravelRecordRepository travelRecordRepository;
+	private final ReferencePlans referencePlans;
 
 	public Map<String, Object> generate(String draftKey) {
 		try {
@@ -53,7 +60,7 @@ public class RecordDraftGenerator {
 			}
 			draftStore.save(draft.running());
 			RecordDraftComposer.Result result = RecordDraftComposer.compose(draft.sourceSnapshot().materials(),
-				photos(draft), properties.draft());
+				photos(draft), plans(draft), properties.draft());
 			draftStore.save(draft.succeeded(result.items(), result.warnings()));
 			return Map.of("type", "RECORD_DRAFT", "draftKey", draftKey);
 		} catch (RuntimeException e) {
@@ -71,6 +78,22 @@ public class RecordDraftGenerator {
 
 	public void expire(String draftKey) {
 		fail(draftKey, Job.TIMED_OUT);
+	}
+
+	/** 접수 때 고정한 계획 항목. 사본은 기록을 만든 뒤 바뀌지 않아 기록에서 다시 읽는다. */
+	private List<PlannedVisit> plans(RecordDraft draft) {
+		Set<Long> ids = Set.copyOf(draft.sourceSnapshot().plannedItemIds());
+		if (ids.isEmpty()) {
+			return List.of();
+		}
+		PlannedSchedule plan = travelRecordRepository.findById(draft.recordId()).map(referencePlans::read).orElse(null);
+		if (plan == null) {
+			return List.of();
+		}
+		return plan.days().stream()
+			.flatMap(day -> day.items().stream().filter(item -> ids.contains(item.id()))
+				.map(item -> new PlannedVisit(item.id(), day.date(), item.place(), item.arrivalAt())))
+			.toList();
 	}
 
 	/** 접수 뒤 지워졌거나 EXIF 를 읽지 못한 사진은 촬영 시각 없음으로 둔다(그 사진은 근거로 쓰지 않는다). */

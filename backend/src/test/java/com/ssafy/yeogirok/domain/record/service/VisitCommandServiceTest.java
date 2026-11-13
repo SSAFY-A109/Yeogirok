@@ -62,6 +62,7 @@ class VisitCommandServiceTest {
 	DataSource dataSource;
 
 	Long recordId;
+	Long roomId;
 
 	@BeforeEach
 	void setUp() {
@@ -70,6 +71,7 @@ class VisitCommandServiceTest {
 			.transportMode(TransportMode.CAR).createdAt(NOW).build());
 		em.persist(RoomMember.creator(room.getId(), MEMBER, NOW));
 		em.persist(RoomMember.joined(room.getId(), LEFT, NOW)).leave(NOW);
+		roomId = room.getId();
 		recordId = em.persist(TravelRecord.create(room.getId(), "강릉 여행", NOW)).getId();
 		em.flush();
 	}
@@ -205,5 +207,38 @@ class VisitCommandServiceTest {
 		assertThat(again.visitIds()).isEqualTo(visitIds);
 		assertThat(again.version()).isEqualTo(2);
 		assertError(() -> visitCommandService.getAdded(LEFT, recordId, visitIds), ExceptionType.RECORD_EDIT_FORBIDDEN);
+	}
+
+	/* ── 참고 계획 연결(명세 specs/record-plan.md 3-3) ───────────── */
+
+	private void attachPlan(Long... itemIds) {
+		em.find(TravelRecord.class, recordId).attachReferencePlan(RecordTestConfig.referencePlan(roomId, DAY1, itemIds));
+		em.flush();
+		em.clear();
+	}
+
+	private static VisitAddCommand.Item planned(LocalDate date, int order, Long plannedItemId) {
+		return new VisitAddCommand.Item(PIN, date, AT, order, null, plannedItemId);
+	}
+
+	@Test
+	void 사본에_있는_계획_항목을_연결하고_같은_항목을_여러_방문에_연결할_수_있다() {
+		attachPlan(501L, 502L);
+
+		VisitAddResponse response = add(1, planned(DAY1, 1, 501L), planned(DAY1, 2, 501L), planned(DAY1, 3, null));
+
+		assertThat(response.visitIds()).map(id -> em.find(ActualVisit.class, id).getPlannedItemId())
+			.containsExactly(501L, 501L, null);
+	}
+
+	@Test
+	void 사본에_없는_항목이나_사본이_없는_기록에_연결하면_C003이고_저장하지_않는다() {
+		assertError(() -> add(1, planned(DAY1, 1, 501L)), ExceptionType.NOT_ALLOWED_VALUE);
+
+		attachPlan(501L);
+		assertError(() -> add(1, planned(DAY1, 1, 501L), planned(DAY1, 2, 999L)), ExceptionType.NOT_ALLOWED_VALUE);
+
+		assertThat(layout()).isEmpty();
+		assertThat(em.find(TravelRecord.class, recordId).getVersion()).isEqualTo(1);
 	}
 }

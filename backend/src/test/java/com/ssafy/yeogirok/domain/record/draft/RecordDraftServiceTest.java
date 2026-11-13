@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.record.draft;
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -38,6 +39,7 @@ import com.ssafy.yeogirok.domain.record.dto.DraftCreateCommand.MaterialRef;
 import com.ssafy.yeogirok.domain.record.dto.DraftJobResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDraftResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
+import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.RecordStatus;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
@@ -292,7 +294,7 @@ class RecordDraftServiceTest {
 		materialStore.save(MATERIAL_ID, ReceiptMaterial.uploaded(recordId, ME, "receipt/u", NOW,
 			NOW.plus(Duration.ofHours(24))).linked("RECEIPT", "job-ocr", NOW)
 			.ocrSucceeded(new ReceiptMaterial.Extracted("가게", LocalDate.of(2026, 11, 2), LocalTime.NOON, PAID_AT,
-				List.of(), null)));
+				List.of(), null, null, null)));
 
 		assertError(() -> draftService.create(ME, recordId, command(1, List.of(imageId), 2)),
 			ExceptionType.RECEIPT_NOT_READY);
@@ -315,6 +317,47 @@ class RecordDraftServiceTest {
 		});
 		assertThat(response.sourcePriority()).containsExactly(RecordDraft.SourceType.MANUAL,
 			RecordDraft.SourceType.RECEIPT, RecordDraft.SourceType.PHOTO, RecordDraft.SourceType.PLAN);
+	}
+
+	@Test
+	void 참고_계획이_있으면_항목_ID_를_입력으로_고정하고_계획_항목마다_PLAN_항목을_만든다() {
+		TravelRecord record = em.find(TravelRecord.class, recordId);
+		record.attachReferencePlan(RecordTestConfig.referencePlan(room.getId(), LocalDate.of(2026, 11, 2), 502L, 501L));
+		em.flush();
+
+		DraftJobResponse created = create();
+
+		assertThat(stored(created.draftKey()).sourceSnapshot().plannedItemIds()).containsExactly(502L, 501L);
+		RecordDraftResponse response = draftService.get(FRIEND, recordId, created.draftKey());
+		assertThat(response.items()).extracting(item -> item.plannedItemId(), item -> item.proposedVisitedAt(),
+				item -> item.needsReview())
+			.containsExactly(tuple(null, PAID_AT, false), tuple(502L, null, true), tuple(501L, null, true));
+		assertThat(response.items().get(1).evidence().sourceTypes()).containsExactly(RecordDraft.SourceType.PLAN);
+	}
+
+	@Test
+	void 이미_방문에_연결된_계획_항목은_초안에_다시_넣지_않는다() {
+		TravelRecord record = em.find(TravelRecord.class, recordId);
+		record.attachReferencePlan(RecordTestConfig.referencePlan(room.getId(), LocalDate.of(2026, 11, 2), 502L, 501L));
+		ActualVisit visit = ActualVisit.manual(recordId, 1L, LocalDate.of(2026, 11, 2), PAID_AT, NOW);
+		visit.moveTo(1, NOW);
+		visit.linkPlannedItem(502L, NOW);
+		em.persist(visit);
+		em.flush();
+
+		DraftJobResponse created = create();
+
+		assertThat(stored(created.draftKey()).sourceSnapshot().plannedItemIds()).containsExactly(501L);
+		assertThat(stored(created.draftKey()).items()).extracting(RecordDraft.Item::plannedItemId)
+			.containsExactly(null, 501L);
+	}
+
+	@Test
+	void 참고_계획이_없으면_계획_항목도_없다() {
+		DraftJobResponse created = create();
+
+		assertThat(stored(created.draftKey()).sourceSnapshot().plannedItemIds()).isEmpty();
+		assertThat(stored(created.draftKey()).items()).extracting(RecordDraft.Item::plannedItemId).containsOnlyNulls();
 	}
 
 	@Test

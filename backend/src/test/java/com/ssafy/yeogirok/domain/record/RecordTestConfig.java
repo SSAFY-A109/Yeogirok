@@ -6,6 +6,10 @@ import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +24,7 @@ import com.ssafy.yeogirok.domain.job.service.JobStore;
 import com.ssafy.yeogirok.domain.record.draft.DraftApplication;
 import com.ssafy.yeogirok.domain.record.RecordProperties;
 import com.ssafy.yeogirok.domain.record.draft.RecordDraftStore;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.material.MaterialQueryService;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
 import com.ssafy.yeogirok.domain.record.service.RecordAuthors;
@@ -30,10 +35,12 @@ import com.ssafy.yeogirok.domain.record.service.RecordPhotoFileCleaner;
 import com.ssafy.yeogirok.domain.record.service.RecordProgressReader;
 import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.RecordVisitViews;
+import com.ssafy.yeogirok.domain.record.service.ReferencePlans;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
 import com.ssafy.yeogirok.domain.room.service.RoomFinder;
+import com.ssafy.yeogirok.domain.schedule.service.ScheduleReader;
 import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyProperties;
 import com.ssafy.yeogirok.global.lock.RedisLock;
@@ -42,6 +49,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestFileProperties;
 import com.ssafy.yeogirok.support.TestRedis;
 
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -53,7 +61,7 @@ import tools.jackson.databind.json.JsonMapper;
 	StoryService.class, RecordCompleteService.class, VisitPhotoService.class, RecordPhotoFileCleaner.class,
 	RecordAuthors.class, RecordFinder.class, RoomFinder.class, JobStore.class, RedisLock.class,
 	ReceiptMaterialStore.class, ReceiptMaterials.class, MaterialQueryService.class, RecordDraftStore.class,
-	DraftApplication.class, RecordProgressReader.class})
+	DraftApplication.class, RecordProgressReader.class, ReferencePlans.class, ScheduleReader.class})
 public class RecordTestConfig {
 
 	/** 2026-11-09 00:30 Asia/Seoul. UTC 날짜(11/8)와 서울 날짜(11/9)가 다른 시각이다. */
@@ -65,9 +73,21 @@ public class RecordTestConfig {
 	/** 작업 대기 제한. 실행 제한 2분을 더한 12분이 작업·초안 기한이다. */
 	public static final Duration QUEUE_TIMEOUT = Duration.ofMinutes(10);
 
-	/** application.yaml 과 같은 값(초안 24시간, 연결한 영수증 자료 30일, 사진 묶음 기준). */
+	/** application.yaml 과 같은 값(초안 24시간, 연결한 영수증 자료 30일, 장소 후보 1개, 초안 거리·시간 기준). */
 	public static final RecordProperties RECORD_PROPERTIES = new RecordProperties(Duration.ofHours(24), Duration.ofDays(30),
-		new RecordProperties.Draft(Duration.ofMinutes(60), 1000, Duration.ofMinutes(60), 500));
+		1, new RecordProperties.Draft(Duration.ofMinutes(60), 500, Duration.ofMinutes(60), 500, 150, 300));
+
+	/** 기록에 붙일 참고 계획 사본(API-057). 하루에 계획 항목 ID 를 순서대로 넣는다. */
+	public static Map<String, Object> referencePlan(Long roomId, LocalDate date, Long... itemIds) {
+		List<PlannedSchedule.Item> items = new ArrayList<>();
+		for (int i = 0; i < itemIds.length; i++) {
+			items.add(new PlannedSchedule.Item(itemIds[i], 100L + i, i + 1, null, null, 60, false, null));
+		}
+		PlannedSchedule plan = new PlannedSchedule(roomId, 1,
+			List.of(new PlannedSchedule.Day(date, null, null, items, List.of(), List.of())));
+		return JsonMapper.builder().build().convertValue(plan, new TypeReference<Map<String, Object>>() {
+		});
+	}
 
 	@Bean
 	MutableClock clock() {

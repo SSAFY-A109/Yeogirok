@@ -22,7 +22,7 @@ import tools.jackson.databind.JsonNode;
  *   <li>draftKey 는 UUID(C002). 있으면 draftVersion 필수(C001)이고 itemId 가 있는 항목이 하나 이상 있어야 한다(C003).
  *   draftKey 없이 draftVersion·itemId 가 오면 C003.
  *   itemId 는 1 이상 정수(정수 아님 C002, 1 미만 C003)</li>
- *   <li>story·storyDraft 값은 C003. plannedItemId 는 계획 사본 전이라 값이 오면 C003, null 은 통과(명세 5절 8·12)</li>
+ *   <li>story·storyDraft 값은 C003. plannedItemId 는 선택(정수 아님 C002, 1 미만 C003, 사본에 있는지는 서비스가 본다)</li>
  *   <li>장소: placeRef·customPlace 둘 다 C003, 둘 다 없으면 RE018</li>
  *   <li>visitDate·visitedAt·order: 명세 1-6, order 는 필수·1 이상</li>
  * </ul>
@@ -69,7 +69,7 @@ public class VisitAddRequest {
 		Integer itemId = itemId(item.get("itemId"), fromDraft);
 		reject(item.get("story"), "story");
 		reject(item.get("storyDraft"), "storyDraft");
-		reject(item.get("plannedItemId"), "plannedItemId");
+		Long plannedItemId = VisitRequestFields.plannedItemId(item.get("plannedItemId"));
 		VisitPlaceInput place = VisitRequestFields.place(item.get("placeRef"), item.get("customPlace"));
 		LocalDate visitDate = VisitRequestFields.date(item.get("visitDate"), "visitDate");
 		OffsetDateTime visitedAt = VisitRequestFields.dateTime(item.get("visitedAt"), "visitedAt");
@@ -78,7 +78,7 @@ public class VisitAddRequest {
 			throw new BusinessException(ExceptionType.VISIT_PLACE_MISSING);
 		}
 		VisitRequestFields.checkSameDate(visitDate, visitedAt);
-		return new VisitAddCommand.Item(place, visitDate, visitedAt.toInstant(), order, itemId);
+		return new VisitAddCommand.Item(place, visitDate, visitedAt.toInstant(), order, itemId, plannedItemId);
 	}
 
 	/** 생략·null 이면 직접 추가한 항목. draftKey 없이 오면 C003. */

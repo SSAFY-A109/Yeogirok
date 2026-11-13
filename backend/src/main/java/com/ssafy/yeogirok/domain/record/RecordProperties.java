@@ -11,14 +11,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param draftRetention    초안 보관 기간. 만든 시각부터 센다
  * @param materialRetention 기록에 연결한 영수증 자료를 원본 삭제 뒤 두는 기간(11/10 사용자 결정 30일). 연결하지 않은 자료는
  *                          멱등키 보관 기간(24시간)만 둔다
+ * @param receiptPlaceCandidates 영수증 주소·상호로 찾은 장소 후보를 063 에 몇 개까지 줄지(1 이상)
  * @param draft             사진을 영수증 근거로 붙이고 사진끼리 묶는 기준
  */
 @ConfigurationProperties("yeogirok.record")
-public record RecordProperties(Duration draftRetention, Duration materialRetention, Draft draft) {
+public record RecordProperties(Duration draftRetention, Duration materialRetention, int receiptPlaceCandidates,
+	Draft draft) {
 
 	public RecordProperties {
 		requirePositive(draftRetention, "draft-retention");
 		requirePositive(materialRetention, "material-retention");
+		if (receiptPlaceCandidates <= 0) {
+			throw new IllegalArgumentException("yeogirok.record.receipt-place-candidates 값이 필요합니다(1 이상).");
+		}
 		if (draft == null) {
 			throw new IllegalArgumentException("yeogirok.record.draft 값이 필요합니다.");
 		}
@@ -29,16 +34,19 @@ public record RecordProperties(Duration draftRetention, Duration materialRetenti
 	 * @param receiptPhotoMaxMeters 사진 GPS 와 영수증 장소가 이보다 멀면 붙이지 않는다
 	 * @param photoGroupGap         남은 사진을 시각순으로 볼 때 앞 사진과 이보다 벌어지면 새 묶음
 	 * @param photoGroupMaxMeters   앞 사진과 이보다 멀면(둘 다 GPS 가 있을 때) 새 묶음
+	 * @param planReceiptMaxMeters  계획 장소와 영수증 확정 장소가 이 거리 이하면 같은 방문으로 합친다(투어API 같은 장소는 거리 무관)
+	 * @param planPhotoMaxMeters    계획 장소와 사진 묶음(가장 가까운 GPS 사진)이 이 거리 이하면 같은 방문으로 합친다
 	 */
 	public record Draft(Duration receiptPhotoWindow, int receiptPhotoMaxMeters, Duration photoGroupGap,
-		int photoGroupMaxMeters) {
+		int photoGroupMaxMeters, int planReceiptMaxMeters, int planPhotoMaxMeters) {
 
 		public Draft {
 			requirePositive(receiptPhotoWindow, "draft.receipt-photo-window");
 			requirePositive(photoGroupGap, "draft.photo-group-gap");
-			if (receiptPhotoMaxMeters <= 0 || photoGroupMaxMeters <= 0) {
-				throw new IllegalArgumentException(
-					"yeogirok.record.draft.receipt-photo-max-meters·photo-group-max-meters 값이 필요합니다(0보다 커야 합니다).");
+			if (receiptPhotoMaxMeters <= 0 || photoGroupMaxMeters <= 0 || planReceiptMaxMeters <= 0
+				|| planPhotoMaxMeters <= 0) {
+				throw new IllegalArgumentException("yeogirok.record.draft.receipt-photo-max-meters·photo-group-max-meters·"
+					+ "plan-receipt-max-meters·plan-photo-max-meters 값이 필요합니다(0보다 커야 합니다).");
 			}
 		}
 	}

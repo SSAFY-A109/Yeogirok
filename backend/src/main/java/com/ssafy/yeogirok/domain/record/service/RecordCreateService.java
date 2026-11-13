@@ -24,13 +24,12 @@ public class RecordCreateService {
 
 	private final RoomFinder roomFinder;
 	private final TravelRecordRepository travelRecordRepository;
+	private final ReferencePlans referencePlans;
 	private final Clock clock;
 
 	/**
 	 * 방 행을 잠근 뒤 참여(RO001·RO002) → 종료일(RE024) → 방당 1개(RE017) 순으로 확인하고 만든다.
-	 * 기록 쓰기 중 방 행을 잠그는 것은 이 API 하나뿐이다(명세 1-2).
-	 *
-	 * <p>TODO 일정 기능이 머지되면 확정 일정을 reference_plan 으로 복사한다(노션 057 plannedSchedule).
+	 * 기록 쓰기 중 방 행을 잠그는 것은 이 API 하나뿐이다(명세 1-2). 같은 잠금 안에서 확정 일정을 참고 계획으로 복사한다(노션 057).
 	 *
 	 * @param title 생략이면 null(여행방 제목을 쓴다)
 	 */
@@ -44,9 +43,9 @@ public class RecordCreateService {
 		if (travelRecordRepository.existsByRoomId(roomId)) {
 			throw new BusinessException(ExceptionType.RECORD_ALREADY_EXISTS);
 		}
-		TravelRecord record = travelRecordRepository.save(
-			TravelRecord.create(roomId, title == null ? room.getTitle() : title, clock.instant()));
-		return RecordCreateResponse.from(record);
+		TravelRecord record = TravelRecord.create(roomId, title == null ? room.getTitle() : title, clock.instant());
+		record.attachReferencePlan(referencePlans.copy(room));
+		return RecordCreateResponse.from(travelRecordRepository.save(record));
 	}
 
 	/** 같은 멱등키 재전송. 현재 참여만 다시 확인하고 종료일은 보지 않는다(노션 057). */

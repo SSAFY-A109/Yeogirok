@@ -21,12 +21,18 @@ public record VisitAddCommand(int version, String draftKey, Integer draftVersion
 
 	/**
 	 * @param order  그 날짜 안의 위치(1부터). 겹치면 기존 방문을 뒤로 민다
-	 * @param itemId 반영하는 초안 항목. 직접 추가한 항목이면 null
+	 * @param itemId        반영하는 초안 항목. 직접 추가한 항목이면 null
+	 * @param plannedItemId 연결할 참고 계획 항목. 없으면 null
 	 */
-	public record Item(VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, int order, Integer itemId) {
+	public record Item(VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, int order, Integer itemId,
+		Long plannedItemId) {
 
 		public Item(VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, int order) {
-			this(place, visitDate, visitedAt, order, null);
+			this(place, visitDate, visitedAt, order, null, null);
+		}
+
+		public Item(VisitPlaceInput place, LocalDate visitDate, Instant visitedAt, int order, Integer itemId) {
+			this(place, visitDate, visitedAt, order, itemId, null);
 		}
 	}
 }

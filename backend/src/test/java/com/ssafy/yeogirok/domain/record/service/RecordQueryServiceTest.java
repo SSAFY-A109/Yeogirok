@@ -10,7 +10,9 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
 import com.ssafy.yeogirok.domain.record.dto.MaterialSummary;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.file.session.ReceiptMaterialStore;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordPhotoView;
@@ -36,10 +39,14 @@ import com.ssafy.yeogirok.domain.record.entity.VisitStory;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.schedule.dto.ScheduleView;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.TestRedis;
 import com.ssafy.yeogirok.support.TestUsers;
+
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 /** API-059. 응답 조립(순서·사진 보관함·탈퇴자 익명화)과 권한. */
 @DataJpaTest
@@ -63,6 +70,8 @@ class RecordQueryServiceTest {
 	FileStorage fileStorage;
 	@Autowired
 	ReceiptMaterialStore materialStore;
+	@Autowired
+	JsonMapper jsonMapper;
 
 	TravelRoom room;
 	TravelRecord record;
@@ -155,6 +164,23 @@ class RecordQueryServiceTest {
 		assertThat(detail.materials()).isEmpty();
 		assertThat(detail.publishedCourseId()).isNull();
 		assertThat(detail.version()).isEqualTo(1);
+	}
+
+	@Test
+	void 참고_계획_사본이_있으면_plannedSchedule_로_그대로_준다() {
+		PlannedSchedule plan = new PlannedSchedule(room.getId(), 3, List.of(new PlannedSchedule.Day(DAY1,
+			LocalTime.of(9, 0), null,
+			List.of(new PlannedSchedule.Item(501L, 31L, 1, AT_DAY1, AT_DAY1.plusSeconds(3600), 60, false, null),
+				new PlannedSchedule.Item(502L, 32L, 2, null, null, 30, true, null)),
+			List.of(new ScheduleView.Leg(501L, 502L, TransportMode.CAR, 15, "KAKAO")),
+			List.of(ScheduleView.WARNING_ARRIVAL_TIME_UNKNOWN))));
+		em.find(TravelRecord.class, record.getId())
+			.attachReferencePlan(jsonMapper.convertValue(plan, new TypeReference<Map<String, Object>>() {
+			}));
+		em.flush();
+		em.clear();
+
+		assertThat(recordQueryService.getDetail(MEMBER, record.getId()).plannedSchedule()).isEqualTo(plan);
 	}
 
 	/** FK 가 없어 지워진 장소를 가리키는 방문이 있어도 상세가 깨지지 않는다(PR #77 리뷰). */

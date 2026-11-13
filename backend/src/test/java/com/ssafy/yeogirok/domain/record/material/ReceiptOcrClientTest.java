@@ -41,7 +41,7 @@ class ReceiptOcrClientTest {
 	}
 
 	@Test
-	void 상호_날짜_시각을_쓰고_v3_주소_같은_모르는_필드는_버린다() {
+	void 상호_날짜_시각과_v3_주소를_읽고_status_는_읽지_않는다() {
 		ReceiptOcrClient client = client(PROPERTIES);
 		server.expect(requestTo(URL)).andExpect(method(HttpMethod.POST))
 			.andExpect(content().contentTypeCompatibleWith(MediaType.MULTIPART_FORM_DATA))
@@ -52,8 +52,30 @@ class ReceiptOcrClientTest {
 
 		OcrResult result = client.recognize(new byte[] {1, 2, 3});
 
-		assertThat(result).isEqualTo(new OcrResult("해운대 커피", LocalDate.of(2026, 11, 8), LocalTime.of(14, 5)));
+		assertThat(result).isEqualTo(new OcrResult("해운대 커피", LocalDate.of(2026, 11, 8), LocalTime.of(14, 5),
+			"부산 해운대구 ...", true));
 		server.verify();
+	}
+
+	/** 지금 운영 응답에는 주소 칸이 없다(v3 반영 전). 칸이 없거나 타입이 틀려도 null·false 로 계속한다. */
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+		"{\"placeName\":\"가게\"}|null|false",
+		"{\"placeName\":\"가게\",\"address\":null,\"addressComplete\":false}|null|false",
+		"{\"placeName\":\"가게\",\"address\":\"  \",\"addressComplete\":true}|null|false",
+		"{\"placeName\":\"가게\",\"address\":3,\"addressComplete\":true}|null|false",
+		"{\"placeName\":\"가게\",\"address\":\"서울 노원구 동일로\",\"addressComplete\":\"true\"}|서울 노원구 동일로|false",
+		"{\"placeName\":\"가게\",\"address\":\"서울 노원구 동일로\",\"addressComplete\":false}|서울 노원구 동일로|false",
+		"{\"placeName\":\"가게\",\"address\":\"서울 노원구\",\"addressComplete\":true}|서울 노원구|true"
+	}, nullValues = "null")
+	void 주소_칸이_없거나_타입이_틀리면_null_false(String body, String address, boolean complete) {
+		ReceiptOcrClient client = client(PROPERTIES);
+		server.expect(requestTo(URL)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+		OcrResult result = client.recognize(new byte[] {1});
+
+		assertThat(result.address()).isEqualTo(address);
+		assertThat(result.addressComplete()).isEqualTo(complete);
 	}
 
 	@ParameterizedTest

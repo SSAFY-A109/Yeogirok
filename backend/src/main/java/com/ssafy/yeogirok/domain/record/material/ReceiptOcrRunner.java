@@ -18,6 +18,7 @@ import com.ssafy.yeogirok.domain.file.storage.FileStorage;
 import com.ssafy.yeogirok.domain.job.Job;
 import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.job.service.JobRunner;
+import com.ssafy.yeogirok.domain.record.dto.RecordPlaceView;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.response.ApiDateTime;
@@ -42,18 +43,21 @@ public class ReceiptOcrRunner {
 	private final FileStorage fileStorage;
 	private final FileProperties fileProperties;
 	private final ReceiptOcrClient ocrClient;
+	private final ReceiptPlaceCandidates placeCandidates;
 	private final OcrProperties ocrProperties;
 	private final Clock clock;
 	/** OCR 컨테이너 메모리 때문에 한 번에 한 건만 부른다(5절 2). 작업 스레드가 2개라 기다리는 건 최대 한 건. */
 	private final Semaphore ocrSlot = new Semaphore(1, true);
 
 	public ReceiptOcrRunner(JobRunner jobRunner, ReceiptMaterials materials, FileStorage fileStorage,
-		FileProperties fileProperties, ReceiptOcrClient ocrClient, OcrProperties ocrProperties, Clock clock) {
+		FileProperties fileProperties, ReceiptOcrClient ocrClient, ReceiptPlaceCandidates placeCandidates,
+		OcrProperties ocrProperties, Clock clock) {
 		this.jobRunner = jobRunner;
 		this.materials = materials;
 		this.fileStorage = fileStorage;
 		this.fileProperties = fileProperties;
 		this.ocrClient = ocrClient;
+		this.placeCandidates = placeCandidates;
 		this.ocrProperties = ocrProperties;
 		this.clock = clock;
 	}
@@ -83,8 +87,14 @@ public class ReceiptOcrRunner {
 				throw new BusinessException(ExceptionType.FILE_NOT_FOUND, "영수증 원본이 삭제됐거나 보관 기한이 지났습니다.");
 			}
 			OcrResult result = callOcr(readOriginal(started));
+			// 그사이 092 재시도로 무효가 된 작업이면 카카오를 부르지 않는다. 저장할 때 jobId 를 다시 확인한다.
+			if (materials.find(materialId).filter(current -> jobId.equals(current.jobId())).isEmpty()) {
+				return staleResult(materialId);
+			}
+			// OCR 슬롯을 반납한 뒤·자료 잠금 밖에서 찾는다. 검색이 느려도 다음 영수증 OCR 은 밀리지 않는다.
+			List<RecordPlaceView> candidates = placeCandidates.find(materialId, result);
 			return materials.update(materialId, current -> jobId.equals(current.jobId()),
-					current -> current.ocrSucceeded(extracted(result)))
+					current -> current.ocrSucceeded(extracted(result, candidates)))
 				.map(saved -> result(materialId, saved.version()))
 				.orElseGet(() -> staleResult(materialId));
 		} catch (BusinessException e) {
@@ -124,12 +134,12 @@ public class ReceiptOcrRunner {
 		}
 	}
 
-	/** 날짜·시각이 둘 다 있을 때만 +09:00 으로 조합한다(5절 6). 장소 후보는 TourAPI 전까지 없다(5절 7). */
-	static ReceiptMaterial.Extracted extracted(OcrResult result) {
+	/** 날짜·시각이 둘 다 있을 때만 +09:00 으로 조합한다(5절 6). 장소 후보는 주소·상호로 찾은 것(제안, specs/draft-merge.md 5절). */
+	static ReceiptMaterial.Extracted extracted(OcrResult result, List<RecordPlaceView> candidates) {
 		var paidAt = result.paidDate() == null || result.paidTime() == null ? null
 			: LocalDateTime.of(result.paidDate(), result.paidTime()).atZone(ApiDateTime.ZONE).toInstant();
 		return new ReceiptMaterial.Extracted(result.merchantName(), result.paidDate(), result.paidTime(), paidAt,
-			List.of(), null);
+			candidates, null, result.address(), result.addressComplete());
 	}
 
 	private void fail(String materialId, String jobId, String code, String message) {

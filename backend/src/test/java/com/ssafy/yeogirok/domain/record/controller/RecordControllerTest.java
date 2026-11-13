@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
@@ -46,6 +47,7 @@ import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.dto.ActualVisitView;
 import com.ssafy.yeogirok.domain.record.dto.PhotoDeleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.PhotoLinkResponse;
+import com.ssafy.yeogirok.domain.record.dto.PlannedSchedule;
 import com.ssafy.yeogirok.domain.record.dto.RecordCompleteResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordCreateResponse;
 import com.ssafy.yeogirok.domain.record.dto.RecordDetailResponse;
@@ -67,6 +69,8 @@ import com.ssafy.yeogirok.domain.record.service.RecordQueryService;
 import com.ssafy.yeogirok.domain.record.service.StoryService;
 import com.ssafy.yeogirok.domain.record.service.VisitCommandService;
 import com.ssafy.yeogirok.domain.record.service.VisitPhotoService;
+import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.domain.schedule.dto.ScheduleView;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
 import com.ssafy.yeogirok.support.WebMvcSecurity;
@@ -182,18 +186,19 @@ class RecordControllerTest {
 		}
 
 		@Test
-		void 초안_반영은_draftKey_draftVersion_itemId_를_넘기고_plannedItemId_null_은_받는다() throws Exception {
+		void 초안_반영은_draftKey_draftVersion_itemId_plannedItemId_를_넘긴다() throws Exception {
 			VisitPlaceInput place = new VisitPlaceInput.CustomPlace("경포대", new BigDecimal("37.7950000"),
 				new BigDecimal("128.9000000"), null);
 			VisitAddCommand expected = new VisitAddCommand(3, "22222222-3333-4444-8555-666666666666", 1, List.of(
-				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, 2),
+				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, 2,
+					501L),
 				new VisitAddCommand.Item(place, LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1)));
 			given(visitCommandService.add(USER_ID, 9L, expected))
 				.willReturn(new VisitAddResponse(List.of(701L, 702L), 4, RecordStatus.DRAFT));
 
 			mockMvc.perform(json(post("/api/v1/records/9/visits"), "{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\","
-					+ " \"draftVersion\": 1, \"items\": [{\"itemId\": 2, \"plannedItemId\": null, " + VALID_ITEM + "}, {"
-					+ VALID_ITEM + "}]}"))
+					+ " \"draftVersion\": 1, \"items\": [{\"itemId\": 2, \"plannedItemId\": 501, " + VALID_ITEM + "}, {"
+					+ "\"plannedItemId\": null, " + VALID_ITEM + "}]}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.data.visitIds[1]").value(702));
 		}
@@ -215,7 +220,9 @@ class RecordControllerTest {
 			"{\"version\": 3, \"draftKey\": \"22222222-3333-4444-8555-666666666666\", \"draftVersion\": 1, \"items\": [{ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"itemId\": 1, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"story\": \"x\", ITEM}]}|C003",
-			"{\"version\": 3, \"items\": [{\"plannedItemId\": 5, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 0, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": \"5\", ITEM}]}|C002",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 1.5, ITEM}]}|C002",
 			"{\"version\": 3, \"items\": [{\"placeRef\": {\"provider\": \"TOUR_API\", \"providerPlaceId\": \"1\"}, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|RE018",
 			"{\"version\": 3, \"items\": [{\"placeRef\": {\"provider\": \"MANUAL\", \"providerPlaceId\": \"1\"}, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-11-01 09:30:00+09\", \"order\": 1}]}|C003",
@@ -269,6 +276,23 @@ class RecordControllerTest {
 		}
 
 		@Test
+		void plannedItemId_는_생략_null_값을_구분해_넘긴다() throws Exception {
+			LocalDate date = LocalDate.parse("2026-11-01");
+			Instant at = Instant.parse("2026-11-01T00:30:00Z");
+			VisitUpdateCommand expected = new VisitUpdateCommand(3, List.of(
+				new VisitUpdateCommand.Item(701L, null, date, at, null, false, null),
+				new VisitUpdateCommand.Item(702L, null, date, at, null, true, null),
+				new VisitUpdateCommand.Item(703L, null, date, at, null, true, 501L)), List.of(), false);
+			given(visitCommandService.update(USER_ID, 9L, expected))
+				.willReturn(new VisitUpdateResponse(List.of(), 4, RecordStatus.DRAFT));
+
+			mockMvc.perform(json(patch("/api/v1/records/9/visits"), "{\"version\": 3, \"items\": [{" + ITEM + "}, {"
+					+ ITEM.replace("701", "702") + ", \"plannedItemId\": null}, {" + ITEM.replace("701", "703")
+					+ ", \"plannedItemId\": 501}]}"))
+				.andExpect(status().isOk());
+		}
+
+		@Test
 		void 삭제만_하면_items_는_빈_배열이어도_된다() throws Exception {
 			given(visitCommandService.update(eq(USER_ID), eq(9L), any()))
 				.willReturn(new VisitUpdateResponse(List.of(), 4, RecordStatus.DRAFT));
@@ -287,7 +311,8 @@ class RecordControllerTest {
 			"{\"version\": 3, \"items\": [], \"removeVisitIds\": 701}|C002",
 			"{\"version\": 3, \"items\": [], \"removeVisitIds\": [\"a\"]}|C002",
 			"{\"version\": 3, \"items\": [], \"confirmDeleteStories\": \"true\"}|C002",
-			"{\"version\": 3, \"items\": [{\"plannedItemId\": 1, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": 0, ITEM}]}|C003",
+			"{\"version\": 3, \"items\": [{\"plannedItemId\": \"1\", ITEM}]}|C002",
 			"{\"version\": 3, \"items\": [{\"order\": 0, ITEM}]}|C003",
 			"{\"version\": 3, \"items\": [{\"visitId\": 701, \"visitDate\": \"2026-11-01\", \"visitedAt\": \"2026-10-31 23:00:00+09\"}]}|C012"
 		})
@@ -545,10 +570,15 @@ class RecordControllerTest {
 				new BigDecimal("37.7519000"), new BigDecimal("128.8761000"), null, null, null, null), null,
 				LocalDate.parse("2026-11-01"), Instant.parse("2026-11-01T00:30:00Z"), 1, List.of(photo),
 				List.of(new ActualVisitView.Story(41L, 2L, "좋았다")));
+			PlannedSchedule plan = new PlannedSchedule(7L, 4, List.of(new PlannedSchedule.Day(
+				LocalDate.parse("2026-11-01"), LocalTime.of(9, 0), null,
+				List.of(new PlannedSchedule.Item(501L, 31L, 1, Instant.parse("2026-11-01T01:00:00Z"), null, 60, false,
+					visit.place())),
+				List.of(new ScheduleView.Leg(null, 501L, TransportMode.CAR, null, "KAKAO")), List.of())));
 			given(recordQueryService.getDetail(USER_ID, 9L)).willReturn(new RecordDetailResponse(9L, "가을 여행",
 				RecordStatus.DRAFT, 7L, List.of(new RecordDetailResponse.Member(1L, "여행자", true)),
 				LocalDate.parse("2026-11-01"), LocalDate.parse("2026-11-02"),
-				new RecordProgress(RecordProgress.Stage.EDIT, null, null), null, List.of(), List.of(photo),
+				new RecordProgress(RecordProgress.Stage.EDIT, null, null), plan, List.of(), List.of(photo),
 				List.of(visit), List.of(), null, 3));
 
 			mockMvc.perform(get("/api/v1/records/9").with(asUser(USER_ID)))
@@ -559,7 +589,17 @@ class RecordControllerTest {
 					  "members": [{"userId": 1, "nickname": "여행자", "isCreator": true}],
 					  "startDate": "2026-11-01", "endDate": "2026-11-02",
 					  "progress": {"stage": "EDIT", "draftKey": null, "jobId": null},
-					  "plannedSchedule": null, "uploads": [],
+					  "plannedSchedule": {"roomId": 7, "version": 4, "days": [{
+					    "date": "2026-11-01", "startTime": "09:00:00", "endTime": null,
+					    "items": [{"id": 501, "roomPlaceId": 31, "order": 1, "arrivalAt": "2026-11-01 10:00:00+09",
+					      "departureAt": null, "stayMinutes": 60, "fixed": false,
+					      "place": {"provider": "MANUAL", "providerPlaceId": null, "name": "경포대",
+					        "latitude": 37.7519000, "longitude": 128.8761000, "address": null, "categoryCode": null,
+					        "imageUrl": null, "imageAttribution": null}}],
+					    "legs": [{"fromItemId": null, "toItemId": 501, "transportMode": "CAR", "travelMinutes": null,
+					      "source": "KAKAO"}],
+					    "warnings": []}]},
+					  "uploads": [],
 					  "photoPool": [{"imageId": 31, "url": "https://signed/31", "attribution": null, "uploadedBy": null, "visitId": 701}],
 					  "actualVisits": [{
 					    "id": 701,
