@@ -1,14 +1,13 @@
 """TourAPI(KorService2) 호출. 호출 수 상한·재시도·즉시 멈춤 판단과 키 가리기를 한 곳에서 한다(명세 tour-course-seed.md 3-4·3-5)."""
 
+import http.client
 import json
-import socket
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 DEFAULT_BASE_URL = "https://apis.data.go.kr/B551011/KorService2"
-STOP_STATUSES = {401, 403, 429}
 
 
 class BudgetExhausted(Exception):
@@ -74,7 +73,8 @@ class TourApi:
             if error is not None:
                 last_error = error
                 continue
-            if status in STOP_STATUSES or (400 <= status < 500):
+            if 400 <= status < 500:
+                # 401·403·429(키·한도) 포함 4xx 는 다시 보내도 같아 바로 멈춘다.
                 raise StopRun("HTTP_STATUS", status, self._clip(body))
             if status >= 500:
                 last_error = f"HTTP {status}"
@@ -104,8 +104,12 @@ class TourApi:
         except urllib.error.HTTPError as e:
             # 예외 문자열·주소에 키가 들어갈 수 있어 상태 코드와 본문만 쓴다.
             with e:
-                return e.code, e.read().decode("utf-8", errors="replace"), None
-        except (urllib.error.URLError, socket.timeout, ConnectionError, TimeoutError) as e:
+                try:
+                    return e.code, e.read().decode("utf-8", errors="replace"), None
+                except (http.client.HTTPException, OSError):
+                    return e.code, "", None
+        except (http.client.HTTPException, OSError) as e:
+            # 연결·시간 초과·SSL(OSError 계열, URLError 포함)과 본문을 읽다 끊긴 경우(IncompleteRead)는 다시 시도한다.
             return None, None, type(e).__name__
 
     def _clip(self, body):
@@ -122,6 +126,14 @@ def items_of(response):
     if item is None:
         return []
     return item if isinstance(item, list) else [item]
+
+
+def rows_of(response, default):
+    """그 페이지를 받을 때 쓴 numOfRows(응답에 적힌 값). 없으면 default."""
+    try:
+        return int((response.get("body") or {}).get("numOfRows") or default)
+    except (TypeError, ValueError):
+        return default
 
 
 def total_of(response):

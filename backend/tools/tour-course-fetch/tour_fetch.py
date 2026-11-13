@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import tour_judge as judge
-from tour_api import DEFAULT_BASE_URL, BudgetExhausted, StopRun, TourApi, items_of, total_of
+from tour_api import DEFAULT_BASE_URL, BudgetExhausted, StopRun, TourApi, items_of, rows_of, total_of
 from tour_store import Store
 
 COURSE_TYPE = "25"
@@ -50,17 +50,19 @@ class Fetcher:
             first = self.api.get("areaBasedList2", numOfRows=self.dict_rows, pageNo=1, arrange="A")
             self.store.save_dict_page(1, first)
         total = total_of(first)
-        pages = max(1, math.ceil(total / self.dict_rows))
+        # 페이지는 첫 페이지를 받을 때의 크기로 계산한다(실행마다 --dict-rows 가 달라도 페이지가 겹치지 않게).
+        rows = rows_of(first, self.dict_rows)
+        pages = max(1, math.ceil(total / rows))
         for page in range(2, pages + 1):
             if self.store.dict_page(page) is None:
                 self.store.save_dict_page(page, self.api.get(
-                    "areaBasedList2", numOfRows=self.dict_rows, pageNo=page, arrange="A"))
-        return self.write_dictionary_meta(total, pages)
+                    "areaBasedList2", numOfRows=rows, pageNo=page, arrange="A"))
+        return self.write_dictionary_meta(total, rows, pages)
 
-    def write_dictionary_meta(self, total, pages):
+    def write_dictionary_meta(self, total, rows, pages):
         items = [item for page in range(1, pages + 1) for item in items_of(self.store.dict_page(page))]
         ids = [str(item.get("contentid")) for item in items]
-        meta = {"totalCount": total, "numOfRows": self.dict_rows, "pages": pages, "count": len(items),
+        meta = {"totalCount": total, "numOfRows": rows, "pages": pages, "count": len(items),
                 "duplicates": len(ids) - len(set(ids)), "complete": True, "checkedAt": now()}
         if meta["count"] != total or meta["duplicates"]:
             self.log(f"[경고] 장소 사전 건수 {meta['count']} / totalCount {total}, 중복 {meta['duplicates']}건")
@@ -84,46 +86,45 @@ class Fetcher:
         return course_order(courses, seed)
 
     # 코스 하나
-    def process(self, course, dictionary, state):
+    def process(self, course, dictionary):
         content_id = str(course["contentid"])
-        items, total = self.fetch_info(content_id, state)
+        items, total = self.fetch_info(content_id)
         result = judge.judge(course, items, total, None, dictionary)
         if result["reason"] is None:
-            self.mark(state, content_id, "intro")
             intro = self.store.intro(content_id)
             if intro is None:
                 intro = self.api.get("detailIntro2", contentId=content_id, contentTypeId=COURSE_TYPE)
                 self.store.save_intro(content_id, intro)
             result = judge.judge(course, items, total, (items_of(intro) or [{}])[0], dictionary)
         self.store.save_judged(result)
-        self.mark(state, content_id, "done")
         return result
 
-    def fetch_info(self, content_id, state):
-        self.mark(state, content_id, "info")
+    def fetch_info(self, content_id):
         first = self.store.info_page(content_id, 1)
         if first is None:
             first = self.api.get("detailInfo2", contentId=content_id, contentTypeId=COURSE_TYPE,
                                  numOfRows=self.info_rows, pageNo=1)
             self.store.save_info_page(content_id, 1, first)
         total = total_of(first)
-        for page in range(2, max(1, math.ceil(total / self.info_rows)) + 1):
+        rows = rows_of(first, self.info_rows)
+        for page in range(2, max(1, math.ceil(total / rows)) + 1):
             if self.store.info_page(content_id, page) is None:
                 self.store.save_info_page(content_id, page, self.api.get(
-                    "detailInfo2", contentId=content_id, contentTypeId=COURSE_TYPE,
-                    numOfRows=self.info_rows, pageNo=page))
-        return self.stored_info(content_id, total), total
+                    "detailInfo2", contentId=content_id, contentTypeId=COURSE_TYPE, numOfRows=rows, pageNo=page))
+        return self.stored_info(content_id), total
 
-    def stored_info(self, content_id, total):
-        pages = max(1, math.ceil(total / self.info_rows))
-        items = [item for page in range(1, pages + 1) for item in items_of(self.store.info_page(content_id, page))]
+    def stored_info(self, content_id):
+        """저장된 장소 목록 페이지를 모두 읽는다. 페이지 크기는 그 코스 첫 페이지를 받을 때의 값이다(--info-rows 와 무관)."""
+        first = self.store.info_page(content_id, 1)
+        if first is None:
+            return []
+        total = total_of(first)
+        rows = rows_of(first, self.info_rows)
+        items = [item for page in range(1, max(1, math.ceil(total / rows)) + 1)
+                 for item in items_of(self.store.info_page(content_id, page) or {})]
         if len(items) != total:
             self.log(f"[경고] 코스 {content_id} 장소 {len(items)}건 / totalCount {total}")
         return items
-
-    def mark(self, state, content_id, stage):
-        state["courses"][content_id] = {"stage": stage, "updatedAt": now()}
-        self.store.save_state(state)
 
 
 # 보고
@@ -223,7 +224,7 @@ def cmd_fetch(args, log=print):
             if run["processed"] >= args.max_courses:
                 run["stopReason"] = "MAX_COURSES"
                 break
-            result = fetcher.process(course, dictionary, state)
+            result = fetcher.process(course, dictionary)
             run["processed"] += 1
             if result["result"] == "PASS":
                 passed += 1
@@ -237,6 +238,10 @@ def cmd_fetch(args, log=print):
         run["stopReason"] = "STOPPED_BY_RESPONSE"
         run["stopDetail"] = e.to_dict()
         log(f"[멈춤] 응답 {e.kind} status={e.status} — 실행 기록 runs/{run['id']}.json 에 본문(키 가림)을 남겼습니다.")
+    except Exception as e:  # 예상 못 한 오류도 멈춘 이유를 남기고 보고를 출력한다(메시지에 키가 있을 수 있어 종류만)
+        run["stopReason"] = "UNEXPECTED_ERROR"
+        run["stopDetail"] = {"kind": type(e).__name__}
+        log(f"[멈춤] 예상 못 한 오류 {type(e).__name__} — 받은 것은 저장했고 다시 실행하면 이어서 받습니다.")
     finally:
         state["calls"] = state.get("calls", 0) + api.calls
         store.save_state(state)
@@ -247,7 +252,7 @@ def cmd_fetch(args, log=print):
     report = build_report(store, run["newPass"])
     store.write(report, "report.json")
     print_report(report, log)
-    return 0
+    return 1 if run["stopReason"] == "UNEXPECTED_ERROR" else 0
 
 
 def cmd_judge(args, log=print):
@@ -265,9 +270,9 @@ def cmd_judge(args, log=print):
         if first is None:
             continue
         total = total_of(first)
-        if len(store.info_pages(content_id)) < max(1, math.ceil(total / args.info_rows)):
-            continue
-        items = fetcher.stored_info(content_id, total)
+        items = fetcher.stored_info(content_id)
+        if len(items) < total:
+            continue  # 장소 목록을 아직 다 받지 못했다
         intro = store.intro(content_id)
         result = judge.judge(course, items, total, None if intro is None else (items_of(intro) or [{}])[0], dictionary)
         if result["reason"] is None and intro is None:
