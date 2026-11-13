@@ -32,7 +32,7 @@ public record RecordDraft(String draftKey, String type, String jobId, Long recor
 
 	public enum SourceType { MANUAL, RECEIPT, PHOTO, PLAN }
 
-	/** 접수 때 고정한 입력. plannedItemIds 는 기록의 참고 계획 사본 항목 전부(사본이 없으면 빈 목록). */
+	/** 접수 때 고정한 입력. plannedItemIds 는 참고 계획 사본 항목 중 아직 방문에 연결되지 않은 것(사본이 없으면 빈 목록). */
 	public record SourceSnapshot(List<Long> imageIds, List<SnapshotMaterial> materials, List<Long> plannedItemIds) {
 
 		public SourceSnapshot {
