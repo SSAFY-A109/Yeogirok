@@ -45,10 +45,8 @@ public class ReceiptPlaceCandidates {
 			log.info("영수증 장소 후보 검색 안 함(카카오 키 없음). materialId={}", materialId);
 			return List.of();
 		}
-		// 영수증 주소의 마지막 단어(도로명, 지번만이면 시·군·구)가 결과 주소에 있어야 같은 지점으로 본다(체인 다른 지점 제외).
-		String street = lastWord(result.address());
-		List<RecordPlaceView> candidates = found.places().stream()
-			.filter(place -> contains(place.roadAddress(), street) || contains(place.address(), street))
+		List<RecordPlaceView> candidates = ReceiptAddress.parse(result.address(), result.addressComplete())
+			.map(address -> address.sameBranch(found.places())).orElse(List.of()).stream()
 			.limit(properties.receiptPlaceCandidates())
 			.map(place -> new RecordPlaceView(PlaceProvider.MANUAL, null, place.name(), place.latitude(),
 				place.longitude(), place.roadAddress() != null ? place.roadAddress() : place.address(), null, null, null))
@@ -59,14 +57,5 @@ public class ReceiptPlaceCandidates {
 			log.info("영수증 장소 후보를 찾았습니다. materialId={}, count={}", materialId, candidates.size());
 		}
 		return candidates;
-	}
-
-	private static String lastWord(String address) {
-		String[] words = address.strip().split("\\s+");
-		return words[words.length - 1];
-	}
-
-	private static boolean contains(String address, String word) {
-		return address != null && address.contains(word);
 	}
 }

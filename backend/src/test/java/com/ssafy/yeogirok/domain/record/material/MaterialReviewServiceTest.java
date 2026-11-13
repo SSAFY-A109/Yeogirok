@@ -133,7 +133,7 @@ class MaterialReviewServiceTest {
 	@Test
 	void 확정할_때는_장소를_다시_찾지_않는다() {
 		given(ocrClient.recognize(any())).willReturn(
-			new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "강원 강릉시 창해로", true));
+			new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "강원 강릉시 창해로 14", true));
 		linked(ME);
 		assertThat(placeSearch.queries()).hasSize(1);
 

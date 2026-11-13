@@ -157,15 +157,15 @@ class MaterialRetryServiceTest {
 			new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "서울 노원구 동일로", false));
 		linked();
 		assertThat(stored().extracted().address()).isEqualTo("서울 노원구 동일로");
-		willReturn(new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "서울 노원구 노해로", true))
+		willReturn(new OcrResult("가게", LocalDate.of(2026, 11, 1), LocalTime.NOON, "서울 노원구 노해로 100", true))
 			.given(ocrClient).recognize(any());
 
 		retryService.retry(ME, recordId, MATERIAL_ID, 2);
 
-		assertThat(stored().extracted().address()).isEqualTo("서울 노원구 노해로");
+		assertThat(stored().extracted().address()).isEqualTo("서울 노원구 노해로 100");
 		assertThat(stored().extracted().addressComplete()).isTrue();
 		// 092 로 OCR 을 다시 돌리면 새 주소로 장소도 다시 찾는다.
-		assertThat(placeSearch.queries()).containsExactly("서울 노원구 동일로 가게", "서울 노원구 노해로 가게");
+		assertThat(placeSearch.queries()).containsExactly("서울 노원구 동일로 가게", "서울 노원구 노해로 100 가게");
 	}
 
 	@Test
