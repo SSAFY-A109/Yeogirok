@@ -89,6 +89,9 @@ services:
       # 멱등키 보관 기간(11/3 결정)과 처리 중 표시 수명(백엔드 제안값). 비밀 값이 아니라 여기에 바로 적는다.
       IDEMPOTENCY_RETENTION: 24h
       IDEMPOTENCY_PROCESSING_TIMEOUT: 30s
+      # 영수증 OCR 서버(아래 ai 서비스) 내부 주소(백엔드 S15P31A109-164). 비밀 값이 아니라 여기에 바로 적는다.
+      # 비어 있으면 백엔드는 뜨고 영수증 OCR 작업만 바로 실패한다(사용자는 API-091 로 직접 입력). ai 가 꺼져 있어도 백엔드는 뜬다.
+      OCR_BASE_URL: http://ai:8000
       # S3 파일 저장소 (값은 .env)
       AWS_REGION: ${AWS_REGION}
       S3_PHOTO_BUCKET: ${S3_PHOTO_BUCKET}

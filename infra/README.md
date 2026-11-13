@@ -454,7 +454,7 @@ bash scripts/restore-db.sh ~/yeogirok/backups/<파일>.sql.gz  # restore 를 입
 
 **AI 서버 (영수증 OCR)**
 - 이미지는 `ai/dev`의 `ai/ocr/Dockerfile`(AI 파트 리뷰)로 만들고, `docker-compose.yml`의 `ai` 서비스가 띄웁니다. 서버에 GPU가 없어 CPU용 paddle로 돌립니다.
-- 백엔드는 내부망 `http://ai:8000/ocr/receipt`로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다. 지금(11/9) 백엔드에는 AI를 부르는 코드가 아직 없습니다.
+- 백엔드는 내부망 `http://ai:8000/ocr/receipt`로 부릅니다. AI 서버 포트는 바깥에 열지 않습니다. 백엔드는 `OCR_BASE_URL`(compose에 `http://ai:8000`으로 적음, 백엔드 S15P31A109-164)로 이 주소를 찾습니다. 값이 없으면 백엔드 시작 로그에 `OCR_BASE_URL 이 없어 영수증 OCR 작업이 바로 실패합니다`가 남습니다.
 - OCR 모델(약 100MB)은 처음 켤 때 받아 `ai-models` 볼륨에 둡니다. 다시 배포해도 새로 받지 않습니다.
 - 메모리는 `mem_limit: 3g`로 묶었습니다. 휴대폰 원본 크기 사진 한 장에 7GB 가까이 써서 서버 전체가 흔들릴 수 있기 때문입니다. 넘으면 AI 컨테이너만 다시 켜집니다.
 
@@ -465,7 +465,18 @@ bash scripts/restore-db.sh ~/yeogirok/backups/<파일>.sql.gz  # restore 를 입
   | 3024×4032 (휴대폰 원본) | 17초 | 6.9GB | 실패 |
   | 3024×4032, 검출 입력을 긴 변 1600으로 제한 | 2.4초 | 2.0GB | 성공 |
 
-  서버는 노트북보다 코어가 적어 더 느립니다. 큰 사진은 AI 파트에 검출 입력 크기 제한을 요청했습니다(마지막 줄). 반영 전에는 큰 사진에서 3GB를 넘어 그 요청이 실패할 수 있습니다.
+  큰 사진 요청은 반영됐습니다. 지금 AI 서버는 사진 긴 변을 1280px(`OCR_MAX_SIDE`)로 줄인 뒤 읽습니다(`ai/dev` c4cc345).
+
+  | 서버 첫 실행 (11/13, 4코어) | 걸린 시간 | 메모리 최고 | 결과 |
+  | --- | --- | --- | --- |
+  | 빌드(`docker compose build ai`) | 4분 | — | 이미지 2.38GB |
+  | 켠 직후 | 23초 안에 (healthy) | 0.7GB | — |
+  | 640×360 시험 그림(`check-ai.sh`) | 4.1초 | — | 응답은 옴. 날짜는 아래 주의 |
+  | 3024×4032 (휴대폰 원본 크기) | 16.7초 | 2.0GB | 응답 옴, 재시작 없음 |
+
+  두 시험 그림에는 영수증 단어가 없어서, 사진을 돌려 다시 읽는 방향 보정이 돌아 느렸을 수 있습니다. 백엔드 OCR 응답 제한(`yeogirok.ocr.read-timeout`)이 20초라 큰 사진은 여유가 적습니다. 실제 영수증으로 다시 재고 백엔드와 맞춥니다.
+
+- **`check-ai.sh` 주의 (11/13)**: 운영 인식 모델이 B30(`ai/dev`, S15P31A109-49)으로 바뀐 뒤, 시험 그림(Pillow 기본 글꼴)의 `2026-11-09`를 `2026-1-09`로 읽어 `[ai] 실패: 시험 그림의 날짜(2026-11-09)를 읽지 못했습니다`로 끝납니다. 같은 그림을 공식 모델은 맞게 읽습니다. `[ai] 응답 …` 줄에 JSON이 찍히면 OCR 서버 자체는 돌고 있는 것입니다. AI 파트가 확인하기 전까지 스크립트는 그대로 둡니다.
 
 - **순서**: AI 파트의 Dockerfile PR이 `ai/dev`에 먼저 머지되고, 그다음 이 compose 변경을 `infra/dev`에 머지합니다. 서버에서는 `ai-src`를 먼저 받습니다. `ai-src`가 없으면 `docker compose up -d`(서비스 이름 없이 전체)가 ai를 빌드하지 못해 멈춥니다. 서비스 이름을 붙인 명령(`up -d backend` 등)과 배포·백업 스크립트는 영향이 없습니다.
 
@@ -475,8 +486,9 @@ cd ~/yeogirok/infra-src && git pull
 cd infra
 docker compose up -d --build ai      # 첫 빌드 3~5분 (paddle 설치, 이미지 약 2.4GB)
 docker compose ps ai                 # (healthy) 가 보일 때까지 기다린다. 처음에는 모델을 받느라 1~2분
-bash scripts/check-ai.sh             # 마지막 줄이 "[ai] 성공" 이면 끝
+bash scripts/check-ai.sh             # 마지막 줄이 "[ai] 성공" 이면 끝 (11/13 B30 모델은 날짜 때문에 실패할 수 있다, 위 주의)
 docker stats --no-stream             # ai 메모리 확인
+docker compose up -d backend         # 백엔드가 OCR_BASE_URL 을 받는다. 시작 로그에 OCR_BASE_URL 경고가 없으면 끝
 ```
 
 - `/health`는 모델을 불러오기만 하면 200이라, OCR이 실제로 도는지는 `check-ai.sh`로 봅니다. 시험 그림을 컨테이너 안에서 만들어 읽힙니다.
