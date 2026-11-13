@@ -87,6 +87,11 @@ public class RoomPlace {
 		return of(roomId, place, addedBy, PlaceSourceType.AI, now);
 	}
 
+	/** API-029 검색 담기. {@code place} 는 재사용하거나 TourAPI 상세로 처음 저장한 투어API 장소다. */
+	public static RoomPlace searched(Long roomId, Place place, Long addedBy, Instant now) {
+		return of(roomId, place, addedBy, PlaceSourceType.SEARCH, now);
+	}
+
 	private static RoomPlace of(Long roomId, Place place, Long addedBy, PlaceSourceType sourceType, Instant now) {
 		RoomPlace roomPlace = new RoomPlace();
 		roomPlace.roomId = roomId;

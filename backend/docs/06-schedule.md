@@ -144,7 +144,7 @@
 
 ## 3. 남은 일
 
-- **API-029 검색·AI 추천 장소 담기**: 장소 조회(API-026·027)와 추천 기록이 생긴 뒤 만든다(`RoomPlaceService` TODO).
+- **API-029 검색·AI 추천 장소 담기**: 완료. 추천 담기(AI)와 검색 담기(SEARCH, 장소 검색 API-026)를 `RoomPlaceAddService` 가 한다.
 - **API-030 공개 코스에서 가져오기**: 여행 기록·공개 코스가 생긴 뒤 만든다(`RoomPlaceService` TODO).
   - 이때 `room_places.source_record_id` FK(`RoomPlace` TODO)를 걸고, API-028·022의 `sourceRecord` 도 채운다.
 - **API-011 기록 작업 권한**: `RECORD_GENERATION`·`RECEIPT_OCR` 조회 정책은 기록 도메인에서 추가한다(`JobAccessPolicy` TODO).

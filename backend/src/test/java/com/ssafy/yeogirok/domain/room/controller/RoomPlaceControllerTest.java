@@ -167,11 +167,27 @@ class RoomPlaceControllerTest {
 				}], "addedCount": 1, "version": 5}}
 				""", JsonCompareMode.STRICT));
 
-		RoomPlaceAddCommand expected = new RoomPlaceAddCommand(List.of(new RoomPlaceAddCommand.Item("126508", 31L, 1)));
+		RoomPlaceAddCommand expected = new RoomPlaceAddCommand(List.of(RoomPlaceAddCommand.Item.ai("126508", 31L, 1)));
 		ArgumentCaptor<IdempotencyKey> key = ArgumentCaptor.forClass(IdempotencyKey.class);
 		verify(idempotencyService).execute(key.capture(), eq(expected), any(), any(), any());
 		assertThat(key.getValue()).isEqualTo(new IdempotencyKey(USER_ID, RoomPlaceController.ADD_PLACES_SCOPE, "7",
 			"key-1"));
+	}
+
+	@Test
+	void 검색_담기는_추천_번호_없이_받고_추천_담기와_섞어_보낼_수_있다() throws Exception {
+		given(roomPlaceAddService.add(eq(USER_ID), eq(7L), any())).willReturn(RoomPlaceAddResponse.of(List.of(), 5));
+
+		postPlaces("""
+			{"items": [{"placeRef": {"provider": "TOUR_API", "providerPlaceId": "2733967"}, "sourceType": "SEARCH"},
+			           {"placeRef": {"provider": "TOUR_API", "providerPlaceId": "126508"},
+			            "sourceType": "AI", "recommendationRequestId": 31, "rank": 1}]}
+			""")
+			.andExpect(status().isCreated());
+
+		verify(idempotencyService).execute(any(), eq(new RoomPlaceAddCommand(List.of(
+			RoomPlaceAddCommand.Item.search("2733967"), RoomPlaceAddCommand.Item.ai("126508", 31L, 1)))),
+			any(), any(), any());
 	}
 
 	@ParameterizedTest
@@ -186,7 +202,8 @@ class RoomPlaceControllerTest {
 		"{\"items\":[{\"placeRef\":{\"provider\":\"MANUAL\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C003",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\" \"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C003",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"recommendationRequestId\":1,\"rank\":1}]}|C001",
-		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"SEARCH\"}]}|C003",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"MANUAL\",\"providerPlaceId\":\"1\"},\"sourceType\":\"SEARCH\"}]}|C003",
+		"{\"items\":[{\"sourceType\":\"SEARCH\"}]}|C001",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"COURSE\"}]}|C003",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"rank\":1}]}|C001",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1}]}|C001",
