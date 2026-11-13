@@ -48,7 +48,7 @@ def test_api_passes_shrunk_image_to_ocr():
         server.get_runner = old
     assert r.status_code == 200
     assert seen["hw"] == (1280, 960)
-    assert set(r.json()) == {"status", "placeName", "date", "time"}
+    assert tuple(r.json()) == ("status", "placeName", "date", "time", "address", "addressComplete")   # S15P31A109-95
 
 
 if __name__ == "__main__":
