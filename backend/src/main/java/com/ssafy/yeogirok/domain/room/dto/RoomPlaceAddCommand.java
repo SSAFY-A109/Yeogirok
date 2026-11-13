@@ -9,7 +9,9 @@ import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
  *
  * @param items 담는 순서. 1개 이상
  */
-public record RoomPlaceAddCommand(List<Item> items) {
+public record RoomPlaceAddCommand(
+	List<Item> items
+) {
 
 	public RoomPlaceAddCommand {
 		items = List.copyOf(items);
@@ -22,8 +24,12 @@ public record RoomPlaceAddCommand(List<Item> items) {
 	 * @param recommendationRequestId AI 일 때만 값이 있다
 	 * @param rank                    AI 일 때만 값이 있다
 	 */
-	public record Item(PlaceSourceType sourceType, String providerPlaceId, Long recommendationRequestId,
-		Integer rank) {
+	public record Item(
+		PlaceSourceType sourceType,
+		String providerPlaceId,
+		Long recommendationRequestId,
+		Integer rank
+	) {
 
 		public static Item ai(String providerPlaceId, Long recommendationRequestId, int rank) {
 			return new Item(PlaceSourceType.AI, providerPlaceId, recommendationRequestId, rank);

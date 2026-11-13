@@ -12,7 +12,11 @@ import com.ssafy.yeogirok.domain.place.tour.TourPlace;
  * @param nextCursor 다음 쪽이 없으면 null
  * @param totalCount TourAPI 가 준 같은 q·regionCode 조건의 전체 결과 수
  */
-public record PlaceSearchResponse(List<Item> items, String nextCursor, int totalCount) {
+public record PlaceSearchResponse(
+	List<Item> items,
+	String nextCursor,
+	int totalCount
+) {
 
 	public PlaceSearchResponse {
 		items = List.copyOf(items);
