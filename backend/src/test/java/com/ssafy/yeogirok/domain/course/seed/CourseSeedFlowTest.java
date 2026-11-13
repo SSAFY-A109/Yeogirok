@@ -37,6 +37,11 @@ import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.MainCourseService;
+import com.ssafy.yeogirok.domain.room.entity.RoomMember;
+import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.room.repository.RoomMemberRepository;
+import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.domain.user.repository.UserRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -83,6 +88,10 @@ class CourseSeedFlowTest {
 	InMemoryFileStorage storage;
 	@Autowired
 	UserRepository userRepository;
+	@Autowired
+	TravelRoomRepository travelRoomRepository;
+	@Autowired
+	RoomMemberRepository roomMemberRepository;
 	@Autowired
 	DataSource dataSource;
 	@Autowired
@@ -401,7 +410,7 @@ class CourseSeedFlowTest {
 		run(null, List.of("c-two"), List.of("c-two"));
 
 		assertThat(List.of(first.unpublished(), first.reseeded())).containsExactly(1, 1);
-		assertThat(again.commandSkipped()).isTrue();
+		assertThat(again.unpublishSkipped()).isTrue();
 		assertThat(List.of(again.unpublished(), again.reseeded())).containsExactly(0, 0);
 		assertThat(count("SELECT COUNT(*) FROM travel_rooms")).isEqualTo(rooms);
 		assertThat(storage.keys("photos")).hasSize(photos);
@@ -424,15 +433,79 @@ class CourseSeedFlowTest {
 		assertThat(recordOf("c-two")).isNotNull();
 	}
 
+	/** PR #130 리뷰: 모두 내린 실행에서는 묶음의 새 코스를 바로 넣지 않는다(다음 실행부터 넣는다). */
 	@Test
-	void 내리기_다시_넣기_값이_바뀌면_다시_처리한다() throws IOException {
+	void ALL_로_실제로_내린_실행에서는_새_코스를_넣지_않는다() throws IOException {
+		bundle("b1", List.of(oneDay()));
+		run();
+		bundle("b2", List.of(twoDays("강릉 1박2일")));
+
+		CourseSeedJob.Report first = run(null, List.of(CourseSeedProperties.ALL), List.of());
+
+		assertThat(List.of(first.unpublished(), first.inserted())).containsExactly(1, 0);
+		assertThat(count("SELECT COUNT(*) FROM travel_rooms WHERE deleted_at IS NULL")).isZero();
+		assertThat(run(null, List.of(CourseSeedProperties.ALL), List.of()).inserted()).isEqualTo(1);
+	}
+
+	/** PR #130 리뷰: 같은 다시 넣기 값이어도 새 묶음이 오면 다시 넣는다(표시는 내리기에만 건다). */
+	@Test
+	void 같은_다시_넣기_값이어도_새_묶음이면_다시_넣는다() throws IOException {
+		bundle("b1", List.of(twoDays("강릉 1박2일")));
+		run();
+		bundle("b2", List.of(twoDays("강릉 1박2일 (고침)")));
+		assertThat(run(null, List.of(), List.of("c-two")).reseeded()).isEqualTo(1);
+		bundle("b3", List.of(twoDays("강릉 1박2일 (또 고침)")));
+
+		assertThat(run(null, List.of(), List.of("c-two")).reseeded()).isEqualTo(1);
+		assertThat(detailService.getDetail(recordOf("c-two")).title()).isEqualTo("강릉 1박2일 (또 고침)");
+		assertThat(dir.resolve(".done").toFile().exists()).isFalse();
+	}
+
+	/** PR #130 리뷰: 다시 넣기가 실패하면 다음 실행에서 다시 시도한다. */
+	@Test
+	void 다시_넣기가_실패하면_다음_실행에서_다시_시도한다() throws IOException {
+		bundle("b1", List.of(twoDays("강릉 1박2일")));
+		run();
+		Long before = recordOf("c-two");
+		bundle("b2", List.of(twoDays("강릉 1박2일 (고침)")));
+		Files.delete(dir.resolve("photos/p1.jpg"));
+
+		assertThat(run(null, List.of(), List.of("c-two")).failed()).containsEntry("c-two", "PHOTO_MISSING_DAY");
+		assertThat(recordOf("c-two")).isEqualTo(before);
+		Files.write(dir.resolve("photos/p1.jpg"), JPEG);
+
+		assertThat(run(null, List.of(), List.of("c-two")).reseeded()).isEqualTo(1);
+		assertThat(detailService.getDetail(recordOf("c-two")).title()).isEqualTo("강릉 1박2일 (고침)");
+	}
+
+	/** PR #130 리뷰: 회원이 같은 모양의 제목으로 만든 방은 내리지도, 넣은 코스로 보지도 않는다. */
+	@Test
+	void 회원이_같은_제목으로_만든_방은_건드리지_않고_그_코스도_넣는다() throws IOException {
+		User member = userRepository.save(User.signUp(OAuthProvider.GOOGLE, "google-sub", null, "회원", null,
+			java.time.Instant.parse("2026-11-01T00:00:00Z")));
+		java.time.Instant now = java.time.Instant.parse("2026-11-01T00:00:00Z");
+		Long memberRoom = travelRoomRepository.save(TravelRoom.builder().title("tourapi-course:c-one:x")
+			.transportMode(TransportMode.CAR).createdAt(now).build()).getId();
+		roomMemberRepository.save(RoomMember.creator(memberRoom, member.getId(), now));
+		bundle("b1", List.of(oneDay()));
+
+		assertThat(run().inserted()).isEqualTo(1);
+		assertThat(run(null, List.of(CourseSeedProperties.ALL), List.of()).unpublished()).isEqualTo(1);
+		assertThat(run(null, List.of(), List.of("c-one")).reseeded()).isEqualTo(1);
+
+		assertThat(count("SELECT COUNT(*) FROM travel_rooms WHERE id = ? AND deleted_at IS NULL", memberRoom))
+			.isEqualTo(1);
+	}
+
+	@Test
+	void 내리기_값이_바뀌면_다시_처리한다() throws IOException {
 		bundle("b1", List.of(twoDays("강릉 1박2일"), oneDay()));
 		run();
 
 		assertThat(run(null, List.of("c-two"), List.of()).unpublished()).isEqualTo(1);
 		assertThat(run(null, List.of("c-one", "c-two"), List.of()).unpublished()).isEqualTo(1);
-		assertThat(CourseSeedJob.commandHash(1L, new CourseSeedProperties(true, null, "x", null,
-			List.of("b", "a"), List.of()))).isEqualTo(CourseSeedJob.commandHash(1L,
+		assertThat(CourseSeedJob.unpublishHash(1L, new CourseSeedProperties(true, null, "x", null,
+			List.of("b", "a"), List.of()))).isEqualTo(CourseSeedJob.unpublishHash(1L,
 			new CourseSeedProperties(true, null, "x", null, List.of("a", "b"), List.of())));
 	}
 

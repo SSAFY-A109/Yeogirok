@@ -33,10 +33,10 @@ class CourseSeedJob {
 
 	/**
 	 * @param failed           contentId → 사유
-	 * @param commandSkipped   같은 내리기·다시 넣기 설정을 이미 처리해 이번엔 건너뛰었는지
+	 * @param unpublishSkipped 같은 내리기 설정을 이미 처리해 이번엔 건너뛰었는지
 	 */
 	record Report(int inserted, int skipped, Map<String, String> failed, int unpublished, int reseeded,
-		boolean commandSkipped) {
+		boolean unpublishSkipped) {
 
 		static final Report NOTHING = new Report(0, 0, Map.of(), 0, 0, false);
 	}
@@ -72,14 +72,16 @@ class CourseSeedJob {
 	private Report runAs(Long ownerId, CourseSeedProperties properties) {
 		CourseSeedSource source = CourseSeedSource.of(properties, fileStorage, fileProperties);
 		List<Loaded> courses = load(source);
-		// 끄는 걸 잊어 배포마다 다시 돌아도, 같은 내리기·다시 넣기 설정은 한 번만 처리한다(UNPUBLISH=ALL 이 나중 코스를
-		// 내리거나, 같은 코스를 내렸다 다시 넣기를 반복하지 않게). 새 코스 넣기는 원래 두 번 돌아도 결과가 같다.
-		String marker = CourseSeedSource.DONE_DIR + commandHash(ownerId, properties) + ".json";
-		boolean hasCommand = !properties.unpublish().isEmpty() || !properties.reseed().isEmpty();
-		boolean commandSkipped = hasCommand && alreadyApplied(source, marker);
-		List<String> reseedIds = commandSkipped ? List.of() : properties.reseed();
-		boolean doUnpublish = hasCommand && !commandSkipped && !properties.unpublish().isEmpty();
-		int unpublished = doUnpublish ? seeder.unpublish(properties.unpublish(), properties.unpublishAll()) : 0;
+		// 끄는 걸 잊어 배포마다 다시 돌아도 같은 내리기 설정은 한 번만 처리한다(UNPUBLISH=ALL 이 나중 코스를 내리지 않게).
+		// 다시 넣기는 표시 없이 매번 보되 같은 묶음으로 넣은 방이 있으면 건너뛴다(새 묶음은 반영, 실패하면 다음에 다시 시도).
+		String marker = CourseSeedSource.DONE_DIR + unpublishHash(ownerId, properties) + ".json";
+		boolean hasUnpublish = !properties.unpublish().isEmpty();
+		boolean unpublishSkipped = hasUnpublish && alreadyApplied(source, marker);
+		boolean doUnpublish = hasUnpublish && !unpublishSkipped;
+		int unpublished = doUnpublish ? seeder.unpublish(properties.unpublish(), properties.unpublishAll(), ownerId) : 0;
+		List<String> reseedIds = properties.reseed();
+		// 이번 실행에서 모두 내렸으면 새 코스는 바로 넣지 않는다(PR #130 리뷰). 다음 실행부터 넣는다.
+		boolean skipNew = doUnpublish && properties.unpublishAll();
 		int inserted = 0;
 		int skipped = 0;
 		int reseeded = 0;
@@ -98,7 +100,7 @@ class CourseSeedJob {
 				case FAILED -> failed.put(contentId, outcome.reason());
 			}
 		}
-		for (Loaded loaded : courses) {
+		for (Loaded loaded : skipNew ? List.<Loaded>of() : courses) {
 			String contentId = loaded.course().contentId();
 			if (reseedIds.contains(contentId) || failed.containsKey(contentId)) {
 				continue;
@@ -110,19 +112,18 @@ class CourseSeedJob {
 				case FAILED -> failed.put(contentId, outcome.reason());
 			}
 		}
-		if (hasCommand && !commandSkipped) {
-			markApplied(source, marker, properties, unpublished, reseeded, failed);
+		if (doUnpublish) {
+			markApplied(source, marker, properties, unpublished);
 		}
-		Report report = new Report(inserted, skipped, failed, unpublished, reseeded, commandSkipped);
-		log.info("공식 코스 적재 끝. 넣음={}, 건너뜀={}, 실패={}, 내림={}, 다시 넣음={}, 내리기·다시 넣기 이미 처리={}, 실패 사유={}",
-			inserted, skipped, failed.size(), unpublished, reseeded, commandSkipped, failed);
+		Report report = new Report(inserted, skipped, failed, unpublished, reseeded, unpublishSkipped);
+		log.info("공식 코스 적재 끝. 넣음={}, 건너뜀={}, 실패={}, 내림={}, 다시 넣음={}, 내리기 이미 처리={}, 모두 내려 새 코스 안 넣음={},"
+			+ " 실패 사유={}", inserted, skipped, failed.size(), unpublished, reseeded, unpublishSkipped, skipNew, failed);
 		return report;
 	}
 
-	/** 내리기·다시 넣기 목록(정렬)과 주인으로 만든 짧은 해시. 값이 하나라도 바뀌면 다시 처리한다. */
-	static String commandHash(Long ownerId, CourseSeedProperties properties) {
-		String text = "owner=" + ownerId + ";unpublish=" + properties.unpublish().stream().sorted().toList()
-			+ ";reseed=" + properties.reseed().stream().sorted().toList();
+	/** 내리기 목록(정렬)과 주인으로 만든 짧은 해시. 값이 하나라도 바뀌면 다시 처리한다. */
+	static String unpublishHash(Long ownerId, CourseSeedProperties properties) {
+		String text = "owner=" + ownerId + ";unpublish=" + properties.unpublish().stream().sorted().toList();
 		return SeedPhotos.sha256(text.getBytes(StandardCharsets.UTF_8)).substring(0, 16);
 	}
 
@@ -130,23 +131,19 @@ class CourseSeedJob {
 		if (!source.exists(marker)) {
 			return false;
 		}
-		log.info("같은 내리기·다시 넣기 설정은 이미 처리해 건너뜁니다(새 코스 넣기만 합니다). 끝났으면 설정을 비워 주세요. marker={}", marker);
+		log.info("같은 내리기 설정은 이미 처리해 건너뜁니다. 끝났으면 설정을 비워 주세요. marker={}", marker);
 		return true;
 	}
 
 	/** 표시를 못 남기면 경고만(다음 실행에서 다시 처리될 수 있다). */
-	private void markApplied(CourseSeedSource source, String marker, CourseSeedProperties properties, int unpublished,
-		int reseeded, Map<String, String> failed) {
+	private void markApplied(CourseSeedSource source, String marker, CourseSeedProperties properties, int unpublished) {
 		Map<String, Object> content = new LinkedHashMap<>();
 		content.put("unpublish", properties.unpublish());
-		content.put("reseed", properties.reseed());
 		content.put("unpublished", unpublished);
-		content.put("reseeded", reseeded);
-		content.put("failed", failed);
 		try {
 			source.write(marker, jsonMapper.writeValueAsBytes(content));
 		} catch (RuntimeException e) {
-			log.warn("내리기·다시 넣기 처리 표시를 남기지 못했습니다. marker={}, reason={}", marker, e.getClass().getSimpleName());
+			log.warn("내리기 처리 표시를 남기지 못했습니다. marker={}, reason={}", marker, e.getClass().getSimpleName());
 		}
 	}
 
