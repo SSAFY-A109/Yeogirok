@@ -47,6 +47,8 @@ public class PlaceSearchService {
 
 		TourSearchPage page;
 		try {
+			// TODO 지역 목록(API-078)을 정할 때 시·도 코드를 TourAPI 기준과 맞춘다. TourAPI 는 전남·광주를 lDongRegnCd 12 로
+			//  주고 예전 코드(46·29)로는 0건이다. 078 이 예전 코드를 쓰면 여기서 바꿔 넘긴다(추천 PlaceRecommendationService 도 같다).
 			page = tourApiClient.searchKeyword(new TourKeywordQuery(keyword,
 				regionCode == null ? null : regionCode.substring(0, 2),
 				regionCode == null || regionCode.length() == 2 ? null : regionCode.substring(2),

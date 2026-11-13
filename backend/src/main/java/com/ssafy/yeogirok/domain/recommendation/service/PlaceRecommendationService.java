@@ -273,6 +273,8 @@ public class PlaceRecommendationService {
 			wholeLarges.add(widest);
 		}
 
+		// TODO 지역 목록(API-078)을 정할 때 시·도 코드를 TourAPI 기준과 맞춘다. TourAPI 는 전남·광주를 lDongRegnCd 12 로
+		//  주고 예전 코드(46·29)로는 0건이다. 078 이 예전 코드를 쓰면 여기서 바꿔 넘긴다(장소 검색 PlaceSearchService 도 같다).
 		String sido = regionCode.substring(0, 2);
 		String sigungu = regionCode.substring(2);
 		List<TourAreaQuery> queries = new ArrayList<>();
