@@ -17,12 +17,15 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 	/**
 	 * 공개 코스에서 가져온 후보 행 조건(별칭 {@code rp}: RoomPlace, {@code target}: 대상 방). 대상 방이 삭제되지 않았고 가져간
 	 * 시각({@code rp.createdAt})이 [:importedFrom, :importedTo) 안(014 는 전체 기간, 015·093 은 30일 — {@code ImportWindow}).
-	 * 빼낸 후보도 센다(노션 014). 가져간 방 수 정의를 여기 한 곳에 둔다. 시각에 null 을 넘기면 PostgreSQL 이 파라미터 타입을
-	 * 정하지 못해({@code :x is null}) 기간은 늘 값으로 받는다.
+	 * 빼낸 후보도 센다(노션 014). 작성자가 자기 코스를 원본 기록의 방으로 가져온 후보는 세지 않는다(그 방은 이미 그 장소를 가진
+	 * 방이고 인기를 스스로 올릴 수 있다 — S15P31A109-224, PR #133 리뷰). 가져간 방 수 정의를 여기 한 곳에 둔다. 시각에 null 을
+	 * 넘기면 PostgreSQL 이 파라미터 타입을 정하지 못해({@code :x is null}) 기간은 늘 값으로 받는다.
 	 */
 	String COURSE_IMPORT_ROWS = "target.id = rp.roomId and target.deletedAt is null"
 		+ " and rp.sourceType = com.ssafy.yeogirok.domain.room.entity.PlaceSourceType.COURSE"
-		+ " and rp.createdAt >= :importedFrom and rp.createdAt < :importedTo";
+		+ " and rp.createdAt >= :importedFrom and rp.createdAt < :importedTo"
+		+ " and not exists (select 1 from TravelRecord origin where origin.id = rp.sourceRecordId"
+		+ " and origin.roomId = rp.roomId)";
 
 	/* 아래 조각은 별칭 r(TravelRecord)·room(원본 방)을 쓴다. */
 
