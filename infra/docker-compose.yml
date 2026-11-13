@@ -143,6 +143,15 @@ services:
       # AR 팁 위치 정확도 기준(미터, 백엔드 #64 AR 팁 API). TBD: 백엔드 로컬 제안값(11/8)을 임시로 넣었다.
       # #64 가 머지되기 전에 서버에 있어야 한다. 그 전에는 백엔드가 이 값을 읽지 않아 넣어 둬도 영향이 없다.
       LOCATION_EVIDENCE_MAX_ACCURACY_METERS: "30"
+      # 투어API 공식 코스 적재(백엔드 S15P31A109-221, 일회성). 값은 .env. 비어 있으면 꺼져 있어 아무 일도 하지 않는다.
+      # 켜 두면 백엔드가 새로 뜰 때마다(Jenkins 자동 배포 포함) 다시 돈다. 다 돌면 ENABLED=false 로 돌리고 UNPUBLISH·RESEED 를 비운다.
+      # 기본값은 백엔드 application.yaml 기본값과 같다. 켜고 끄는 법은 README 9단계 "공식 코스 적재".
+      COURSE_SEED_ENABLED: ${COURSE_SEED_ENABLED:-false}
+      COURSE_SEED_SOURCE: ${COURSE_SEED_SOURCE:-s3}
+      COURSE_SEED_LOCATION: ${COURSE_SEED_LOCATION:-}
+      COURSE_SEED_OWNER_USER_ID: ${COURSE_SEED_OWNER_USER_ID:-}
+      COURSE_SEED_UNPUBLISH: ${COURSE_SEED_UNPUBLISH:-}
+      COURSE_SEED_RESEED: ${COURSE_SEED_RESEED:-}
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
       # TOUR_API_KEY: ${TOUR_API_KEY}
     ports:
