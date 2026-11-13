@@ -87,6 +87,10 @@ public class ReceiptOcrRunner {
 				throw new BusinessException(ExceptionType.FILE_NOT_FOUND, "영수증 원본이 삭제됐거나 보관 기한이 지났습니다.");
 			}
 			OcrResult result = callOcr(readOriginal(started));
+			// 그사이 092 재시도로 무효가 된 작업이면 카카오를 부르지 않는다. 저장할 때 jobId 를 다시 확인한다.
+			if (materials.find(materialId).filter(current -> jobId.equals(current.jobId())).isEmpty()) {
+				return staleResult(materialId);
+			}
 			// OCR 슬롯을 반납한 뒤·자료 잠금 밖에서 찾는다. 검색이 느려도 다음 영수증 OCR 은 밀리지 않는다.
 			List<RecordPlaceView> candidates = placeCandidates.find(materialId, result);
 			return materials.update(materialId, current -> jobId.equals(current.jobId()),
