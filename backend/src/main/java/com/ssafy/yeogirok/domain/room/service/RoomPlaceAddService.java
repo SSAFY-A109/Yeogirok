@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,8 +16,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.place.entity.Place;
-import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
+import com.ssafy.yeogirok.domain.place.service.TourPlaces;
 import com.ssafy.yeogirok.domain.recommendation.dto.PlaceRecommendationResponse.RecommendedPlace;
 import com.ssafy.yeogirok.domain.recommendation.service.RecommendedPlaces;
 import com.ssafy.yeogirok.domain.recommendation.service.RecommendedPlaces.Pick;
@@ -35,8 +34,6 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.global.geo.LegalDongResolver;
 
-import lombok.extern.slf4j.Slf4j;
-
 /**
  * 검색·추천 장소 담기(API-029). 지금은 추천 담기(sourceType=AI)만 한다. 검색 담기(SEARCH)는 장소 검색·상세(API-026·027)가
  * 생기면 같은 흐름에 장소 확인만 바꿔 붙인다.
@@ -44,14 +41,13 @@ import lombok.extern.slf4j.Slf4j;
  * <ol>
  *   <li>참여 확인 → 추천 기록 확인(이 방의 추천 결과에 그 순위·장소가 있었는지). 틀리면 아무것도 바꾸지 않고 C003</li>
  *   <li>장소: 같은 투어API 장소는 places 한 행을 재사용한다. 없으면 추천 결과에 저장된 정보로 만들고, 법정동 코드·이름은
- *       직접 추가(API-031)와 같은 단위로 좌표에서 찾는다(외부 호출이라 트랜잭션·잠금 밖). 두 요청이 동시에 처음 만들면 한쪽이
- *       UNIQUE(provider, provider_place_id)에 걸리므로 새 트랜잭션에서 먼저 만든 행을 다시 읽는다.</li>
+ *       직접 추가(API-031)와 같은 단위로 좌표에서 찾는다(외부 호출이라 트랜잭션·잠금 밖). 찾기·처음 저장·동시 저장 경쟁은
+ *       {@link TourPlaces} 가 맡는다(공식 코스 적재와 같이 씀).</li>
  *   <li>방 행을 잠그고 참여를 다시 확인한 뒤 후보를 만들고, 여행방 version 을 1 올리고(확정 일정이 있으면 재계산 필요도 켠다),
  *       후보마다 recommendation_logs ADD 를 남긴다.</li>
  * </ol>
  * 같은 장소를 새 요청으로 여러 번 담을 수 있고, 한 요청 안에 같은 장소가 두 번 있어도 후보를 두 개 만든다(팀 확정 정책).
  */
-@Slf4j
 @Service
 public class RoomPlaceAddService {
 
@@ -59,6 +55,7 @@ public class RoomPlaceAddService {
 	private final RoomVersions roomVersions;
 	private final RoomPlaceRepository roomPlaceRepository;
 	private final PlaceRepository placeRepository;
+	private final TourPlaces tourPlaces;
 	private final ScheduleItemRepository scheduleItemRepository;
 	private final RecommendedPlaces recommendedPlaces;
 	private final LegalDongResolver legalDongResolver;
@@ -67,7 +64,7 @@ public class RoomPlaceAddService {
 	private final Clock clock;
 
 	public RoomPlaceAddService(RoomFinder roomFinder, RoomVersions roomVersions,
-		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
+		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository, TourPlaces tourPlaces,
 		ScheduleItemRepository scheduleItemRepository, RecommendedPlaces recommendedPlaces,
 		LegalDongResolver legalDongResolver, CategoryNames categoryNames, PlatformTransactionManager transactionManager,
 		Clock clock) {
@@ -75,6 +72,7 @@ public class RoomPlaceAddService {
 		this.roomVersions = roomVersions;
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
+		this.tourPlaces = tourPlaces;
 		this.scheduleItemRepository = scheduleItemRepository;
 		this.recommendedPlaces = recommendedPlaces;
 		this.legalDongResolver = legalDongResolver;
@@ -138,29 +136,13 @@ public class RoomPlaceAddService {
 		return added.stream().map(roomPlace -> RoomPlaceResponse.from(roomPlace, names)).toList();
 	}
 
-	/** 있으면 그 행(값을 고치지 않는다), 없으면 추천 결과의 정보로 만든다. 법정동 조회는 새로 만들 때만 한다. */
+	/** 있으면 그 행(값을 고치지 않는다), 없으면 추천 결과의 정보로 만든다. 법정동 조회는 새로 만들 때만 한다(트랜잭션 밖). */
 	private Place findOrCreate(RecommendedPlace recommended) {
-		Place existing = transactionTemplate.execute(status -> find(recommended.providerPlaceId()));
-		if (existing != null) {
-			return existing;
-		}
-		LegalDong legalDong = legalDongResolver.resolve(recommended.latitude(), recommended.longitude());
-		try {
-			return transactionTemplate.execute(status -> {
-				Place found = find(recommended.providerPlaceId());
-				return found != null ? found : placeRepository.saveAndFlush(Place.tourApi(
-					recommended.providerPlaceId(), recommended.name(), recommended.latitude(), recommended.longitude(),
-					recommended.address(), legalDong.code(), legalDong.name(), recommended.categoryCode(),
-					recommended.imageUrl(), recommended.imageAttribution(), clock.instant()));
-			});
-		} catch (DataIntegrityViolationException e) {
-			log.info("같은 투어API 장소를 동시에 처음 담아 먼저 저장된 행을 씁니다. providerPlaceId={}",
-				recommended.providerPlaceId());
-			return transactionTemplate.execute(status -> find(recommended.providerPlaceId()));
-		}
-	}
-
-	private Place find(String providerPlaceId) {
-		return placeRepository.findByProviderAndProviderPlaceId(PlaceProvider.TOUR_API, providerPlaceId).orElse(null);
+		return tourPlaces.findOrCreate(recommended.providerPlaceId(), () -> {
+			LegalDong legalDong = legalDongResolver.resolve(recommended.latitude(), recommended.longitude());
+			return Place.tourApi(recommended.providerPlaceId(), recommended.name(), recommended.latitude(),
+				recommended.longitude(), recommended.address(), legalDong.code(), legalDong.name(),
+				recommended.categoryCode(), recommended.imageUrl(), recommended.imageAttribution(), clock.instant());
+		});
 	}
 }

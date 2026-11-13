@@ -37,6 +37,7 @@ import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.MainCourseService;
+import com.ssafy.yeogirok.domain.place.service.TourPlaces;
 import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.domain.user.repository.UserRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
@@ -53,7 +54,7 @@ import tools.jackson.databind.json.JsonMapper;
 @DataJpaTest
 @Import({CourseTestConfig.class, CoursePreviewService.class, CoursePublishService.class, CourseDetailService.class,
 	CourseSearchService.class, MainCourseService.class, CourseSeedJob.class, CourseSeeder.class, SeedOwner.class,
-	SeedPlaces.class, SeedPhotos.class, CourseSeedFlowTest.Config.class})
+	SeedPlaces.class, SeedPhotos.class, TourPlaces.class, CourseSeedFlowTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class CourseSeedFlowTest {
 
