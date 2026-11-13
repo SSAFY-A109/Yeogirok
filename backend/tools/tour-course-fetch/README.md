@@ -1,4 +1,4 @@
-# 투어API 여행코스 받아 오기·판정 (S15P31A109-218)
+# 투어API 여행코스 받아 오기·판정·묶음 (S15P31A109-218·222)
 
 투어API 여행코스(contentTypeId=25)를 받아 공식 계정 공개 코스로 넣을 수 있는지 판정한다. 백엔드와 떨어진 로컬 스크립트이고, 결과 파일은 코스 적재 작업(221·222)이 읽는다.
 
@@ -41,11 +41,75 @@ Remove-Item Env:TOUR_API_KEY   # 끝나면 지운다
 | `courses/{id}/info-p1.json` … · `intro.json` | 코스별 detailInfo2·detailIntro2 원본 |
 | `judged/{id}.json` | 판정 결과. 통과 코스는 장소별 일차·순서·날짜·시각과 사전 값 |
 | `state.json` · `runs/*.json` · `report.json` | 진행 상태·누적 호출 수, 실행 기록, 판정 보고 |
+| `courses/{id}/common.json` · `photo-cache/` · `region-cache.json` | 묶음용 소개 글 원본, 사진 원본, 카카오 지역 코드 캐시 |
+| `bundles/{bundleId}/` · `bundles/index.json` | 묶음 파일·사진, 만든 묶음 목록 |
 
 판정 규칙과 파일 모양: `.handoff/specs/tour-course-seed.md` 3절(로컬 문서). 일차 배분·날짜·시각은 이 스크립트에서만 계산하고 적재 작업은 그대로 읽는다.
+
+## 묶음 파일 만들기 (S15P31A109-222)
+
+판정을 통과한 코스로 적재용 묶음을 만든다. 코스 소개 글(detailCommon2)은 투어API 호출 상한에 들어가고, 장소 사진은 원본 그대로 받으며, 지역 코드는 카카오 좌표→법정동으로 채운다. 받은 소개 글·사진·지역 코드는 데이터 폴더에 캐시해 다시 부르지 않는다.
+
+```powershell
+$env:TOUR_API_KEY = "<인증키 Decoding 값>"
+$env:KAKAO_REST_API_KEY = "<카카오 REST 키>"     # 없으면 regionCode·regionName 을 비우고 다음에 다시 채운다
+
+python tour_fetch.py bundle --count 20                 # 처리 순서대로, 앞 묶음에 없는 통과 코스 20개
+python tour_fetch.py bundle --ids 2916281,1234567      # 고른 코스만
+python tour_fetch.py bundle --count 10 --bundle-id 20261115-01 --max-calls 50
+
+Remove-Item Env:TOUR_API_KEY, Env:KAKAO_REST_API_KEY
+```
+
+- 결과: `bundles/{bundleId}/bundle-{bundleId}.json` + `bundles/{bundleId}/photos/`. 묶음 ID 기본값은 `오늘날짜-순번`. 만든 묶음 목록은 `bundles/index.json`(다음 `--count` 는 여기 있는 코스를 뺀다).
+- 사진을 못 받아 어떤 날의 사진이 0장이 되면 그 코스는 묶음에서 빠진다(출력에 사유).
+- 투어API 글의 `<br>`·태그·HTML 엔티티는 정리해서 담는다.
+
+## 로컬 백엔드에 넣어 보기
+
+로컬 DB·Redis(`infra/docker-compose.local.yml`)와 로컬 실행 설정(IntelliJ 환경 변수 또는 `backend/.env`)이 있는 상태에서, 아래 환경 변수를 더해 백엔드를 한 번 띄운다. 사진은 로컬 설정의 사진 버킷(기본 dev 버킷 `yeogirok-a109-photos-dev`)의 `record-photo/` 에 올라간다.
+
+```powershell
+$bundle = "$env:USERPROFILE\yeogirok-tour-data\bundles\20261114-01"
+$env:COURSE_SEED_ENABLED = "true"
+$env:COURSE_SEED_SOURCE = "local"
+$env:COURSE_SEED_LOCATION = $bundle
+cd C:\Users\SSAFY\Desktop\Yeogirok\backend
+.\gradlew.bat bootRun --args="--spring.profiles.active=local"
+# 로그에서 "공식 코스 적재 끝. 넣음=…, 건너뜀=…, 실패=…" 를 확인한다
+```
+
+- 다시 띄워도 이미 넣은 코스는 건너뛴다. 내리기는 `$env:COURSE_SEED_UNPUBLISH = "2916281"`(또는 `ALL`), 다시 넣기는 `$env:COURSE_SEED_RESEED = "2916281"`.
+- 끝나면 `Remove-Item Env:COURSE_SEED_*` 로 꺼 둔다.
+
+## 넣은 뒤 015·014·016 응답 보기
+
+015·014·016 은 로그인(USER 토큰)이 필요하다. 로컬 백엔드와 같은 `JWT_SECRET`(Base64)으로 토큰을 만든다(운영 비밀값은 쓰지 않는다). 회원 번호는 로컬 DB 의 아무 회원(예: 공식 코스 시스템 계정)을 쓴다.
+
+```powershell
+$env:JWT_SECRET = "<로컬 JWT_SECRET 값>"
+$token = python tour_token.py 1
+$h = @{ Authorization = "Bearer $token" }
+$base = "http://localhost:8080/api/v1"
+$out = "$env:USERPROFILE\yeogirok-tour-data\responses"; New-Item -ItemType Directory -Force $out | Out-Null
+
+Invoke-RestMethod "$base/courses/recommendations" -Headers $h | ConvertTo-Json -Depth 20 | Out-File -Encoding utf8 "$out\015.json"
+Invoke-RestMethod "$base/courses" -Headers $h | ConvertTo-Json -Depth 20 | Out-File -Encoding utf8 "$out\014.json"
+$id = (Get-Content "$out\015.json" -Raw | ConvertFrom-Json).data.items[0].id
+Invoke-RestMethod "$base/courses/$id" -Headers $h | ConvertTo-Json -Depth 20 | Out-File -Encoding utf8 "$out\016.json"
+Remove-Item Env:JWT_SECRET
+```
+
+- 프론트에 줄 예시: 위 파일을 그대로 쓰면 된다. 공개 코스 응답에는 닉네임·이메일이 없고 작성자는 `{id, profileImageUrl}` 뿐이며, 공식 코스 작성자는 시스템 계정(프로필 사진 없음)이다. 사진 `url` 은 15분짜리 서명 주소라 공유 전에 지우거나 그대로 두어도 곧 만료된다. 실제 사용자 기록이 섞인 DB 라면 공식 코스(제목이 아닌 방 제목 `tourapi-course:` 로 확인)만 골라 준다.
+
+## 서버에 넣기 (S15P31A109-223, 사용자 작업)
+
+1. 묶음 폴더 내용을 운영 사진 버킷의 `course-seed/` 아래로 올린다(`bundle-{bundleId}.json` 은 `course-seed/` 바로 아래, 사진은 `course-seed/photos/`).
+2. 서버 `.env` 에 `COURSE_SEED_ENABLED=true`, `COURSE_SEED_LOCATION=course-seed/` 를 넣고 backend 를 다시 띄운다(compose backend `environment` 에 `COURSE_SEED_*` 6개가 연결돼 있어야 한다 — 인프라).
+3. 로그 확인 뒤 `COURSE_SEED_ENABLED=false` 로 되돌린다. 비상시 DB 에서 내리기: `update travel_rooms set deleted_at = now() where deleted_at is null and title like 'tourapi-course:%';`
 
 ## 테스트
 
 ```powershell
-python -m unittest -v    # 가짜 HTTP 서버와 가짜 응답으로. 실제 투어API 는 부르지 않는다
+python -m unittest -v    # 가짜 HTTP 서버(투어API·이미지·카카오)로. 실제로는 부르지 않는다
 ```

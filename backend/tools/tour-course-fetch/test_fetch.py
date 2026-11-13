@@ -38,6 +38,9 @@ class FakeTourApi:
         self.dict_rows = dict_rows
         self.requests = []
         self.override = None  # (조건 함수, 상태 코드, 본문) — 맞으면 그 응답
+        self.overviews = {}  # 코스 contentId → overview(detailCommon2)
+        self.images = {}  # 파일 이름 → 바이트(없으면 404)
+        self.regions = {}  # "x,y" → (법정동 코드, 읍면동 이름)
         self.lock = threading.Lock()
         fake = self
 
@@ -48,7 +51,8 @@ class FakeTourApi:
                 with fake.lock:
                     fake.requests.append((path.rsplit("/", 1)[-1], params))
                 status, body = fake.respond(path.rsplit("/", 1)[-1], params)
-                data = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+                data = body if isinstance(body, bytes) else (
+                    body.encode() if isinstance(body, str) else json.dumps(body).encode())
                 self.send_response(status)
                 self.end_headers()
                 self.wfile.write(data)
@@ -70,6 +74,17 @@ class FakeTourApi:
         if api == "detailInfo2":
             items = self.courses.get(params["contentId"], [])
             return 200, ok(items[(page - 1) * rows: page * rows], len(items))
+        if api == "detailCommon2":
+            cid = params["contentId"]
+            return 200, ok([{"contentid": cid, "overview": self.overviews.get(cid, "")}], 1)
+        if api == "coord2regioncode.json":
+            found = self.regions.get(params.get("x", "") + "," + params.get("y", ""))
+            docs = [{"region_type": "H", "code": "9999999999"}]
+            if found:
+                docs.append({"region_type": "B", "code": found[0], "region_3depth_name": found[1]})
+            return 200, {"documents": docs}
+        if api in self.images:
+            return 200, self.images[api]
         if api == "detailIntro2":
             return 200, ok([{"contentid": params["contentId"], "schedule": self.intros.get(params["contentId"], "당일")}], 1)
         return 404, "no"

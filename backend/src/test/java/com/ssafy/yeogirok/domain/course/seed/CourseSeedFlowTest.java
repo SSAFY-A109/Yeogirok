@@ -59,6 +59,7 @@ class CourseSeedFlowTest {
 
 	static final byte[] JPEG = {(byte)0xFF, (byte)0xD8, (byte)0xFF, (byte)0xE0, 0, 16, 'J', 'F', 'I', 'F', 0, 1, 1, 0, 0, 1};
 	static final String ALL_ROOMS = "tourapi-course:%";
+	static final String JPEG_SHA256 = SeedPhotos.sha256(JPEG);
 
 	@TestConfiguration
 	static class Config {
@@ -125,6 +126,7 @@ class CourseSeedFlowTest {
 		place.put("imageUrl", photo == null ? "" : "https://tong.example.test/" + id + ".jpg");
 		place.put("cpyrhtDivCd", photo == null ? "" : "Type1");
 		place.put("photo", photo);
+		place.put("photoSha256", photo == null ? null : CourseSeedFlowTest.JPEG_SHA256);
 		return place;
 	}
 
@@ -154,9 +156,14 @@ class CourseSeedFlowTest {
 			place("p7", 1, 3, "2023-05-01", "11:00", null)));
 	}
 
+	/** 스크립트(tour_bundle.py)가 만드는 모양 그대로: createdAt·source 처럼 적재가 안 쓰는 칸도 있다. */
 	void bundle(String bundleId, List<Map<String, Object>> courses) throws IOException {
-		Files.write(dir.resolve("bundle-" + bundleId + ".json"),
-			jsonMapper.writeValueAsBytes(Map.of("bundleId", bundleId, "courses", courses)));
+		Map<String, Object> bundle = new LinkedHashMap<>();
+		bundle.put("bundleId", bundleId);
+		bundle.put("createdAt", "2026-11-14T10:00:00+09:00");
+		bundle.put("source", "tour-course-fetch");
+		bundle.put("courses", courses);
+		Files.write(dir.resolve("bundle-" + bundleId + ".json"), jsonMapper.writeValueAsBytes(bundle));
 		Files.createDirectories(dir.resolve("photos"));
 		for (String id : List.of("p1", "p3", "p5")) {
 			Files.write(dir.resolve("photos/" + id + ".jpg"), JPEG);
@@ -351,6 +358,32 @@ class CourseSeedFlowTest {
 
 		assertThat(report.failed()).containsEntry("c-bad", "INVALID_TIME");
 		assertThat(report.inserted()).isEqualTo(1);
+	}
+
+	/** AC-15: 두 번째 묶음을 넣으면 새 코스만 늘어난다(앞 묶음 코스가 다시 들어 있어도). */
+	@Test
+	void 두_번째_묶음을_넣으면_새_코스만_늘어난다() throws IOException {
+		bundle("b1", List.of(oneDay()));
+		run();
+		Long first = recordOf("c-one");
+		bundle("b2", List.of(oneDay(), twoDays("강릉 1박2일")));
+
+		CourseSeedJob.Report report = run();
+
+		assertThat(List.of(report.inserted(), report.skipped())).containsExactly(1, 2);
+		assertThat(recordOf("c-one")).isEqualTo(first);
+		assertThat(count("SELECT COUNT(*) FROM travel_rooms WHERE deleted_at IS NULL")).isEqualTo(2);
+	}
+
+	@Test
+	void 사진_해시가_다르면_그_사진은_빼고_날마다_사진이_없으면_넣지_않는다() throws IOException {
+		Map<String, Object> course = oneDay();
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> places = (List<Map<String, Object>>)course.get("places");
+		places.getFirst().put("photoSha256", "0".repeat(64));
+		bundle("b1", List.of(course));
+
+		assertThat(run().failed()).containsEntry("c-one", "PHOTO_MISSING_DAY");
 	}
 
 	@Test
