@@ -2,13 +2,13 @@ package com.ssafy.yeogirok.domain.course.dto;
 
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.regex.Pattern;
 
 import com.ssafy.yeogirok.domain.category.TravelCategory;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.request.ControlCharacters;
+import com.ssafy.yeogirok.global.request.RegionCode;
 
 /**
  * API-014 검색 조건(명세 {@code specs/course-search-api.md} 2·5절 2~3). 모두 선택이고 생략하면 거르지 않는다. 지원하지 않는
@@ -21,8 +21,6 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 	TransportMode transportMode) {
 
 	public static final int QUERY_MAX_LENGTH = 100;
-	/** 시·도 2자리 또는 시·군·구 5자리(078 목록 코드). */
-	private static final Pattern REGION_CODE = Pattern.compile("\\d{2}|\\d{5}");
 	private static final String POPULAR = "POPULAR";
 
 	/** 여행 기간(dayCount 기준). */
@@ -70,13 +68,8 @@ public record CourseSearchCondition(String pattern, String regionPrefix, String 
 	 * @return regionCode 가 null 이면 null
 	 */
 	public static String regionPrefix(String regionCode, ExceptionType onInvalid) {
-		if (regionCode == null) {
-			return null;
-		}
-		if (!REGION_CODE.matcher(regionCode).matches()) {
-			throw new BusinessException(onInvalid, "regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
-		}
-		return regionCode + "%";
+		RegionCode.check(regionCode, onInvalid);
+		return regionCode == null ? null : regionCode + "%";
 	}
 
 	private static <E extends Enum<E>> E parse(Class<E> type, String value, String field) {

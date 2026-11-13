@@ -87,6 +87,11 @@ public class RoomPlace {
 		return of(roomId, place, addedBy, PlaceSourceType.AI, now);
 	}
 
+	/** API-029 검색 담기. {@code place} 는 재사용하거나 TourAPI 상세로 처음 저장한 투어API 장소다. */
+	public static RoomPlace searched(Long roomId, Place place, Long addedBy, Instant now) {
+		return of(roomId, place, addedBy, PlaceSourceType.SEARCH, now);
+	}
+
 	/** API-030 공개 코스에서 가져오기. {@code place} 는 원본 방문의 장소 행을 그대로 쓴다. */
 	public static RoomPlace imported(Long roomId, Place place, Long addedBy, Long sourceRecordId, Instant now) {
 		RoomPlace roomPlace = of(roomId, place, addedBy, PlaceSourceType.COURSE, now);

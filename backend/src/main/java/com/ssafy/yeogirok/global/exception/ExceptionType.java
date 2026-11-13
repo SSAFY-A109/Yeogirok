@@ -152,6 +152,10 @@ public enum ExceptionType {
 
 	/* ── 장소 P ─────────────────────────────────────────────── */
 
+	/** API-026 검색어(q)·지역(regionCode) 조건이 틀렸다. */
+	PLACE_SEARCH_CONDITION_INVALID(BAD_REQUEST, "P002", "장소 검색어 조건 오류"),
+	/** TourAPI 를 부르지 못했다(키 없음·시간 초과·오류 응답). 장소 검색(API-026)·검색 담기(API-029). */
+	PLACE_PROVIDER_UNAVAILABLE(BAD_GATEWAY, "P003", "외부 장소 정보 공급자 연동 실패"),
 	CUSTOM_PLACE_NAME_INVALID(BAD_REQUEST, "P004", "직접 추가할 장소명은 앞뒤 공백을 빼고 1~255자여야 합니다."),
 
 	/* ── AR 팁 T ─────────────────────────────────────────────── */

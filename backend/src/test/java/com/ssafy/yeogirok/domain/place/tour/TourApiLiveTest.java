@@ -29,7 +29,7 @@ import tools.jackson.databind.JsonNode;
  * TOUR_API_KEY=Decoding키 ./gradlew test --tests '*TourApiLiveTest' -i
  * TOUR_API_KEY=Decoding키 TOUR_API_REGION=11680 ./gradlew test --tests '*TourApiLiveTest' -i   # 다른 지역(서울 강남구)
  * </pre>
- * 출력(-i)이나 build/reports/tests/test/index.html 의 Standard output 에서 결과를 본다. 호출 수는 10번이다(원본 1 + 카페 1 + 모든 카테고리 8, 일일 한도 참고).
+ * 출력(-i)이나 build/reports/tests/test/index.html 의 Standard output 에서 결과를 본다. 호출 수는 12번이다(원본 1 + 카페 1 + 모든 카테고리 8 + 검색·상세 2, 일일 한도 참고).
  */
 class TourApiLiveTest {
 
@@ -132,5 +132,21 @@ class TourApiLiveTest {
 		System.out.println("[매핑] 카테고리별 후보 수 = " + perCategory);
 		System.out.println("[매핑] 카테고리 없음으로 빠진 코드(중분류/소분류 = 개수) = " + unmapped);
 		assertThat(queries).hasSizeLessThanOrEqualTo(12);
+	}
+
+	/** 장소 검색(API-026)과 검색 담기(API-029)의 상세 확인. 검색 1번 + 상세 1번. */
+	@Test
+	void 키워드_검색과_상세가_같은_장소를_준다() {
+		HttpTourApiClient client = client();
+		TourSearchPage page = client.searchKeyword(new TourKeywordQuery("해변", region.substring(0, 2),
+			region.substring(2), 1, 5));
+		System.out.println("[검색] totalCount = " + page.totalCount() + ", 첫 쪽 = " + page.places());
+		assertThat(page.places()).as("검색 결과(좌표 있는 항목)").isNotEmpty();
+
+		TourPlace first = page.places().getFirst();
+		TourPlace detail = client.detail(first.contentId()).orElseThrow();
+		System.out.println("[상세] " + detail);
+		assertThat(detail.title()).isEqualTo(first.title());
+		assertThat(detail.lclsSystm1()).as("상세에도 신분류가 온다").isNotNull();
 	}
 }

@@ -41,7 +41,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 
-/** 여행방 후보 장소. API-029 는 추천 담기(AI)만 있고 검색 담기는 아직 없다({@link RoomPlaceService} TODO). */
+/** 여행방 후보 장소. API-029 는 검색 담기(SEARCH)·추천 담기(AI)를, API-030 은 공개 코스에서 가져오기를 받는다. */
 @RestController
 @RequestMapping("/api/v1/rooms/{roomId}")
 @RequiredArgsConstructor

@@ -18,8 +18,8 @@ import tools.jackson.databind.JsonNode;
  * <ul>
  *   <li>items: 생략·null C001, 배열 아님 C002, 비었거나 {@link #MAX_ITEMS}개 초과 C003</li>
  *   <li>placeRef: 생략·null C001, 객체 아님 C002. provider 가 TOUR_API 가 아니거나 providerPlaceId 가 비면 C003</li>
- *   <li>sourceType: 생략·null C001, 문자열 아님 C002. AI 만 받는다. SEARCH 는 장소 검색(API-026)이 생기면 받는다(지금 C003)</li>
- *   <li>recommendationRequestId·rank: AI 면 필수(생략·null C001, 정수 아님 C002), rank 는 1 이상(C003)</li>
+ *   <li>sourceType: 생략·null C001, 문자열 아님 C002. AI·SEARCH 가 아니면 C003</li>
+ *   <li>recommendationRequestId·rank: AI 면 필수(생략·null C001, 정수 아님 C002), rank 는 1 이상(C003). SEARCH 면 보지 않는다</li>
  * </ul>
  */
 public class RoomPlaceAddRequest {
@@ -69,7 +69,7 @@ public class RoomPlaceAddRequest {
 
 		String sourceType = nonNullString(item.get("sourceType"), "items.sourceType");
 		if (PlaceSourceType.SEARCH.name().equals(sourceType)) {
-			throw notAllowed("items.sourceType: 검색 담기(SEARCH)는 장소 검색(API-026)이 생기면 지원합니다.");
+			return RoomPlaceAddCommand.Item.search(providerPlaceId);
 		}
 		if (!PlaceSourceType.AI.name().equals(sourceType)) {
 			throw notAllowed("items.sourceType: AI 또는 SEARCH 여야 합니다.");
@@ -83,7 +83,7 @@ public class RoomPlaceAddRequest {
 		if (rank < 1) {
 			throw notAllowed("items.rank: 1 이상이어야 합니다.");
 		}
-		return new RoomPlaceAddCommand.Item(providerPlaceId, requestId, rank);
+		return RoomPlaceAddCommand.Item.ai(providerPlaceId, requestId, rank);
 	}
 
 	private static BusinessException notAllowed(String message) {
