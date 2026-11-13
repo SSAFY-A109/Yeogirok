@@ -6,9 +6,13 @@
 - 검증: 학습에 쓰지 않은 검증 83줄에서 글자 오류율(CER) 2.55% — 글자 단위 수치이며 영수증 전체 정확도가 아님
 - 영수증 단위 평가와 채택 근거: AI 실험 기록(실험결과.md) E8·E11·E17
 - 되돌리기: 환경변수 OCR_REC_MODEL_DIR=official
+- 내보내기: paddle 3.2.2 (운영 Dockerfile 의 CPU paddle 과 같은 버전), PaddleOCR 저장소 dab3fe3, 체크포인트 best_accuracy (11/04 학습)
+  - 11/13 다시 내보냄: 11/04 에 paddle 3.3.1 로 내보낸 파일은 paddle 3.2.2 에서 불러오기 실패 (pd_op_to_kernel_pass.cc:2597)
+  - 다시 학습하지 않음. 같은 체크포인트이며, 서버 GPU 에서 dev2 29장 결과가 11/04 파일과 같음을 확인
+  - 앞으로 이 모델을 다시 내보낼 때도 운영 paddle 버전과 같은 버전으로 내보낼 것
 
 | 파일 | 크기 (bytes) | md5 |
 |---|---|---|
-| inference.json | 214,476 | 4db87573175dc80b9c1b09d4df5d4f7d |
-| inference.pdiparams | 13,342,671 | 1f4ee6f11fc8c3061feebc58f829f91c |
+| inference.json | 217,724 | 228a3452e95c70e0b19646a35896f271 |
+| inference.pdiparams | 13,342,671 | d69ba074dc43ddb7770ed46bbec87c36 |
 | inference.yml | 96,039 | db0295874ec67df2a56196555e963971 |
