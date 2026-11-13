@@ -105,11 +105,13 @@ services:
       # - KAKAO_ADMIN_KEY: 카카오 회원 탈퇴 때 카카오 연결 해제. 없으면 해제하지 않고 재시도 대상으로만 남는다.
       # - KAKAO_REST_API_KEY: 발자취 주소·후보 장소 법정동(카카오 로컬 API). 없으면 주소가 비어 저장된다.
       # - FIREBASE_SERVICE_ACCOUNT_BASE64: 채팅 앱 푸시(FCM). 없으면 푸시만 보내지 않는다.
+      # - TOUR_API_KEY: 장소 추천(API-034, 한국관광공사 TourAPI). 없으면 장소 추천만 C014 로 실패한다.
       # :- 는 .env 에 없을 때 경고 없이 빈 값으로 넘긴다는 뜻이다.
       GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
       KAKAO_ADMIN_KEY: ${KAKAO_ADMIN_KEY:-}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
       FIREBASE_SERVICE_ACCOUNT_BASE64: ${FIREBASE_SERVICE_ACCOUNT_BASE64:-}
+      TOUR_API_KEY: ${TOUR_API_KEY:-}
       # 여행방 초대 (백엔드 #55, 11/6). 둘 중 하나라도 빠지면 백엔드가 바로 멈춘다.
       # 초대 토큰 암호화 키는 비밀 값이라 .env 에 둔다. 한 번 만든 뒤에는 바꾸지 않는다.
       ROOM_INVITE_TOKEN_KEY: ${ROOM_INVITE_TOKEN_KEY}
@@ -153,7 +155,7 @@ services:
       COURSE_SEED_UNPUBLISH: ${COURSE_SEED_UNPUBLISH:-}
       COURSE_SEED_RESEED: ${COURSE_SEED_RESEED:-}
       # 백엔드에 키가 필요해지면 .env 에 넣고 여기에 한 줄씩 추가한다. 예:
-      # TOUR_API_KEY: ${TOUR_API_KEY}
+      # GMS_KEY: ${GMS_KEY}
     ports:
       - "127.0.0.1:8080:8080"   # Nginx만 접근
 
