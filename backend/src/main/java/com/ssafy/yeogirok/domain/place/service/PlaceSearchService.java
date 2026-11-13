@@ -2,7 +2,6 @@ package com.ssafy.yeogirok.domain.place.service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 
@@ -14,6 +13,7 @@ import com.ssafy.yeogirok.domain.place.tour.TourSearchPage;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.request.PageSize;
+import com.ssafy.yeogirok.global.request.RegionCode;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,13 +36,12 @@ import lombok.extern.slf4j.Slf4j;
 public class PlaceSearchService {
 
 	static final int QUERY_MAX_LENGTH = 100;
-	private static final Pattern REGION_CODE = Pattern.compile("\\d{2}|\\d{5}");
 
 	private final TourApiClient tourApiClient;
 
 	public PlaceSearchResponse search(String q, String regionCode, String cursor, Integer limit) {
 		String keyword = keyword(q);
-		checkRegionCode(regionCode);
+		RegionCode.check(regionCode, ExceptionType.PLACE_SEARCH_CONDITION_INVALID);
 		int size = PageSize.resolve(limit);
 		int pageNo = decodePage(cursor, size);
 
@@ -73,13 +72,6 @@ public class PlaceSearchService {
 				"q: 앞뒤 공백을 빼고 1~%d자여야 합니다.".formatted(QUERY_MAX_LENGTH));
 		}
 		return keyword;
-	}
-
-	private static void checkRegionCode(String regionCode) {
-		if (regionCode != null && !REGION_CODE.matcher(regionCode).matches()) {
-			throw new BusinessException(ExceptionType.PLACE_SEARCH_CONDITION_INVALID,
-				"regionCode: 시·도 2자리 또는 시·군·구 5자리 숫자여야 합니다.");
-		}
 	}
 
 	static String encodePage(int pageNo, int size) {
