@@ -11,7 +11,8 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
 
 /**
  * API-028 후보 목록. version 은 여행방 version 이다(빼기·복원 요청에 쓴다).
- * sourceRecord 는 여행 기록·공개 코스가 아직 없어 항상 null 이다. TODO API-030 에서 공개 가능한 원본 코스 제목·작성자를 채운다.
+ * sourceRecord 는 아직 항상 null 이다. 코스에서 가져온 후보(API-030)는 sourceRecordId 만 채운다.
+ * TODO 원본 코스가 지금 공개 중이면 제목·작성자를 sourceRecord 로 채운다(API-028 명세의 모양에 맞춰).
  */
 public record RoomPlaceListResponse(List<Item> items, Integer version) {
 
