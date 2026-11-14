@@ -159,6 +159,8 @@ def build_report(store, new_pass_ids):
         "reducedPassed": sum(1 for j in passed if j["reducedFrom"]),
         "schedules": dict(Counter((j["schedule"] or "(빈 값)") for j in with_intro)),
         "unreadSchedules": sum(1 for j in with_intro if not j["scheduleRead"]),
+        "daysFromTaketime": sum(1 for j in passed if j.get("daysSource") == "TAKETIME"),
+        "multiDaysFromTaketime": sum(1 for j in passed if j.get("daysSource") == "TAKETIME" and j["days"] > 1),
         "photoCopyright": dict(Counter((p.get("cpyrhtDivCd") or "(빈 값)")
                                        for j in passed for p in j["places"] if p["hasPhoto"])),
         "provincesOfPassed": dict(Counter(j["provinceCode"] or "(없음)" for j in passed)),
@@ -182,7 +184,8 @@ def print_report(report, log=print):
         f" · 통과 비율 {report['passRate']}")
     log("탈락 사유: " + (", ".join(f"{REASON_NAMES.get(k, k)} {v}" for k, v in report["reasons"].items()) or "없음"))
     log(f"일수별 통과: {report['daysOfPassed']} · 일수를 줄여 통과 {report['reducedPassed']}")
-    log(f"schedule 값: {report['schedules']} · 읽지 못함 {report['unreadSchedules']}")
+    log(f"schedule 값: {report['schedules']} · 읽지 못함 {report['unreadSchedules']}"
+        f" · 통과 중 소요 시간으로 일수를 정함 {report['daysFromTaketime']}(그중 2일 이상 {report['multiDaysFromTaketime']})")
     log(f"사진 저작권 유형(통과 코스): {report['photoCopyright']}")
     log(f"시·도별 통과(lDongRegnCd): {report['provincesOfPassed']} · 코드 12: {report['province12Passed']}")
     log(f"누적 호출 {report['callsTotal']}번 · 남은 코스 {report['remainingCourses']}")

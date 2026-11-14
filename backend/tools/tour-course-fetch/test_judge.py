@@ -112,7 +112,28 @@ class Judge(unittest.TestCase):
 
     def test_unreadable_schedule_is_one_day(self):
         result = judge.judge(COURSE, info("1", "2", "3"), 3, {"schedule": "가볍게"}, self.dictionary)
-        self.assertEqual((result["days"], result["scheduleRead"]), (1, False))
+        self.assertEqual((result["days"], result["scheduleRead"], result["daysSource"]), (1, False, "DEFAULT"))
+
+    def test_unreadable_schedule_uses_taketime(self):
+        # S15P31A109-226: 일정 "기타"가 대부분이라 소요 시간으로 일수를 본다. 시간 단위는 당일.
+        cases = {"1박 2일": (2, "TAKETIME"), "2일": (2, "TAKETIME"), "1일": (1, "TAKETIME"),
+                 "6시간": (1, "DEFAULT"), "약 1시간 20분": (1, "DEFAULT"), "": (1, "DEFAULT")}
+        for taketime, expected in cases.items():
+            with self.subTest(taketime=taketime):
+                result = judge.judge(COURSE, info("1", "2", "3", "4"), 4, {"schedule": "기타", "taketime": taketime},
+                                     self.dictionary)
+                self.assertEqual((result["days"], result["daysSource"]), expected)
+
+    def test_readable_schedule_wins_over_taketime(self):
+        result = judge.judge(COURSE, info("1", "2", "3", "4"), 4, {"schedule": "당일", "taketime": "1박 2일"},
+                             self.dictionary)
+        self.assertEqual((result["days"], result["daysSource"], result["taketime"]), (1, "SCHEDULE", "1박 2일"))
+
+    def test_taketime_days_split_places_and_dates(self):
+        result = judge.judge(COURSE, info("1", "2", "3", "4"), 4, {"schedule": "기타", "taketime": "1박 2일"},
+                             self.dictionary)
+        self.assertEqual([(p["day"], p["visitDate"]) for p in result["places"]],
+                         [(1, "2022-03-04"), (1, "2022-03-04"), (2, "2022-03-05"), (2, "2022-03-05")])
 
     def test_date_crosses_month(self):
         course = dict(COURSE, createdtime="20220228090000")
