@@ -139,4 +139,20 @@ class PublicCourseRepositoryTest {
 		assertThat(repository.countPhotos(List.of(course.getId(), noVisit.getId(), unlinked.getRecordId())))
 			.containsExactly(new CoursePhotoStats(course.getId(), 3, 1, 2));
 	}
+
+	/** 227: 공식 계정이 만든 방의 기록만 공식 코스다(참여만 한 방·다른 계정은 아님). */
+	@Test
+	void 공식_코스는_공식_계정이_만든_방의_기록이다() {
+		long official = em.persist(com.ssafy.yeogirok.domain.user.domain.User.signUp(
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER, com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT,
+			null, "공식", null, NOW)).getId();
+		TravelRecord byOfficial = fixture.record(fixture.room(DAY1, official));
+		TravelRecord joinedOnly = fixture.record(fixture.room(DAY1, ME, official));
+		em.flush();
+		em.clear();
+
+		assertThat(repository.findOfficialIds(List.of(course.getId(), byOfficial.getId(), joinedOnly.getId()),
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER,
+			com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT)).containsExactly(byOfficial.getId());
+	}
 }

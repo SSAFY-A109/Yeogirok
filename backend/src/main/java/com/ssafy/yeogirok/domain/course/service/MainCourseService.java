@@ -5,9 +5,11 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.springframework.stereotype.Service;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.category.TravelCategory;
+import com.ssafy.yeogirok.domain.course.OfficialAccount;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
 import com.ssafy.yeogirok.domain.course.repository.CourseCandidate;
@@ -63,16 +66,19 @@ public class MainCourseService {
 
 	private List<MainCoursePicker.Entry> entries(List<CourseCandidate> candidates) {
 		Map<Long, CoursePhotoStats> stats = new HashMap<>();
+		Set<Long> official = new HashSet<>();
 		List<Long> ids = candidates.stream().map(CourseCandidate::id).toList();
 		for (int from = 0; from < ids.size(); from += STATS_CHUNK) {
-			publicCourseRepository.countPhotos(ids.subList(from, Math.min(from + STATS_CHUNK, ids.size())))
-				.forEach(stat -> stats.put(stat.recordId(), stat));
+			List<Long> chunk = ids.subList(from, Math.min(from + STATS_CHUNK, ids.size()));
+			publicCourseRepository.countPhotos(chunk).forEach(stat -> stats.put(stat.recordId(), stat));
+			official.addAll(publicCourseRepository.findOfficialIds(chunk, OfficialAccount.PROVIDER, OfficialAccount.SUBJECT));
 		}
 		return candidates.stream().map(course -> {
 			CoursePhotoStats stat = stats.get(course.id());
 			int days = CoursePeriod.dates(course.roomStart(), course.roomEnd(), course.firstVisit(), course.lastVisit())
 				.size();
-			return new MainCoursePicker.Entry(course, stat.visits(), stat.photoVisits(), stat.publicPhotos(), days);
+			return new MainCoursePicker.Entry(course, stat.visits(), stat.photoVisits(), stat.publicPhotos(), days,
+				official.contains(course.id()));
 		}).toList();
 	}
 

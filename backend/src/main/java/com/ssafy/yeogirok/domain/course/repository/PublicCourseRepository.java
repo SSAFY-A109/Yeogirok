@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.global.oauth.OAuthProvider;
 
 /** 공개 코스 검색·메인 추천 후보(API-014·015, 명세 {@code specs/course-search-api.md} 2·{@code specs/main-api.md} 1). */
 public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
@@ -86,4 +87,10 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 		+ " left join VisitImage i on i.visitId = v.id and i.publicSelected = true"
 		+ " where v.recordId in :recordIds group by v.recordId")
 	List<CoursePhotoStats> countPhotos(@Param("recordIds") Collection<Long> recordIds);
+
+	/** 공식 계정({@code OfficialAccount})이 만든 방의 기록 ID(API-015 사용자 코스 자리 구분). */
+	@Query("select r.id from TravelRecord r, RoomMember m, User u where m.roomId = r.roomId and m.creator = true"
+		+ " and u.id = m.userId and u.provider = :provider and u.providerSubject = :subject and r.id in :recordIds")
+	List<Long> findOfficialIds(@Param("recordIds") Collection<Long> recordIds, @Param("provider") OAuthProvider provider,
+		@Param("subject") String subject);
 }

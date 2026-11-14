@@ -204,6 +204,27 @@ class MainCourseServiceTest {
 		assertThat(response.nextCursor()).isNull();
 	}
 
+	/** 227: 공식 계정 코스가 많아도 사용자 코스는 자기 쪽 맨 앞 자리를 받는다(공식 여부는 방 만든 계정으로 DB 에서 판정). */
+	@Test
+	void 사용자_코스는_공식_코스가_많아도_앞자리를_받는다() {
+		long official = em.persist(com.ssafy.yeogirok.domain.user.domain.User.signUp(
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER, com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT,
+			null, "공식", null, NOW)).getId();
+		for (int i = 0; i < 10; i++) {
+			TravelRoom room = fixture.room(DAY1, official);
+			em.getEntityManager().createNativeQuery("UPDATE travel_rooms SET end_date = start_date WHERE id = ?1")
+				.setParameter(1, room.getId()).executeUpdate();
+			TravelRecord record = fixture.record(room);
+			record.changeCourse("공식 " + i, "", NOW, true, NOW);
+			for (int position = 1; position <= 3; position++) {  // 공개 사진 3장·방문 3개 → 사진 넉넉
+				visit(record, "공식 장소 " + i + "-" + position, DAY1, position, true);
+			}
+		}
+		TravelRecord mine = shown("내 코스", 1);  // 공개 사진 1장 → 나머지 쪽이라 2번째 자리
+
+		assertThat(ids(recommend())).hasSize(8).element(1).isEqualTo(mine.getId());
+	}
+
 	@Test
 	void 카테고리와_지역으로_거르고_없는_카테고리는_CO004_지역_형식은_C003() {
 		TravelRecord cafe = shown("카페", 1);

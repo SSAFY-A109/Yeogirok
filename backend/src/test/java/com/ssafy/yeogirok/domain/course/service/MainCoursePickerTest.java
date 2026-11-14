@@ -20,12 +20,17 @@ class MainCoursePickerTest {
 
 	static final Random SEEDED = new Random(227);
 
-	static MainCoursePicker.Entry entry(long id, long visits, long photoVisits, long photos, int days) {
+	static MainCoursePicker.Entry entry(long id, long visits, long photoVisits, long photos, int days, boolean official) {
 		return new MainCoursePicker.Entry(new CourseCandidate(id, "코스" + id, id, null, null, TransportMode.CAR, null, null,
-			0L), visits, photoVisits, photos, days);
+			0L), visits, photoVisits, photos, days, official);
 	}
 
-	/** id 1~ : 사진 넉넉(4방문·4사진, 당일), 101~ : 나머지(4방문·1사진). */
+	/** 공식 코스. */
+	static MainCoursePicker.Entry entry(long id, long visits, long photoVisits, long photos, int days) {
+		return entry(id, visits, photoVisits, photos, days, true);
+	}
+
+	/** 공식 코스. id 1~ : 사진 넉넉(4방문·4사진, 당일), 101~ : 나머지(4방문·1사진). */
 	static List<MainCoursePicker.Entry> pool(int rich, int others) {
 		List<MainCoursePicker.Entry> entries = new ArrayList<>();
 		IntStream.rangeClosed(1, rich).forEach(i -> entries.add(entry(i, 4, 4, 4, 1)));
@@ -89,6 +94,38 @@ class MainCoursePickerTest {
 	void 후보가_8개_미만이면_있는_만큼_없으면_빈_목록() {
 		assertThat(ids(MainCoursePicker.pick(pool(2, 3), SEEDED))).hasSize(5).doesNotHaveDuplicates();
 		assertThat(MainCoursePicker.pick(List.of(), SEEDED)).isEmpty();
+	}
+
+	/** 사용자 코스는 최대 2개를 먼저 뽑아 자기 쪽 맨 앞(넉넉하면 1번, 아니면 2번 자리)에 둔다. */
+	@RepeatedTest(10)
+	void 사용자_코스는_자기_쪽의_맨_앞_자리에_온다() {
+		List<MainCoursePicker.Entry> entries = new ArrayList<>(pool(10, 10));
+		entries.add(entry(901, 4, 4, 4, 1, false));  // 사진 넉넉한 사용자 코스
+		entries.add(entry(902, 4, 1, 1, 1, false));  // 나머지 사용자 코스
+
+		List<Long> picked = ids(MainCoursePicker.pick(entries, new Random()));
+
+		assertThat(picked.subList(0, 2)).containsExactly(901L, 902L);
+		assertThat(picked).hasSize(8).doesNotHaveDuplicates();
+	}
+
+	@RepeatedTest(10)
+	void 사용자_코스가_여럿이면_2개만_자리를_받고_나머지는_공식_코스와_같이_뽑힌다() {
+		List<MainCoursePicker.Entry> entries = new ArrayList<>(pool(10, 10));
+		IntStream.rangeClosed(1, 5).forEach(i -> entries.add(entry(900 + i, 4, 4, 4, 1, false)));
+
+		List<Long> picked = ids(MainCoursePicker.pick(entries, new Random()));
+
+		// 넉넉한 사용자 코스 2개가 1·3번째를 먼저 차지한다. 나머지 3개는 공식 코스와 섞여 뽑힐 수도 안 뽑힐 수도 있다.
+		assertThat(List.of(picked.get(0), picked.get(2))).allMatch(id -> id > 900);
+		for (int i = 0; i < picked.size(); i++) {
+			assertThat(picked.get(i) < 100 || picked.get(i) > 900).as("%d번째", i + 1).isEqualTo(i % 2 == 0);
+		}
+	}
+
+	@Test
+	void 사용자_코스가_없으면_공식_코스로_채운다() {
+		assertThat(ids(MainCoursePicker.pick(pool(10, 10), SEEDED))).hasSize(8).allMatch(id -> id < 900);
 	}
 
 	/** AC-06: 공개 사진 3장 이상이고 사진 붙은 방문이 절반 이상(포함)일 때만 사진 넉넉. */
