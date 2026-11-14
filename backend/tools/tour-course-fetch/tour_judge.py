@@ -156,6 +156,7 @@ def judge(course, info_items, info_total, intro_item, dictionary):
     result = {
         "contentId": str(course.get("contentid")), "title": course.get("title"),
         "createdDate": None, "schedule": None, "scheduleDays": None, "scheduleRead": None,
+        "taketime": None, "daysSource": None,
         "days": None, "reducedFrom": None, "result": "FAIL", "reason": None,
         "infoTotal": info_total, "infoReceived": len(info_items), "excludedPlaceIds": [],
         "provinceCode": None, "places": [],
@@ -169,8 +170,13 @@ def judge(course, info_items, info_total, intro_item, dictionary):
         return result
 
     schedule = intro_item.get("schedule") or ""
+    taketime = intro_item.get("taketime") or ""
     days, read = parse_days(schedule)
-    result.update(schedule=schedule, scheduleDays=days, scheduleRead=read)
+    result.update(schedule=schedule, scheduleDays=days, scheduleRead=read, taketime=taketime, daysSource="SCHEDULE")
+    if not read:
+        # 일정은 대부분 "기타"라 소요 시간("1박 2일", "2일")으로 한 번 더 본다. "6시간"처럼 시간이면 당일(S15P31A109-226).
+        days, from_taketime = parse_days(taketime)
+        result["daysSource"] = "TAKETIME" if from_taketime else "DEFAULT"
     start = created_date(course)
     if start is None:
         result["reason"] = NO_DATE

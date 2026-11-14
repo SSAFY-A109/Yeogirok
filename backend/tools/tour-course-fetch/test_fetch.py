@@ -97,7 +97,9 @@ class FakeTourApi:
         if api in self.images:
             return 200, self.images[api]
         if api == "detailIntro2":
-            return 200, ok([{"contentid": params["contentId"], "schedule": self.intros.get(params["contentId"], "당일")}], 1)
+            intro = self.intros.get(params["contentId"], "당일")  # 문자열이면 schedule, dict 면 칸 그대로
+            fields = intro if isinstance(intro, dict) else {"schedule": intro}
+            return 200, ok([{"contentid": params["contentId"], **fields}], 1)
         return 404, "no"
 
     def count(self, api=None):
@@ -328,6 +330,17 @@ class FetchTest(unittest.TestCase):
         with open(os.path.join(self.data_dir, "judged", "c1.json"), encoding="utf-8") as f:
             judged = json.load(f)
         self.assertEqual((judged["infoTotal"], judged["infoReceived"]), (4, 3))
+
+    def test_report_counts_days_read_from_taketime(self):
+        # S15P31A109-226: 일정 "기타" + 소요 시간 "1박 2일" 이면 2일로 통과하고 보고에 센다.
+        # 소요 시간 "1일"로 당일이 된 코스는 정한 개수에만 들고 2일 이상에는 들지 않는다.
+        self.fake.intros["c1"] = {"schedule": "기타", "taketime": "1박 2일"}
+        self.fake.intros["c3"] = {"schedule": "기타", "taketime": "1일"}
+        self.run_fetch("--max-calls", "100")
+        report = self.report()
+        self.assertEqual((report["daysFromTaketime"], report["multiDaysFromTaketime"]), (2, 1))
+        self.assertEqual(report["daysOfPassed"], {"1박2일": 1, "당일": 1})
+        self.assertTrue(any("소요 시간으로 일수를 정함 2(그중 2일 이상 1)" in line for line in self.logs))
 
     def test_state_keeps_only_seed_and_calls(self):
         self.run_fetch("--max-calls", "100")
