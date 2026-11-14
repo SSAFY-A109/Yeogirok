@@ -20,12 +20,16 @@ import com.ssafy.yeogirok.domain.room.dto.CustomPlaceCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddRequest;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceImportCommand;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceImportRequest;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceImportResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceListResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreRequest;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceAddService;
+import com.ssafy.yeogirok.domain.room.service.RoomPlaceImportService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyKey;
 import com.ssafy.yeogirok.global.idempotency.IdempotencyService;
@@ -37,7 +41,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 
-/** 여행방 후보 장소. API-029 는 추천 담기(AI)만 있고 검색 담기·API-030(코스 가져오기)은 아직 없다({@link RoomPlaceService} TODO). */
+/** 여행방 후보 장소. API-029 는 검색 담기(SEARCH)·추천 담기(AI)를, API-030 은 공개 코스에서 가져오기를 받는다. */
 @RestController
 @RequestMapping("/api/v1/rooms/{roomId}")
 @RequiredArgsConstructor
@@ -46,9 +50,11 @@ public class RoomPlaceController {
 	/** 멱등키 scope. 대상은 방 ID 다. */
 	static final String CUSTOM_PLACE_SCOPE = "room-custom-place-create";
 	static final String ADD_PLACES_SCOPE = "room-place-add";
+	static final String IMPORT_PLACES_SCOPE = "room-place-import";
 
 	private final RoomPlaceService roomPlaceService;
 	private final RoomPlaceAddService roomPlaceAddService;
+	private final RoomPlaceImportService roomPlaceImportService;
 	private final IdempotencyService idempotencyService;
 
 	@Operation(summary = "API-028 여행방 후보 장소 목록 조회")
@@ -75,6 +81,23 @@ public class RoomPlaceController {
 			() -> roomPlaceAddService.add(user.userId(), roomId, command),
 			RoomPlaceAddService::resultIdOf,
 			id -> roomPlaceAddService.getAdded(user.userId(), roomId, RoomPlaceAddService.roomPlaceIdsOf(id)));
+		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
+	}
+
+	@Operation(summary = "API-030 공개된 코스에서 선택 장소 가져오기")
+	@PostMapping("/place-imports")
+	public ResponseEntity<ApiResponseBody<RoomPlaceImportResponse>> importPlaces(
+		@AuthenticationPrincipal AuthenticatedUser user,
+		@RequestHeader("Idempotency-Key") String idempotencyKey,
+		@PathVariable Long roomId,
+		@RequestBody RoomPlaceImportRequest request) {
+		RoomPlaceImportCommand command = request.toCommand();
+		RoomPlaceImportResponse response = idempotencyService.execute(
+			new IdempotencyKey(user.userId(), IMPORT_PLACES_SCOPE, roomId.toString(), idempotencyKey),
+			command,
+			() -> roomPlaceImportService.importPlaces(user.userId(), roomId, command),
+			RoomPlaceImportService::resultIdOf,
+			id -> roomPlaceImportService.getImported(user.userId(), roomId, RoomPlaceImportService.roomPlaceIdsOf(id)));
 		return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseUtil.createSuccessResponse(response));
 	}
 

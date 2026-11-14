@@ -136,6 +136,10 @@ public enum ExceptionType {
 	COURSE_RECOMMENDATION_CATEGORY_NOT_SUPPORTED(BAD_REQUEST, "CO004", "지원하지 않는 코스 추천 카테고리"),
 	/** 노션에 발생 조건이 "일시 불가"뿐이라 던지는 곳이 없다(명세 main-api.md 5절 7). */
 	COURSE_RECOMMENDATION_UNAVAILABLE(SERVICE_UNAVAILABLE, "CO005", "추천 코스 조회 일시 불가"),
+	/** API-030. visitIds 생략·null·빈 배열. */
+	COURSE_IMPORT_NOTHING_SELECTED(BAD_REQUEST, "CO006", "가져올 코스 장소를 선택하지 않음"),
+	/** API-030. 다른 기록의 방문이거나 공개 대상이 아닌 방문. */
+	COURSE_IMPORT_VISIT_NOT_IN_COURSE(BAD_REQUEST, "CO007", "선택한 장소 항목이 원본 코스에 속하지 않음"),
 	COURSE_NOT_MEMBER(FORBIDDEN, "CO008", "해당 여행 기록의 현재 참여자가 아님"),
 	/** 부분 선택 필드를 받던 계약의 오류. 지금은 전체 공개라 생기지 않는다(명세 course-publish-api.md 5절 7). */
 	COURSE_SELECTION_NOT_IN_RECORD(UNPROCESSABLE_CONTENT, "CO009", "공개 대상으로 선택한 자원이 원본 기록에 속하지 않음"),
@@ -148,6 +152,10 @@ public enum ExceptionType {
 
 	/* ── 장소 P ─────────────────────────────────────────────── */
 
+	/** API-026 검색어(q)·지역(regionCode) 조건이 틀렸다. */
+	PLACE_SEARCH_CONDITION_INVALID(BAD_REQUEST, "P002", "장소 검색어 조건 오류"),
+	/** TourAPI 를 부르지 못했다(키 없음·시간 초과·오류 응답). 장소 검색(API-026)·검색 담기(API-029). */
+	PLACE_PROVIDER_UNAVAILABLE(BAD_GATEWAY, "P003", "외부 장소 정보 공급자 연동 실패"),
 	CUSTOM_PLACE_NAME_INVALID(BAD_REQUEST, "P004", "직접 추가할 장소명은 앞뒤 공백을 빼고 1~255자여야 합니다."),
 
 	/* ── AR 팁 T ─────────────────────────────────────────────── */

@@ -47,7 +47,10 @@ import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.entity.PlaceSourceType;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceAddResponse;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceImportCommand;
+import com.ssafy.yeogirok.domain.room.dto.RoomPlaceImportResponse;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceAddService;
+import com.ssafy.yeogirok.domain.room.service.RoomPlaceImportService;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -74,6 +77,9 @@ class RoomPlaceControllerTest {
 
 	@MockitoBean
 	RoomPlaceAddService roomPlaceAddService;
+
+	@MockitoBean
+	RoomPlaceImportService roomPlaceImportService;
 
 	@MockitoBean
 	IdempotencyService idempotencyService;
@@ -167,11 +173,27 @@ class RoomPlaceControllerTest {
 				}], "addedCount": 1, "version": 5}}
 				""", JsonCompareMode.STRICT));
 
-		RoomPlaceAddCommand expected = new RoomPlaceAddCommand(List.of(new RoomPlaceAddCommand.Item("126508", 31L, 1)));
+		RoomPlaceAddCommand expected = new RoomPlaceAddCommand(List.of(RoomPlaceAddCommand.Item.ai("126508", 31L, 1)));
 		ArgumentCaptor<IdempotencyKey> key = ArgumentCaptor.forClass(IdempotencyKey.class);
 		verify(idempotencyService).execute(key.capture(), eq(expected), any(), any(), any());
 		assertThat(key.getValue()).isEqualTo(new IdempotencyKey(USER_ID, RoomPlaceController.ADD_PLACES_SCOPE, "7",
 			"key-1"));
+	}
+
+	@Test
+	void 검색_담기는_추천_번호_없이_받고_추천_담기와_섞어_보낼_수_있다() throws Exception {
+		given(roomPlaceAddService.add(eq(USER_ID), eq(7L), any())).willReturn(RoomPlaceAddResponse.of(List.of(), 5));
+
+		postPlaces("""
+			{"items": [{"placeRef": {"provider": "TOUR_API", "providerPlaceId": "2733967"}, "sourceType": "SEARCH"},
+			           {"placeRef": {"provider": "TOUR_API", "providerPlaceId": "126508"},
+			            "sourceType": "AI", "recommendationRequestId": 31, "rank": 1}]}
+			""")
+			.andExpect(status().isCreated());
+
+		verify(idempotencyService).execute(any(), eq(new RoomPlaceAddCommand(List.of(
+			RoomPlaceAddCommand.Item.search("2733967"), RoomPlaceAddCommand.Item.ai("126508", 31L, 1)))),
+			any(), any(), any());
 	}
 
 	@ParameterizedTest
@@ -186,7 +208,8 @@ class RoomPlaceControllerTest {
 		"{\"items\":[{\"placeRef\":{\"provider\":\"MANUAL\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C003",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\" \"},\"sourceType\":\"AI\",\"recommendationRequestId\":1,\"rank\":1}]}|C003",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"recommendationRequestId\":1,\"rank\":1}]}|C001",
-		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"SEARCH\"}]}|C003",
+		"{\"items\":[{\"placeRef\":{\"provider\":\"MANUAL\",\"providerPlaceId\":\"1\"},\"sourceType\":\"SEARCH\"}]}|C003",
+		"{\"items\":[{\"sourceType\":\"SEARCH\"}]}|C001",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"COURSE\"}]}|C003",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"rank\":1}]}|C001",
 		"{\"items\":[{\"placeRef\":{\"provider\":\"TOUR_API\",\"providerPlaceId\":\"1\"},\"sourceType\":\"AI\",\"recommendationRequestId\":1}]}|C001",
@@ -205,6 +228,67 @@ class RoomPlaceControllerTest {
 		postPlaces("{\"items\":[" + String.join(",", java.util.Collections.nCopies(51, item)) + "]}")
 			.andExpect(jsonPath("$.code").value("C003"));
 		verifyNoInteractions(roomPlaceAddService);
+	}
+
+	/* ── API-030 ────────────────────────────────────────────── */
+
+	private ResultActions postImports(String json) throws Exception {
+		return mockMvc.perform(post("/api/v1/rooms/7/place-imports").with(asUser(USER_ID))
+			.header("Idempotency-Key", "key-1").contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	@Test
+	void 코스_가져오기는_201과_명세의_응답을_주고_멱등키는_방_단위다() throws Exception {
+		PlaceInfo coursePlace = new PlaceInfo(PlaceProvider.TOUR_API, "126508", "경포해변", LAT, LNG, null,
+			"NATURE", "자연", "4215010100", "강릉동", null, null);
+		given(roomPlaceImportService.importPlaces(eq(USER_ID), eq(7L), any())).willReturn(new RoomPlaceImportResponse(
+			List.of(new RoomPlaceResponse(401L, coursePlace, PlaceSourceType.COURSE, 201L, USER_ID)), 3));
+
+		postImports("{\"recordId\": 201, \"visitIds\": [702, 701]}")
+			.andExpect(status().isCreated())
+			.andExpect(content().json("""
+				{"success": true, "data": {"added": [{
+				  "id": 401,
+				  "place": {"provider": "TOUR_API", "providerPlaceId": "126508", "name": "경포해변",
+				    "latitude": 37.7519000, "longitude": 128.8761000, "address": null,
+				    "categoryCode": "NATURE", "categoryName": "자연", "regionCode": "4215010100", "regionName": "강릉동",
+				    "imageUrl": null, "imageAttribution": null},
+				  "sourceType": "COURSE", "sourceRecordId": 201, "addedBy": 1
+				}], "version": 3}}
+				""", JsonCompareMode.STRICT));
+
+		RoomPlaceImportCommand expected = new RoomPlaceImportCommand(201L, List.of(702L, 701L));
+		ArgumentCaptor<IdempotencyKey> key = ArgumentCaptor.forClass(IdempotencyKey.class);
+		verify(idempotencyService).execute(key.capture(), eq(expected), any(), any(), any());
+		assertThat(key.getValue()).isEqualTo(new IdempotencyKey(USER_ID, RoomPlaceController.IMPORT_PLACES_SCOPE,
+			"7", "key-1"));
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', value = {
+		"{\"visitIds\":[1]}|C001",
+		"{\"recordId\":null,\"visitIds\":[1]}|C001",
+		"{\"recordId\":\"201\",\"visitIds\":[1]}|C002",
+		"{\"recordId\":201}|CO006",
+		"{\"recordId\":201,\"visitIds\":null}|CO006",
+		"{\"recordId\":201,\"visitIds\":[]}|CO006",
+		"{\"recordId\":201,\"visitIds\":701}|C002",
+		"{\"recordId\":201,\"visitIds\":[\"701\"]}|C002",
+		"{\"recordId\":201,\"visitIds\":[null]}|C002",
+		"{\"recordId\":201,\"visitIds\":[701,701]}|C003"
+	})
+	void 코스_가져오기_요청_형식_오류(String json, String code) throws Exception {
+		postImports(json).andExpect(jsonPath("$.code").value(code));
+		verifyNoInteractions(roomPlaceImportService);
+	}
+
+	@Test
+	void 코스_가져오기에_멱등키_헤더가_없으면_C001() throws Exception {
+		mockMvc.perform(post("/api/v1/rooms/7/place-imports").with(asUser(USER_ID))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"recordId\": 201, \"visitIds\": [701]}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("C001"));
+		verifyNoInteractions(roomPlaceImportService);
 	}
 
 	/* ── API-031 ────────────────────────────────────────────── */

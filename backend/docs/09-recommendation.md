@@ -10,7 +10,7 @@
 | 저장한 조건 불러오기 | 081 | 저장 전이면 빈 조건 + version 1 |
 | 지역·카테고리 저장 | 033 | 조건 version 비교. 여행방 version 은 그대로 |
 | 추천 받기 | 034 | `Idempotency-Key` 필수. 저장된 조건으로 추천 |
-| 추천 장소 담기 | 029 | `sourceType: AI` 만. 검색 담기(SEARCH)는 장소 검색(API-026)이 생기면 붙인다 |
+| 추천 장소 담기 | 029 | `sourceType: AI`. 같은 API 의 검색 담기(SEARCH)는 장소 검색(API-026) 결과를 담는다 |
 
 ## 2. 결정 사항 (11/11)
 
@@ -85,7 +85,7 @@
    처음 만들면 UNIQUE 충돌이 나므로 새 트랜잭션에서 먼저 만든 행을 다시 읽는다.
 3. **후보**: 방 행을 잠그고 후보(`source_type=AI`)를 만든 뒤 여행방 version 을 1 올린다(확정 일정이 있으면 재계산 필요도 켠다).
    같은 장소를 여러 번 담으면 후보도 여러 개다(팀 확정 정책).
-- 검색 담기(`sourceType: SEARCH`)는 지금 C003 이다. 장소 검색·상세(026·027)가 생기면 장소 확인만 TourAPI 로 바꿔 붙인다.
+- 검색 담기(`sourceType: SEARCH`)는 places 에 없는 장소만 TourAPI 상세(detailCommon2)로 확인해 만든다. TourAPI 에 없으면 C003, 부르지 못하면 P003 이다. 한 요청에 AI 와 섞어 보낼 수 있고 ADD 기록은 AI 후보만 남긴다.
 - 같은 멱등키 재전송은 담았던 후보(요청 순서)와 지금 여행방 version 을 준다.
 
 ## 3. 실제 TourAPI 확인 (11/11)
@@ -104,8 +104,14 @@ TOUR_API_KEY=Decoding키 ./gradlew test --tests '*TourApiLiveTest' -i
 - 모든 카테고리 조회에서 8개 카테고리 모두 후보가 있다. 매핑에서 빠진 코드는 VE09·VE11·VE12 뿐이고 매핑표대로 카테고리 없음이다.
 - FD 대분류 전체 조회는 100개에서 잘린다(맛집+카페를 함께 고를 때). 카페 후보가 모자라면 `rows-per-query` 를 늘린다.
 
+장소 검색(API-026)·검색 담기(API-029 SEARCH)용 호출도 강릉시로 확인했다(11/13):
+
+- 키워드 검색(`searchKeyword2`) "해변"은 totalCount 26, 첫 쪽 항목의 이름·주소·좌표·사진·`lclsSystm1~3` 을 읽는다.
+  검색어가 이름에 들어간 장소는 종류와 관계없이 나온다(공중화장실 VE01, 음식점 FD01 등).
+- 공통 정보(`detailCommon2`)는 검색 결과와 같은 장소를 같은 값으로 주고, `lclsSystm1~3` 도 온다. 그래서 검색 담기로 만든
+  장소에도 공통 카테고리가 붙는다.
+
 ## 4. 남은 일
 
 - API-078 지역 목록(시도 → 시군구 법정동 코드) 서버 구현과 데이터 출처 결정.
-- API-029 검색 담기(SEARCH): 장소 검색·상세(API-026·027) 구현 후.
 - 서버 `infra/.env` 에 `TOUR_API_KEY` 값을 넣고 `infra/docker-compose.yml` 의 예약 주석(`# TOUR_API_KEY: ${TOUR_API_KEY}`)을 푼다(infra 파트).
