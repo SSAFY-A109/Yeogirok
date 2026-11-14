@@ -12,6 +12,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+import tour_bundle
 import tour_judge as judge
 from tour_api import DEFAULT_BASE_URL, BudgetExhausted, StopRun, TourApi, items_of, rows_of, total_of
 from tour_store import Store
@@ -297,6 +298,10 @@ def cmd_report(args, log=print):
     return 0
 
 
+def cmd_bundle(args, log=print):
+    return tour_bundle.cmd_bundle(args, log, Fetcher, Store(args.data_dir))
+
+
 def parser():
     p = argparse.ArgumentParser(description="투어API 여행코스 받아 오기·판정(S15P31A109-218)")
     common = argparse.ArgumentParser(add_help=False)
@@ -313,6 +318,16 @@ def parser():
     fetch.add_argument("--interval", type=float, default=0.3, help=argparse.SUPPRESS)
     fetch.add_argument("--retry-wait", type=float, default=1.0, help=argparse.SUPPRESS)
     fetch.set_defaults(func=cmd_fetch)
+    bundle = sub.add_parser("bundle", parents=[common], help="통과 코스로 묶음 파일 만들기(222)")
+    bundle.add_argument("--ids", help="넣을 contentId 목록(쉼표)")
+    bundle.add_argument("--count", type=int, help="처리 순서대로 앞 묶음에 없는 통과 코스 개수")
+    bundle.add_argument("--bundle-id", help="기본 오늘날짜-순번(예 20261114-01)")
+    bundle.add_argument("--max-calls", type=int, default=100, help="소개 글(detailCommon2) 투어API 호출 상한")
+    bundle.add_argument("--base-url", default=DEFAULT_BASE_URL, help=argparse.SUPPRESS)
+    bundle.add_argument("--kakao-base-url", default=tour_bundle.DEFAULT_KAKAO_BASE_URL, help=argparse.SUPPRESS)
+    bundle.add_argument("--interval", type=float, default=0.3, help=argparse.SUPPRESS)
+    bundle.add_argument("--retry-wait", type=float, default=1.0, help=argparse.SUPPRESS)
+    bundle.set_defaults(func=cmd_bundle)
     sub.add_parser("judge", parents=[common], help="판정만 다시(호출 0번)").set_defaults(func=cmd_judge)
     sub.add_parser("report", parents=[common], help="보고만 다시 출력").set_defaults(func=cmd_report)
     return p
