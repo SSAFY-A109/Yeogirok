@@ -14,8 +14,6 @@ import java.util.List;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
@@ -36,7 +34,10 @@ import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.MutableClock;
 
-/** 199 API-015 메인 추천 코스. 30일 경계·같은 방·삭제된 방은 PublicCourseRepositoryTest, 응답 모양은 CourseControllerTest. */
+/**
+ * 199·227 API-015 메인 추천 코스. 고르기 규칙은 MainCoursePickerTest, 30일 경계·같은 방·삭제된 방·사진 통계는
+ * PublicCourseRepositoryTest, 응답 모양은 CourseControllerTest.
+ */
 @DataJpaTest
 @Import({CourseTestConfig.class, MainCourseService.class})
 class MainCourseServiceTest {
@@ -106,10 +107,14 @@ class MainCourseServiceTest {
 			.setParameter(1, course.getId()).setParameter(2, at).setParameter(3, roomPlace.getId()).executeUpdate();
 	}
 
-	private MainCourseListResponse recommend(String category, String regionCode, String cursor, Integer limit) {
+	private MainCourseListResponse recommend(String category, String regionCode) {
 		em.flush();
 		em.clear();
-		return service.recommend(category, regionCode, cursor, limit);
+		return service.recommend(category, regionCode);
+	}
+
+	private MainCourseListResponse recommend() {
+		return recommend(null, null);
 	}
 
 	private List<Long> ids(MainCourseListResponse response) {
@@ -137,7 +142,7 @@ class MainCourseServiceTest {
 		TravelRecord draft = shown("편집됨", 1);
 		draft.markEdited(NOW);
 
-		assertThat(ids(recommend(null, null, null, null))).containsExactly(draft.getId(), full.getId());
+		assertThat(ids(recommend())).containsExactlyInAnyOrder(draft.getId(), full.getId());
 	}
 
 	/** 노출 조건을 쿼리로 옮기며 기간 계산(CoursePeriod 와 같은 규칙)이 같은지 본다(PR #107 리뷰). */
@@ -159,59 +164,44 @@ class MainCourseServiceTest {
 		visit(sameDay, "첫 번째", DAY1, 1, true);
 		visit(sameDay, "두 번째", DAY1, 2, true);
 
-		assertThat(ids(recommend(null, null, null, null))).containsExactly(undated.getId(), early.getId());
+		assertThat(ids(recommend())).containsExactlyInAnyOrder(undated.getId(), early.getId());
 	}
 
+	/** 227: 가져간 방 수는 순서에 쓰지 않지만 응답 값과 기준(최근 30일, 조회 시각까지)은 그대로다. */
 	@Test
-	void 최근_30일_가져간_방_수가_많은_순_같으면_최근_코스_순이고_기간은_조회_시각까지() {
-		TravelRecord one = shown("한 방", 1);
+	void 최근_30일_가져간_방_수와_기준은_그대로_준다() {
 		TravelRecord two = shown("두 방", 1);
-		TravelRecord none = shown("없음", 1);
 		TravelRecord old = shown("오래전", 1);
-		imported(one, NOW.minusSeconds(1));
 		imported(two, NOW.minus(Duration.ofDays(29)));
 		imported(two, NOW.minus(Duration.ofDays(1)));
 		imported(old, NOW.minus(Duration.ofDays(31)));
-		imported(none, NOW);
 
-		MainCourseListResponse response = recommend(null, null, null, null);
+		MainCourseListResponse response = recommend();
 
 		assertThat(response.items()).extracting(MainCourseListResponse.Item::id, MainCourseListResponse.Item::importCount30d)
-			.containsExactly(Tuple.tuple(two.getId(), 2L),
-				Tuple.tuple(one.getId(), 1L),
-				Tuple.tuple(old.getId(), 0L),
-				Tuple.tuple(none.getId(), 0L));
+			.containsExactlyInAnyOrder(Tuple.tuple(two.getId(), 2L), Tuple.tuple(old.getId(), 0L));
 		assertThat(response.basis()).isEqualTo(new ImportCountBasis("IMPORT_COUNT_30D", NOW.minus(Duration.ofDays(30)), NOW));
 	}
 
+	/** 227 AC-01·07: 최대 8개, 홀수 자리는 사진 넉넉한 코스(DB 사진 통계로 판정), 다음 쪽 없음. */
 	@Test
-	void 다음_페이지는_최초_조회_시각의_30일_구간을_쓴다() {
-		TravelRecord a = shown("a", 1);
-		TravelRecord b = shown("b", 1);
-		TravelRecord c = shown("c", 1);
-		imported(a, NOW.minusSeconds(10));
+	void 최대_8개를_사진_넉넉한_코스와_나머지를_번갈아_주고_다음_쪽은_없다() {
+		List<Long> rich = new java.util.ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			rich.add(shown("사흘 " + i, 3).getId());  // 공개 사진 3장·방문 3개 → 넉넉, 3일
+		}
+		for (int i = 0; i < 5; i++) {
+			shown("하루 " + i, 1);  // 공개 사진 1장 → 나머지
+		}
 
-		MainCourseListResponse page1 = recommend(null, null, null, 2);
-		// 첫 조회 뒤 c 를 두 방이 가져가도 다음 페이지는 같은 구간이라 순서가 바뀌지 않는다.
-		clock.advance(Duration.ofMinutes(5));
-		imported(c, NOW.plusSeconds(60));
-		imported(c, NOW.plusSeconds(120));
-		MainCourseListResponse page2 = recommend(null, null, page1.nextCursor(), 2);
+		MainCourseListResponse response = recommend();
 
-		assertThat(ids(page1)).containsExactly(a.getId(), c.getId());
-		assertThat(ids(page2)).containsExactly(b.getId());
-		assertThat(page2.nextCursor()).isNull();
-		assertThat(page2.basis()).isEqualTo(page1.basis());
-	}
-
-	/** 최초 조회 시각이 지금보다 뒤거나 시각으로 바꿀 수 없을 만큼 크면 500 대신 C006(PR #107 리뷰). */
-	@ParameterizedTest
-	@ValueSource(longs = {1L, 99_999_999_999_999_999L})
-	void 커서의_최초_조회_시각이_지금보다_뒤면_C006(long secondsAfterNow) {
-		String cursor = CourseCursors.encode(NOW.getEpochSecond() + secondsAfterNow, 0, 1);
-
-		assertThatThrownBy(() -> recommend(null, null, cursor, null)).isInstanceOf(BusinessException.class)
-			.extracting("exceptionType").isEqualTo(ExceptionType.INVALID_CURSOR);
+		List<Long> picked = ids(response);
+		assertThat(picked).hasSize(8).doesNotHaveDuplicates();
+		for (int i = 0; i < picked.size(); i++) {
+			assertThat(rich.contains(picked.get(i))).as("%d번째", i + 1).isEqualTo(i % 2 == 0);
+		}
+		assertThat(response.nextCursor()).isNull();
 	}
 
 	@Test
@@ -223,11 +213,11 @@ class MainCourseServiceTest {
 			.executeUpdate();
 		shown("다른", 1);
 
-		assertThat(ids(recommend("CAFE", null, null, null))).containsExactly(cafe.getId());
-		assertThat(ids(recommend(null, "51150", null, null))).containsExactly(cafe.getId());
-		assertThatThrownBy(() -> recommend("LODGING", null, null, null)).isInstanceOf(BusinessException.class)
+		assertThat(ids(recommend("CAFE", null))).containsExactly(cafe.getId());
+		assertThat(ids(recommend(null, "51150"))).containsExactly(cafe.getId());
+		assertThatThrownBy(() -> recommend("LODGING", null)).isInstanceOf(BusinessException.class)
 			.extracting("exceptionType").isEqualTo(ExceptionType.COURSE_RECOMMENDATION_CATEGORY_NOT_SUPPORTED);
-		assertThatThrownBy(() -> recommend(null, "5", null, null)).isInstanceOf(BusinessException.class)
+		assertThatThrownBy(() -> recommend(null, "5")).isInstanceOf(BusinessException.class)
 			.extracting("exceptionType").isEqualTo(ExceptionType.NOT_ALLOWED_VALUE);
 	}
 
@@ -244,7 +234,7 @@ class MainCourseServiceTest {
 		ActualVisit day3 = visit(record, "셋째 날", DAY1.plusDays(2), 1, true);
 		visit(record, "넷째 날", DAY1.plusDays(3), 1, true);
 
-		MainCourseListResponse.Item item = recommend(null, null, null, null).items().getFirst();
+		MainCourseListResponse.Item item = recommend().items().getFirst();
 
 		assertThat(item.previewPlaces()).extracting(MainCourseListResponse.PreviewPlace::visitId,
 				MainCourseListResponse.PreviewPlace::day, MainCourseListResponse.PreviewPlace::name)
@@ -260,7 +250,7 @@ class MainCourseServiceTest {
 
 	@Test
 	void 조건에_맞는_코스가_없으면_빈_목록과_기준() {
-		MainCourseListResponse response = recommend(null, null, null, null);
+		MainCourseListResponse response = recommend();
 
 		assertThat(response.items()).isEmpty();
 		assertThat(response.nextCursor()).isNull();

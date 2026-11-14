@@ -4,11 +4,12 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
-import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,26 +18,28 @@ import com.ssafy.yeogirok.domain.category.TravelCategory;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
 import com.ssafy.yeogirok.domain.course.repository.CourseCandidate;
+import com.ssafy.yeogirok.domain.course.repository.CoursePhotoStats;
 import com.ssafy.yeogirok.domain.course.repository.PublicCourseRepository;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
-import com.ssafy.yeogirok.global.request.PageSize;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * 메인 추천 코스(API-015, 명세 {@code specs/main-api.md} 2). 게시 중인 코스 중 여행 첫날~마지막 날 모든 날짜에 공개 사진이 있는
- * 코스를 최근 30일 가져간 방 수 내림차순(같으면 id 내림차순)으로 준다. 노출 조건·정렬·커서는 쿼리가 처리해 한 페이지만 읽고
- * (PR #107 리뷰), 카드 재료는 {@link CourseCards} 로 읽는다.
+ * 메인 추천 코스(API-015, 명세 {@code specs/main-api.md} 2·227). 게시 중인 코스 중 여행 첫날~마지막 날 모든 날짜에 공개 사진이
+ * 있는 코스에서 최대 8개를 요청마다 무작위로 고른다({@link MainCoursePicker}). 다음 쪽은 없고, 카드 재료는 고른 코스만
+ * {@link CourseCards} 로 읽는다. 후보는 요청마다 전부 읽는다(공식 코스 수백 개 규모, 수천 개가 되면 쿼리로 줄인다).
  */
 @Service
 @RequiredArgsConstructor
 public class MainCourseService {
 
 	static final int PREVIEW_PLACE_SIZE = 3;
+	/** IN 절 바인드 수 한도(PostgreSQL 32767)를 넘지 않게 나눠 센다. */
+	static final int STATS_CHUNK = 1000;
 
 	private final PublicCourseRepository publicCourseRepository;
 	private final CourseCards courseCards;
@@ -44,25 +47,33 @@ public class MainCourseService {
 	private final CategoryNames categoryNames;
 	private final Clock clock;
 
-	/** 없는 category CO004, regionCode 형식 C003, 커서 C006, limit 20·50(C007). */
+	/** 없는 category CO004, regionCode 형식 C003. 다음 쪽이 없어 nextCursor 는 늘 null(옛 앱의 cursor·limit 는 받지 않는다). */
 	@Transactional(readOnly = true)
-	public MainCourseListResponse recommend(String category, String regionCode, String cursor, Integer limit) {
+	public MainCourseListResponse recommend(String category, String regionCode) {
 		if (category != null && TravelCategory.fromCode(category).isEmpty()) {
 			throw new BusinessException(ExceptionType.COURSE_RECOMMENDATION_CATEGORY_NOT_SUPPORTED);
 		}
 		String regionPrefix = CourseSearchCondition.regionPrefix(regionCode, ExceptionType.NOT_ALLOWED_VALUE);
-		int size = PageSize.resolve(limit);
-		MainCourseCursor after = MainCourseCursor.decodeOrNull(cursor, clock.instant());
-		ImportWindow window = after == null ? ImportWindow.now(clock) : ImportWindow.endingAt(after.windowEnd());
+		ImportWindow window = ImportWindow.now(clock);
+		List<CourseCandidate> candidates = publicCourseRepository.findMainCourses(regionPrefix, category,
+			window.start(), window.end());
+		List<CourseCandidate> picked = MainCoursePicker.pick(entries(candidates), ThreadLocalRandom.current());
+		return new MainCourseListResponse(items(picked), null, window.basis());
+	}
 
-		List<CourseCandidate> found = publicCourseRepository.findMainCourses(regionPrefix, category, window.start(),
-			window.end(),
-			after == null ? Long.MAX_VALUE : after.importCount(), after == null ? Long.MAX_VALUE : after.id(),
-			Limit.of(size + 1));
-		List<CourseCandidate> page = found.size() > size ? found.subList(0, size) : found;
-		String nextCursor = found.size() > size ? new MainCourseCursor(window.end(), page.getLast().importCount(),
-			page.getLast().id()).encode() : null;
-		return new MainCourseListResponse(items(page), nextCursor, window.basis());
+	private List<MainCoursePicker.Entry> entries(List<CourseCandidate> candidates) {
+		Map<Long, CoursePhotoStats> stats = new HashMap<>();
+		List<Long> ids = candidates.stream().map(CourseCandidate::id).toList();
+		for (int from = 0; from < ids.size(); from += STATS_CHUNK) {
+			publicCourseRepository.countPhotos(ids.subList(from, Math.min(from + STATS_CHUNK, ids.size())))
+				.forEach(stat -> stats.put(stat.recordId(), stat));
+		}
+		return candidates.stream().map(course -> {
+			CoursePhotoStats stat = stats.get(course.id());
+			int days = CoursePeriod.dates(course.roomStart(), course.roomEnd(), course.firstVisit(), course.lastVisit())
+				.size();
+			return new MainCoursePicker.Entry(course, stat.visits(), stat.photoVisits(), stat.publicPhotos(), days);
+		}).toList();
 	}
 
 	private List<MainCourseListResponse.Item> items(List<CourseCandidate> page) {
