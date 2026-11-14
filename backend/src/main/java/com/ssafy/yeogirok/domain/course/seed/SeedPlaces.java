@@ -24,7 +24,7 @@ class SeedPlaces {
 	private final TourPlaces tourPlaces;
 	private final Clock clock;
 
-	/** 코스 트랜잭션 안에서 불러도 된다(TourPlaces 가 새 트랜잭션으로 저장). */
+	/** 코스 트랜잭션 전에 부른다(TourPlaces 가 자기 트랜잭션으로 찾고 저장한다). 저장하지 못하면 예외. */
 	void ensure(SeedBundle.Place place) {
 		tourPlaces.findOrCreate(place.contentId(), () -> {
 			TravelCategory category = TourCategoryMapper.categoryOf(place.lclsSystm2(), place.lclsSystm3());

@@ -357,6 +357,22 @@ class CourseSeedFlowTest {
 		assertThat(recordOf("c-one")).isNotNull();
 	}
 
+	/** PR #132 리뷰: 장소를 저장하지 못하면 조용히 넘어가지 않고 그 코스를 넣지 않는다(장소는 코스 트랜잭션 전에 만든다). */
+	@Test
+	void 장소를_저장하지_못하면_그_코스는_실패하고_방_사진이_남지_않는다() throws IOException {
+		Map<String, Object> course = oneDay();
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> places = (List<Map<String, Object>>)course.get("places");
+		places.get(1).put("regionCode", "1".repeat(31));  // places.region_code 30자 초과
+		bundle("b1", List.of(course));
+
+		CourseSeedJob.Report report = run();
+
+		assertThat(report.failed()).containsEntry("c-one", "DataIntegrityViolationException");
+		assertThat(count("SELECT COUNT(*) FROM travel_rooms")).isZero();
+		assertThat(storage.keys("photos")).isEmpty();
+	}
+
 	@Test
 	void 모양이_어긋난_코스는_그_코스만_실패한다() throws IOException {
 		List<Map<String, Object>> broken = new ArrayList<>(List.of(
