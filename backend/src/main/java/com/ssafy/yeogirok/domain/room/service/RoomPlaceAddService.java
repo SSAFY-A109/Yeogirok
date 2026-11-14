@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +31,7 @@ import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
+import com.ssafy.yeogirok.domain.place.service.TourPlaces;
 import com.ssafy.yeogirok.domain.place.tour.TourApiClient;
 import com.ssafy.yeogirok.domain.place.tour.TourApiException;
 import com.ssafy.yeogirok.domain.place.tour.TourPlace;
@@ -62,8 +62,8 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>참여 확인 → AI 항목은 추천 기록 확인(이 방의 추천 결과에 그 순위·장소가 있었는지). 틀리면 아무것도 바꾸지 않고 C003</li>
  *   <li>장소: 같은 투어API 장소는 places 한 행을 재사용한다. 없으면 AI 는 추천 결과에 저장된 정보로, SEARCH 는 TourAPI 상세로
  *       확인한 정보로 만든다(TourAPI 에 없으면 C003, 부르지 못하면 P003). 법정동 코드·이름은 직접 추가(API-031)와 같은 단위로
- *       좌표에서 찾고, 시간 안에 못 찾으면 비워 둔다. 두 요청이 동시에 처음 만들면 한쪽이
- *       UNIQUE(provider, provider_place_id)에 걸리므로 새 트랜잭션에서 먼저 만든 행을 다시 읽는다.</li>
+ *       좌표에서 찾고, 시간 안에 못 찾으면 비워 둔다. 찾기·처음 저장(동시 저장 처리 포함)은 공식 코스 적재와 같은
+ *       {@link TourPlaces} 로 한다.</li>
  *   <li>방 행을 잠그고 참여를 다시 확인한 뒤 후보를 요청 순서대로 만들고, 여행방 version 을 1 올리고(확정 일정이 있으면 재계산
  *       필요도 켠다), AI 후보마다 recommendation_logs ADD 를 남긴다.</li>
  * </ol>
@@ -88,6 +88,7 @@ public class RoomPlaceAddService {
 	private final RoomVersions roomVersions;
 	private final RoomPlaceRepository roomPlaceRepository;
 	private final PlaceRepository placeRepository;
+	private final TourPlaces tourPlaces;
 	private final ScheduleItemRepository scheduleItemRepository;
 	private final RecommendedPlaces recommendedPlaces;
 	private final LegalDongResolver legalDongResolver;
@@ -101,7 +102,7 @@ public class RoomPlaceAddService {
 	private Duration externalTimeout = DEFAULT_EXTERNAL_TIMEOUT;
 
 	public RoomPlaceAddService(RoomFinder roomFinder, RoomVersions roomVersions,
-		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
+		RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository, TourPlaces tourPlaces,
 		ScheduleItemRepository scheduleItemRepository, RecommendedPlaces recommendedPlaces,
 		LegalDongResolver legalDongResolver, TourApiClient tourApiClient, CategoryNames categoryNames,
 		PlatformTransactionManager transactionManager, Clock clock) {
@@ -110,6 +111,7 @@ public class RoomPlaceAddService {
 		this.roomVersions = roomVersions;
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
+		this.tourPlaces = tourPlaces;
 		this.scheduleItemRepository = scheduleItemRepository;
 		this.recommendedPlaces = recommendedPlaces;
 		this.legalDongResolver = legalDongResolver;
@@ -238,19 +240,10 @@ public class RoomPlaceAddService {
 
 	/** 만든다. 그사이 다른 요청이 같은 장소를 먼저 만들었으면 그 행을 쓴다. */
 	private Place create(RecommendedPlace recommended, LegalDong legalDong) {
-		try {
-			return transactionTemplate.execute(status -> {
-				Place found = find(recommended.providerPlaceId());
-				return found != null ? found : placeRepository.saveAndFlush(Place.tourApi(
-					recommended.providerPlaceId(), recommended.name(), recommended.latitude(), recommended.longitude(),
-					recommended.address(), legalDong.code(), legalDong.name(), recommended.categoryCode(),
-					recommended.imageUrl(), recommended.imageAttribution(), clock.instant()));
-			});
-		} catch (DataIntegrityViolationException e) {
-			log.info("같은 투어API 장소를 동시에 처음 담아 먼저 저장된 행을 씁니다. providerPlaceId={}",
-				recommended.providerPlaceId());
-			return transactionTemplate.execute(status -> find(recommended.providerPlaceId()));
-		}
+		return tourPlaces.findOrCreate(recommended.providerPlaceId(), () -> Place.tourApi(
+			recommended.providerPlaceId(), recommended.name(), recommended.latitude(), recommended.longitude(),
+			recommended.address(), legalDong.code(), legalDong.name(), recommended.categoryCode(),
+			recommended.imageUrl(), recommended.imageAttribution(), clock.instant()));
 	}
 
 	/**

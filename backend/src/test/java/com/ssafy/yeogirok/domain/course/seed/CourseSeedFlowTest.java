@@ -37,6 +37,7 @@ import com.ssafy.yeogirok.domain.course.service.CoursePreviewService;
 import com.ssafy.yeogirok.domain.course.service.CoursePublishService;
 import com.ssafy.yeogirok.domain.course.service.CourseSearchService;
 import com.ssafy.yeogirok.domain.course.service.MainCourseService;
+import com.ssafy.yeogirok.domain.place.service.TourPlaces;
 import com.ssafy.yeogirok.domain.room.entity.RoomMember;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
@@ -58,7 +59,7 @@ import tools.jackson.databind.json.JsonMapper;
 @DataJpaTest
 @Import({CourseTestConfig.class, CoursePreviewService.class, CoursePublishService.class, CourseDetailService.class,
 	CourseSearchService.class, MainCourseService.class, CourseSeedJob.class, CourseSeeder.class, SeedOwner.class,
-	SeedPlaces.class, SeedPhotos.class, CourseSeedFlowTest.Config.class})
+	SeedPlaces.class, SeedPhotos.class, TourPlaces.class, CourseSeedFlowTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class CourseSeedFlowTest {
 
@@ -354,6 +355,22 @@ class CourseSeedFlowTest {
 
 		assertThat(report.failed()).containsEntry("c-missing", "NOT_IN_BUNDLE");
 		assertThat(recordOf("c-one")).isNotNull();
+	}
+
+	/** PR #132 리뷰: 장소를 저장하지 못하면 조용히 넘어가지 않고 그 코스를 넣지 않는다(장소는 코스 트랜잭션 전에 만든다). */
+	@Test
+	void 장소를_저장하지_못하면_그_코스는_실패하고_방_사진이_남지_않는다() throws IOException {
+		Map<String, Object> course = oneDay();
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> places = (List<Map<String, Object>>)course.get("places");
+		places.get(1).put("regionCode", "1".repeat(31));  // places.region_code 30자 초과
+		bundle("b1", List.of(course));
+
+		CourseSeedJob.Report report = run();
+
+		assertThat(report.failed()).containsEntry("c-one", "DataIntegrityViolationException");
+		assertThat(count("SELECT COUNT(*) FROM travel_rooms")).isZero();
+		assertThat(storage.keys("photos")).isEmpty();
 	}
 
 	@Test

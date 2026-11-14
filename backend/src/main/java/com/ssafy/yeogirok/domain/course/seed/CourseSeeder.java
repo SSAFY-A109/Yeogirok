@@ -39,7 +39,7 @@ import com.ssafy.yeogirok.global.response.ApiDateTime;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 공식 코스 1개 넣기·내리기(명세 {@code specs/tour-course-seed.md} 6-4·6-6). 사진은 트랜잭션 밖에서 먼저 올리고, 방·기록·방문·이야기·
+ * 공식 코스 1개 넣기·내리기(명세 {@code specs/tour-course-seed.md} 6-4·6-6). 장소·사진은 트랜잭션 밖에서 먼저 만들고, 방·기록·방문·이야기·
  * 사진 행은 한 트랜잭션으로 만든다. 실패하면 트랜잭션을 되돌리고 올린 파일을 지운다. 후보 장소(room_places)는 만들지 않는다.
  * 로그에는 contentId 만 남긴다.
  */
@@ -162,6 +162,9 @@ class CourseSeeder {
 		}
 		List<String> uploaded = new ArrayList<>();
 		try {
+			// 장소도 사진처럼 코스 트랜잭션 전에 만든다(연결을 하나 쥔 채 새 트랜잭션을 더 열지 않게, PR #132 리뷰).
+			// 코스가 실패해도 장소는 남는다(여러 코스·여행방이 같이 쓰는 행).
+			sorted(course.places()).forEach(seedPlaces::ensure);
 			seedPhotos.upload(photos.values(), uploaded);
 			transaction.executeWithoutResult(status -> write(bundleId, course, ownerId, photos));
 			return Outcome.INSERTED;
@@ -185,7 +188,6 @@ class CourseSeeder {
 				course.contentId(), bundleId)).startDate(first).endDate(last).transportMode(TransportMode.CAR)
 			.createdAt(now).build());
 		roomMemberRepository.save(RoomMember.creator(room.getId(), ownerId, now));
-		places.forEach(seedPlaces::ensure);
 
 		String title = cut(course.title().strip(), TITLE_MAX);
 		Long recordId = recordCreateService.create(ownerId, room.getId(), title).recordId();

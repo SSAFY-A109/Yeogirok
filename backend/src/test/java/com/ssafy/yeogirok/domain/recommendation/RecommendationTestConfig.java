@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Import;
 import com.ssafy.yeogirok.domain.recommendation.service.PlaceRecommendationService;
 import com.ssafy.yeogirok.domain.recommendation.service.RecommendationPreferenceService;
 import com.ssafy.yeogirok.domain.recommendation.service.RecommendedPlaces;
+import com.ssafy.yeogirok.domain.place.service.TourPlaces;
 import com.ssafy.yeogirok.domain.room.service.RoomPlaceAddService;
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.support.FakeTourApiClient;
@@ -18,7 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
 /** 추천 서비스 @DataJpaTest 용 빈. 여행방 빈({@link RoomTestConfig})을 함께 쓴다. */
 @TestConfiguration
 @Import({RoomTestConfig.class, RecommendationPreferenceService.class, PlaceRecommendationService.class,
-	RecommendedPlaces.class, RoomPlaceAddService.class})
+	RecommendedPlaces.class, RoomPlaceAddService.class, TourPlaces.class})
 public class RecommendationTestConfig {
 
 	/** 기본 10개·상한 50개, 조회당 100개, 호출 상한 12번·마감 1초, 인기 30일, 기준거리 CAR 20km·TRANSIT 7km. */

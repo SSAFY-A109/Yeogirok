@@ -27,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -75,8 +76,14 @@ class UserApiTest {
 	@Autowired
 	ArTipRepository arTipRepository;
 
+	@Autowired
+	StringRedisTemplate redis;
+
 	@BeforeEach
 	void reset() {
+		// 탈퇴 표시(auth:withdrawn:{회원번호})는 Redis 에 토큰 수명만큼 남는데, 테스트 컨텍스트마다 DB 의 회원 번호는 다시 1부터라
+		// 앞 테스트에서 탈퇴한 번호를 받은 새 회원이 A003 으로 막힐 수 있다(테스트 순서에 따라 실패).
+		redis.delete(redis.keys("auth:withdrawn:*"));
 		clock.set(TestAuthConfig.START);
 		kakaoUnlinkClient.reset();
 		googleOAuthClient.reset();
