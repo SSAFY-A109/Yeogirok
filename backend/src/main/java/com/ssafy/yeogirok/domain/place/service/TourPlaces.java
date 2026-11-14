@@ -17,7 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * 투어API 장소 찾기·처음 저장(API-029 추천 담기, 공식 코스 적재가 같이 쓴다). 같은 providerPlaceId 는 한 행만 두고, 이미 있는 행은
  * 고치지 않는다(ERD "외부 장소는 최초 저장 정보를 재사용"). 두 요청이 동시에 처음 만들면 한쪽이 UNIQUE(provider, provider_place_id)에
- * 걸리므로 새 트랜잭션에서 먼저 만든 행을 다시 읽는다.
+ * 걸리므로 새 트랜잭션에서 먼저 만든 행을 다시 읽는다. 다시 읽어도 없으면 다른 제약 위반이라 원래 예외를 그대로 던진다.
  *
  * <p>트랜잭션은 모두 새로 연다. 호출자가 트랜잭션 안이어도 제약 위반이 바깥 트랜잭션을 깨지 않는다(PostgreSQL 은 위반 뒤 트랜잭션을
  * 중단한다). 그래서 새로 만든 장소는 바깥이 되돌려져도 남는다(공유 장소라 문제없다).
@@ -51,8 +51,12 @@ public class TourPlaces {
 				return found != null ? found : placeRepository.saveAndFlush(created);
 			});
 		} catch (DataIntegrityViolationException e) {
+			Place winner = newTransaction.execute(status -> find(providerPlaceId));
+			if (winner == null) {
+				throw e;  // 동시 저장이 아니라 다른 제약 위반(길이 초과 등)이다(PR #132 리뷰)
+			}
 			log.info("같은 투어API 장소를 동시에 처음 저장해 먼저 저장된 행을 씁니다. providerPlaceId={}", providerPlaceId);
-			return newTransaction.execute(status -> find(providerPlaceId));
+			return winner;
 		}
 	}
 

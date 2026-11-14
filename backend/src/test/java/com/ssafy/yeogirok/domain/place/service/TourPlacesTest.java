@@ -1,6 +1,7 @@
 package com.ssafy.yeogirok.domain.place.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -65,6 +66,20 @@ class TourPlacesTest {
 
 			assertThat(found).isSameAs(winner);
 		}
+
+		/** PR #132 리뷰: 다른 제약 위반이면 다시 읽어도 없어 null 을 돌려줬다(029 는 NPE 로 500). */
+		@Test
+		void 다시_읽어도_없으면_원래_예외를_던진다() {
+			PlaceRepository repository = mock(PlaceRepository.class);
+			PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
+			given(transactions.getTransaction(any())).willReturn(new SimpleTransactionStatus());
+			given(repository.findByProviderAndProviderPlaceId(PlaceProvider.TOUR_API, "t-1")).willReturn(Optional.empty());
+			DataIntegrityViolationException violation = new DataIntegrityViolationException("value too long");
+			given(repository.saveAndFlush(any())).willThrow(violation);
+
+			assertThatThrownBy(() -> new TourPlaces(repository, transactions).findOrCreate("t-1",
+				() -> place("t-1", "길이 초과"))).isSameAs(violation);
+		}
 	}
 
 	@Nested
@@ -113,6 +128,16 @@ class TourPlacesTest {
 
 			assertThat(created.getId()).isNotNull();
 			assertThat(rows("tp-2")).isEqualTo(1);
+		}
+
+		@Test
+		void 길이를_넘는_값이면_저장_예외가_나고_행이_생기지_않는다() {
+			Place tooLong = Place.tourApi("tp-long", "길이 초과", new BigDecimal("37.75"), new BigDecimal("128.87"), null,
+				"1".repeat(31), null, null, null, null, NOW);
+
+			assertThatThrownBy(() -> tourPlaces.findOrCreate("tp-long", () -> tooLong))
+				.isInstanceOf(DataIntegrityViolationException.class);
+			assertThat(rows("tp-long")).isZero();
 		}
 
 		@Test
