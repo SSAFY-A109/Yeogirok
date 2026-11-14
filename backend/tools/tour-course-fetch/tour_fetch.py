@@ -271,9 +271,10 @@ def cmd_judge(args, log=print):
         if first is None:
             continue
         total = total_of(first)
-        items = fetcher.stored_info(content_id)
-        if len(items) < total:
+        # 마지막 쪽까지 받았는지로 본다. 건수로 보면 투어API 가 totalCount 보다 적게 주는 코스가 다시 판정되지 않는다(PR #132 리뷰).
+        if store.info_page(content_id, max(1, math.ceil(total / rows_of(first, args.info_rows)))) is None:
             continue  # 장소 목록을 아직 다 받지 못했다
+        items = fetcher.stored_info(content_id)
         intro = store.intro(content_id)
         result = judge.judge(course, items, total, None if intro is None else (items_of(intro) or [{}])[0], dictionary)
         if result["reason"] is None and intro is None:

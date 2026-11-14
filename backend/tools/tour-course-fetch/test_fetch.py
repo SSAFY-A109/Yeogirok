@@ -312,6 +312,23 @@ class FetchTest(unittest.TestCase):
         with open(os.path.join(self.data_dir, "judged", "big.json"), encoding="utf-8") as f:
             self.assertEqual(len(json.load(f)["places"]), 230)
 
+    def test_judge_reruns_course_whose_api_returns_fewer_places_than_total(self):
+        # 리뷰(PR #132): 저장된 장소 수가 totalCount 보다 적으면 judge 가 그 코스를 건너뛰었다.
+        self.run_fetch("--max-calls", "100")
+        page = os.path.join(self.data_dir, "courses", "c1", "info-p1.json")
+        with open(page, encoding="utf-8") as f:
+            response = json.load(f)
+        response["body"]["totalCount"] = 4  # 3건만 주면서 4건이라고 하는 코스
+        with open(page, "w", encoding="utf-8") as f:
+            json.dump(response, f)
+        os.remove(os.path.join(self.data_dir, "judged", "c1.json"))
+
+        self.assertEqual(tour_fetch.main(["judge", "--data-dir", self.data_dir], self.logs.append), 0)
+
+        with open(os.path.join(self.data_dir, "judged", "c1.json"), encoding="utf-8") as f:
+            judged = json.load(f)
+        self.assertEqual((judged["infoTotal"], judged["infoReceived"]), (4, 3))
+
     def test_state_keeps_only_seed_and_calls(self):
         self.run_fetch("--max-calls", "100")
         with open(os.path.join(self.data_dir, "state.json"), encoding="utf-8") as f:
