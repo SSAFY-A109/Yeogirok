@@ -6,13 +6,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
-import org.springframework.data.domain.Limit;
 
 import com.ssafy.yeogirok.domain.course.CourseFixture;
 import com.ssafy.yeogirok.domain.course.service.ImportWindow;
@@ -114,8 +114,45 @@ class PublicCourseRepositoryTest {
 		em.flush();
 		em.clear();
 
-		assertThat(repository.findMainCourses(null, null, WINDOW.start(), WINDOW.end(), Long.MAX_VALUE, Long.MAX_VALUE,
-			Limit.of(10))).singleElement()
+		assertThat(repository.findMainCourses(null, null, WINDOW.start(), WINDOW.end())).singleElement()
 			.satisfies(candidate -> assertThat(candidate.importCount()).isZero());
+	}
+
+	/** 227: 015 고르기용 사진 통계. 공개 선택된 연결 사진만 센다(비공개·미연결 제외), 사진 없는 방문도 방문 수에 든다. */
+	@Test
+	void 사진_통계는_방문_수와_공개_사진_있는_방문_수와_공개_사진_수를_센다() {
+		ActualVisit withPhotos = fixture.visit(course.getId(), fixture.place("두 장"), DAY1, 1);
+		VisitImage first = fixture.photo(course.getId(), withPhotos.getId(), 1);
+		VisitImage second = fixture.photo(course.getId(), withPhotos.getId(), 2);
+		fixture.photo(course.getId(), withPhotos.getId(), 3);  // 비공개
+		ActualVisit privateOnly = fixture.visit(course.getId(), fixture.place("비공개만"), DAY1, 2);
+		fixture.photo(course.getId(), privateOnly.getId(), 1);
+		fixture.visit(course.getId(), fixture.place("사진 없음"), DAY1, 3);
+		VisitImage unlinked = fixture.photo(course.getId(), null, 0);
+		em.flush();
+		em.getEntityManager().createNativeQuery("UPDATE visit_images SET is_public_selected = TRUE WHERE id IN (?1, ?2)")
+			.setParameter(1, first.getId()).setParameter(2, second.getId()).executeUpdate();
+		TravelRecord noVisit = fixture.record(fixture.room(DAY1, ME));
+		em.flush();
+		em.clear();
+
+		assertThat(repository.countPhotos(List.of(course.getId(), noVisit.getId(), unlinked.getRecordId())))
+			.containsExactly(new CoursePhotoStats(course.getId(), 3, 1, 2));
+	}
+
+	/** 227: 공식 계정이 만든 방의 기록만 공식 코스다(참여만 한 방·다른 계정은 아님). */
+	@Test
+	void 공식_코스는_공식_계정이_만든_방의_기록이다() {
+		long official = em.persist(com.ssafy.yeogirok.domain.user.domain.User.signUp(
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER, com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT,
+			null, "공식", null, NOW)).getId();
+		TravelRecord byOfficial = fixture.record(fixture.room(DAY1, official));
+		TravelRecord joinedOnly = fixture.record(fixture.room(DAY1, ME, official));
+		em.flush();
+		em.clear();
+
+		assertThat(repository.findOfficialIds(List.of(course.getId(), byOfficial.getId(), joinedOnly.getId()),
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER,
+			com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT)).containsExactly(byOfficial.getId());
 	}
 }

@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
-/** 공개 코스 커서(API-014·015) 형식: base64url 로 감싼 ":" 구분 정수. 해석 불가 C006. */
+/** 공개 코스 검색 커서(API-014) 형식: base64url 로 감싼 ":" 구분 정수. 해석 불가 C006. */
 final class CourseCursors {
 
 	private CourseCursors() {
@@ -42,7 +42,7 @@ final class CourseCursors {
 		}
 	}
 
-	static BusinessException invalid() {
+	private static BusinessException invalid() {
 		return new BusinessException(ExceptionType.INVALID_CURSOR);
 	}
 }

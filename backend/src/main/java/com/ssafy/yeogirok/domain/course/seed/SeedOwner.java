@@ -5,9 +5,9 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Component;
 
+import com.ssafy.yeogirok.domain.course.OfficialAccount;
 import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.domain.user.repository.UserRepository;
-import com.ssafy.yeogirok.global.oauth.OAuthProvider;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,8 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class SeedOwner {
 
-	/** 카카오 로그인은 숫자 회원번호(sub)로 찾으므로 이 값으로는 로그인할 수 없다. */
-	static final String SYSTEM_SUBJECT = "system:tourapi";
+	static final String SYSTEM_SUBJECT = OfficialAccount.SUBJECT;
 	static final String SYSTEM_NICKNAME = "한국관광공사 여행코스";
 
 	private final UserRepository userRepository;
@@ -36,9 +35,9 @@ class SeedOwner {
 			}
 			return owner;
 		}
-		return Optional.of(userRepository.findByProviderAndProviderSubject(OAuthProvider.KAKAO, SYSTEM_SUBJECT)
+		return Optional.of(userRepository.findByProviderAndProviderSubject(OfficialAccount.PROVIDER, SYSTEM_SUBJECT)
 			.orElseGet(() -> userRepository.save(
-				User.signUp(OAuthProvider.KAKAO, SYSTEM_SUBJECT, null, SYSTEM_NICKNAME, null, clock.instant())))
+				User.signUp(OfficialAccount.PROVIDER, SYSTEM_SUBJECT, null, SYSTEM_NICKNAME, null, clock.instant())))
 			.getId());
 	}
 }

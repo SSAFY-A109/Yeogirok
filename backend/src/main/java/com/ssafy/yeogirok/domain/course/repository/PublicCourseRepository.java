@@ -1,15 +1,16 @@
 package com.ssafy.yeogirok.domain.course.repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
-import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.room.entity.TransportMode;
+import com.ssafy.yeogirok.global.oauth.OAuthProvider;
 
 /** 공개 코스 검색·메인 추천 후보(API-014·015, 명세 {@code specs/course-search-api.md} 2·{@code specs/main-api.md} 1). */
 public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
@@ -70,16 +71,26 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 		@Param("importedFrom") Instant importedFrom, @Param("importedTo") Instant importedTo);
 
 	/**
-	 * API-015 한 페이지(명세 main-api.md 2). 여행 첫날~마지막 날 모든 날짜에 공개 사진이 연결된 방문이 있는 코스만, 가져간 방 수
-	 * 내림차순·id 내림차순으로 커서 뒤부터. 방문 날짜는 늘 기간 안이라 "공개 사진 있는 날 수 = 기간 일수"면 모든 날짜다.
-	 * 첫 페이지는 afterCount·afterId 에 Long.MAX_VALUE 를 넘긴다(null 은 PostgreSQL 이 타입을 정하지 못함).
+	 * API-015 후보 전부(명세 main-api.md 2·227). 여행 첫날~마지막 날 모든 날짜에 공개 사진이 연결된 방문이 있는 코스만. 방문
+	 * 날짜는 늘 기간 안이라 "공개 사진 있는 날 수 = 기간 일수"면 모든 날짜다. 고르기·순서는 서비스가 정한다({@code MainCoursePicker}).
 	 */
 	@Query(CANDIDATE + PUBLISHED_FILTERED
 		+ " and exists (select 1 from ActualVisit v where v.recordId = r.id)"
 		+ " and " + PUBLIC_PHOTO_DAYS + " = (" + LAST_DAY + " - " + FIRST_DAY + ") by day + 1"
-		+ " and (" + IMPORT_COUNT + " < :afterCount or " + IMPORT_COUNT + " = :afterCount and r.id < :afterId)"
-		+ " order by " + IMPORT_COUNT + " desc, r.id desc")
+		+ " order by r.id")
 	List<CourseCandidate> findMainCourses(@Param("regionPrefix") String regionPrefix, @Param("category") String category,
-		@Param("importedFrom") Instant importedFrom, @Param("importedTo") Instant importedTo,
-		@Param("afterCount") long afterCount, @Param("afterId") long afterId, Limit limit);
+		@Param("importedFrom") Instant importedFrom, @Param("importedTo") Instant importedTo);
+
+	/** 기록별 방문 수·공개 사진 있는 방문 수·공개 사진 수(API-015 고르기). 방문이 없는 기록은 나오지 않는다. */
+	@Query("select new com.ssafy.yeogirok.domain.course.repository.CoursePhotoStats(v.recordId, count(distinct v.id),"
+		+ " count(distinct i.visitId), count(i.id)) from ActualVisit v"
+		+ " left join VisitImage i on i.visitId = v.id and i.publicSelected = true"
+		+ " where v.recordId in :recordIds group by v.recordId")
+	List<CoursePhotoStats> countPhotos(@Param("recordIds") Collection<Long> recordIds);
+
+	/** 공식 계정({@code OfficialAccount})이 만든 방의 기록 ID(API-015 사용자 코스 자리 구분). */
+	@Query("select r.id from TravelRecord r, RoomMember m, User u where m.roomId = r.roomId and m.creator = true"
+		+ " and u.id = m.userId and u.provider = :provider and u.providerSubject = :subject and r.id in :recordIds")
+	List<Long> findOfficialIds(@Param("recordIds") Collection<Long> recordIds, @Param("provider") OAuthProvider provider,
+		@Param("subject") String subject);
 }
