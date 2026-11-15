@@ -394,7 +394,7 @@
       "features": [
         "EXP-04"
       ],
-      "note": "2026-11-03 사용자 지정 Figma 대조. 사진·지도는 자리표시(API 미정), mock은 features/explore/mocks. 인기 장소를 누르면 room-select-sheet에 장소 위치 지도(place-location-map)를 얹어 바로 담는다(사용자 요청 2026-11-03, Figma W05-2 32:2956에 W05 기반으로 작성). 시트의 새 여행방 만들기는 /rooms/new로 장소를 넘긴다(사용자 요청 2026-11-03). 인기 장소 id는 MSW 장소 목록과 같은 숫자다. Pencil 미대조."
+      "note": "2026-11-03 사용자 지정 Figma 대조. 사진·지도는 자리표시(API 미정). 인기 장소를 누르면 room-select-sheet에 장소 위치 지도(place-location-map)를 얹어 바로 담는다(사용자 요청 2026-11-03, Figma W05-2 32:2956에 W05 기반으로 작성). 시트의 새 여행방 만들기는 /rooms/new로 장소를 넘긴다(사용자 요청 2026-11-03). 인기 장소 id는 MSW 장소 목록과 같은 숫자다. Pencil 미대조."
     },
     "courses": {
       "route": "/courses",
