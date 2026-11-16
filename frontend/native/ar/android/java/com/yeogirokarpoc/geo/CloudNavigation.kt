@@ -45,7 +45,7 @@ class CloudNavigation(private val activity: Activity, private val viewport: Fram
     /** 미니맵 카드와 크게 보기 버튼을 함께 담는다. 크기를 바꿀 때는 이 틀을 바꾼다. */
     private lateinit var mapFrame: FrameLayout
     private lateinit var expandCover: android.view.View
-    private lateinit var expandBadge: TextView
+    private lateinit var expandBadge: android.view.View
     private lateinit var expandedControls: LinearLayout
     /** 지도를 크게 볼 때 카메라(AR 화면)를 줄여 넣는 오른쪽 위 작은 창의 테두리와 누를 자리. */
     private lateinit var cameraFrame: android.view.View
@@ -95,10 +95,11 @@ class CloudNavigation(private val activity: Activity, private val viewport: Fram
         mapCard = card
         val theme = ArTheme(activity)
         expandCover = android.view.View(activity).apply {
-            isClickable = true; contentDescription = "지도 크게 보기"
+            isClickable = true; contentDescription = "지도와 카메라 바꾸기, 지도 크게 보기"
             setOnClickListener { setMapExpanded(true) }
         }
-        expandBadge = pill(theme, "지도 크게", 11f).apply { isClickable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        // 미니맵 왼쪽 아래 교환 아이콘. 누르는 자리는 미니맵 전체(expandCover)다.
+        expandBadge = swapBadge(theme)
         expandedControls = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; visibility = android.view.View.GONE
             addView(pill(theme, "내 위치", 13f).apply {
@@ -109,7 +110,7 @@ class CloudNavigation(private val activity: Activity, private val viewport: Fram
         mapFrame = FrameLayout(activity).apply {
             addView(card, FrameLayout.LayoutParams(-1, -1))
             addView(expandCover, FrameLayout.LayoutParams(-1, -1))
-            addView(expandBadge, FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(6); bottomMargin = dp(6) })
+            addView(expandBadge, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(6); bottomMargin = dp(6) })
             addView(expandedControls, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(12); leftMargin = dp(12) })
         }
         viewport.addView(mapFrame, miniMapLayout())
@@ -120,11 +121,10 @@ class CloudNavigation(private val activity: Activity, private val viewport: Fram
         }
         viewport.addView(cameraFrame, cameraFrameLayout())
         cameraWindow = FrameLayout(activity).apply {
-            isClickable = true; contentDescription = "카메라 크게 보기"; visibility = android.view.View.GONE
+            isClickable = true; contentDescription = "지도와 카메라 바꾸기, 카메라 크게 보기"; visibility = android.view.View.GONE
             translationZ = dp(9).toFloat()
             setOnClickListener { setMapExpanded(false) }
-            addView(pill(theme, "카메라 크게", 11f).apply { isClickable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO },
-                FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(6); bottomMargin = dp(6) })
+            addView(swapBadge(theme), FrameLayout.LayoutParams(dp(28), dp(28), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(6); bottomMargin = dp(6) })
         }
         viewport.addView(cameraWindow, miniMapLayout())
         footer = LinearLayout(activity).apply {
@@ -208,6 +208,12 @@ class CloudNavigation(private val activity: Activity, private val viewport: Fram
     /** 위쪽 "주변 공개 팁" 줄 아래부터 아래쪽 탭 위까지 채운다. 오른쪽 위에는 작은 카메라 창이 겹친다. */
     private fun expandedMapLayout() = FrameLayout.LayoutParams(-1, -1).apply {
         topMargin = insetTop + dp(48); leftMargin = dp(12); rightMargin = dp(12); bottomMargin = insetBottom + dp(12)
+    }
+    /** 지도·카메라 작은 창 왼쪽 아래의 교환 아이콘(28dp). 누르는 자리는 작은 창 전체라 이 아이콘은 터치를 받지 않는다. */
+    private fun swapBadge(theme: ArTheme) = FrameLayout(activity).apply {
+        background = theme.background(theme.card, dp(14).toFloat()).apply { setStroke(dp(1), theme.border) }
+        importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        addView(ArIcon(activity, "arrow-left-right.svg", theme.foreground), FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
     }
     private fun pill(theme: ArTheme, label: String, size: Float) = TextView(activity).apply {
         text = label; textSize = size; typeface = theme.medium; setTextColor(theme.foreground); includeFontPadding = false
