@@ -147,6 +147,12 @@ class Judge(unittest.TestCase):
                          ("https://example.test/p.jpg", "Type1", "VE010100", "설명"))
         self.assertEqual(result["provinceCode"], "11")
 
+    def test_name_is_dictionary_title_not_course_item_name(self):
+        # 코스 항목 이름("점심식사(…)" 등)은 코스 작성자가 붙인 것이라 장소 이름으로 쓰지 않는다.
+        self.dictionary["2"]["title"] = " "
+        result = judge.judge(COURSE, info("1", "2", "3"), 3, {"schedule": "당일"}, self.dictionary)
+        self.assertEqual([p["name"] for p in result["places"]], ["장소1", "이름2", "장소3"])
+
     def test_province_is_most_common_code_then_smallest(self):
         self.dictionary.update({"1": place("1", regn="12"), "2": place("2", regn="46"), "3": place("3", regn="12")})
         result = judge.judge(COURSE, info("1", "2", "3"), 3, {"schedule": "당일"}, self.dictionary)
