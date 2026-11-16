@@ -4,6 +4,8 @@ import static com.ssafy.yeogirok.domain.course.CourseFixture.DAY1;
 import static com.ssafy.yeogirok.domain.record.RecordTestConfig.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.doReturn;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -18,11 +20,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import com.ssafy.yeogirok.domain.course.CourseFixture;
 import com.ssafy.yeogirok.domain.course.CourseTestConfig;
 import com.ssafy.yeogirok.domain.course.dto.ImportCountBasis;
 import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
+import com.ssafy.yeogirok.domain.course.repository.PublicCourseRepository;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
@@ -51,6 +55,8 @@ class MainCourseServiceTest {
 	MutableClock clock;
 	@Autowired
 	TestEntityManager em;
+	@MockitoSpyBean
+	PublicCourseRepository publicCourseRepository;
 
 	CourseFixture fixture;
 
@@ -267,6 +273,17 @@ class MainCourseServiceTest {
 			.isEqualTo(RecordTestConfig.SIGNED + day1First.getImagePath());
 		assertThat(item.thumbnailUrl()).isEqualTo(RecordTestConfig.SIGNED + day1First.getImagePath());
 		assertThat(List.of(item.placeCount(), item.dayCount(), item.nightCount())).containsExactly(6, 4, 3);
+	}
+
+	/** 227 리뷰: 후보를 읽은 뒤 사진 수를 세기 전에 방문이 다 지워져 통계가 없는 코스는 500 대신 뺀다. */
+	@Test
+	void 사진_통계가_없는_후보는_뺀다() {
+		TravelRecord kept = shown("남는 코스", 1);
+		shown("방문이 지워진 코스", 1);
+		doReturn(List.of(new com.ssafy.yeogirok.domain.course.repository.CoursePhotoStats(kept.getId(), 1, 1, 1)))
+			.when(publicCourseRepository).countPhotos(anyCollection());
+
+		assertThat(ids(recommend())).containsExactly(kept.getId());
 	}
 
 	@Test

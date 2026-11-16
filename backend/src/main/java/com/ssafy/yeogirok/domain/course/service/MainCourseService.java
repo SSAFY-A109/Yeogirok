@@ -76,7 +76,8 @@ public class MainCourseService {
 			official.addAll(publicCourseRepository.findOfficialIds(chunk, OfficialAccount.PROVIDER, OfficialAccount.SUBJECT,
 				seedProperties.ownerUserId()));
 		}
-		return candidates.stream().map(course -> {
+		// 후보 조회와 사진 수 세기는 다른 쿼리라, 그 사이 방문이 다 지워진 코스는 통계가 없다 → 뺀다.
+		return candidates.stream().filter(course -> stats.containsKey(course.id())).map(course -> {
 			CoursePhotoStats stat = stats.get(course.id());
 			int days = CoursePeriod.dates(course.roomStart(), course.roomEnd(), course.firstVisit(), course.lastVisit())
 				.size();
