@@ -44,7 +44,7 @@ export async function measureTipLocation(): Promise<LocationEvidenceDto> {
   const native = bridge();
 
   const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
-    title: "주변 AR 팁을 위한 현재 위치", message: "50m 안의 팁을 찾고 상세 보기나 반응을 남길 수 있는 거리인지 확인하는 데 현재 위치를 사용해요.", buttonPositive: "위치 확인",
+    title: "주변 AR 팁을 위한 현재 위치", message: "주변 팁을 찾고 상세 보기나 반응을 남길 수 있는 거리인지 확인하는 데 현재 위치를 사용해요.", buttonPositive: "위치 확인",
   });
 
   if (permission !== PermissionsAndroid.RESULTS.GRANTED) {
@@ -78,7 +78,8 @@ function publicTipRecords(page: TipSearchPage): string {
       cloudRecord: {
         schemaVersion: 1, kind: "yeogirok-public-cloud-anchor", anchorType: "CLOUD", anchorId: tip.spatialReference.referenceId,
         expiresAtEstimate: tip.spatialReference.expiresAt.toISOString(), ttlDays: 365,
-        discoveryLocation: { latitude: tip.latitude, longitude: tip.longitude },
+        // 네이티브 지도는 이 반경 안의 팁만 찍는다. 서버 설정(appliedRadiusMeters)을 그대로 넘긴다.
+        discoveryLocation: { latitude: tip.latitude, longitude: tip.longitude, radiusMeters: page.appliedRadiusMeters },
       },
     };
   }));

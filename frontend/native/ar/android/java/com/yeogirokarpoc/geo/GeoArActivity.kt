@@ -229,6 +229,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 explorerTips.forEach { tip -> tip.getJSONObject("cloudRecord").optJSONObject("discoveryLocation")?.let { points.put(it) } }
                 if (points.length() == 0) restore?.optJSONObject("discoveryLocation")?.let { points.put(it) }
             }, publicTips = publicTips, onLocation = if (publicTips) { location -> refreshPublicTips(location) } else null)
+        navigation?.attachCameraView(surface, overlay)
         layout.addView(viewport, LinearLayout.LayoutParams(-1, 0, 1f))
         val actions = LinearLayout(this)
         confirm = Button(this).apply {
@@ -306,7 +307,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     text = if (publicTips) "주변 공개 팁 ${count}개" else if (exploring || localTip != null) "저장한 팁 " + count + "개" else "팁 남길 자리"
                     textSize = 12f; typeface = theme.medium; setTextColor(theme.foreground); includeFontPadding = false
                 }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(4) })
-                contentDescription = if (publicTips) "지도는 50m 이내 팁 표시. 눌러 5m 이내 팁 선택" else "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
+                contentDescription = if (publicTips) "지도는 주변 공개 팁 위치 표시. 눌러 5m 이내 팁 선택" else "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
                 setOnClickListener {
                     val choices = if (publicTips) explorerTips.filter { PublicTipPolicy.inCamera(restoredTipDistances.get()[it.getString("id")]) } else explorerTips
                     if (choices.isEmpty()) {
@@ -392,6 +393,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             for (i in 0 until actions.childCount) {
                 val button = actions.getChildAt(i) as Button
                 button.typeface = theme.medium; button.stateListAnimator = null; button.elevation = 0f
+                fitButtonText(button)
                 button.background = theme.background(if (button === confirm) theme.primary else theme.muted, dp(8).toFloat())
                 button.setTextColor(if (button === confirm) theme.card else theme.foreground)
             }
@@ -432,6 +434,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     isEnabled = false; textSize = 15f; typeface = theme.medium; isAllCaps = false
                     setTextColor(theme.card); background = theme.background(theme.primary, dp(8).toFloat())
                     stateListAnimator = null; elevation = 0f
+                    fitButtonText(this)
                     setOnClickListener {
                         if (placementCommitted.get()) confirmRequested.set(true)
                         else {
@@ -447,15 +450,29 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 placementReset = Button(this@GeoArActivity).apply {
                     text = "다시 놓기"; contentDescription = "선택한 팁 위치 초기화"
                     textSize = 14f; typeface = theme.medium; isAllCaps = false
-                    setTextColor(theme.primary); background = theme.background(theme.card, dp(8).toFloat())
+                    setTextColor(theme.primary)
+                    background = theme.background(theme.card, dp(8).toFloat()).apply { setStroke(dp(1), theme.border) }
+                    stateListAnimator = null; elevation = 0f
+                    fitButtonText(this)
                     setOnClickListener { placementCommitted.set(false); resetRequested.set(true) }
                     visibility = View.GONE
                 }
-                addView(placementReset, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+                addView(placementReset, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
             }
             placementPanel = panel
             root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             showPlacementControls()
+            // 지도를 크게 펼치면 지도 위에 겹치는 상태 안내와 팁 남기기 버튼을 숨기고, 접으면 원래대로 되돌린다.
+            var hiddenForMap: List<Pair<View, Int>> = emptyList()
+            navigation?.setOnMapExpandedChange { expanded ->
+                if (expanded) {
+                    hiddenForMap = listOfNotNull<View>(statusPanel, addTip).map { it to it.visibility }
+                    hiddenForMap.forEach { (view, _) -> view.visibility = View.GONE }
+                } else {
+                    hiddenForMap.forEach { (view, visibility) -> view.visibility = visibility }
+                    hiddenForMap = emptyList()
+                }
+            }
             androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
                 val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 (statusPanel.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(64) }.also { statusPanel.layoutParams = it }
@@ -510,9 +527,19 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
         if (intent.getBooleanExtra("explorerMode", false)) recreate() else finish()
     }
 
+    /**
+     * 높이를 고정한 버튼은 Android 기본 버튼의 위아래 여백과 Noto Sans KR 글꼴 여백 때문에 글자 아래가 잘린다
+     * (자리 놓기 패널의 "다시 놓기" 44dp 등). 여백을 걷고 글자를 가운데에 맞춘다.
+     */
+    private fun fitButtonText(button: Button) {
+        val horizontal = (16 * resources.displayMetrics.density).toInt()
+        button.minHeight = 0; button.minimumHeight = 0; button.includeFontPadding = false
+        button.setPadding(horizontal, 0, horizontal, 0); button.gravity = Gravity.CENTER
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (productMode && placingTip) cancelPlacement() else super.onBackPressed()
+        if (productMode && placingTip) cancelPlacement() else if (navigation?.collapseMap() != true) super.onBackPressed()
     }
 
     override fun onResume() {
@@ -643,7 +670,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             next.forEach { points.put(it.getJSONObject("cloudRecord").getJSONObject("discoveryLocation")) }
         })
         nearbyLabel?.text = "주변 공개 팁 ${next.size}개"
-        nearbyLabel?.contentDescription = "지도 50m 이내 팁 ${next.size}개, 카메라 5m 이내 표시"
+        nearbyLabel?.contentDescription = "지도에 주변 팁 ${next.size}개, 카메라 5m 이내 표시"
         return true
     }
 
@@ -1312,7 +1339,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                         publicTips && nearbyFailed -> "일부 팁의 위치를 복원하지 못했어요."
                         else -> trackingMessage
                     }
-                } else if (exploring && explorerTips.isEmpty()) if (publicTips) "50m 안에 공개된 팁이 없어요. ＋로 첫 팁을 남겨 보세요." else "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
+                } else if (exploring && explorerTips.isEmpty()) if (publicTips) "주변에 공개된 팁이 없어요. ＋로 첫 팁을 남겨 보세요." else "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
                 else if (exploring) centerHint else productSaveHint
                 if (status.text.toString() != nextStatus) status.text = nextStatus
                 if (publicTips) retry.visibility = if (!placingTip && restoreFailed) View.VISIBLE else View.GONE

@@ -1,8 +1,11 @@
 import { ApiError } from "../../api/errors";
 import { assertId, ContractMismatchError, toKnownEnum } from "../../lib/contract";
 import { parseServerDateTime } from "../../lib/date";
+import { isWithinAdjustRadius } from "../footprint/model";
 
 export const TIP_SEARCH_RADIUS_METERS = 50;
+/** 서버가 알려 주는 탐색 반경(`appliedRadiusMeters`)의 상한. 앱은 반경을 보내지 않고 서버 설정을 따른다(2026-11-16, 100m 확대 대비). */
+const MAX_TIP_SEARCH_RADIUS_METERS = 1000;
 export const TIP_INTERACTION_RADIUS_METERS = 50;
 export const TIP_BODY_MAX_LENGTH = 120;
 export const TIP_TYPE_LABELS = { PHOTO: "포토", FOOD: "맛집", CAFE: "카페", TIP: "꿀팁", TMI: "TMI" } as const;
@@ -85,7 +88,7 @@ export type TipSearchItemDto = {
 export type SearchTipsResponseDto = {
   items: TipSearchItemDto[];
   nextCursor: string | null;
-  appliedRadiusMeters: 50;
+  appliedRadiusMeters: number;
   totalCount: number;
   interactionRadiusMeters: 5 | typeof TIP_INTERACTION_RADIUS_METERS;
 };
@@ -267,14 +270,16 @@ export function toTipSearchPage(value: unknown) {
   const dto = object(value, "tipSearch");
   const { interactionRadiusMeters } = dto;
 
-  if (!Array.isArray(dto.items) || dto.items.length > 10 || dto.appliedRadiusMeters !== TIP_SEARCH_RADIUS_METERS ||
+  const appliedRadiusMeters = number(dto.appliedRadiusMeters, "appliedRadiusMeters", MAX_TIP_SEARCH_RADIUS_METERS);
+
+  if (!Array.isArray(dto.items) || dto.items.length > 10 || appliedRadiusMeters <= 0 ||
     (interactionRadiusMeters !== 5 && interactionRadiusMeters !== TIP_INTERACTION_RADIUS_METERS)) {
     throw new ContractMismatchError("tipSearch");
   }
 
   const items = dto.items.map((value: unknown) => {
     const item = object(value, "items");
-    const distanceMeters = number(item.distanceMeters, "distanceMeters", TIP_SEARCH_RADIUS_METERS);
+    const distanceMeters = number(item.distanceMeters, "distanceMeters", appliedRadiusMeters);
     const canInteract = boolean(item.canInteract, "canInteract");
 
     if (canInteract !== (distanceMeters <= interactionRadiusMeters)) {
@@ -293,7 +298,7 @@ export function toTipSearchPage(value: unknown) {
     };
   });
 
-  return { items, nextCursor: cursor(dto.nextCursor), totalCount: count(dto.totalCount, "totalCount"), appliedRadiusMeters: TIP_SEARCH_RADIUS_METERS, interactionRadiusMeters };
+  return { items, nextCursor: cursor(dto.nextCursor), totalCount: count(dto.totalCount, "totalCount"), appliedRadiusMeters, interactionRadiusMeters };
 }
 
 export function toTipDetail(value: unknown) {
@@ -407,6 +412,26 @@ export function validateTipLocation(location: LocationEvidenceDto): LocationEvid
   number(location.accuracyMeters, "location.accuracyMeters");
   parseServerDateTime(location.capturedAt, "location.capturedAt");
   return { latitude: location.latitude, longitude: location.longitude, accuracyMeters: location.accuracyMeters, capturedAt: location.capturedAt };
+}
+
+/** 지도에서 직접 고친 팁 위치. */
+export type TipPoint = { latitude: number; longitude: number };
+
+/**
+ * 서버에 보낼 위치 증거. 지도에서 핀을 고쳤으면 그 좌표를 쓰고, 정확도와 잰 시각은 방금 잰 값을 그대로 쓴다.
+ * 고친 핀이 방금 잰 위치에서 발자취와 같은 범위(`FOOTPRINT_ADJUST_RADIUS_METERS`, 2026-11-16 사용자 결정)를 넘으면 `null`이다.
+ * 서버가 고친 좌표를 사용자 위치로 받아도 되는지는 백엔드 확인 전이다(TBD).
+ */
+export function toTipLocationEvidence(measured: LocationEvidenceDto, chosen: TipPoint | null): LocationEvidenceDto | null {
+  if (chosen === null) {
+    return measured;
+  }
+
+  if (!isWithinAdjustRadius(measured, chosen)) {
+    return null;
+  }
+
+  return { ...measured, latitude: chosen.latitude, longitude: chosen.longitude };
 }
 
 export function validateTipUploads(value: string[] | undefined): string[] | undefined {

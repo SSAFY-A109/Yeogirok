@@ -21,6 +21,7 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
     private var destroyed = false
     private var ready = false
     private var latestPosition: String? = null
+    private var latestExpanded: String? = null
     private var latestPoints = points.toString()
     private val timeout = Runnable { if (!ready && !destroyed) showError() }
     private val html: String
@@ -34,7 +35,7 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
         val pinColor = String.format("#%06X", 0xFFFFFF and theme.primary)
         html = """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
           <style>html,body,#map{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><div id="map"></div><script>
-          var map,me,selected,pending,markers=[];
+          var map,me,selected,pending,markers=[],current=null,follow=true,expanded=false,zoomControl=null;
           window.setPoints=function(points){
             if(!map)return;
             markers.forEach(function(marker){marker.setMap(null);});
@@ -43,17 +44,30 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
           window.setCurrent=function(lat,lng,heading){
             if(!map){pending=[lat,lng,heading];return;}
             var p=new kakao.maps.LatLng(lat,lng);
+            current=p;
             if(me)me.setMap(null);
             var angle=heading===null?'': '<span style="position:absolute;left:0;top:-12px;transform:rotate('+heading+'deg);transform-origin:7px 19px">▲</span>';
             me=new kakao.maps.CustomOverlay({map:map,position:p,content:'<div style="position:relative;width:14px;height:14px;border:2px solid white;border-radius:50%;background:$pinColor;color:$pinColor">'+angle+'</div>'});
-            ${if (onSelect == null) "map.panTo(p);" else "if(!window.positioned){map.panTo(p);window.positioned=true;}"}
+            ${if (onSelect == null) "if(follow)map.panTo(p);" else "if(!window.positioned){map.panTo(p);window.positioned=true;}"}
           };
+          window.setExpanded=function(on){
+            expanded=on;follow=true;
+            if(!map)return;
+            map.relayout();map.setDraggable(on);map.setZoomable(on);
+            if(on){if(!zoomControl)zoomControl=new kakao.maps.ZoomControl();map.addControl(zoomControl,kakao.maps.ControlPosition.BOTTOMRIGHT);}
+            else{if(zoomControl)map.removeControl(zoomControl);map.setLevel(3);}
+            if(current)map.setCenter(current);
+          };
+          window.recenter=function(){follow=true;if(map&&current)map.panTo(current);};
           window.hideCurrent=function(){if(me)me.setMap(null);};
           var s=document.createElement('script');s.src='https://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey='+encodeURIComponent($keyJson);
           s.onerror=function(){ArMap.failed();};s.onload=function(){
             try{kakao.maps.load(function(){
-              map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng($latitude,$longitude),level:3});
+              map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng($latitude,$longitude),level:3${if (onSelect == null) ",disableDoubleClickZoom:true" else ""}});
               map.setDraggable(${onSelect != null});map.setZoomable(${onSelect != null});
+              kakao.maps.event.addListener(map,'dragstart',function(){follow=false;});
+              window.addEventListener('resize',function(){map.relayout();if(current&&follow)map.setCenter(current);});
+              if(expanded)window.setExpanded(true);
               window.setPoints(${points.toString().replace("<", "\\u003c")});
               ${if (onSelect != null) "kakao.maps.event.addListener(map,'click',function(e){if(selected)selected.setMap(null);selected=new kakao.maps.Marker({map:map,position:e.latLng});ArMap.selected(e.latLng.getLat(),e.latLng.getLng());});" else ""}
               kakao.maps.event.addListener(map,'tilesloaded',function(){ArMap.ready();});
@@ -72,6 +86,7 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
                 if (!destroyed && !ready) {
                     ready = true; status.visibility = GONE; removeCallbacks(timeout)
                     web.evaluateJavascript("window.setPoints($latestPoints);", null)
+                    latestExpanded?.let { web.evaluateJavascript(it, null) }
                     latestPosition?.let { web.evaluateJavascript(it, null) }
                 }
             } }
@@ -96,6 +111,17 @@ class KakaoWebMap(context: Context, center: JSONObject?, points: JSONArray = JSO
         latestPosition = "window.setCurrent && window.setCurrent($lat,$lng,$direction);"
         if (ready) web.evaluateJavascript(latestPosition!!, null)
     }
+    /**
+     * 크게 보기(카메라 화면을 덮는 지도)에서는 끌기·손가락 확대·축소와 ± 버튼을 켜고, 끌면 내 위치 따라가기를 멈춘다.
+     * 작게 보기로 돌아오면 다시 고정하고 기본 확대 단계로 내 위치를 따라간다. 크기가 바뀐 뒤 불러야 지도가 새 크기를 안다.
+     */
+    fun setExpanded(expanded: Boolean) {
+        if (destroyed) return
+        latestExpanded = "window.setExpanded && window.setExpanded($expanded);"
+        if (ready) web.evaluateJavascript(latestExpanded!!, null)
+    }
+    /** 크게 보기에서 끌어 옮긴 지도를 내 위치로 되돌리고 다시 따라간다. */
+    fun recenter() { if (!destroyed && ready) web.evaluateJavascript("window.recenter && window.recenter();", null) }
     fun hideLocation() { latestPosition = null; if (!destroyed && ready) web.evaluateJavascript("window.hideCurrent && window.hideCurrent();", null) }
     fun updatePoints(points: JSONArray) {
         val raw = points.toString().replace("<", "\\u003c")
