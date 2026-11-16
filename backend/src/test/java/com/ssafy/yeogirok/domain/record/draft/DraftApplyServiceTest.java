@@ -179,6 +179,52 @@ class DraftApplyServiceTest {
 		assertThat(em.find(VisitImage.class, imageId).getVisitId()).isEqualTo(other);
 	}
 
+	/** 235 리뷰: 같은 사진이 두 항목의 근거면 앞 방문에만 붙고, 뒤 방문의 다른 사진은 1번부터 붙는다. */
+	@Test
+	void 같은_사진이_두_항목의_근거면_앞_방문에만_붙고_뒤_방문은_1번부터_시작한다() {
+		Long second = em.persist(VisitImage.unlinked(recordId, FRIEND, "record-photo/b", NOW)).getId();
+		em.flush();
+		RecordDraft.Item first = draftStore.find(draftKey).orElseThrow().items().getFirst();
+		replaceItems(withPhotos(first, 1, List.of(imageId)), withPhotos(first, 2, List.of(imageId, second)));
+
+		VisitAddResponse response = apply(1, draftKey, 1, draftItem(1, 1), draftItem(2, 2));
+
+		em.flush();
+		em.clear();
+		assertThat(List.of(em.find(VisitImage.class, imageId), em.find(VisitImage.class, second)))
+			.extracting(VisitImage::getVisitId, VisitImage::getPosition)
+			.containsExactly(tuple(response.visitIds().get(0), 1), tuple(response.visitIds().get(1), 1));
+	}
+
+	/** 235 리뷰: 근거에 다른 기록의 사진이 섞이면 연결 전에 C004 이고 아무것도 붙지 않는다. */
+	@Test
+	void 근거에_다른_기록의_사진이_섞이면_C004_이고_연결하지_않는다() {
+		TravelRoom otherRoom = em.persist(TravelRoom.builder().title("다른 여행").startDate(DAY).endDate(DAY)
+			.transportMode(TransportMode.CAR).createdAt(NOW).build());
+		Long otherRecord = em.persist(TravelRecord.create(otherRoom.getId(), "다른 여행", NOW)).getId();
+		Long foreign = em.persist(VisitImage.unlinked(otherRecord, ME, "record-photo/other", NOW)).getId();
+		em.flush();
+		RecordDraft.Item first = draftStore.find(draftKey).orElseThrow().items().getFirst();
+		replaceItems(withPhotos(first, 1, List.of(imageId, foreign)));
+
+		assertError(() -> apply(1, draftKey, 1, draftItem(1, 1)), ExceptionType.VERSION_MISMATCH);
+		em.clear();
+		assertThat(em.find(VisitImage.class, imageId).getVisitId()).isNull();
+		assertThat(em.find(VisitImage.class, foreign).getVisitId()).isNull();
+	}
+
+	/** 초안 생성 규칙으로는 만들기 어려운 경우를 시험하려고 저장된 초안의 항목을 바꾼다(draftVersion 은 그대로 1). */
+	private void replaceItems(RecordDraft.Item... items) {
+		RecordDraft draft = draftStore.find(draftKey).orElseThrow();
+		draftStore.save(draft.succeeded(List.of(items), draft.warnings()));
+	}
+
+	private static RecordDraft.Item withPhotos(RecordDraft.Item item, int itemId, List<Long> photoIds) {
+		return new RecordDraft.Item(itemId, item.sourceMaterialIds(), item.placeCandidates(), item.visitDate(),
+			item.proposedVisitedAt(), item.needsReview(), item.evidence(), photoIds, item.plannedItemId(),
+			item.proposedPlace());
+	}
+
 	@Test
 	void 같은_초안을_두_번_반영하면_RE012_반영_표시를_지워도_DB_로_RE012() {
 		apply(1, draftKey, 1, draftItem(1, 1));
