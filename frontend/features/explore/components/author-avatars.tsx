@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { User } from "lucide-react-native";
 
 import { Icon } from "@/components/ui/icon";
+import { toHttpsUrl } from "@/lib/url";
 import { cn } from "@/lib/utils";
 import type { CourseAuthor } from "@/features/course/model";
 
@@ -25,7 +26,7 @@ export function AuthorAvatars({ authors, size, overlap, cachePolicy }: AuthorAva
             style={{ width: size, height: size, marginRight: index < visible.length - 1 ? -overlap : 0, zIndex: visible.length - index }}
           >
             {author.profileImageUrl ? (
-              <Image source={{ uri: author.profileImageUrl }} contentFit="cover" cachePolicy={cachePolicy} style={{ width: "100%", height: "100%" }} />
+              <Image source={{ uri: toHttpsUrl(author.profileImageUrl) }} contentFit="cover" cachePolicy={cachePolicy} style={{ width: "100%", height: "100%" }} />
             ) : (
               <Icon as={User} size={size * 0.55} className="text-icon" />
             )}
