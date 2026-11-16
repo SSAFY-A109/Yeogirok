@@ -20,10 +20,12 @@ import org.springframework.context.annotation.Import;
 import com.ssafy.yeogirok.global.config.ClockConfig;
 import org.springframework.test.context.TestPropertySource;
 
+import com.ssafy.yeogirok.domain.course.OfficialAccount;
 import com.ssafy.yeogirok.domain.footprint.entity.Footprint;
 import com.ssafy.yeogirok.domain.statistics.dto.VisitStatisticsResponse;
 import com.ssafy.yeogirok.domain.statistics.entity.FootprintStatistic;
 import com.ssafy.yeogirok.domain.statistics.entity.FootprintStatisticId;
+import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
@@ -211,6 +213,91 @@ class VisitStatisticsServiceTest {
 		expect(() -> get("124.0,33.0,132.0,39.0", 0, null, null, null), ExceptionType.INVALID_BBOX);  // 한국 전체 × 0.04도
 	}
 
+	/** 230: center 는 발자취 평균 위치. 실제 사용자 발자취가 1~2개(center-min-count 3 미만)면 셀 중심(3-1). */
+	@Nested
+	class 셀_위치 {
+
+		// 공식 계정이 빈 DB 에서 회원 번호 1 을 받으므로 실제 사용자는 겹치지 않는 번호를 쓴다.
+		static final long USER_1 = 9001L;
+		static final long USER_2 = 9002L;
+		static final long USER_3 = 9003L;
+		static final long USER_4 = 9004L;
+
+		@Test
+		void 공식_계정_발자취만_있으면_좌표_평균을_소수_7자리로_준다() {
+			long official = officialUser();
+			save(official, at("37.501", "127.001"), List.of("CULTURE"));
+			save(official, at("37.502", "127.008"), List.of("CULTURE"));
+			save(official, at("37.502", "127.008"), List.of("NATURE"));  // 카테고리 집합이 달라도 같은 셀이면 함께 평균
+
+			VisitStatisticsResponse.Center center = get(SEOUL_BOX, 10, null, null, null).cells().getFirst().center();
+
+			assertThat(center.latitude()).isEqualByComparingTo("37.5016667");
+			assertThat(center.longitude()).isEqualByComparingTo("127.0056667");
+		}
+
+		@Test
+		void 실제_사용자_발자취가_3개_미만이면_공식_발자취가_섞여도_셀_중심을_준다() {
+			long official = officialUser();
+			save(official, at("37.501", "127.001"), List.of("CULTURE"));
+			save(official, at("37.501", "127.001"), List.of("CULTURE"));
+			save(USER_1, at("37.502", "127.002"), List.of("CAFE"));  // 평균(37.5015)이 셀 중심과 다르게
+			save(USER_2, at("37.502", "127.002"), List.of("CAFE"));
+
+			VisitStatisticsResponse.Cell cell = get(SEOUL_BOX, 10, null, null, null).cells().getFirst();
+
+			assertThat(cell.count()).isEqualTo(4);
+			assertThat(cell.center().latitude()).isEqualByComparingTo("37.505");
+			assertThat(cell.center().longitude()).isEqualByComparingTo("127.005");
+		}
+
+		@Test
+		void 실제_사용자_발자취가_3개_이상이면_삭제한_것을_빼고_모든_발자취_평균을_준다() {
+			long official = officialUser();
+			save(official, at("37.501", "127.001"), List.of("CULTURE"));
+			save(USER_1, at("37.502", "127.002"), List.of("CAFE"));
+			save(USER_2, at("37.503", "127.003"), List.of("CAFE"));
+			save(USER_3, at("37.506", "127.006"), List.of("CAFE"));
+			softDelete(save(USER_4, at("37.509", "127.009"), List.of("CAFE")));
+
+			VisitStatisticsResponse.Center center = get(SEOUL_BOX, 10, null, null, null).cells().getFirst().center();
+
+			assertThat(center.latitude()).isEqualByComparingTo("37.503");
+			assertThat(center.longitude()).isEqualByComparingTo("127.003");
+		}
+
+		@Test
+		void 탈퇴자_보존분은_실제_사용자로_세고_기본_셀_중심을_횟수만큼_평균에_넣는다() {
+			long official = officialUser();
+			save(official, at("37.501", "127.001"), List.of("CULTURE"));
+			preserve("test-v1", "3750:12700", "2026-11-01", "[\"CAFE\"]", "37.505", "127.005", 3);
+
+			VisitStatisticsResponse.Center center = get(SEOUL_BOX, 10, null, null, null).cells().getFirst().center();
+
+			assertThat(center.latitude()).isEqualByComparingTo("37.504");  // (37.501 + 37.505 × 3) / 4
+			assertThat(center.longitude()).isEqualByComparingTo("127.004");
+		}
+
+		@Test
+		void category를_주면_거른_발자취만으로_평균과_실제_사용자_수를_센다() {
+			save(USER_1, at("37.501", "127.001"), List.of("CAFE"));
+			save(USER_2, at("37.502", "127.002"), List.of("CAFE"));
+			save(USER_3, at("37.503", "127.003"), List.of("CAFE"));
+			save(USER_4, at("37.509", "127.009"), List.of("FOOD"));
+
+			VisitStatisticsResponse.Center cafe = get(SEOUL_BOX, 10, "CAFE", null, null).cells().getFirst().center();
+			VisitStatisticsResponse.Center food = get(SEOUL_BOX, 10, "FOOD", null, null).cells().getFirst().center();
+
+			assertThat(cafe.latitude()).isEqualByComparingTo("37.502");
+			assertThat(food.latitude()).isEqualByComparingTo("37.505");  // 실제 사용자 1개 → 셀 중심
+		}
+
+		private long officialUser() {
+			return em.persistAndGetId(User.signUp(OfficialAccount.PROVIDER, OfficialAccount.SUBJECT, null, "공식", null,
+				Instant.parse("2026-11-01T00:00:00Z")), Long.class);
+		}
+	}
+
 	@Nested
 	@TestPropertySource(properties = "yeogirok.visit-statistics.min-count=2")
 	class 최소_집계_수 {
@@ -238,8 +325,16 @@ class VisitStatisticsServiceTest {
 		return save(point, categories, "2026-11-04T03:00:00Z");
 	}
 
+	private Long save(long userId, BigDecimal[] point, List<String> categories) {
+		return save(userId, point, categories, "2026-11-04T03:00:00Z");
+	}
+
 	private Long save(BigDecimal[] point, List<String> categories, String visitedAt) {
-		Footprint footprint = footprintOf(1L).latitude(point[0]).longitude(point[1]).categoryCodes(categories)
+		return save(1L, point, categories, visitedAt);
+	}
+
+	private Long save(long userId, BigDecimal[] point, List<String> categories, String visitedAt) {
+		Footprint footprint = footprintOf(userId).latitude(point[0]).longitude(point[1]).categoryCodes(categories)
 			.visitedAt(Instant.parse(visitedAt)).build();
 		Long id = em.persistAndGetId(footprint, Long.class);
 		em.flush();

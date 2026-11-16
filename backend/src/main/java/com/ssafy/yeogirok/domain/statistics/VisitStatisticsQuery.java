@@ -26,8 +26,8 @@ class VisitStatisticsQuery {
 	@PersistenceContext
 	private EntityManager entityManager;
 
-	/** 삭제하지 않은 발자취. 칸 번호는 이 격자 기준. */
-	List<Row> countFootprints(VisitGrid grid, BoundingBox area, DateRange dates, String category) {
+	/** 삭제하지 않은 발자취. 칸 번호는 이 격자 기준. officialUserId 의 발자취는 실제 사용자 수에서 뺀다(공식 계정이 없으면 -1). */
+	List<Row> countFootprints(VisitGrid grid, BoundingBox area, DateRange dates, String category, long officialUserId) {
 		Where where = new Where("deleted_at IS NULL", Map.of())
 			.and("latitude >= :south AND latitude < :north AND longitude >= :west AND longitude < :east", area(area))
 			.andIf(dates.startInclusive() != null, "visited_at >= :visitedFrom", "visitedFrom", dates.startInclusive())
@@ -35,20 +35,25 @@ class VisitStatisticsQuery {
 			.andIf(category != null, "CAST(category_codes AS VARCHAR) LIKE :categoryPattern",
 				"categoryPattern", category == null ? null : FootprintCategories.containsPattern(category));
 		Query query = where.bind(entityManager.createNativeQuery("""
-			SELECT lat_index, lng_index, codes, COUNT(*)
+			SELECT lat_index, lng_index, codes, COUNT(*), SUM(latitude), SUM(longitude),
+			       SUM(CASE WHEN user_id = :officialUserId THEN 0 ELSE 1 END)
 			FROM (
 			    SELECT FLOOR(latitude / :cellSize) AS lat_index, FLOOR(longitude / :cellSize) AS lng_index,
-			           CAST(category_codes AS VARCHAR) AS codes
+			           CAST(category_codes AS VARCHAR) AS codes, latitude, longitude, user_id
 			    FROM footprints
 			    WHERE %s
 			) cells
 			GROUP BY lat_index, lng_index, codes
 			""".formatted(where.sql())));
 		query.setParameter("cellSize", grid.cellSize());
+		query.setParameter("officialUserId", officialUserId);
 		return toRows(query, grid, false);
 	}
 
-	/** 탈퇴자 보존분. cell_id 는 기본 셀 "{위도 칸}:{경도 칸}" 이고 이 격자 칸 번호로 바꿔 돌려준다. */
+	/**
+	 * 탈퇴자 보존분. cell_id 는 기본 셀 "{위도 칸}:{경도 칸}" 이고 이 격자 칸 번호로 바꿔 돌려준다.
+	 * 누구 것인지 모르므로 모두 실제 사용자로 세고, 위치는 기본 셀 중심을 횟수만큼 더한다.
+	 */
 	List<Row> countPreserved(VisitGrid grid, String aggregationVersion, BoundingBox area, DateRange dates,
 		String category) {
 		Where where = new Where("aggregation_version = :version", Map.of("version", aggregationVersion))
@@ -59,9 +64,10 @@ class VisitStatisticsQuery {
 			.andIf(category != null, "CAST(category_codes AS VARCHAR) LIKE :categoryPattern",
 				"categoryPattern", category == null ? null : FootprintCategories.containsPattern(category));
 		Query query = where.bind(entityManager.createNativeQuery("""
-			SELECT cell_id, codes, SUM(visit_count)
+			SELECT cell_id, codes, SUM(visit_count), SUM(center_latitude * visit_count),
+			       SUM(center_longitude * visit_count), SUM(visit_count)
 			FROM (
-			    SELECT cell_id, CAST(category_codes AS VARCHAR) AS codes, visit_count
+			    SELECT cell_id, CAST(category_codes AS VARCHAR) AS codes, visit_count, center_latitude, center_longitude
 			    FROM footprint_statistics
 			    WHERE %s
 			) preserved
@@ -123,18 +129,23 @@ class VisitStatisticsQuery {
 				latitudeIndex = toLong(result[0]);
 				longitudeIndex = toLong(result[1]);
 			}
-			String codes = (String)result[baseCellId ? 1 : 2];
-			long count = toLong(result[baseCellId ? 2 : 3]);
-			rows.add(new Row(latitudeIndex, longitudeIndex, codes, count));
+			int first = baseCellId ? 1 : 2;
+			rows.add(new Row(latitudeIndex, longitudeIndex, (String)result[first], toLong(result[first + 1]),
+				toDecimal(result[first + 2]), toDecimal(result[first + 3]), toLong(result[first + 4])));
 		}
 		return rows;
+	}
+
+	private static BigDecimal toDecimal(Object value) {
+		return value instanceof BigDecimal decimal ? decimal : new BigDecimal(value.toString());
 	}
 
 	private static long toLong(Object value) {
 		return value instanceof BigDecimal decimal ? decimal.longValueExact() : ((Number)value).longValue();
 	}
 
-	/** 한 셀·한 카테고리 집합의 횟수. codes 는 JSON 배열 문자열. */
-	record Row(long latitudeIndex, long longitudeIndex, String codes, long count) {
+	/** 한 셀·한 카테고리 집합의 횟수·좌표 합과 그중 실제 사용자(공식 계정 아님) 횟수. codes 는 JSON 배열 문자열. */
+	record Row(long latitudeIndex, long longitudeIndex, String codes, long count, BigDecimal latitudeSum,
+		BigDecimal longitudeSum, long userCount) {
 	}
 }
