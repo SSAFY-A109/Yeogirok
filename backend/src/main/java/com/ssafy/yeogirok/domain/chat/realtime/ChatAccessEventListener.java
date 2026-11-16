@@ -5,6 +5,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.ssafy.yeogirok.domain.chat.cleanup.ChatCleanupQueue;
+import com.ssafy.yeogirok.domain.room.event.RoomDeletedEvent;
 import com.ssafy.yeogirok.domain.room.event.RoomMemberLeftEvent;
 import com.ssafy.yeogirok.domain.user.unlink.UserWithdrawnEvent;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -29,9 +30,20 @@ public class ChatAccessEventListener {
 	public void onMemberLeft(RoomMemberLeftEvent event) {
 		kick(event.roomId(), event.userId(), ExceptionType.ROOM_NOT_MEMBER);
 		if (event.roomDeleted()) {
-			kick(event.roomId(), null, ExceptionType.ROOM_NOT_FOUND);
-			cleanupQueue.register(event.roomId());
+			closeDeletedRoom(event.roomId());
 		}
+	}
+
+	/** 탈퇴로 참여자가 0명이 되어 삭제된 방. */
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	public void onRoomDeleted(RoomDeletedEvent event) {
+		closeDeletedRoom(event.roomId());
+	}
+
+	/** 삭제된 방의 모든 연결을 RO001 로 끊고 메시지를 정리 대상으로 등록한다. 나가기·탈퇴 어느 쪽으로 삭제됐든 같다. */
+	private void closeDeletedRoom(Long roomId) {
+		kick(roomId, null, ExceptionType.ROOM_NOT_FOUND);
+		cleanupQueue.register(roomId);
 	}
 
 	/** 탈퇴한 회원의 모든 방 연결을 A003 으로 끊는다. 메시지는 남기고 보낸 사람 표시만 익명화한다(조회 때). */

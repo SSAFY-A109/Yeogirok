@@ -91,12 +91,12 @@ public class UserService {
 			target.withdraw(clock.instant());
 			// 푸시 기기 토큰을 모두 지운다(노션 ERD › user_push_tokens). 탈퇴한 계정으로 채팅 알림이 가지 않는다.
 			userPushTokenRepository.deleteAllByUserId(target.getId());
-			// TODO: 탈퇴 데이터 정리(노션 ERD › ERD 설계 관련 사항). 발자취 PR(S15P31A109-35)이 합쳐진 뒤 구현한다.
-			//  - 위에서 잠근 회원 행 아래에서(발자취 UserLock 도 같은 잠금으로 맞춘다) 미삭제 발자취를 footprint_statistics 에 합산하고,
-			//    그 회원의 발자취 원본(삭제 상태 포함)을 지운다. 계정 비활성화와 같은 이 트랜잭션에서 한다.
-			//    cell_id 는 기본 셀 "{floor(lat/기본셀)}:{floor(lng/기본셀)}", stat_date 는 방문 시각의 Asia/Seoul 날짜.
-			//  - 이야기·사진·채팅·AR 팁의 작성자 표시 익명화, 참여자 명단에서 빼기(남은 참여자가 0명이면 방 삭제).
-			//  - 응답의 dataCleanupStatus=QUEUED 가 실제 정리 작업과 이어지게 한다.
+			// 탈퇴 데이터 정리(노션 ERD › ERD 설계 관련 사항). 이 이벤트를 받는 @EventListener 가 잠근 회원 행 아래, 이 트랜잭션
+			// 안에서 정리한다. 하나라도 실패하면 탈퇴 전체가 롤백된다.
+			//  - 발자취: 미삭제분을 footprint_statistics 에 합산하고 원본을 모두 지운다(statistics.WithdrawnFootprints).
+			//  - 여행방: 현재 참여자가 0명이 된 방을 지운다(room.service.WithdrawnMemberRooms).
+			// 이야기·사진·채팅·AR 팁의 작성자 익명 표시와 참여자 명단 제외는 각 조회가 계정 상태로 한다(데이터는 그대로 둔다).
+			// 커밋 뒤 처리(@TransactionalEventListener AFTER_COMMIT)는 연결 해제·채팅 연결 끊기·참여자 변경 알림이다.
 			eventPublisher.publishEvent(event);
 		});
 

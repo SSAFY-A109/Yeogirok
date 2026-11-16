@@ -37,6 +37,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestIdTokens;
+import com.ssafy.yeogirok.support.TestWithdrawalConfig;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -45,7 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestAuthConfig.class)
+@Import({TestAuthConfig.class, TestWithdrawalConfig.class})
 class PushTokenApiTest {
 
 	private static final String PATH = "/api/v1/users/me/push-tokens";

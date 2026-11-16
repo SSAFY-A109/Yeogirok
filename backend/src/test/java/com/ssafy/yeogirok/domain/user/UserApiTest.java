@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -45,6 +47,7 @@ import com.ssafy.yeogirok.support.FakeKakaoUnlinkClient;
 import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestIdTokens;
+import com.ssafy.yeogirok.support.TestWithdrawalConfig;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -52,7 +55,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestAuthConfig.class)
+@Import({TestAuthConfig.class, TestWithdrawalConfig.class})
 class UserApiTest {
 
 	@Autowired
@@ -75,6 +78,8 @@ class UserApiTest {
 	FootprintRepository footprintRepository;
 	@Autowired
 	ArTipRepository arTipRepository;
+	@Autowired
+	JdbcTemplate jdbc;
 
 	@Autowired
 	StringRedisTemplate redis;
@@ -214,6 +219,35 @@ class UserApiTest {
 
 	@Nested
 	class 회원_탈퇴 {
+
+		@Test
+		void 탈퇴하면_발자취를_방문_분포_보존분으로_옮기고_원본을_지운다() throws Exception {
+			String accessToken = login("kakao", idTokens.kakao(uniqueSub(), clock.instant()))
+				.get("accessToken").asString();
+			Long userId = jsonMapper.readTree(getMe(accessToken).andReturn().getResponse().getContentAsString())
+				.get("data").get("id").asLong();
+			// 다른 테스트와 겹치지 않는 칸(위도 -10도 근처)에 둔다.
+			footprintRepository.save(footprintOf(userId).latitude(new BigDecimal("-10.0012345"))
+				.longitude(new BigDecimal("-20.0012345")).categoryCodes(List.of("FOOD", "CAFE")).build());
+			try {
+				withdraw(accessToken).andExpect(status().isOk());
+
+				assertThat(jdbc.queryForObject("SELECT count(*) FROM footprints WHERE user_id = ?", Long.class, userId))
+					.isZero();
+				// application-test.yaml 의 기본 셀 0.005도: floor(-10.0012345 / 0.005) = -2001, floor(-20.0012345 / 0.005) = -4001
+				assertThat(jdbc.queryForList("SELECT visit_count, CAST(category_codes AS VARCHAR) AS codes"
+					+ " FROM footprint_statistics WHERE cell_id = '-2001:-4001'"))
+					.singleElement()
+					.satisfies(row -> {
+						assertThat(((Number)row.get("visit_count")).longValue()).isEqualTo(1);
+						assertThat((String)row.get("codes")).contains("CAFE").contains("FOOD");
+					});
+			} finally {
+				// 탈퇴가 실패해도 공용 DB 에 이 테스트의 행이 남지 않게 지운다.
+				jdbc.update("DELETE FROM footprints WHERE user_id = ?", userId);
+				jdbc.update("DELETE FROM footprint_statistics WHERE cell_id = '-2001:-4001'");
+			}
+		}
 
 		@Test
 		void 탈퇴하면_withdrawn_과_QUEUED_를_돌려주고_카카오_연결을_끊는다() throws Exception {

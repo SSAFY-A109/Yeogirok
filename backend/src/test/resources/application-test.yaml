@@ -66,3 +66,7 @@ auth:
     google-client-secret: test-google-client-secret
     # 테스트 중에 재시도 스케줄이 돌지 않게 길게 둔다. 재시도는 테스트에서 직접 호출한다.
     retry-interval: P1D
+  withdrawal:
+    # 탈퇴 정리 작업도 테스트에서 직접 호출한다.
+    cleanup-interval: P1D
+    cleanup-initial-delay: P1D

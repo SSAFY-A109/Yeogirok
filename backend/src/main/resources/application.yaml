@@ -209,6 +209,12 @@ auth:
   withdrawal:
     # TBD: 탈퇴 전 재인증 허용 시간. 소셜 로그인 후 이 시간이 지나면 A011. 5분은 제안값.
     reauth-max-age: PT5M
+    # 탈퇴 데이터 정리가 생기기 전에 탈퇴한 회원의 발자취·빈 방을 정리하는 주기(WithdrawalCleanupJob). 새 탈퇴는 탈퇴 트랜잭션에서
+    # 정리하므로 이 작업은 배포 뒤 첫 실행에서 옛 데이터를 치우고, 그 뒤로는 놓친 게 없는지 보는 안전망이다. 그래서 하루에 한 번 돈다.
+    cleanup-interval: P1D
+    # 서버가 뜬 뒤 첫 실행까지 기다리는 시간. 새 커밋마다 백엔드를 다시 띄우므로(infra/scripts/deploy-backend.sh) 주기와 같게
+    # 하루로 두면 하루에 한 번 넘게 배포되는 날엔 한 번도 돌지 않는다. 그래서 첫 실행은 짧게 둔다.
+    cleanup-initial-delay: PT10M
 
 springdoc:
   swagger-ui:

@@ -51,6 +51,7 @@ import com.ssafy.yeogirok.support.MutableClock;
 import com.ssafy.yeogirok.support.TestAuthConfig;
 import com.ssafy.yeogirok.support.TestChatConfig;
 import com.ssafy.yeogirok.support.TestUsers;
+import com.ssafy.yeogirok.support.TestWithdrawalConfig;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -65,7 +66,7 @@ import tools.jackson.databind.json.JsonMapper;
 	"spring.jpa.hibernate.ddl-auto=create-drop"
 })
 @ActiveProfiles("test")
-@Import({TestAuthConfig.class, TestChatConfig.class})
+@Import({TestAuthConfig.class, TestChatConfig.class, TestWithdrawalConfig.class})
 class ChatWebSocketTest {
 
 	private static final AtomicLong USER_IDS = new AtomicLong(9000);

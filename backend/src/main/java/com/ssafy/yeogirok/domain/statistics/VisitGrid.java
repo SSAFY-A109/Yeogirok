@@ -23,6 +23,11 @@ record VisitGrid(BigDecimal baseCellSize, int multiplier) {
 			upperEdge(box.east(), size), upperEdge(box.north(), size));
 	}
 
+	/** 좌표가 든 칸 번호 floor(좌표 / 한 변). API-046 발자취 조회 SQL 의 FLOOR(latitude / :cellSize) 와 같은 식이다. */
+	long cellIndex(BigDecimal coordinate) {
+		return coordinate.divide(cellSize(), 0, RoundingMode.FLOOR).longValueExact();
+	}
+
 	/** footprint_statistics 의 기본 셀 칸 번호를 이 격자의 칸 번호로. */
 	long toCellIndex(long baseIndex) {
 		return Math.floorDiv(baseIndex, multiplier);
