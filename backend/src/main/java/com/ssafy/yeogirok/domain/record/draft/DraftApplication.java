@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import com.ssafy.yeogirok.domain.job.JobStatus;
 import com.ssafy.yeogirok.domain.record.dto.VisitAddCommand;
+import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.record.material.ReceiptMaterials;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
@@ -41,9 +42,9 @@ public class DraftApplication {
 	 * 판정 순서: 초안 없음·만료·다른 기록·SUCCEEDED 아님 RE011 → 반영됨 RE012 → draftVersion C004 → itemId 없음·중복 C003 →
 	 * 반영 항목의 영수증 자료 version 이 바뀜(키가 남아 있을 때만) 또는 근거 사진이 지워짐 C004 → 이미 이 초안으로 만든 방문 RE012.
 	 *
-	 * @return 반영할 초안 항목의 itemId → 근거 사진 ID(초안 순서). 방문을 저장한 뒤 사진을 연결하는 데 쓴다
+	 * @return 반영할 초안 항목의 itemId → 근거 사진(이 기록의 사진, 초안 순서). 방문을 저장한 뒤 사진을 연결하는 데 쓴다
 	 */
-	public Map<Integer, List<Long>> check(Long recordId, VisitAddCommand command) {
+	public Map<Integer, List<VisitImage>> check(Long recordId, VisitAddCommand command) {
 		RecordDraft draft = draftStore.find(command.draftKey())
 			.filter(found -> found.recordId().equals(recordId))
 			.map(found -> found.asOf(clock.instant()))
@@ -56,12 +57,13 @@ public class DraftApplication {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH, "draftVersion 이 현재 초안과 다릅니다.");
 		}
 		List<RecordDraft.Item> applying = applyingItems(draft, command);
-		checkSources(recordId, draft, applying);
+		Map<Long, VisitImage> photos = checkSources(recordId, draft, applying);
 		// 기록 행 잠금으로 같은 기록의 066 이 한 줄로 서서 이 확인이 정확하다. DB 유일 제약이 마지막으로 막는다.
 		if (actualVisitRepository.existsByRecordIdAndSourceDraftKey(recordId, draft.draftKey())) {
 			throw new BusinessException(ExceptionType.RECORD_DRAFT_ALREADY_APPLIED);
 		}
-		return applying.stream().collect(Collectors.toMap(RecordDraft.Item::itemId, RecordDraft.Item::sourcePhotoIds));
+		return applying.stream().collect(Collectors.toMap(RecordDraft.Item::itemId,
+			item -> item.sourcePhotoIds().stream().map(photos::get).toList()));
 	}
 
 	/**
@@ -94,7 +96,8 @@ public class DraftApplication {
 			.toList();
 	}
 
-	private void checkSources(Long recordId, RecordDraft draft, List<RecordDraft.Item> applying) {
+	/** @return 반영 항목의 근거 사진 ID → 사진(모두 이 기록의 것). 하나라도 없거나 다른 기록이면 C004 */
+	private Map<Long, VisitImage> checkSources(Long recordId, RecordDraft draft, List<RecordDraft.Item> applying) {
 		Set<String> materialIds = applying.stream().flatMap(item -> item.sourceMaterialIds().stream())
 			.collect(Collectors.toSet());
 		for (RecordDraft.SnapshotMaterial snapshot : draft.sourceSnapshot().materials()) {
@@ -109,11 +112,12 @@ public class DraftApplication {
 		}
 		Set<Long> photoIds = applying.stream().flatMap(item -> item.sourcePhotoIds().stream())
 			.collect(Collectors.toCollection(LinkedHashSet::new));
-		long remaining = visitImageRepository.findAllById(photoIds).stream()
+		Map<Long, VisitImage> photos = visitImageRepository.findAllById(photoIds).stream()
 			.filter(image -> image.getRecordId().equals(recordId))
-			.count();
-		if (remaining != photoIds.size()) {
+			.collect(Collectors.toMap(VisitImage::getId, Function.identity()));
+		if (photos.size() != photoIds.size()) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH, "초안의 근거 사진이 지워졌습니다.");
 		}
+		return photos;
 	}
 }

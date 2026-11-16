@@ -91,7 +91,7 @@ public class VisitCommandService {
 			command.items().stream().map(VisitAddCommand.Item::place));
 		VisitAddResponse response = transactionTemplate.execute(status -> {
 			TravelRecord record = lockAndCheckVersion(userId, recordId, command.version());
-			Map<Integer, List<Long>> draftPhotos = command.fromDraft()
+			Map<Integer, List<VisitImage>> draftPhotos = command.fromDraft()
 				? draftApplication.check(recordId, command) : Map.of();
 			referencePlans.checkLinkable(record,
 				command.items().stream().map(VisitAddCommand.Item::plannedItemId).toList());
@@ -110,7 +110,7 @@ public class VisitCommandService {
 				added.add(visit);
 			}
 			layout.apply(now, actualVisitRepository::flush, actualVisitRepository::save);
-			linkDraftPhotos(recordId, added, draftPhotos);
+			linkDraftPhotos(added, draftPhotos);
 			record.markEdited(now);
 			return new VisitAddResponse(added.stream().map(ActualVisit::getId).toList(), record.getVersion(),
 				record.getStatus());
@@ -122,25 +122,18 @@ public class VisitCommandService {
 	}
 
 	/**
-	 * 초안 항목 방문마다 근거 사진을 초안 순서대로 1번부터 연결한다. 이 기록의 미연결 사진만 연결하고, 그사이 사용자가
-	 * 다른 방문에 연결한 사진은 옮기지 않는다(새 방문이라 기존 사진이 없어 순서가 겹치지 않는다).
+	 * 초안 항목 방문마다 근거 사진(초안 검사에서 이 기록의 것임을 확인한 사진)을 초안 순서대로 1번부터 연결한다. 이미 방문에
+	 * 연결된 사진은 건너뛴다: 그사이 사용자가 다른 방문에 옮긴 사진, 그리고 같은 사진이 두 항목의 근거면 앞 방문에 붙은 뒤의 것.
+	 * 새 방문이라 기존 사진이 없어 순서가 겹치지 않는다. 실제 연결 결과는 응답에 없고 059 로 다시 읽는다.
 	 */
-	private void linkDraftPhotos(Long recordId, List<ActualVisit> added, Map<Integer, List<Long>> draftPhotos) {
-		if (draftPhotos.isEmpty()) {
-			return;
-		}
-		Map<Long, VisitImage> images = visitImageRepository.findAllById(
-				draftPhotos.values().stream().flatMap(List::stream).toList()).stream()
-			.filter(image -> image.getRecordId().equals(recordId) && image.getVisitId() == null)
-			.collect(toMap(VisitImage::getId, Function.identity()));
+	private static void linkDraftPhotos(List<ActualVisit> added, Map<Integer, List<VisitImage>> draftPhotos) {
 		for (ActualVisit visit : added) {
 			if (visit.getSourceItemId() == null) {
 				continue;
 			}
 			int position = 1;
-			for (Long photoId : draftPhotos.getOrDefault(visit.getSourceItemId(), List.of())) {
-				VisitImage image = images.remove(photoId);
-				if (image != null) {
+			for (VisitImage image : draftPhotos.getOrDefault(visit.getSourceItemId(), List.of())) {
+				if (image.getVisitId() == null) {
 					image.linkTo(visit.getId(), position++);
 				}
 			}
