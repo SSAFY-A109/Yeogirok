@@ -2,7 +2,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient }
 
 import { isApiError } from "@/api/errors";
 import { createIdempotencyKey } from "@/api/idempotency";
-import { courseKeys } from "@/features/course/api/queries";
+import { invalidateCoursesExceptBanner } from "@/features/course/api/queries";
 import {
   acceptRoomInvitation,
   addRoomPlaces,
@@ -330,7 +330,7 @@ export function useImportCoursePlaces() {
 
     onSettled: (_count, _error, { roomId }) => {
       invalidateAfterPlacesChanged(queryClient, roomId);
-      void queryClient.invalidateQueries({ queryKey: courseKeys.all });
+      void invalidateCoursesExceptBanner(queryClient);
     },
   });
 }
