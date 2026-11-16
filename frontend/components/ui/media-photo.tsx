@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Platform, View } from "react-native";
 
 import { getMockImageSource } from "@/features/media/mock-image";
+import { toHttpsUrl } from "@/lib/url";
 import { cn } from "@/lib/utils";
 import { Spinner } from "./spinner";
 
@@ -14,7 +15,7 @@ export function MediaImage({ uri, ...props }: MediaImageProps) {
     return <MockRecordImage {...props} uri={uri} />;
   }
 
-  return <Image {...props} source={{ uri }} />;
+  return <Image {...props} source={{ uri: toHttpsUrl(uri) }} />;
 }
 
 function MockRecordImage({ uri, onError, ...props }: MediaImageProps) {
