@@ -10,7 +10,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useCategories, useRegions } from "@/features/common/api/queries";
+import { useCategories, useDistricts, useRegions } from "@/features/common/api/queries";
 import type { Category, Region } from "@/features/common/model";
 import { useRecommendationPreference, useRecommendPlaces } from "@/features/recommendation/api/queries";
 import {
@@ -20,6 +20,7 @@ import {
   getSelectedCategoryNames,
   RecommendConditions,
   toRecommendationConditions,
+  withKnownDistrict,
   type RecommendConditionsValue,
 } from "@/features/recommendation/components/recommend-conditions";
 import { RecommendLoading } from "@/features/recommendation/components/recommend-loading";
@@ -135,7 +136,10 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
   const addRoomPlaces = useAddRoomPlaces();
   const getRecommendationKey = useIdempotencyKeyFor();
   const getAddPlacesKey = useIdempotencyKeyFor();
-  const missingConditionMessage = getMissingConditionMessage(conditions);
+  const districts = useDistricts(conditions.provinceCode);
+  // 시/군/구 목록을 받기 전이거나 목록에 없는 저장값은 고르지 않은 것으로 본다.
+  const knownConditions = withKnownDistrict(conditions, districts.data);
+  const missingConditionMessage = getMissingConditionMessage(knownConditions);
 
   function returnToConditions() {
     if (addRoomPlaces.isPending) {
@@ -156,7 +160,7 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
   }));
 
   function requestRecommendation() {
-    const recommendationConditions = toRecommendationConditions(conditions);
+    const recommendationConditions = toRecommendationConditions(knownConditions);
 
     if (recommendationConditions === null) {
       return;
@@ -218,8 +222,19 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
             room={room}
             placeCount={roomPlaces.length}
             categories={categories}
-            regions={regions}
-            value={conditions}
+            provinces={regions}
+
+            districts={{
+              items: districts.data,
+              loading: conditions.provinceCode !== null && districts.isPending,
+              failed: districts.isError,
+
+              onRetry: () => {
+                void districts.refetch();
+              },
+            }}
+
+            value={knownConditions}
             onChange={setConditions}
           />
           <BottomCta>
@@ -252,7 +267,7 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
           <RecommendResults
             result={result}
             categories={categories}
-            criteria={getSelectedCategoryNames(conditions, categories)}
+            criteria={getSelectedCategoryNames(knownConditions, categories)}
             addedPlaceKeys={addedPlaceKeys}
             excludedPlaceKeys={excludedPlaceKeys}
             onToggle={togglePlace}
@@ -284,7 +299,7 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
       );
     }
 
-    const conditionLabels = getConditionLabels(conditions, categories, regions);
+    const conditionLabels = getConditionLabels(knownConditions, categories, regions, districts.data ?? []);
 
     if (recommendPlaces.isError) {
       return (

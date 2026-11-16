@@ -113,7 +113,7 @@
 | API-075 | COURSE | 공개할 코스 수정·공개 해제 | PATCH | `/courses/{courseId}` | P0 |
 | API-076 | ROOM | 여행방 채팅 이력 조회 | GET | `/rooms/{roomId}/messages` | P1 |
 | API-077 | REALTIME | 실시간 연결 티켓 발급 | POST | `/realtime/tickets` | P1 |
-| API-078 | COMMON | 관심 지역(시) 목록 조회 | GET | `/regions` | — |
+| API-078 | COMMON | 추천 지역 계층 목록 조회 | GET | `/regions?parentCode=` | — |
 | API-079 | COMMON | 여행 컨셉 카테고리 목록 조회 | GET | `/categories` | — |
 | API-080 | AI | 여행방 추천 조건 저장 | PUT | `/rooms/{roomId}/preferences` | — |
 | API-081 | AI | 여행방 추천 조건 조회 | GET | `/rooms/{roomId}/preferences` | — |
@@ -190,7 +190,7 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 | 033(=080)·034 | `features/recommendation/model.ts` | **가정 아님** — 2026-11-10 Notion 명세 상세로 맞췄다(아래 단락). 조건 요청 `{ version, regionCode, categoryCodes, skipped: false }`, 추천 결과 `{ recommendationRequestId, mode, items[{ rank, place, reason, reasonEvidence }], generatedAt }` |
 | 081 | `features/recommendation/model.ts` (`RecommendationPreferenceDto`) | **가정(TBD)** — 상세 페이지 미확인. API-033 응답과 같은 `{ roomId, preferences, version }`, 저장한 조건이 없으면 빈 본문으로 가정 |
 | 036·037·038·084·039 | `features/schedule/model.ts` | **가정 아님** — 2026-11-10 `backend/dev`(`8778cb2`)의 schedule 컨트롤러·DTO와 `backend/docs/06-schedule.md`로 맞췄다. 037은 202 `{ jobId, draftKey, status }`(헤더 `Idempotency-Key`, 본문 `baseVersion`·`roomPlaceIds`·`days`·`fixedItems?`), 038은 `{ status(QUEUED·RUNNING·SUCCEEDED·FAILED), baseVersion, draftVersion, conditions, schedule, error }`, 084는 바꾼 항목만 보내는 재계산, 039는 고친 전체 상태(`days`·`unassignedItemIds`)를 보내는 저장이다. 일차 시각은 `HH:mm:ss`, 항목 시각은 datetime이며 모르면 `null`이다. pace는 없다. 확정 일정 직접 편집(040)과 작업 상태 조회(011)는 앱이 부르지 않는다 |
-| 078 | `features/common/model.ts` | **가정(TBD)** — 지역은 시/도 → 시/군/구 2단(`children`) |
+| 078 | `features/common/model.ts` (`RegionListResponseDto`) | **가정 아님** — 2026-11-16 `backend/dev`(#144, `ae7b2b4`)의 region 컨트롤러·DTO로 맞췄다. 한 번에 한 단계만 준다. `parentCode` 없이 부르면 시·도, 시·도 code를 주면 그 시·도의 시·군·구를 화면 순서대로 `{ items[{ code, name, level(PROVINCE·DISTRICT), parentCode, hasChildren }] }`로 준다. 시·도가 아닌 `parentCode`는 C003. 시·도 16(전남광주통합특별시 `12` 포함)·시·군·구 256개이고 시·군·구 code 앞 두 자리가 시·도 code다. API-033은 이 목록의 시·군·구 code만 받는다(아니면 C003) |
 | 079 | `features/common/model.ts` (`CategoriesResponseDto`) | **가정 아님** — 2026-11-11 Notion 명세 확정(S15P31A109-202). 응답 `{ categories[{ code, name }] }`, 배열 순서가 표시 순서. Flyway V2 기준 8종(NATURE·CULTURE·SIGHT·FOOD·CAFE·ACTIVITY·SHOPPING·EVENT). 코드는 바뀌지 않고 표시명만 마이그레이션으로 바뀔 수 있다. 다른 API의 `categoryName`은 이 목록의 `name`과 같고, 코드·매핑이 없으면 `null` |
 
 - 도메인 오류 code는 `RO`(여행방)·`SC`(일정)가 서버에 있다(§3-0, `features/room/errors.ts`, `features/schedule/errors.ts`). `AI`(추천)는 아직 없어 도메인 기본 문구만 쓴다.

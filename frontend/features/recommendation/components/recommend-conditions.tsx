@@ -1,11 +1,11 @@
 import { Bus, Calendar, Car, Sparkles, Users, type LucideIcon } from "lucide-react-native";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
 import { Dropdown } from "@/components/ui/dropdown";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import type { Category, Region } from "@/features/common/model";
+import { toProvinceCode, type Category, type Region } from "@/features/common/model";
 import type { RecommendationConditions, RecommendationPreference } from "@/features/recommendation/model";
 import { hasTripDates, TRANSPORT_MODE_LABEL, type RoomDetail } from "@/features/room/model";
 import { formatDateRange } from "@/lib/date";
@@ -24,32 +24,43 @@ const EMPTY_CONDITIONS: RecommendConditionsValue = { categoryCodes: [], province
 
 // #region 조건 계산
 
-/** 저장된 지역 코드(시/도 또는 시/군/구)를 2단 선택값으로 바꾼다. 목록에 없으면 비운다. */
-function findRegionSelection(regions: readonly Region[], regionCode: string | null): Pick<RecommendConditionsValue, "provinceCode" | "districtCode"> {
-  if (regionCode !== null) {
-    for (const province of regions) {
-      if (province.code === regionCode) {
-        return { provinceCode: province.code, districtCode: null };
-      }
-
-      const hasDistrict = province.districts.some((district) => {
-        return district.code === regionCode;
-      });
-
-      if (hasDistrict) {
-        return { provinceCode: province.code, districtCode: regionCode };
-      }
-    }
+/**
+ * 저장된 지역 코드(시/도 또는 시/군/구)를 2단 선택값으로 바꾼다. 시/도 목록에 없으면 비운다.
+ * 시/군/구가 지금 목록에 있는지는 그 시/도의 시/군/구를 받은 뒤 `withKnownDistrict`로 가린다.
+ */
+function findRegionSelection(provinces: readonly Region[], regionCode: string | null): Pick<RecommendConditionsValue, "provinceCode" | "districtCode"> {
+  if (regionCode === null) {
+    return { provinceCode: null, districtCode: null };
   }
 
-  return { provinceCode: null, districtCode: null };
+  const province = provinces.find((item) => {
+    return item.code === toProvinceCode(regionCode);
+  });
+
+  if (province === undefined) {
+    return { provinceCode: null, districtCode: null };
+  }
+
+  return { provinceCode: province.code, districtCode: regionCode === province.code ? null : regionCode };
+}
+
+/**
+ * 고른 시/군/구가 받은 목록에 없거나 목록을 아직 받지 못했으면 고르지 않은 것으로 본다.
+ * 지금 기준 데이터에 없는 저장값은 버린다(서버는 목록에 없는 시/군/구를 C003으로 거절한다).
+ */
+export function withKnownDistrict(conditions: RecommendConditionsValue, districts: readonly Region[] | undefined): RecommendConditionsValue {
+  const known = districts?.some((district) => {
+    return district.code === conditions.districtCode;
+  }) ?? false;
+
+  return known ? conditions : { ...conditions, districtCode: null };
 }
 
 /** 저장된 조건이 있으면 그 값으로, 없으면 비운 채로 시작한다. 지금 기준 데이터에 없는 코드는 버린다. */
 export function getInitialConditions(
   preference: RecommendationPreference | null,
   categories: readonly Category[],
-  regions: readonly Region[],
+  provinces: readonly Region[],
 ): RecommendConditionsValue {
   if (preference === null) {
     return EMPTY_CONDITIONS;
@@ -64,7 +75,7 @@ export function getInitialConditions(
       return knownCategoryCodes.has(code);
     }),
 
-    ...findRegionSelection(regions, preference.regionCode),
+    ...findRegionSelection(provinces, preference.regionCode),
   };
 }
 
@@ -105,15 +116,16 @@ export function getSelectedCategoryNames(conditions: RecommendConditionsValue, c
 export function getConditionLabels(
   conditions: RecommendConditionsValue,
   categories: readonly Category[],
-  regions: readonly Region[],
+  provinces: readonly Region[],
+  districts: readonly Region[],
 ): string[] {
   const categoryLabels = getSelectedCategoryNames(conditions, categories);
 
-  const province = regions.find((region) => {
+  const province = provinces.find((region) => {
     return region.code === conditions.provinceCode;
   });
 
-  const district = province?.districts.find((item) => {
+  const district = districts.find((item) => {
     return item.code === conditions.districtCode;
   });
 
@@ -123,29 +135,34 @@ export function getConditionLabels(
 
 // #endregion
 
+/** 고른 시/도의 시/군/구 목록 상태. 시/도를 고르면 그때 받는다. */
+export type DistrictListState = {
+  items: readonly Region[] | undefined;
+  loading: boolean;
+  failed: boolean;
+  onRetry: () => void;
+};
+
 type RecommendConditionsProps = {
   room: RoomDetail;
   placeCount: number;
   categories: readonly Category[];
-  regions: readonly Region[];
+  provinces: readonly Region[];
+  districts: DistrictListState;
   value: RecommendConditionsValue;
   onChange: (value: RecommendConditionsValue) => void;
 };
 
 /** AI 추천 조건 입력(Figma W10). 지역·기간·이동 수단은 여행방 값을 보여 준다. */
-export function RecommendConditions({ room, placeCount, categories, regions, value, onChange }: RecommendConditionsProps) {
+export function RecommendConditions({ room, placeCount, categories, provinces, districts, value, onChange }: RecommendConditionsProps) {
   const dateLabel = hasTripDates(room) ? formatDateRange(room.startDate, room.endDate, { weekday: false }) : "날짜 미정";
   const transportIcon = room.transportMode === "TRANSIT" ? Bus : Car;
 
-  const selectedProvince = regions.find((region) => {
-    return region.code === value.provinceCode;
-  });
-
-  const provinceOptions = regions.map((region) => {
+  const provinceOptions = provinces.map((region) => {
     return { value: region.code, label: region.name };
   });
 
-  const districtOptions = (selectedProvince?.districts ?? []).map((district) => {
+  const districtOptions = (districts.items ?? []).map((district) => {
     return { value: district.code, label: district.name };
   });
 
@@ -222,7 +239,7 @@ export function RecommendConditions({ room, placeCount, categories, regions, val
             <Dropdown
               key={value.provinceCode ?? "none"}
               accessibilityLabel="시/군/구"
-              placeholder="시/군/구"
+              placeholder={districts.loading ? "불러오는 중" : "시/군/구"}
               options={districtOptions}
               value={value.districtCode ?? undefined}
               onValueChange={selectDistrict}
@@ -231,6 +248,14 @@ export function RecommendConditions({ room, placeCount, categories, regions, val
             />
           </View>
         </View>
+        {districts.failed ? (
+          <View className="flex-row items-center gap-2" testID="recommend.district-error">
+            <Text accessibilityRole="alert" className="flex-1 text-caption text-destructive">시/군/구 목록을 불러오지 못했어요.</Text>
+            <Pressable accessibilityRole="button" className="min-h-touch justify-center px-1" onPress={districts.onRetry} testID="recommend.district-retry">
+              <Text className="text-label text-primary">다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       {placeCount > 0 ? (
