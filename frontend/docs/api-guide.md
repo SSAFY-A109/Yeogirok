@@ -222,7 +222,7 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | `PATCH /rooms/{id}` (API-023) | `roomKeys.list()`, `roomKeys.places(roomId)`, `scheduleKeys.room(roomId)` | 응답 상세 → `roomKeys.detail(roomId)` |
 | `DELETE /rooms/{id}/members/me` (가정, TBD) | `roomKeys.list()` | — (나간 방의 캐시는 닫히는 화면이 다시 요청하지 않도록 바로 지우지 않고 gcTime에 맡긴다) |
 | `POST /rooms/{id}/places` (API-029) | `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — |
-| `POST /rooms/{id}/place-imports` (API-030) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)`, `roomKeys.list()`, `courseKeys.all` | — |
+| `POST /rooms/{id}/place-imports` (API-030) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)`, `roomKeys.list()`, 메인 추천 배너(`courseKeys.recommendations()`)를 뺀 `courseKeys.all`(`invalidateCoursesExceptBanner`) | — |
 | `DELETE /rooms/{id}/places/{roomPlaceId}` (API-032) | 완료·실패 모두 `roomKeys.places(roomId)`, `roomKeys.detail(roomId)` | — (화면이 되돌리기 토스트 동안 행을 숨겼다가 확정 시 요청) |
 | `PATCH /rooms/{id}/messages/read` (API-088) | — (화면에 보인 가장 최신 메시지만 보낸다. 읽은 위치 이하의 값은 보내지 않고, 요청은 한 번에 하나만 보낸다) | 응답의 읽음 상태 → `chatKeys.messages(roomId)` 첫 쪽의 `readState`, `roomKeys.detail(roomId)`·`roomKeys.list()`의 `hasUnreadChat` |
 | `POST /realtime/tickets` (API-077) + WebSocket `/ws/v1` | 여행방이 없어졌거나 참여자가 아니게 되면(RO001·RO002) `roomKeys.list()` | — (실시간으로 받은 메시지는 이력 캐시에 넣지 않는다. 이력 캐시는 다시 받을 때 통째로 바뀌므로 `useChatConnection`의 `liveMessages`로 따로 두고, 화면이 `mergeChatMessages`로 이력과 합친다) |
@@ -233,7 +233,8 @@ function FootprintComposer({ fix }: { fix: LocationFix }) {
 | `PUT /rooms/{id}/schedule` (API-039) | `roomKeys.detail(roomId)`, `scheduleKeys.room(roomId)`. 409 C004면 `scheduleKeys.draft(roomId, draftKey)`·`scheduleKeys.room(roomId)`·`roomKeys.detail(roomId)`·`roomKeys.places(roomId)` 다시 조회(덮어쓰지 않는다) | 응답 일정 → `scheduleKeys.room(roomId)`, 응답 version → `storeRoomVersion` |
 | `PATCH /rooms/{id}/schedule` (API-040) | 앱에서 쓰지 않는다(일정 조정은 037 `fixedItems` → 084 → 039). 쓰게 되면 039와 같이 처리하고 409 C004면 `scheduleKeys.room(roomId)` 다시 조회 | — |
 | `POST /records/{id}/drafts` (API-064) | 작업 완료 시 `recordKeys.drafts(recordId)` | — |
-| `POST /records/{id}/publications` (API-073) | `recordKeys.detail(recordId)`, `courseKeys.mine()` | — |
+| `POST /records/{id}/publications` (API-073) | `recordKeys.detail(recordId)`, 메인 추천 배너를 뺀 `courseKeys.all`(`invalidateCoursesExceptBanner`) | — |
+| `GET /courses/recommendations` (API-015, 메인 추천 배너) | 다시 받지 않는다. 서버가 부를 때마다 무작위 8개를 주므로 앱을 켜 있는 동안 한 번만 받는다(`staleTime`·`gcTime` 무한, 카테고리와 무관, 2026-11-16 사용자 결정). 앱을 다시 켜면 새로 받는다 | — |
 | `POST /auth/token` (API-005) | 전체 캐시 `queryClient.clear()` 후 시작 | — |
 | `POST /auth/logout`·`DELETE /users/me` (API-007·009) | `queryClient.clear()`, SecureStore 토큰 삭제, 업로드 대기열 비우기 | — |
 

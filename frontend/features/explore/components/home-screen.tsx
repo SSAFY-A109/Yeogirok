@@ -49,7 +49,7 @@ export function HomeScreen() {
         </Pressable>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="pb-4" keyboardShouldPersistTaps="handled">
-        <FeaturedSection key={category ?? "all"} category={category} />
+        <FeaturedSection />
         <View className="gap-4 pb-4">
           <View className="h-2 bg-muted" />
           <Text accessibilityRole="header" className="px-5 pt-4 text-h3 text-foreground">어떤 곳을 찾으세요?</Text>
@@ -75,8 +75,9 @@ export function HomeScreen() {
 
 // #region 추천 코스
 
-function FeaturedSection({ category }: { category: string | null }) {
-  const recommendations = useCourseRecommendations(category);
+/** 위쪽 추천 코스 배너. 카테고리를 바꿔도 그대로이고, 앱을 다시 켤 때만 새로 받는다. */
+function FeaturedSection() {
+  const recommendations = useCourseRecommendations();
 
   if (recommendations.isPending) {
     return (

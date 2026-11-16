@@ -9,7 +9,7 @@ import { Icon } from "@/components/ui/icon";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
-import { courseKeys, useCourse } from "@/features/course/api/queries";
+import { invalidateCoursesExceptBanner, useCourse } from "@/features/course/api/queries";
 import { getCourseErrorMessage, isCourseUnavailable } from "@/features/course/errors";
 import type { PublicPhotoDto } from "@/features/course/model";
 import { CourseDetailContent } from "@/features/explore/components/course-detail-screen";
@@ -83,7 +83,7 @@ export function RecordPublicationScreen({ record, onBack }: { record: RecordDeta
           });
 
           if (saved) {
-            void client.invalidateQueries({ queryKey: courseKeys.all });
+            void invalidateCoursesExceptBanner(client);
             onBack();
           }
         }}><Text>코스로 공개</Text></Button>
