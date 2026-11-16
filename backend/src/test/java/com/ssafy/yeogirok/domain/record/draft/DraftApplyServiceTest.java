@@ -145,6 +145,86 @@ class DraftApplyServiceTest {
 		assertThat(draftStore.find(draftKey).orElseThrow().applied()).isTrue();
 	}
 
+	/** 235: 반영하면 초안 항목 방문에 근거 사진이 초안 순서대로 붙고(공개 선택 꺼짐), 직접 추가한 방문에는 안 붙는다. */
+	@Test
+	void 초안_항목_방문에_근거_사진을_순서대로_연결하고_직접_추가_방문에는_연결하지_않는다() {
+		Long second = em.persist(VisitImage.unlinked(recordId, FRIEND, "record-photo/b", NOW)).getId();
+		em.flush();
+		metadataReader.put("record-photo/b", new PhotoMetadata(PAID_AT.plusSeconds(1200), null, null));
+		String key = draftService.create(ME, recordId, new DraftCreateCommand(1, List.of(second, imageId),
+			List.of(new DraftCreateCommand.MaterialRef(MATERIAL_ID, 3)))).draftKey();
+
+		VisitAddResponse response = apply(1, key, 1, draftItem(1, 1), manualItem(2));
+
+		em.flush();  // 테스트 트랜잭션은 커밋하지 않아 연결 변경을 먼저 내보낸다
+		em.clear();
+		Long draftVisit = response.visitIds().get(0);
+		assertThat(List.of(em.find(VisitImage.class, imageId), em.find(VisitImage.class, second)))
+			.extracting(VisitImage::getVisitId, VisitImage::getPosition, VisitImage::isPublicSelected)
+			.containsExactly(tuple(draftVisit, 1, false), tuple(draftVisit, 2, false));  // 촬영 시각 순(초안 순서)
+	}
+
+	/** 235: 초안을 만든 뒤 사용자가 다른 방문에 연결한 사진은 반영할 때 옮기지 않는다. */
+	@Test
+	void 이미_다른_방문에_연결된_근거_사진은_그대로_둔다() {
+		Long other = apply(1, null, 0, manualItem(1)).visitIds().getFirst();
+		em.find(VisitImage.class, imageId).linkTo(other, 1);
+		em.flush();
+
+		VisitAddResponse response = apply(2, draftKey, 1, draftItem(1, 1));
+
+		em.flush();
+		em.clear();
+		assertThat(response.visitIds()).hasSize(1);
+		assertThat(em.find(VisitImage.class, imageId).getVisitId()).isEqualTo(other);
+	}
+
+	/** 235 리뷰: 같은 사진이 두 항목의 근거면 앞 방문에만 붙고, 뒤 방문의 다른 사진은 1번부터 붙는다. */
+	@Test
+	void 같은_사진이_두_항목의_근거면_앞_방문에만_붙고_뒤_방문은_1번부터_시작한다() {
+		Long second = em.persist(VisitImage.unlinked(recordId, FRIEND, "record-photo/b", NOW)).getId();
+		em.flush();
+		RecordDraft.Item first = draftStore.find(draftKey).orElseThrow().items().getFirst();
+		replaceItems(withPhotos(first, 1, List.of(imageId)), withPhotos(first, 2, List.of(imageId, second)));
+
+		VisitAddResponse response = apply(1, draftKey, 1, draftItem(1, 1), draftItem(2, 2));
+
+		em.flush();
+		em.clear();
+		assertThat(List.of(em.find(VisitImage.class, imageId), em.find(VisitImage.class, second)))
+			.extracting(VisitImage::getVisitId, VisitImage::getPosition)
+			.containsExactly(tuple(response.visitIds().get(0), 1), tuple(response.visitIds().get(1), 1));
+	}
+
+	/** 235 리뷰: 근거에 다른 기록의 사진이 섞이면 연결 전에 C004 이고 아무것도 붙지 않는다. */
+	@Test
+	void 근거에_다른_기록의_사진이_섞이면_C004_이고_연결하지_않는다() {
+		TravelRoom otherRoom = em.persist(TravelRoom.builder().title("다른 여행").startDate(DAY).endDate(DAY)
+			.transportMode(TransportMode.CAR).createdAt(NOW).build());
+		Long otherRecord = em.persist(TravelRecord.create(otherRoom.getId(), "다른 여행", NOW)).getId();
+		Long foreign = em.persist(VisitImage.unlinked(otherRecord, ME, "record-photo/other", NOW)).getId();
+		em.flush();
+		RecordDraft.Item first = draftStore.find(draftKey).orElseThrow().items().getFirst();
+		replaceItems(withPhotos(first, 1, List.of(imageId, foreign)));
+
+		assertError(() -> apply(1, draftKey, 1, draftItem(1, 1)), ExceptionType.VERSION_MISMATCH);
+		em.clear();
+		assertThat(em.find(VisitImage.class, imageId).getVisitId()).isNull();
+		assertThat(em.find(VisitImage.class, foreign).getVisitId()).isNull();
+	}
+
+	/** 초안 생성 규칙으로는 만들기 어려운 경우를 시험하려고 저장된 초안의 항목을 바꾼다(draftVersion 은 그대로 1). */
+	private void replaceItems(RecordDraft.Item... items) {
+		RecordDraft draft = draftStore.find(draftKey).orElseThrow();
+		draftStore.save(draft.succeeded(List.of(items), draft.warnings()));
+	}
+
+	private static RecordDraft.Item withPhotos(RecordDraft.Item item, int itemId, List<Long> photoIds) {
+		return new RecordDraft.Item(itemId, item.sourceMaterialIds(), item.placeCandidates(), item.visitDate(),
+			item.proposedVisitedAt(), item.needsReview(), item.evidence(), photoIds, item.plannedItemId(),
+			item.proposedPlace());
+	}
+
 	@Test
 	void 같은_초안을_두_번_반영하면_RE012_반영_표시를_지워도_DB_로_RE012() {
 		apply(1, draftKey, 1, draftItem(1, 1));

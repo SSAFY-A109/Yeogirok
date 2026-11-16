@@ -29,6 +29,7 @@ import com.ssafy.yeogirok.domain.record.dto.VisitUpdateCommand;
 import com.ssafy.yeogirok.domain.record.dto.VisitUpdateResponse;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
+import com.ssafy.yeogirok.domain.record.entity.VisitImage;
 import com.ssafy.yeogirok.domain.record.repository.ActualVisitRepository;
 import com.ssafy.yeogirok.domain.record.repository.RecordPlaceRepository;
 import com.ssafy.yeogirok.domain.record.repository.VisitImageRepository;
@@ -83,15 +84,15 @@ public class VisitCommandService {
 	/**
 	 * API-066. 방문을 끼워 넣고 기록 version+1·DRAFT. 방문은 is_public_selected=TRUE 이고, 초안 항목(itemId)은
 	 * creation_type=AI·출처(draftKey·itemId), 직접 추가는 USER 다. 초안 검사는 기록 행 잠금 안에서, 반영 표시는 커밋 뒤에 한다.
+	 * 초안 항목 방문에는 그 항목의 근거 사진을 같은 트랜잭션에서 연결한다(068 규칙, 이미 다른 방문에 연결된 사진은 그대로).
 	 */
 	public VisitAddResponse add(Long userId, Long recordId, VisitAddCommand command) {
 		Map<VisitPlaceInput.CustomPlace, LegalDong> legalDongs = legalDongs(userId, recordId,
 			command.items().stream().map(VisitAddCommand.Item::place));
 		VisitAddResponse response = transactionTemplate.execute(status -> {
 			TravelRecord record = lockAndCheckVersion(userId, recordId, command.version());
-			if (command.fromDraft()) {
-				draftApplication.check(recordId, command);
-			}
+			Map<Integer, List<VisitImage>> draftPhotos = command.fromDraft()
+				? draftApplication.check(recordId, command) : Map.of();
 			referencePlans.checkLinkable(record,
 				command.items().stream().map(VisitAddCommand.Item::plannedItemId).toList());
 			Instant now = clock.instant();
@@ -109,6 +110,7 @@ public class VisitCommandService {
 				added.add(visit);
 			}
 			layout.apply(now, actualVisitRepository::flush, actualVisitRepository::save);
+			linkDraftPhotos(added, draftPhotos);
 			record.markEdited(now);
 			return new VisitAddResponse(added.stream().map(ActualVisit::getId).toList(), record.getVersion(),
 				record.getStatus());
@@ -117,6 +119,25 @@ public class VisitCommandService {
 			draftApplication.markApplied(command.draftKey());
 		}
 		return response;
+	}
+
+	/**
+	 * 초안 항목 방문마다 근거 사진(초안 검사에서 이 기록의 것임을 확인한 사진)을 초안 순서대로 1번부터 연결한다. 이미 방문에
+	 * 연결된 사진은 건너뛴다: 그사이 사용자가 다른 방문에 옮긴 사진, 그리고 같은 사진이 두 항목의 근거면 앞 방문에 붙은 뒤의 것.
+	 * 새 방문이라 기존 사진이 없어 순서가 겹치지 않는다. 실제 연결 결과는 응답에 없고 059 로 다시 읽는다.
+	 */
+	private static void linkDraftPhotos(List<ActualVisit> added, Map<Integer, List<VisitImage>> draftPhotos) {
+		for (ActualVisit visit : added) {
+			if (visit.getSourceItemId() == null) {
+				continue;
+			}
+			int position = 1;
+			for (VisitImage image : draftPhotos.getOrDefault(visit.getSourceItemId(), List.of())) {
+				if (image.getVisitId() == null) {
+					image.linkTo(visit.getId(), position++);
+				}
+			}
+		}
 	}
 
 	/** 같은 멱등키 재전송. 현재 쓰기 권한을 다시 확인하고 그때 만든 방문 ID 와 지금 기록 상태를 준다. */

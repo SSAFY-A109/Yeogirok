@@ -11,7 +11,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * API-047 요청. location 은 필드 4개 모두 필수(C008), 타입 오류 C002. category 목록 밖 C003.
- * radiusMeters(50만)·limit(1~10) 값 검사는 서비스가 한다. cursor 는 받지만 쓰지 않는다(다음 페이지 없음).
+ * radiusMeters(설정값 search-radius-meters 와 같을 때만)·limit(1~10) 값 검사는 서비스가 한다. cursor 는 받지만 쓰지 않는다(다음 페이지 없음).
  */
 public class TipSearchRequest {
 
