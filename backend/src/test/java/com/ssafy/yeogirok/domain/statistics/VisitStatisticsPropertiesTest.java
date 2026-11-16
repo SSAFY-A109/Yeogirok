@@ -69,7 +69,8 @@ class VisitStatisticsPropertiesTest {
 			"yeogirok.visit-statistics.base-cell-size-degrees", "0.005",
 			"yeogirok.visit-statistics.zoom-multipliers", zoomMultipliers,
 			"yeogirok.visit-statistics.min-count", "1",
-			"yeogirok.visit-statistics.max-cells", "2500")))
+			"yeogirok.visit-statistics.max-cells", "2500",
+			"yeogirok.visit-statistics.center-min-count", "3")))
 			.bindOrCreate("yeogirok.visit-statistics", VisitStatisticsProperties.class);
 	}
 }

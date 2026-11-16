@@ -20,7 +20,10 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.category.TravelCategory;
+import com.ssafy.yeogirok.domain.course.OfficialAccount;
 import com.ssafy.yeogirok.domain.statistics.dto.VisitStatisticsResponse;
+import com.ssafy.yeogirok.domain.user.domain.User;
+import com.ssafy.yeogirok.domain.user.repository.UserRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.global.geo.BoundingBox;
@@ -31,6 +34,8 @@ import lombok.RequiredArgsConstructor;
 /**
  * API-046. 조회할 때 미삭제 발자취를 세고 footprint_statistics(탈퇴자 보존분)를 더한다.
  * category 를 주면 그 코드를 고른 발자취만 세고, categoryCounts 에는 함께 고른 코드도 센다.
+ * center 는 셀 발자취의 평균 위치다. 단 실제 사용자 발자취가 1개 이상 center-min-count 미만이면 셀 중심을 준다
+ * (공식 계정 발자취는 공개된 장소라 섞인 평균에서 한두 명의 위치를 역산할 수 있다. specs/visit-stats-center.md 3-1).
  */
 @Service
 @RequiredArgsConstructor
@@ -39,6 +44,7 @@ public class VisitStatisticsService {
 
 	public static final String METRIC_VISIT_COUNT = "VISIT_COUNT";
 	static final String UNIT = "LAT_LNG_GRID";
+	private static final int COORDINATE_SCALE = 7;
 
 	private static final Pattern CATEGORY_CODE = Pattern.compile("\"([A-Z_]+)\"");
 	/** 서비스 지역(한국). 이 밖은 조회하지 않는다. */
@@ -47,6 +53,7 @@ public class VisitStatisticsService {
 
 	private final VisitStatisticsProperties properties;
 	private final VisitStatisticsQuery query;
+	private final UserRepository userRepository;
 	private final Clock clock;
 
 	/** 발자취와 보존분을 같은 시점으로 읽는다. 두 쿼리 사이에 탈퇴 처리(발자취 → 보존분 이동)가 끼면 이중 집계되기 때문이다. */
@@ -68,19 +75,21 @@ public class VisitStatisticsService {
 		BoundingBox area = grid.expandToCells(korea);
 		rejectIfTooManyCells(area, grid);
 
+		long officialUserId = userRepository.findByProviderAndProviderSubject(OfficialAccount.PROVIDER,
+			OfficialAccount.SUBJECT).map(User::getId).orElse(-1L);
 		Map<CellKey, Tally> tallies = new HashMap<>();
 		List<VisitStatisticsQuery.Row> rows = new ArrayList<>(
-			query.countFootprints(grid, area, dates, category));
+			query.countFootprints(grid, area, dates, category, officialUserId));
 		rows.addAll(query.countPreserved(grid, properties.aggregationVersion(), area, dates, category));
 		for (VisitStatisticsQuery.Row row : rows) {
 			tallies.computeIfAbsent(new CellKey(row.latitudeIndex(), row.longitudeIndex()), key -> new Tally())
-				.add(row.codes(), row.count());
+				.add(row);
 		}
 
 		List<VisitStatisticsResponse.Cell> cells = tallies.entrySet().stream()
 			.filter(entry -> entry.getValue().count >= properties.minCount())
 			.sorted(Map.Entry.comparingByKey())
-			.map(entry -> toCell(grid, entry.getKey(), entry.getValue()))
+			.map(entry -> toCell(grid, entry.getKey(), entry.getValue(), properties.centerMinCount()))
 			.toList();
 
 		return response(dates, grid, cells);
@@ -123,11 +132,12 @@ public class VisitStatisticsService {
 		return new VisitGrid(properties.baseCellSizeDegrees(), properties.zoomMultipliers().multiplierFor(zoom));
 	}
 
-	private static VisitStatisticsResponse.Cell toCell(VisitGrid grid, CellKey key, Tally tally) {
-		return new VisitStatisticsResponse.Cell(
-			grid.cellId(key.latitudeIndex, key.longitudeIndex),
-			new VisitStatisticsResponse.Center(grid.center(key.latitudeIndex), grid.center(key.longitudeIndex)),
-			tally.count,
+	private static VisitStatisticsResponse.Cell toCell(VisitGrid grid, CellKey key, Tally tally, int centerMinCount) {
+		boolean average = tally.userCount == 0 || tally.userCount >= centerMinCount;
+		VisitStatisticsResponse.Center center = average
+			? new VisitStatisticsResponse.Center(tally.average(tally.latitudeSum), tally.average(tally.longitudeSum))
+			: new VisitStatisticsResponse.Center(grid.center(key.latitudeIndex), grid.center(key.longitudeIndex));
+		return new VisitStatisticsResponse.Cell(grid.cellId(key.latitudeIndex, key.longitudeIndex), center, tally.count,
 			tally.categoryCounts());
 	}
 
@@ -147,15 +157,27 @@ public class VisitStatisticsService {
 	private static final class Tally {
 
 		private long count;
+		private long userCount;
+		private BigDecimal latitudeSum = BigDecimal.ZERO;
+		private BigDecimal longitudeSum = BigDecimal.ZERO;
 		private final Map<TravelCategory, Long> byCategory = new EnumMap<>(TravelCategory.class);
 
-		void add(String codes, long times) {
+		void add(VisitStatisticsQuery.Row row) {
+			long times = row.count();
 			count += times;
-			Matcher matcher = CATEGORY_CODE.matcher(codes);
+			userCount += row.userCount();
+			latitudeSum = latitudeSum.add(row.latitudeSum());
+			longitudeSum = longitudeSum.add(row.longitudeSum());
+			Matcher matcher = CATEGORY_CODE.matcher(row.codes());
 			while (matcher.find()) {
 				TravelCategory.fromCode(matcher.group(1))
 					.ifPresent(category -> byCategory.merge(category, times, Long::sum));
 			}
+		}
+
+		/** 좌표 평균, 소수 7자리(셀 중심과 같은 반올림). 셀 안 점들의 평균이라 셀 안에 있다. */
+		BigDecimal average(BigDecimal sum) {
+			return sum.divide(BigDecimal.valueOf(count), COORDINATE_SCALE, RoundingMode.HALF_UP);
 		}
 
 		/** 공통 카테고리 순서로, 0 인 코드는 없이. */

@@ -20,6 +20,7 @@ import jakarta.validation.constraints.Positive;
  * @param zoomMultipliers "최소zoom:배수" 쉼표 목록(예: {@code 15:1,13:2,0:128}). 최소zoom 0 단계가 있어야 한다
  * @param minCount        이 수보다 적은 셀은 응답에서 뺀다
  * @param maxCells        한 번에 조회할 수 있는 최대 셀 수. 넘으면 C013
+ * @param centerMinCount  셀의 실제 사용자 발자취가 이 수 이상(또는 0)일 때만 center 를 발자취 평균 위치로 준다
  */
 @Validated
 @ConfigurationProperties("yeogirok.visit-statistics")
@@ -28,7 +29,8 @@ public record VisitStatisticsProperties(
 	@NotNull @Positive BigDecimal baseCellSizeDegrees,
 	@NotNull ZoomMultipliers zoomMultipliers,
 	@NotNull @Min(1) Integer minCount,
-	@NotNull @Min(1) Integer maxCells
+	@NotNull @Min(1) Integer maxCells,
+	@NotNull @Min(1) Integer centerMinCount
 ) {
 
 	/** 설정 문자열을 시작할 때 한 번 파싱한 zoom 단계. Spring 이 {@link #valueOf(String)} 으로 바꿔 넣는다. */
