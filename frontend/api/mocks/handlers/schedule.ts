@@ -584,8 +584,16 @@ export const scheduleHandlers = [
       return reject(items);
     }
 
+    // `days`는 선택이다. 생략·null이면 지금 일차 조건 그대로, 있으면 여행의 모든 날짜여야 한다.
+    const invalidDays = body.days === undefined || body.days === null ? null : checkDays(room, body.days);
+
+    if (invalidDays !== null) {
+      return reject(invalidDays);
+    }
+
+    const days = body.days === undefined || body.days === null ? draft.days : sortedDays(body.days);
     draft.jobId = `mock-job-${nextSeq()}`;
-    draft.pending = { readyAt: Date.now() + RECALCULATION_MS, ...trimMockOverflow(items, draft.days, room.places, draft.transportMode) };
+    draft.pending = { readyAt: Date.now() + RECALCULATION_MS, days, ...trimMockOverflow(items, days, room.places, draft.transportMode) };
     draft.adjustRequests.set(idempotencyKey, { requestBody, jobId: draft.jobId });
     return ok(toJobResponse(draft), 202);
   }),

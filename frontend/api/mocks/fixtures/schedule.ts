@@ -215,8 +215,8 @@ export type MockScheduleDraft = {
   days: DayConditionDto[];
   /** 마지막으로 계산을 마친 배치. */
   items: MockDraftItem[];
-  /** 계산 중인 배치. `readyAt`이 지나면 `items`가 되고(`error`가 있으면 실패) 비워진다. */
-  pending: { readyAt: number; items: MockDraftItem[]; error: MockJobError | null } | null;
+  /** 계산 중인 배치. `readyAt`이 지나면 `items`(와 바꾼 일차 조건 `days`)가 되고(`error`가 있으면 실패) 비워진다. */
+  pending: { readyAt: number; items: MockDraftItem[]; days?: DayConditionDto[]; error: MockJobError | null } | null;
   /** 처음 만들기에 실패했을 때만. */
   error: MockJobError | null;
   /** API-084 멱등키별 요청 본문과 작업 id. */
@@ -231,11 +231,12 @@ export function settleMockDraft(draft: MockScheduleDraft, now: number = Date.now
     return;
   }
 
-  const { items, error } = draft.pending;
+  const { items, days, error } = draft.pending;
   draft.pending = null;
 
   if (error === null) {
     draft.items = items;
+    draft.days = days ?? draft.days;
     draft.draftVersion += 1;
     return;
   }

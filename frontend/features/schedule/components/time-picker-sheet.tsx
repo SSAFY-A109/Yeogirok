@@ -13,6 +13,8 @@ type TimePickerSheetProps = {
   /** 열려 있으면 고치는 시각의 이름(`1일차 시작`). 닫혀 있으면 `null`. */
   title: string | null;
   value: LocalTime;
+  /** 이 시각보다 늦은 칸만 보여 준다(W14 "종료 시각 늘리기"). 없으면 모든 칸. */
+  after?: LocalTime;
   onSelect: (time: LocalTime) => void;
   onClose: () => void;
 };
@@ -34,13 +36,18 @@ function toRows(options: readonly LocalTime[]): (LocalTime | null)[][] {
 }
 
 /** W13 시각 선택("시각을 누르면 시간 선택기가 열려요"). 30분 간격 칸을 누르면 바로 정해지고 닫힌다. */
-export function TimePickerSheet({ title, value, onSelect, onClose }: TimePickerSheetProps) {
+export function TimePickerSheet({ title, value, after, onSelect, onClose }: TimePickerSheetProps) {
+  const options = after === undefined ? TIME_OPTIONS : TIME_OPTIONS.filter((time) => {
+    return time > after;
+  });
+
   return (
     <BottomSheet visible={title !== null} onClose={onClose} closeLabel="시각 선택 닫기">
       <View className="gap-4 px-5 pb-4 pt-2" testID="schedule-conditions.time-sheet">
         <Text accessibilityRole="header" className="text-h3 text-foreground">{`${title ?? ""} 시각`}</Text>
+        {options.length === 0 ? <Text className="text-caption text-foreground-secondary">더 늦게 고를 수 있는 시각이 없어요</Text> : null}
         <View className="gap-2">
-          {toRows(TIME_OPTIONS).map((row) => {
+          {toRows(options).map((row) => {
             return (
               <View key={row[0] ?? "empty"} className="flex-row gap-2">
                 {row.map((time, index) => {
