@@ -48,7 +48,7 @@ class MainApiFlowTest {
 	private MainCourseListResponse courses() {
 		em.flush();
 		em.clear();
-		return mainCourseService.recommend(null, null, null, null);
+		return mainCourseService.recommend(null, null);
 	}
 
 	private PopularPlaceListResponse places() {

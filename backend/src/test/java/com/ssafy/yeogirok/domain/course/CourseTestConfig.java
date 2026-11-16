@@ -1,9 +1,11 @@
 package com.ssafy.yeogirok.domain.course;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
+import com.ssafy.yeogirok.domain.course.seed.CourseSeedProperties;
 import com.ssafy.yeogirok.domain.course.service.CourseAuthors;
 import com.ssafy.yeogirok.domain.course.service.CourseCards;
 import com.ssafy.yeogirok.domain.course.service.CourseSelection;
@@ -14,5 +16,6 @@ import com.ssafy.yeogirok.domain.record.RecordTestConfig;
 @TestConfiguration
 @Import({RecordTestConfig.class, PublicCourseReader.class, CourseAuthors.class, CourseSelection.class,
 	CategoryNames.class, CourseCards.class})
+@EnableConfigurationProperties(CourseSeedProperties.class)
 public class CourseTestConfig {
 }

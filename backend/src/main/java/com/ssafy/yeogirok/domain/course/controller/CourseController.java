@@ -133,10 +133,9 @@ public class CourseController {
 	public ResponseEntity<ApiResponseBody<MainCourseListResponse>> recommend(
 		@Parameter(description = "공통 카테고리 코드") @RequestParam(required = false) String category,
 		@Parameter(description = "시·도 2자리 또는 시·군·구 5자리") @RequestParam(required = false) String regionCode,
-		@Parameter(description = "다음 페이지 커서(최초 조회 시각을 담아 같은 30일 구간을 쓴다)") @RequestParam(required = false)
-		String cursor,
-		@Parameter(description = "한 번에 받을 개수. 기본 20, 최대 50") @RequestParam(required = false) Integer limit) {
-		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(
-			mainCourseService.recommend(category, regionCode, cursor, limit)));
+		@Parameter(description = "쓰지 않는다. 최대 8개를 한 번에 주고 nextCursor 는 늘 null(옛 앱 호환으로만 받음)")
+		@RequestParam(required = false) String cursor,
+		@Parameter(description = "쓰지 않는다(옛 앱 호환으로만 받음)") @RequestParam(required = false) Integer limit) {
+		return ResponseEntity.ok(ApiResponseUtil.createSuccessResponse(mainCourseService.recommend(category, regionCode)));
 	}
 }

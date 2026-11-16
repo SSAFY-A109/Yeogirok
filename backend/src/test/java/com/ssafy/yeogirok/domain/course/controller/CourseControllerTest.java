@@ -339,15 +339,16 @@ class CourseControllerTest {
 
 		@Test
 		void 추천_응답_모양과_조건_전달() throws Exception {
-			given(mainCourseService.recommend("CAFE", "51", "c1", 10)).willReturn(new MainCourseListResponse(List.of(
+			given(mainCourseService.recommend("CAFE", "51")).willReturn(new MainCourseListResponse(List.of(
 				new MainCourseListResponse.Item(7L, "강릉 1박", List.of(new PublicAuthor(1L, null)), "강릉시",
 					"https://signed/t", 3, 2, 1, TransportMode.CAR, 12, List.of(new MainCourseListResponse.PreviewPlace(
-						11L, 1, "안목 카페거리", "CAFE", "카페", "https://signed/p")))), "next",
+						11L, 1, "안목 카페거리", "CAFE", "카페", "https://signed/p")))), null,
 				new ImportCountBasis("IMPORT_COUNT_30D", Instant.parse("2026-10-12T03:00:00Z"),
 					Instant.parse("2026-11-11T03:00:00Z"))));
 
+			// 옛 앱이 보내는 cursor·limit 는 받기만 하고 쓰지 않는다(227 AC-07).
 			mockMvc.perform(get("/api/v1/courses/recommendations").with(asUser(USER_ID)).param("category", "CAFE")
-					.param("regionCode", "51").param("cursor", "c1").param("limit", "10"))
+					.param("regionCode", "51").param("cursor", "아무 값").param("limit", "999"))
 				.andExpect(status().isOk())
 				.andExpect(content().json("""
 					{"success": true, "data": {"items": [{"id": 7, "title": "강릉 1박",
@@ -356,7 +357,7 @@ class CourseControllerTest {
 					  "transportMode": "CAR", "importCount30d": 12,
 					  "previewPlaces": [{"visitId": 11, "day": 1, "name": "안목 카페거리", "categoryCode": "CAFE",
 					    "categoryName": "카페", "imageUrl": "https://signed/p"}]}],
-					  "nextCursor": "next",
+					  "nextCursor": null,
 					  "basis": {"type": "IMPORT_COUNT_30D", "periodStart": "2026-10-12 12:00:00+09",
 					    "periodEnd": "2026-11-11 12:00:00+09"}}}
 					""", org.springframework.test.json.JsonCompareMode.STRICT));

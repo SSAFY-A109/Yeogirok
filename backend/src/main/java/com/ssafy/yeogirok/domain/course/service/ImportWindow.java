@@ -9,7 +9,6 @@ import com.ssafy.yeogirok.domain.course.dto.ImportCountBasis;
 
 /**
  * 메인 집계 기간(API-015·093, 명세 {@code specs/main-api.md} 1). 장소를 가져간 시각 기준 [start, end), end 는 조회 시각(초 단위).
- * 015 다음 페이지는 커서에 담긴 end 로 다시 만들어 같은 구간을 쓴다.
  */
 public record ImportWindow(Instant start, Instant end) {
 

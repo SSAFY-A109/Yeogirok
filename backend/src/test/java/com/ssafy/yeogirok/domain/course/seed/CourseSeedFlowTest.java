@@ -208,7 +208,7 @@ class CourseSeedFlowTest {
 		assertThat(report.failed()).isEmpty();
 		Long twoDaysId = recordOf("c-two");
 		// 015: 큰 사진(첫 공개 방문 사진), 날짜별 미리보기, 장소 수, 일수(AC-04·11)
-		MainCourseListResponse.Item main = mainCourseService.recommend(null, null, null, null).items().stream()
+		MainCourseListResponse.Item main = mainCourseService.recommend(null, null).items().stream()
 			.filter(item -> item.id().equals(twoDaysId)).findFirst().orElseThrow();
 		assertThat(main.thumbnailUrl()).startsWith(InMemoryFileStorage.SIGNED + "record-photo/");
 		assertThat(main.previewPlaces()).extracting(MainCourseListResponse.PreviewPlace::day,
@@ -316,7 +316,7 @@ class CourseSeedFlowTest {
 
 		assertThat(run(null, List.of("c-two"), List.of()).unpublished()).isEqualTo(1);
 
-		assertThat(mainCourseService.recommend(null, null, null, null).items()).extracting(MainCourseListResponse.Item::id)
+		assertThat(mainCourseService.recommend(null, null).items()).extracting(MainCourseListResponse.Item::id)
 			.doesNotContain(twoDaysId);
 		assertThat(searchService.search(CourseSearchCondition.of(null, null, null, null, null, null), null, null)
 			.items()).extracting(item -> item.title()).containsExactly("당일 코스");
