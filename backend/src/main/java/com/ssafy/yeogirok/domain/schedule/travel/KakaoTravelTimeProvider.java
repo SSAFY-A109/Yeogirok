@@ -23,7 +23,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * 카카오 길찾기로 구한 이동 시간. 키는 카카오 로컬 API 와 같은 REST API 키다. x 는 경도, y 는 위도다.
  * <ul>
- *   <li>CAR: 카카오모빌리티 자동차 길찾기 {@code GET /v1/directions}(추천 경로 요약)</li>
+ *   <li>CAR: 카카오모빌리티 자동차 길찾기 {@code GET /v1/directions}(추천 경로 요약). 출발지·도착지 주변 돌발 정보는
+ *   무시한다. 출발지·도착지 근처에 도로가 없으면(102·103) 카카오 로컬 카테고리 검색으로 근처 주차장을 찾아 다시 묻는다</li>
  *   <li>TRANSIT: 카카오맵 대중교통 경로 조회 {@code GET /v2/routing/publictraffic}. 경로가 여러 개면 가장 빠른 것.
  *   대중교통 경로가 없고 두 지점이 {@link #WALK_FALLBACK_MAX_METERS} 안이면 도보 경로 조회로 대신한다</li>
  * </ul>
@@ -42,6 +43,8 @@ import tools.jackson.databind.JsonNode;
 public class KakaoTravelTimeProvider implements TravelTimeProvider {
 
 	public static final String SOURCE_CAR = "KAKAO_CAR";
+	/** 출발지·도착지 근처 도로가 없어 근처 주차장 좌표로 구한 자동차 경로. */
+	public static final String SOURCE_CAR_PARKING = "KAKAO_CAR_PARKING";
 	public static final String SOURCE_TRANSIT = "KAKAO_TRANSIT";
 	public static final String SOURCE_WALK = "KAKAO_WALK";
 
@@ -65,8 +68,22 @@ public class KakaoTravelTimeProvider implements TravelTimeProvider {
 	private static final String CAR_PATH = "/v1/directions";
 	private static final String TRANSIT_PATH = "/v2/routing/publictraffic";
 	private static final String WALK_PATH = "/v2/routing/walk";
+	private static final String PARKING_PATH = "/v2/local/search/category.json";
 	/** 자동차 길찾기에서 출발지와 도착지가 5m 안이라 경로를 찾지 않았다는 결과 코드. */
 	private static final int CAR_SAME_POINT = 104;
+	/** 자동차 길찾기에서 출발지 근처 도로를 찾지 못했다는 결과 코드(산·공원 안쪽 좌표 등). */
+	static final int CAR_NO_ROAD_NEAR_ORIGIN = 102;
+	/** 자동차 길찾기에서 도착지 근처 도로를 찾지 못했다는 결과 코드. */
+	static final int CAR_NO_ROAD_NEAR_DESTINATION = 103;
+	/**
+	 * 출발지·도착지 주변 돌발 정보(통제 등)는 무시하고 경로 중간 것만 반영한다. 기본값(0)은 시장 골목처럼 장소 바로 앞
+	 * 통제 때문에 경로를 아예 주지 않는다(105·106).
+	 */
+	static final int ROADEVENT_IGNORE_ENDPOINTS = 1;
+	/** 주차장 카테고리(카카오 로컬 category_group_code). */
+	private static final String PARKING_CATEGORY = "PK6";
+	/** 도로를 못 찾은 지점에서 주차장을 찾는 반경(m). 경주 남산은 가장 가까운 주차장이 약 1.8km 다. */
+	static final int PARKING_SEARCH_RADIUS_METERS = 2_000;
 
 	private final RestClient localClient;
 	private final RestClient mobilityClient;
@@ -113,25 +130,97 @@ public class KakaoTravelTimeProvider implements TravelTimeProvider {
 		return mode == TransportMode.CAR ? car(from, to, now) : transit(from, to, now);
 	}
 
+	/**
+	 * 자동차 경로. 출발지(102)·도착지(103) 근처에 도로가 없다는 결과면 그 지점 근처 주차장으로 바꿔 한 번씩 다시 묻는다.
+	 * 주차장으로 구한 값은 {@link #SOURCE_CAR_PARKING} 이고 주차장까지의 시간이다(주차장에서 걷는 시간은 넣지 않는다).
+	 */
 	private TravelLeg car(GeoPoint from, GeoPoint to, Instant now) {
+		GeoPoint origin = from;
+		GeoPoint destination = to;
+		CarRoute route = carRoute(origin, destination, now);
+		while (route.leg() == null) {
+			if (route.resultCode() == CAR_NO_ROAD_NEAR_ORIGIN && origin == from) {
+				origin = nearestParking(from);
+				if (origin == null) {
+					break;
+				}
+			} else if (route.resultCode() == CAR_NO_ROAD_NEAR_DESTINATION && destination == to) {
+				destination = nearestParking(to);
+				if (destination == null) {
+					break;
+				}
+			} else {
+				break;
+			}
+			route = carRoute(origin, destination, now);
+		}
+		if (route.leg() == null) {
+			return TravelLeg.unavailable(SOURCE_CAR, route.reason(), now);
+		}
+		boolean parking = origin != from || destination != to;
+		TravelLeg leg = route.leg();
+		return parking ? TravelLeg.found(leg.travelMinutes(), leg.distanceMeters(), SOURCE_CAR_PARKING, now) : leg;
+	}
+
+	/** 자동차 길찾기 한 번. 찾으면 leg, 못 찾으면 결과 코드와 사유. */
+	private CarRoute carRoute(GeoPoint from, GeoPoint to, Instant now) {
 		JsonNode response = get(mobilityClient, mobilityBreaker, CAR_PATH, uri -> uri
 			.queryParam("origin", xy(from))
 			.queryParam("destination", xy(to))
-			.queryParam("summary", true));
+			.queryParam("summary", true)
+			.queryParam("roadevent", ROADEVENT_IGNORE_ENDPOINTS));
 		if (response == null) {
-			return TravelLeg.unavailable(SOURCE_CAR, REASON_CALL_FAILED, now);
+			return new CarRoute(null, -1, REASON_CALL_FAILED);
 		}
 		JsonNode route = first(response.get("routes"));
 		int resultCode = route == null ? -1 : route.path("result_code").asInt(-1);
 		if (resultCode == CAR_SAME_POINT) {
-			return TravelLeg.found(0, BigDecimal.ZERO.setScale(2), SOURCE_CAR, now);
+			return new CarRoute(TravelLeg.found(0, BigDecimal.ZERO.setScale(2), SOURCE_CAR, now), resultCode, null);
 		}
 		JsonNode summary = route == null ? null : route.get("summary");
 		if (resultCode != 0 || summary == null) {
-			return TravelLeg.unavailable(SOURCE_CAR, "KAKAO_CAR_RESULT_" + resultCode, now);
+			return new CarRoute(null, resultCode, "KAKAO_CAR_RESULT_" + resultCode);
 		}
-		return TravelLeg.found(minutes(summary.path("duration").asLong()), meters(summary.path("distance").asLong()),
-			SOURCE_CAR, now);
+		return new CarRoute(TravelLeg.found(minutes(summary.path("duration").asLong()),
+			meters(summary.path("distance").asLong()), SOURCE_CAR, now), resultCode, null);
+	}
+
+	private record CarRoute(TravelLeg leg, int resultCode, String reason) {
+	}
+
+	/**
+	 * 지점에서 {@link #PARKING_SEARCH_RADIUS_METERS} 안의 가장 가까운 주차장(카카오 로컬 카테고리 검색 PK6). 없거나 조회에
+	 * 실패하면 null.
+	 *
+	 * <p>TODO: 찾은 주차장을 저장해 같은 장소를 다시 검색하지 않게 한다. 장소별 주차장 정보라 {@code places.parking_info}
+	 * 컬럼에 넣는 방향을 검토한다(지금 이 컬럼을 채우는 코드는 없다. 길찾기는 좌표만 받으므로 장소 ID 를 넘기는 구조
+	 * 변경이 필요하다). 저장 전까지는 도로를 못 찾은 구간마다 검색을 한 번씩 더 부른다.
+	 */
+	private GeoPoint nearestParking(GeoPoint point) {
+		if (clock.instant().isBefore(localBreaker.suspendedUntil)) {
+			return null;
+		}
+		JsonNode response = get(localClient, localBreaker, PARKING_PATH, uri -> uri
+			.queryParam("category_group_code", PARKING_CATEGORY)
+			.queryParam("x", point.longitude().toPlainString())
+			.queryParam("y", point.latitude().toPlainString())
+			.queryParam("radius", PARKING_SEARCH_RADIUS_METERS)
+			.queryParam("sort", "distance")
+			.queryParam("size", 1));
+		if (response == null) {
+			return null;
+		}
+		JsonNode document = first(response.get("documents"));
+		if (document == null || !document.has("x") || !document.has("y")) {
+			return null;
+		}
+		try {
+			return new GeoPoint(new BigDecimal(document.path("y").asString()),
+				new BigDecimal(document.path("x").asString()));
+		} catch (NumberFormatException e) {
+			log.warn("카카오 주차장 검색 응답의 좌표를 읽지 못했습니다.");
+			return null;
+		}
 	}
 
 	private TravelLeg transit(GeoPoint from, GeoPoint to, Instant now) {
