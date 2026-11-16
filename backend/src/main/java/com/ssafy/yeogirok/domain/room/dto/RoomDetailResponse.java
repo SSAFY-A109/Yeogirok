@@ -53,7 +53,7 @@ public record RoomDetailResponse(
 		static Place from(RoomPlace place, Map<String, String> categoryNames,
 			Map<Long, SourceRecordResponse> sourceRecords) {
 			return new Place(place.getId(), PlaceInfo.from(place.getPlace(), categoryNames), place.getSourceType(),
-				place.getSourceRecordId(), RoomPlaceListResponse.sourceOf(place, sourceRecords), place.getAddedBy());
+				place.getSourceRecordId(), SourceRecordResponse.of(place, sourceRecords), place.getAddedBy());
 		}
 	}
 

@@ -33,11 +33,8 @@ public record RoomPlaceListResponse(
 		public static Item from(RoomPlace place, Map<String, String> categoryNames,
 			Map<Long, SourceRecordResponse> sourceRecords) {
 			return new Item(place.getId(), PlaceInfo.from(place.getPlace(), categoryNames), place.getSourceType(),
-				place.getSourceRecordId(), sourceOf(place, sourceRecords), place.getAddedBy(), place.getRemovedAt());
+				place.getSourceRecordId(), SourceRecordResponse.of(place, sourceRecords), place.getAddedBy(),
+				place.getRemovedAt());
 		}
-	}
-
-	static SourceRecordResponse sourceOf(RoomPlace place, Map<Long, SourceRecordResponse> sourceRecords) {
-		return place.getSourceRecordId() == null ? null : sourceRecords.get(place.getSourceRecordId());
 	}
 }

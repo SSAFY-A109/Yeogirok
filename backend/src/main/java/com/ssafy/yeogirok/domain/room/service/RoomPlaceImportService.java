@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
+import com.ssafy.yeogirok.domain.course.repository.PublicCourseRepository;
+import com.ssafy.yeogirok.domain.course.repository.ViewableCourse;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.repository.PlaceRepository;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
@@ -27,7 +29,6 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceResponse;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
-import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.domain.schedule.repository.ScheduleItemRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -55,7 +56,7 @@ public class RoomPlaceImportService {
 	private final RoomFinder roomFinder;
 	private final RoomVersions roomVersions;
 	private final RoomPlaceRepository roomPlaceRepository;
-	private final TravelRoomRepository travelRoomRepository;
+	private final PublicCourseRepository publicCourseRepository;
 	private final TravelRecordRepository travelRecordRepository;
 	private final ActualVisitRepository actualVisitRepository;
 	private final PlaceRepository placeRepository;
@@ -115,14 +116,15 @@ public class RoomPlaceImportService {
 		return Arrays.stream(resultId.split(",")).map(Long::valueOf).toList();
 	}
 
-	/** 없음·미게시·원본 방 삭제는 구분하지 않고 CO001. */
+	/**
+	 * 원본 기록 행을 잠근 뒤, 공개 코스 상세(API-016)와 같은 기준({@link PublicCourseRepository#findViewable})으로 지금 볼 수
+	 * 있는지 본다. 없음·미게시·원본 방 삭제는 구분하지 않고 CO001.
+	 */
 	private TravelRecord lockPublishedRecord(Long recordId) {
-		TravelRecord record = travelRecordRepository.findByIdForUpdate(recordId)
-			.filter(found -> found.getPublishedAt() != null)
+		travelRecordRepository.findByIdForUpdate(recordId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.COURSE_UNAVAILABLE));
-		travelRoomRepository.findByIdAndDeletedAtIsNull(record.getRoomId())
+		return publicCourseRepository.findViewable(recordId).map(ViewableCourse::record)
 			.orElseThrow(() -> new BusinessException(ExceptionType.COURSE_UNAVAILABLE));
-		return record;
 	}
 
 	private List<RoomPlaceResponse> responses(List<RoomPlace> added) {

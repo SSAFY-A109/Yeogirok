@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.course.repository;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -97,4 +98,18 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 		+ " and r.id in :recordIds")
 	List<Long> findOfficialIds(@Param("recordIds") Collection<Long> recordIds, @Param("provider") OAuthProvider provider,
 		@Param("subject") String subject, @Param("ownerUserId") Long ownerUserId);
+
+	/**
+	 * 지금 볼 수 있는 공개 코스: 게시 중이고 원본 방이 삭제되지 않았다. 공개 코스 상세(API-016)·가져오기(API-030)·후보의 원본
+	 * 코스(sourceRecord, API-028·022)가 모두 이 기준을 쓴다. 공개 조건이 바뀌면 여기만 고친다. 볼 수 없는 ID 는 결과에 없다.
+	 */
+	@Query("select new com.ssafy.yeogirok.domain.course.repository.ViewableCourse(r, room)"
+		+ " from TravelRecord r, TravelRoom room"
+		+ " where r.id in :ids and room.id = r.roomId and r.publishedAt is not null and room.deletedAt is null")
+	List<ViewableCourse> findViewable(@Param("ids") Collection<Long> ids);
+
+	/** 한 코스. 볼 수 없으면 비어 있다. */
+	default Optional<ViewableCourse> findViewable(Long id) {
+		return findViewable(List.of(id)).stream().findFirst();
+	}
 }
