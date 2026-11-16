@@ -393,6 +393,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             for (i in 0 until actions.childCount) {
                 val button = actions.getChildAt(i) as Button
                 button.typeface = theme.medium; button.stateListAnimator = null; button.elevation = 0f
+                fitButtonText(button)
                 button.background = theme.background(if (button === confirm) theme.primary else theme.muted, dp(8).toFloat())
                 button.setTextColor(if (button === confirm) theme.card else theme.foreground)
             }
@@ -433,6 +434,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     isEnabled = false; textSize = 15f; typeface = theme.medium; isAllCaps = false
                     setTextColor(theme.card); background = theme.background(theme.primary, dp(8).toFloat())
                     stateListAnimator = null; elevation = 0f
+                    fitButtonText(this)
                     setOnClickListener {
                         if (placementCommitted.get()) confirmRequested.set(true)
                         else {
@@ -448,11 +450,14 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 placementReset = Button(this@GeoArActivity).apply {
                     text = "다시 놓기"; contentDescription = "선택한 팁 위치 초기화"
                     textSize = 14f; typeface = theme.medium; isAllCaps = false
-                    setTextColor(theme.primary); background = theme.background(theme.card, dp(8).toFloat())
+                    setTextColor(theme.primary)
+                    background = theme.background(theme.card, dp(8).toFloat()).apply { setStroke(dp(1), theme.border) }
+                    stateListAnimator = null; elevation = 0f
+                    fitButtonText(this)
                     setOnClickListener { placementCommitted.set(false); resetRequested.set(true) }
                     visibility = View.GONE
                 }
-                addView(placementReset, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+                addView(placementReset, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
             }
             placementPanel = panel
             root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
@@ -520,6 +525,16 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
 
     private fun cancelPlacement() {
         if (intent.getBooleanExtra("explorerMode", false)) recreate() else finish()
+    }
+
+    /**
+     * 높이를 고정한 버튼은 Android 기본 버튼의 위아래 여백과 Noto Sans KR 글꼴 여백 때문에 글자 아래가 잘린다
+     * (자리 놓기 패널의 "다시 놓기" 44dp 등). 여백을 걷고 글자를 가운데에 맞춘다.
+     */
+    private fun fitButtonText(button: Button) {
+        val horizontal = (16 * resources.displayMetrics.density).toInt()
+        button.minHeight = 0; button.minimumHeight = 0; button.includeFontPadding = false
+        button.setPadding(horizontal, 0, horizontal, 0); button.gravity = Gravity.CENTER
     }
 
     @Deprecated("Deprecated in Java")
