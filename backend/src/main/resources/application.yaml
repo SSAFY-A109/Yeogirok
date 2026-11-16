@@ -69,8 +69,9 @@ yeogirok:
     # 셀의 실제 사용자 발자취가 이 수 이상(또는 0)일 때만 center 를 발자취 평균 위치로 준다(한두 명 위치 역산 방지, S15P31A109-230).
     center-min-count: 3
   tip:
-    # AR 팁 거리·개수(11/6 확정): 주변 탐색 50m, 상세·반응 5m(경계 포함), 탐색 결과 가까운 순 최대 10개.
-    search-radius-meters: 50
+    # AR 팁 거리·개수: 주변 탐색 100m(11/16 50m 에서 넓힘), 상세·반응 5m(경계 포함), 탐색 결과 가까운 순 최대 10개(11/6 확정).
+    # 앱은 응답 appliedRadiusMeters 를 따라야 한다. 50 으로 고정한 옛 앱이 남아 있으면 이 값을 바꾼 배포 전에 앱부터 내보낸다.
+    search-radius-meters: 100
     interaction-radius-meters: 5
     max-search-results: 10
     # placement JSON 최대 크기(11/8 결정 8KB). 앱은 3개 필드만 보낸다.

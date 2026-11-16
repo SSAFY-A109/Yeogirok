@@ -36,8 +36,8 @@ class PublicTipFinderTest {
 	void 상호작용_거리는_5m_경계를_포함한다() {
 		assertThat(properties.canInteract(5.0)).isTrue();
 		assertThat(properties.canInteract(5.000001)).isFalse();
-		assertThat(properties.inSearchRadius(50.0)).isTrue();
-		assertThat(properties.inSearchRadius(50.000001)).isFalse();
+		assertThat(properties.inSearchRadius(100.0)).isTrue();
+		assertThat(properties.inSearchRadius(100.000001)).isFalse();
 	}
 
 	@Test

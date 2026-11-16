@@ -61,16 +61,16 @@ class TipSearchServiceTest {
 	TestEntityManager em;
 
 	@Test
-	void 반경_50m_경계는_포함하고_밖은_뺀다() {
-		// 북쪽 위도 차이로 정확히 50m 가 되는 위치에 팁을 둔다
-		BigDecimal fiftyMeters = latitudeAtMeters(50);
-		Long inside = tipAt(locationAt(fiftyMeters, LNG), ArTipCategory.CAFE);
-		tipAt(locationAt(latitudeAtMeters(50.5), LNG), ArTipCategory.CAFE);
+	void 반경_100m_경계는_포함하고_밖은_뺀다() {
+		// 북쪽 위도 차이로 정확히 100m 가 되는 위치에 팁을 둔다
+		BigDecimal hundredMeters = latitudeAtMeters(100);
+		Long inside = tipAt(locationAt(hundredMeters, LNG), ArTipCategory.CAFE);
+		tipAt(locationAt(latitudeAtMeters(100.5), LNG), ArTipCategory.CAFE);
 
 		TipSearchResponse response = service.search(query(locationAt(LAT, LNG), null, null));
 
 		assertThat(response.items()).extracting(TipSearchResponse.Item::id).containsExactly(inside);
-		assertThat(response.items().getFirst().distanceMeters()).isLessThanOrEqualTo(50.0);
+		assertThat(response.items().getFirst().distanceMeters()).isLessThanOrEqualTo(100.0);
 	}
 
 	@Test
@@ -112,7 +112,7 @@ class TipSearchServiceTest {
 		assertThat(response.items()).extracting(TipSearchResponse.Item::distanceMeters).isSorted();
 		assertThat(response.totalCount()).isEqualTo(11);
 		assertThat(response.nextCursor()).isNull();
-		assertThat(response.appliedRadiusMeters()).isEqualTo(50);
+		assertThat(response.appliedRadiusMeters()).isEqualTo(100);
 		assertThat(response.interactionRadiusMeters()).isEqualTo(5);
 		assertThat(service.search(query(locationAt(LAT, LNG), null, 3L)).items()).hasSize(3);
 	}
@@ -133,8 +133,8 @@ class TipSearchServiceTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(longs = {49, 51, 0})
-	void radiusMeters가_50이_아니면_C003(long radius) {
+	@ValueSource(longs = {99, 101, 50, 0})
+	void radiusMeters가_100이_아니면_C003(long radius) {
 		TipSearchQuery query = new TipSearchQuery(locationAt(LAT, LNG), radius, null, null);
 
 		assertThatThrownBy(() -> service.search(query))
