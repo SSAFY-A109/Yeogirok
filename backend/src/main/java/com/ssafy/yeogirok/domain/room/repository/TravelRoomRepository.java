@@ -27,6 +27,10 @@ public interface TravelRoomRepository extends JpaRepository<TravelRoom, Long> {
 	@Query("select r from TravelRoom r where r.id = :id")
 	Optional<TravelRoom> findByIdForUpdate(@Param("id") Long id);
 
+	/** 이 방의 기록이 공개 코스로 게시 중인지. 공개 코스는 원본 방이 삭제되면 내려가므로 탈퇴 정리가 이런 방은 남긴다. */
+	@Query("select count(r) > 0 from TravelRecord r where r.roomId = :roomId and r.publishedAt is not null")
+	boolean hasPublishedCourse(@Param("roomId") Long roomId);
+
 	/**
 	 * API-025. 삭제된 방도 찾는다(삭제된 방의 링크는 RO005 가 아니라 RO001).
 	 *
