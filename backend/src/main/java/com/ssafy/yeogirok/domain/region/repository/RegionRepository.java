@@ -6,8 +6,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import com.ssafy.yeogirok.domain.region.entity.Region;
+import com.ssafy.yeogirok.domain.region.entity.RegionLevel;
 
 public interface RegionRepository extends JpaRepository<Region, String> {
+
+	/** 추천 조건 저장(API-033)이 regionCode 가 목록의 시·군·구인지 확인한다. */
+	boolean existsByCodeAndLevel(String code, RegionLevel level);
 
 	List<Region> findByParentCodeIsNullOrderByDisplayOrderAscCodeAsc();
 

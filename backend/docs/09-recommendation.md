@@ -22,7 +22,7 @@
 
 ### 조건 (033·081)
 
-- `regionCode` 는 시/군/구 법정동 코드 5자리다(시도 2자리 + 시군구 3자리, 예: 강릉시 `51150`). 형식이 다르면 C003.
+- `regionCode` 는 지역 목록(API-078)의 시/군/구 법정동 코드 5자리다(시도 2자리 + 시군구 3자리, 예: 강릉시 `51150`). 형식이 다르면 C003, 형식은 맞지만 목록에 없는 코드도 C003.
 - `categoryCodes` 는 1개 이상(상한 없음), 공통 카테고리 코드만. 중복은 합친다. `skipped` 는 false 만(생략하면 false).
 - 조건은 `travel_rooms.preferences` JSON 에 `{regionCode, categoryCodes, skipped, version}` 로 둔다.
 - **조건 version 은 여행방 version 과 따로 센다.** 저장 전 1, 저장할 때마다 1 오른다. 조건만 바꿨는데 여행방 version 이

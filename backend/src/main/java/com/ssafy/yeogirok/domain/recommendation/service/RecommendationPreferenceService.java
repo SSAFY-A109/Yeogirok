@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ssafy.yeogirok.domain.recommendation.RecommendationPreferences;
 import com.ssafy.yeogirok.domain.recommendation.dto.PreferenceResponse;
 import com.ssafy.yeogirok.domain.recommendation.dto.PreferenceSaveCommand;
+import com.ssafy.yeogirok.domain.region.entity.RegionLevel;
+import com.ssafy.yeogirok.domain.region.repository.RegionRepository;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.event.RoomChange;
 import com.ssafy.yeogirok.domain.room.event.RoomChangedEvent;
@@ -27,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 public class RecommendationPreferenceService {
 
 	private final RoomFinder roomFinder;
+	private final RegionRepository regionRepository;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
@@ -44,6 +47,11 @@ public class RecommendationPreferenceService {
 	@Transactional
 	public PreferenceResponse save(Long userId, Long roomId, PreferenceSaveCommand command) {
 		TravelRoom room = roomFinder.getForMemberForUpdate(roomId, userId).room();
+		// 형식(5자리)은 요청에서 봤다. 저장은 지역 목록(API-078)의 최종 시·군·구 code 로만 한다.
+		if (!regionRepository.existsByCodeAndLevel(command.regionCode(), RegionLevel.DISTRICT)) {
+			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE,
+				"regionCode: 지역 목록에 있는 시/군/구 코드여야 합니다.");
+		}
 		RecommendationPreferences current = RecommendationPreferences.from(room.getPreferences());
 		if (current.version() != command.version()) {
 			throw new BusinessException(ExceptionType.VERSION_MISMATCH);

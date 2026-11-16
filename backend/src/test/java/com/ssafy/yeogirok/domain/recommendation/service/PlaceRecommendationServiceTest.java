@@ -52,6 +52,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.CommittedRoomData;
 import com.ssafy.yeogirok.support.FakeTourApiClient;
 import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestRegions;
 import com.ssafy.yeogirok.support.TestUsers;
 
 /**
@@ -118,7 +119,10 @@ class PlaceRecommendationServiceTest {
 		clock.set(NOW);
 		tourApi.reset();
 		owner = newUserId();
-		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), owner));
+		inTransaction(() -> {
+			TestUsers.insertActive(em.getEntityManager(), owner);
+			TestRegions.insertGangwon(em.getEntityManager());
+		});
 		roomId = roomService.create(owner, new RoomCreateCommand("강릉 여행", null, null, TransportMode.CAR)).id();
 	}
 
