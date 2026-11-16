@@ -18,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.chat.service.ChatReadStates;
+import com.ssafy.yeogirok.domain.record.repository.RoomRecordId;
+import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomDetailResponse;
@@ -58,15 +60,17 @@ public class RoomService {
 	private final TransactionTemplate transactionTemplate;
 	private final ChatReadStates chatReadStates;
 	private final RoomPlaceSources roomPlaceSources;
+	private final TravelRecordRepository travelRecordRepository;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
 	public RoomService(TravelRoomRepository travelRoomRepository, RoomMemberRepository roomMemberRepository,
 		RoomPlaceRepository roomPlaceRepository, CategoryNames categoryNames, RoomFinder roomFinder,
 		ScheduleRoomChanges scheduleRoomChanges, PlatformTransactionManager transactionManager,
-		ChatReadStates chatReadStates, RoomPlaceSources roomPlaceSources, ApplicationEventPublisher eventPublisher,
-		Clock clock) {
+		ChatReadStates chatReadStates, RoomPlaceSources roomPlaceSources, TravelRecordRepository travelRecordRepository,
+		ApplicationEventPublisher eventPublisher, Clock clock) {
 		this.roomPlaceSources = roomPlaceSources;
+		this.travelRecordRepository = travelRecordRepository;
 		this.travelRoomRepository = travelRoomRepository;
 		this.roomMemberRepository = roomMemberRepository;
 		this.roomPlaceRepository = roomPlaceRepository;
@@ -130,10 +134,11 @@ public class RoomService {
 			.stream()
 			.collect(Collectors.toMap(RoomPlaceCount::roomId, RoomPlaceCount::count));
 		Set<Long> unreadRoomIds = chatReadStates.unreadRoomIds(userId, page.stream().map(TravelRoom::getId).toList());
+		Map<Long, List<Long>> recordIdsByRoom = recordIdsByRoom(page.stream().map(TravelRoom::getId).toList());
 		List<RoomListResponse.Item> items = page.stream()
 			.map(room -> RoomListResponse.Item.of(room, membersByRoom.getOrDefault(room.getId(), List.of()),
-				placeCountByRoom.getOrDefault(room.getId(), 0L).intValue(), userId,
-				unreadRoomIds.contains(room.getId())))
+				placeCountByRoom.getOrDefault(room.getId(), 0L).intValue(),
+				recordIdsByRoom.getOrDefault(room.getId(), List.of()), userId, unreadRoomIds.contains(room.getId())))
 			.toList();
 		String nextCursor = hasNext ? new RoomCursor(page.getLast().getId()).encode() : null;
 		return new RoomListResponse(items, nextCursor);
@@ -146,8 +151,15 @@ public class RoomService {
 		List<RoomPlace> places = roomPlaceRepository.findByRoomIdAndRemovedAtIsNullOrderByIdAsc(roomId);
 		List<String> categoryCodes = places.stream().map(place -> place.getPlace().getCategoryCode()).toList();
 		return RoomDetailResponse.of(found.room(), roomMemberRepository.findCurrentMembers(List.of(roomId)), places,
-			categoryNames.of(categoryCodes), roomPlaceSources.of(places), chatReadStates.of(found.member()),
+			categoryNames.of(categoryCodes), roomPlaceSources.of(places),
+			recordIdsByRoom(List.of(roomId)).getOrDefault(roomId, List.of()), chatReadStates.of(found.member()),
 			scheduleRoomChanges.view(found.room()));
+	}
+
+	/** 방마다 그 방의 여행 기록 ID(방마다 하나라 비었거나 하나). API-020·022 recordIds. 앱은 첫 값을 그 방의 기록으로 쓴다. */
+	private Map<Long, List<Long>> recordIdsByRoom(List<Long> roomIds) {
+		return travelRecordRepository.findIdsByRoomIds(roomIds).stream().collect(Collectors.groupingBy(
+			RoomRecordId::roomId, Collectors.mapping(RoomRecordId::recordId, Collectors.toList())));
 	}
 
 	/**
