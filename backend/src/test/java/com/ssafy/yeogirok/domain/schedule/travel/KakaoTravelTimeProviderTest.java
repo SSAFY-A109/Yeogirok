@@ -42,6 +42,7 @@ class KakaoTravelTimeProviderTest {
 	static final String CAR_URL = "https://apis-navi.kakaomobility.com/v1/directions";
 	static final String TRANSIT_URL = "https://dapi.kakao.com/v2/routing/publictraffic";
 	static final String WALK_URL = "https://dapi.kakao.com/v2/routing/walk";
+	static final String PARKING_URL = "https://dapi.kakao.com/v2/local/search/category.json";
 
 	MockRestServiceServer localServer;
 	MockRestServiceServer mobilityServer;
@@ -78,6 +79,7 @@ class KakaoTravelTimeProviderTest {
 		expect(mobilityServer, CAR_URL)
 			.andExpect(queryParam("origin", "127.0300000,37.5000000"))   // 경도,위도
 			.andExpect(queryParam("destination", "127.0300000,37.6000000"))
+			.andExpect(queryParam("roadevent", "1"))   // 출발지·도착지 주변 돌발 정보는 무시
 			.andRespond(withSuccess(carJson(0), MediaType.APPLICATION_JSON));
 
 		TravelLeg leg = provider.estimate(FROM, FAR, TransportMode.CAR);
@@ -102,6 +104,114 @@ class KakaoTravelTimeProviderTest {
 		TravelLeg leg = provider.estimate(FROM, FAR, TransportMode.CAR);
 
 		assertThat(leg).isEqualTo(TravelLeg.unavailable("KAKAO_CAR", "KAKAO_CAR_RESULT_105", NOW));
+		localServer.verify();   // 102·103 이 아니면 주차장을 찾지 않는다
+	}
+
+	private static String parkingJson(String x, String y) {
+		return """
+			{"documents":[{"category_group_code":"PK6","place_name":"p","distance":"1817","x":"%s","y":"%s"}],
+			 "meta":{"total_count":1}}
+			""".formatted(x, y);
+	}
+
+	@Test
+	void 출발지_근처에_도로가_없으면_근처_주차장에서_다시_묻는다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(102), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL)
+			.andExpect(queryParam("category_group_code", "PK6"))
+			.andExpect(queryParam("x", "127.0300000"))
+			.andExpect(queryParam("y", "37.5000000"))
+			.andExpect(queryParam("radius", "2000"))
+			.andExpect(queryParam("sort", "distance"))
+			.andRespond(withSuccess(parkingJson("127.031", "37.501"), MediaType.APPLICATION_JSON));
+		expect(mobilityServer, CAR_URL)
+			.andExpect(queryParam("origin", "127.031,37.501"))
+			.andExpect(queryParam("destination", "127.0300000,37.6000000"))
+			.andRespond(withSuccess(carJson(0), MediaType.APPLICATION_JSON));
+
+		TravelLeg leg = provider.estimate(FROM, FAR, TransportMode.CAR);
+
+		assertThat(leg).isEqualTo(TravelLeg.found(21, new BigDecimal("12345.00"), "KAKAO_CAR_PARKING", NOW));
+		mobilityServer.verify();
+		localServer.verify();
+	}
+
+	@Test
+	void 도착지_근처에_도로가_없으면_도착지를_주차장으로_바꾼다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(103), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL)
+			.andExpect(queryParam("x", "127.0300000"))
+			.andExpect(queryParam("y", "37.6000000"))
+			.andRespond(withSuccess(parkingJson("127.031", "37.599"), MediaType.APPLICATION_JSON));
+		expect(mobilityServer, CAR_URL)
+			.andExpect(queryParam("origin", "127.0300000,37.5000000"))
+			.andExpect(queryParam("destination", "127.031,37.599"))
+			.andRespond(withSuccess(carJson(0), MediaType.APPLICATION_JSON));
+
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR).source()).isEqualTo("KAKAO_CAR_PARKING");
+		mobilityServer.verify();
+		localServer.verify();
+	}
+
+	@Test
+	void 출발지와_도착지_모두_도로가_없으면_둘_다_주차장으로_바꾼다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(102), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL)
+			.andRespond(withSuccess(parkingJson("127.031", "37.501"), MediaType.APPLICATION_JSON));
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(103), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL)
+			.andRespond(withSuccess(parkingJson("127.031", "37.599"), MediaType.APPLICATION_JSON));
+		expect(mobilityServer, CAR_URL)
+			.andExpect(queryParam("origin", "127.031,37.501"))
+			.andExpect(queryParam("destination", "127.031,37.599"))
+			.andRespond(withSuccess(carJson(0), MediaType.APPLICATION_JSON));
+
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR).isKnown()).isTrue();
+		mobilityServer.verify();
+		localServer.verify();
+	}
+
+	@Test
+	void 주차장에서_다시_물어도_못_찾으면_이동_시간을_모른다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(102), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL)
+			.andRespond(withSuccess(parkingJson("127.031", "37.501"), MediaType.APPLICATION_JSON));
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(102), MediaType.APPLICATION_JSON));
+
+		// 같은 쪽은 한 번만 바꾼다(호출이 끝없이 이어지지 않는다).
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR))
+			.isEqualTo(TravelLeg.unavailable("KAKAO_CAR", "KAKAO_CAR_RESULT_102", NOW));
+		mobilityServer.verify();
+		localServer.verify();
+	}
+
+	@Test
+	void 근처에_주차장이_없으면_이동_시간을_모른다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(102), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL).andRespond(withSuccess("{\"documents\":[],\"meta\":{\"total_count\":0}}",
+			MediaType.APPLICATION_JSON));
+
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR))
+			.isEqualTo(TravelLeg.unavailable("KAKAO_CAR", "KAKAO_CAR_RESULT_102", NOW));
+		mobilityServer.verify();
+		localServer.verify();
+	}
+
+	@Test
+	void 주차장_검색이_실패하면_이동_시간을_모른다() {
+		KakaoTravelTimeProvider provider = provider("test-key");
+		expect(mobilityServer, CAR_URL).andRespond(withSuccess(carJson(102), MediaType.APPLICATION_JSON));
+		expect(localServer, PARKING_URL).andRespond(withServerError());
+
+		assertThat(provider.estimate(FROM, FAR, TransportMode.CAR))
+			.isEqualTo(TravelLeg.unavailable("KAKAO_CAR", "KAKAO_CAR_RESULT_102", NOW));
+		mobilityServer.verify();
+		localServer.verify();
 	}
 
 	/* ── 대중교통 ───────────────────────────────────────────── */
