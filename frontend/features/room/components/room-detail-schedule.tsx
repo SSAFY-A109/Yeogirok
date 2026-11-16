@@ -153,7 +153,9 @@ function ScheduleTimeline({ schedule, places, header, onOpenMap }: ScheduleTimel
     }
 
     setSelectedDate(date);
-    listRef.current?.scrollToLocation({ sectionIndex, itemIndex: 0, animated: true });
+    // 위에 붙는 일차 머리글은 위치가 늘 0으로 재어져(머리글을 감싼 칸 기준), 머리글(itemIndex 0)로 넘기면 맨 위로 간다.
+    // 그날 첫 칸(itemIndex 1)으로 넘기면 SectionList가 머리글 높이만큼 띄워 머리글 바로 아래에 맞춘다.
+    listRef.current?.scrollToLocation({ sectionIndex, itemIndex: 1, animated: true });
   };
 
   // SectionList는 이 콜백이 바뀌면 안 된다. 상태 변경 함수만 쓰므로 한 번만 만든다.
