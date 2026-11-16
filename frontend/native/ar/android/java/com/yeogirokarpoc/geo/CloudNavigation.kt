@@ -15,7 +15,7 @@ import com.google.android.gms.location.*
 import org.json.JSONObject
 
 /** Main-thread location/map lifecycle. The AR render thread reads only immutable/volatile snapshots. */
-class CloudNavigation(private val activity: Activity, viewport: FrameLayout, target: JSONObject?,
+class CloudNavigation(private val activity: Activity, private val viewport: FrameLayout, target: JSONObject?,
                       private val compact: Boolean = false, private var points: org.json.JSONArray = org.json.JSONArray(),
                       private val publicTips: Boolean = false, private val onLocation: ((JSONObject) -> Unit)? = null) : SensorEventListener {
     private val latitude = target?.getDouble("latitude")
@@ -42,6 +42,22 @@ class CloudNavigation(private val activity: Activity, viewport: FrameLayout, tar
     private var placing = false
     @Volatile var visitLocation: String? = null; private set
     private lateinit var mapCard: LinearLayout
+    /** 미니맵 카드와 크게 보기 버튼을 함께 담는다. 크기를 바꿀 때는 이 틀을 바꾼다. */
+    private lateinit var mapFrame: FrameLayout
+    private lateinit var expandCover: android.view.View
+    private lateinit var expandBadge: TextView
+    private lateinit var expandedControls: LinearLayout
+    /** 지도를 크게 볼 때 카메라(AR 화면)를 줄여 넣는 오른쪽 위 작은 창의 테두리와 누를 자리. */
+    private lateinit var cameraFrame: android.view.View
+    private lateinit var cameraWindow: FrameLayout
+    private var cameraView: android.view.View? = null
+    private var cameraOverlay: android.view.View? = null
+    /** 지도를 카메라 화면 위로 크게 펼쳤는지. */
+    var mapExpanded = false
+        private set
+    private var mapExpandedListener: ((Boolean) -> Unit)? = null
+    private var insetTop = 0
+    private var insetBottom = 0
     private lateinit var footer: LinearLayout
     private data class ArState(val text: String?, val busy: Boolean, val failed: Boolean, val trackingLost: Boolean, val at: Long,
                               val angle: Double? = null)
@@ -77,9 +93,40 @@ class CloudNavigation(private val activity: Activity, viewport: FrameLayout, tar
             addView(mapStatus, LinearLayout.LayoutParams(-1, -2))
         }
         mapCard = card
-        viewport.addView(card, FrameLayout.LayoutParams(dp(112), dp(112), Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(8); rightMargin = dp(16)
-        })
+        val theme = ArTheme(activity)
+        expandCover = android.view.View(activity).apply {
+            isClickable = true; contentDescription = "지도 크게 보기"
+            setOnClickListener { setMapExpanded(true) }
+        }
+        expandBadge = pill(theme, "지도 크게", 11f).apply { isClickable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        expandedControls = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL; visibility = android.view.View.GONE
+            addView(pill(theme, "내 위치", 13f).apply {
+                contentDescription = "끌어 옮긴 지도를 내 위치로 되돌리고 다시 따라가기"
+                setOnClickListener { mapView?.recenter() }
+            }, LinearLayout.LayoutParams(-2, dp(36)))
+        }
+        mapFrame = FrameLayout(activity).apply {
+            addView(card, FrameLayout.LayoutParams(-1, -1))
+            addView(expandCover, FrameLayout.LayoutParams(-1, -1))
+            addView(expandBadge, FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(6); bottomMargin = dp(6) })
+            addView(expandedControls, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(12); leftMargin = dp(12) })
+        }
+        viewport.addView(mapFrame, miniMapLayout())
+        // 카메라 창 테두리와 누를 자리는 AR 화면보다 위(translationZ)에 그린다. 투명한 자리는 카메라를 가리지 않는다.
+        cameraFrame = android.view.View(activity).apply {
+            background = theme.background(theme.card, dp(10).toFloat()); visibility = android.view.View.GONE
+            translationZ = dp(7).toFloat(); importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        viewport.addView(cameraFrame, cameraFrameLayout())
+        cameraWindow = FrameLayout(activity).apply {
+            isClickable = true; contentDescription = "카메라 크게 보기"; visibility = android.view.View.GONE
+            translationZ = dp(9).toFloat()
+            setOnClickListener { setMapExpanded(false) }
+            addView(pill(theme, "카메라 크게", 11f).apply { isClickable = false; importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO },
+                FrameLayout.LayoutParams(-2, dp(22), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(6); bottomMargin = dp(6) })
+        }
+        viewport.addView(cameraWindow, miniMapLayout())
         footer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.argb(235, 17, 24, 39)); isClickable = true
             addView(hint); addView(startButton)
@@ -115,16 +162,74 @@ class CloudNavigation(private val activity: Activity, viewport: FrameLayout, tar
         mapView?.pause()
     }
     fun destroy() { pause(); destroyed = true; mapView?.destroy(); mapView = null }
+    /**
+     * 맞바꿀 카메라 화면(AR GLSurfaceView)과 그 위 핀 표시 층. 둘 다 `viewport`의 자식이어야 한다.
+     * 넘기지 않으면 지도만 크게 펼친다.
+     */
+    fun attachCameraView(camera: android.view.View, overlay: android.view.View) { cameraView = camera; cameraOverlay = overlay }
+    /** 지도를 크게 펼치거나 접을 때 화면의 다른 겹침 요소(상태 안내·팁 남기기 버튼)를 숨기고 되살리게 알린다. */
+    fun setOnMapExpandedChange(listener: (Boolean) -> Unit) { mapExpandedListener = listener }
+    /** 크게 펼친 지도를 접는다. 접었으면 true(뒤로 가기를 여기서 끝낸다). */
+    fun collapseMap(): Boolean {
+        if (!mapExpanded) return false
+        setMapExpanded(false)
+        return true
+    }
+    /**
+     * 지도와 카메라를 맞바꾼다(2026-11-16 사용자 요청). 지도를 크게 펼치면 카메라(AR 화면)를 지도가 있던 오른쪽 위 작은 창으로
+     * 줄이고, 그 창을 누르면 다시 카메라가 커지고 지도가 작은 창으로 돌아간다. AR 화면은 떼어 내지 않고 크기와 그리는 순서만
+     * 바꾸므로 AR 세션은 그대로 이어진다(렌더러가 매 프레임 화면 크기로 표시 영역을 맞춘다). 크게 볼 때만 지도를 끌고 확대·축소한다.
+     */
+    fun setMapExpanded(expanded: Boolean) {
+        if (destroyed || placing || mapExpanded == expanded) return
+        mapExpanded = expanded
+        mapFrame.layoutParams = if (expanded) expandedMapLayout() else miniMapLayout()
+        expandCover.visibility = if (expanded) android.view.View.GONE else android.view.View.VISIBLE
+        expandBadge.visibility = expandCover.visibility
+        expandedControls.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
+        if (expanded) mapFrame.bringToFront()
+        cameraView?.let { camera ->
+            camera.layoutParams = if (expanded) miniMapLayout() else FrameLayout.LayoutParams(-1, -1)
+            camera.translationZ = if (expanded) dp(8).toFloat() else 0f
+            cameraOverlay?.visibility = if (expanded) android.view.View.INVISIBLE else android.view.View.VISIBLE
+            cameraFrame.visibility = if (expanded) android.view.View.VISIBLE else android.view.View.GONE
+            cameraWindow.visibility = cameraFrame.visibility
+        }
+        mapFrame.post { mapView?.setExpanded(expanded) }
+        mapExpandedListener?.invoke(expanded)
+    }
+    private fun miniMapLayout() = FrameLayout.LayoutParams(dp(112), dp(112), Gravity.TOP or Gravity.END).apply {
+        topMargin = insetTop + dp(8); rightMargin = dp(16)
+    }
+    /** 작은 카메라 창 둘레 테두리. 창보다 사방 2dp 크다. */
+    private fun cameraFrameLayout() = FrameLayout.LayoutParams(dp(116), dp(116), Gravity.TOP or Gravity.END).apply {
+        topMargin = insetTop + dp(6); rightMargin = dp(14)
+    }
+    /** 위쪽 "주변 공개 팁" 줄 아래부터 아래쪽 탭 위까지 채운다. 오른쪽 위에는 작은 카메라 창이 겹친다. */
+    private fun expandedMapLayout() = FrameLayout.LayoutParams(-1, -1).apply {
+        topMargin = insetTop + dp(48); leftMargin = dp(12); rightMargin = dp(12); bottomMargin = insetBottom + dp(12)
+    }
+    private fun pill(theme: ArTheme, label: String, size: Float) = TextView(activity).apply {
+        text = label; textSize = size; typeface = theme.medium; setTextColor(theme.foreground); includeFontPadding = false
+        gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+        background = theme.background(theme.card, dp(18).toFloat()).apply { setStroke(dp(1), theme.border) }
+        isClickable = true; isFocusable = true
+    }
     fun permissionResult() { if (active) requestLocation(false) }
     fun updatePoints(next: org.json.JSONArray) { points = next; if (active) tick() }
     fun startScan() { manualResolve = true; if (active) tick() }
     fun setInsets(top: Int, bottom: Int) {
-        (mapCard.layoutParams as FrameLayout.LayoutParams).apply { topMargin = top + dp(8) }.also { mapCard.layoutParams = it }
+        insetTop = top; insetBottom = bottom
+        mapFrame.layoutParams = if (mapExpanded) expandedMapLayout() else miniMapLayout()
+        cameraFrame.layoutParams = cameraFrameLayout()
+        cameraWindow.layoutParams = miniMapLayout()
+        if (mapExpanded) cameraView?.layoutParams = miniMapLayout()
         (footer.layoutParams as FrameLayout.LayoutParams).apply { bottomMargin = bottom + dp(72) }.also { footer.layoutParams = it }
     }
     fun startPlacement() {
+        if (mapExpanded) setMapExpanded(false)
         placing = true
-        mapCard.visibility = android.view.View.GONE
+        mapFrame.visibility = android.view.View.GONE
         footer.visibility = android.view.View.GONE
         directionArrow.visibility = android.view.View.GONE
     }

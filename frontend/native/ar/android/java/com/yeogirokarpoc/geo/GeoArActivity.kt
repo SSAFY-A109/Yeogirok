@@ -229,6 +229,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                 explorerTips.forEach { tip -> tip.getJSONObject("cloudRecord").optJSONObject("discoveryLocation")?.let { points.put(it) } }
                 if (points.length() == 0) restore?.optJSONObject("discoveryLocation")?.let { points.put(it) }
             }, publicTips = publicTips, onLocation = if (publicTips) { location -> refreshPublicTips(location) } else null)
+        navigation?.attachCameraView(surface, overlay)
         layout.addView(viewport, LinearLayout.LayoutParams(-1, 0, 1f))
         val actions = LinearLayout(this)
         confirm = Button(this).apply {
@@ -456,6 +457,17 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             placementPanel = panel
             root.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             showPlacementControls()
+            // 지도를 크게 펼치면 지도 위에 겹치는 상태 안내와 팁 남기기 버튼을 숨기고, 접으면 원래대로 되돌린다.
+            var hiddenForMap: List<Pair<View, Int>> = emptyList()
+            navigation?.setOnMapExpandedChange { expanded ->
+                if (expanded) {
+                    hiddenForMap = listOfNotNull<View>(statusPanel, addTip).map { it to it.visibility }
+                    hiddenForMap.forEach { (view, _) -> view.visibility = View.GONE }
+                } else {
+                    hiddenForMap.forEach { (view, visibility) -> view.visibility = visibility }
+                    hiddenForMap = emptyList()
+                }
+            }
             androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
                 val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 (statusPanel.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bars.top + dp(64) }.also { statusPanel.layoutParams = it }
@@ -512,7 +524,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (productMode && placingTip) cancelPlacement() else super.onBackPressed()
+        if (productMode && placingTip) cancelPlacement() else if (navigation?.collapseMap() != true) super.onBackPressed()
     }
 
     override fun onResume() {
