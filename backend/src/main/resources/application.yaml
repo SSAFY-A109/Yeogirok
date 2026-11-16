@@ -41,6 +41,9 @@ yeogirok:
     owner-user-id: ${COURSE_SEED_OWNER_USER_ID:}
     unpublish: ${COURSE_SEED_UNPUBLISH:}
     reseed: ${COURSE_SEED_RESEED:}
+  main:
+    # 메인 인기 장소(API-093)에 공식 코스를 "그 장소를 담은 여행방 1곳"으로 세어 넣는다(S15P31A109-231). 사용자 기록이 쌓이면 false.
+    include-official-courses: true
   record:
     # 통합 기록 초안(API-064·065) 보관 기간. 노션 제안값이다(팀 미확정).
     draft-retention: 24h

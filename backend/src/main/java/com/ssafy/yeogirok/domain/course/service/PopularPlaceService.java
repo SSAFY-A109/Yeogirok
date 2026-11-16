@@ -4,19 +4,26 @@ import static java.util.stream.Collectors.groupingBy;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.category.TravelCategory;
+import com.ssafy.yeogirok.domain.course.MainProperties;
+import com.ssafy.yeogirok.domain.course.OfficialAccount;
 import com.ssafy.yeogirok.domain.course.dto.PopularPlaceListResponse;
 import com.ssafy.yeogirok.domain.course.repository.ImportedPlace;
 import com.ssafy.yeogirok.domain.course.repository.ImportedPlaceRepository;
+import com.ssafy.yeogirok.domain.course.seed.CourseSeedProperties;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.room.dto.PlaceInfo;
@@ -27,27 +34,23 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 메인 인기 장소(API-093, 명세 {@code specs/main-api.md} 3). 최근 30일 공개 코스에서 가져온 후보를 장소별로 묶어 서로 다른
- * 대상 방 수 내림차순(같으면 장소 식별값 오름차순)으로 최대 5개. 30일 후보 행을 읽어 서비스에서 묶는다(명세 5절 8).
+ * 대상 방 수 내림차순(같으면 무작위)으로 최대 5개. 30일 후보 행을 읽어 서비스에서 묶는다(명세 5절 8).
+ * 설정이 켜져 있으면 공식 코스 방도 "그 장소를 담은 여행방 1곳"으로 기간 없이 더한다(S15P31A109-231).
  */
 @Service
 @RequiredArgsConstructor
+@EnableConfigurationProperties(MainProperties.class)
 public class PopularPlaceService {
 
 	static final int MAX_ITEMS = 5;
-	/** 장소 식별값 오름차순(명세 5절 9). null 이 먼저다. */
-	private static final Comparator<PlaceKey> KEY_ORDER = Comparator
-		.comparing(PlaceKey::provider)
-		.thenComparing(PlaceKey::providerPlaceId, Comparator.nullsFirst(Comparator.naturalOrder()))
-		.thenComparing(PlaceKey::name, Comparator.nullsFirst(Comparator.naturalOrder()))
-		.thenComparing(PlaceKey::latitude, Comparator.nullsFirst(Comparator.naturalOrder()))
-		.thenComparing(PlaceKey::longitude, Comparator.nullsFirst(Comparator.naturalOrder()))
-		.thenComparing(PlaceKey::address, Comparator.nullsFirst(Comparator.naturalOrder()));
 	/** 표시값은 가장 최근 후보, 같은 시각이면 후보 ID 큰 것. */
 	private static final Comparator<ImportedPlace> LATEST = Comparator.comparing(ImportedPlace::importedAt)
 		.thenComparing(ImportedPlace::roomPlaceId);
 
 	private final ImportedPlaceRepository importedPlaceRepository;
 	private final CategoryNames categoryNames;
+	private final MainProperties mainProperties;
+	private final CourseSeedProperties seedProperties;
 	private final Clock clock;
 
 	/**
@@ -76,12 +79,22 @@ public class PopularPlaceService {
 			throw new BusinessException(ExceptionType.NOT_ALLOWED_VALUE, "category: 없는 카테고리입니다.");
 		}
 		ImportWindow window = ImportWindow.now(clock);
-		List<Ranked> top = importedPlaceRepository.findImported(category, window.start(), window.end()).stream()
+		List<ImportedPlace> rows = new ArrayList<>(
+			importedPlaceRepository.findImported(category, window.start(), window.end()));
+		if (mainProperties.includeOfficialCourses()) {
+			rows.addAll(importedPlaceRepository.findOfficialCoursePlaces(category, OfficialAccount.PROVIDER,
+				OfficialAccount.SUBJECT, seedProperties.ownerUserId()));
+		}
+		List<Ranked> places = new ArrayList<>(rows.stream()
 			.collect(groupingBy(imported -> PlaceKey.of(imported.place())))
 			.entrySet().stream()
 			.map(group -> new Ranked(group.getKey(), group.getValue().stream().max(LATEST).orElseThrow().place(),
 				group.getValue().stream().map(ImportedPlace::roomId).distinct().count()))
-			.sorted(Comparator.comparingLong(Ranked::rooms).reversed().thenComparing(Ranked::key, KEY_ORDER))
+			.toList());
+		// 같은 방 수끼리는 무작위: 섞은 뒤 방 수로만 정렬한다(정렬은 안정적이라 섞인 순서가 남는다).
+		Collections.shuffle(places, ThreadLocalRandom.current());
+		List<Ranked> top = places.stream()
+			.sorted(Comparator.comparingLong(Ranked::rooms).reversed())
 			.limit(MAX_ITEMS)
 			.toList();
 		Map<String, String> names = categoryNames.of(top.stream().map(ranked -> ranked.display().getCategoryCode())
