@@ -5,7 +5,7 @@ import {
   type CategoriesResponseDto,
   type Category,
   type Region,
-  type RegionsResponseDto,
+  type RegionListResponseDto,
 } from "@/features/common/model";
 
 /** API-079 여행 컨셉 카테고리 목록. */
@@ -14,8 +14,9 @@ export async function getCategories(signal?: AbortSignal): Promise<Category[]> {
   return toCategories(data);
 }
 
-/** API-078 관심 지역 목록(시/도와 그 아래 시/군/구). */
-export async function getRegions(signal?: AbortSignal): Promise<Region[]> {
-  const { data } = await api.get<RegionsResponseDto>("/regions", { signal });
-  return toRegions(data);
+/** API-078 추천 지역 계층 목록. `parentCode`가 없으면 시·도, 시·도 code면 그 시·도의 시·군·구다. */
+export async function getRegions(parentCode: string | null, signal?: AbortSignal): Promise<Region[]> {
+  const params = parentCode === null ? undefined : { parentCode };
+  const { data } = await api.get<RegionListResponseDto>("/regions", { params, signal });
+  return toRegions(data, parentCode);
 }
