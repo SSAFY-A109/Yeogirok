@@ -2,6 +2,7 @@ package com.ssafy.yeogirok.domain.place.service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
@@ -9,6 +10,8 @@ import com.ssafy.yeogirok.domain.place.dto.PlaceSearchResponse;
 import com.ssafy.yeogirok.domain.place.tour.TourApiClient;
 import com.ssafy.yeogirok.domain.place.tour.TourApiException;
 import com.ssafy.yeogirok.domain.place.tour.TourKeywordQuery;
+import com.ssafy.yeogirok.domain.place.tour.TourPlace;
+import com.ssafy.yeogirok.domain.place.tour.TourRegionCodes;
 import com.ssafy.yeogirok.domain.place.tour.TourSearchPage;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
@@ -29,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>TourAPI 가 검색 조건을 파라미터 오류로 거절하면 P002, 그 밖의 실패(키 없음 포함)는 P003</li>
  * </ul>
  * 좌표가 없는 항목은 담을 수 없어 빼므로 한 쪽이 limit 보다 적을 수 있다. totalCount 는 TourAPI 값 그대로다.
+ * 화성시 일반구처럼 옛 시 코드도 부르는 곳은 두 결과를 쪽 단위로 잇고 totalCount 는 둘의 합이다({@link #joined}).
  */
 @Slf4j
 @Service
@@ -45,14 +49,14 @@ public class PlaceSearchService {
 		int size = PageSize.resolve(limit);
 		int pageNo = decodePage(cursor, size);
 
-		TourSearchPage page;
+		Result result;
 		try {
-			// TODO 지역 목록(API-078)을 정할 때 시·도 코드를 TourAPI 기준과 맞춘다. TourAPI 는 전남·광주를 lDongRegnCd 12 로
-			//  주고 예전 코드(46·29)로는 0건이다. 078 이 예전 코드를 쓰면 여기서 바꿔 넘긴다(추천 PlaceRecommendationService 도 같다).
-			page = tourApiClient.searchKeyword(new TourKeywordQuery(keyword,
-				regionCode == null ? null : regionCode.substring(0, 2),
-				regionCode == null || regionCode.length() == 2 ? null : regionCode.substring(2),
-				pageNo, size));
+			// regionCode 는 지역 목록(API-078)의 법정동 코드라 TourAPI lDongRegnCd·lDongSignguCd 와 같은 체계다(전남광주 12).
+			String sido = TourRegionCodes.sido(regionCode);
+			List<String> sigungus = TourRegionCodes.sigungus(regionCode);
+			result = sigungus.size() <= 1
+				? single(keyword, sido, sigungus.isEmpty() ? null : sigungus.getFirst(), pageNo, size)
+				: joined(keyword, sido, sigungus.get(0), sigungus.get(1), pageNo, size);
 		} catch (TourApiException e) {
 			if (e.isInvalidRequest()) {
 				// 검색 조건(특수문자 섞인 검색어 등)을 TourAPI 가 받지 않았다. 다시 시도해도 같으므로 장애(P003)가 아니라 조건 오류다.
@@ -62,9 +66,39 @@ public class PlaceSearchService {
 			log.warn("장소 검색 중 TourAPI 를 쓰지 못했습니다: {}", e.getMessage());
 			throw new BusinessException(ExceptionType.PLACE_PROVIDER_UNAVAILABLE);
 		}
-		boolean hasNext = (long) pageNo * size < page.totalCount();
-		return new PlaceSearchResponse(page.places().stream().map(PlaceSearchResponse.Item::from).toList(),
-			hasNext ? encodePage(pageNo + 1, size) : null, page.totalCount());
+		return new PlaceSearchResponse(result.places().stream().map(PlaceSearchResponse.Item::from).toList(),
+			result.hasNext() ? encodePage(pageNo + 1, size) : null, result.totalCount());
+	}
+
+	/** 응답 한 쪽. totalCount 는 부른 TourAPI 결과 수의 합이다. */
+	private record Result(List<TourPlace> places, int totalCount, boolean hasNext) {
+	}
+
+	private Result single(String keyword, String sido, String sigungu, int pageNo, int size) {
+		TourSearchPage page = tourApiClient.searchKeyword(new TourKeywordQuery(keyword, sido, sigungu, pageNo, size));
+		return new Result(page.places(), page.totalCount(), (long) pageNo * size < page.totalCount());
+	}
+
+	/**
+	 * 고른 시·군·구 결과 쪽들 뒤에 옛 시 코드(화성시 590, {@link TourRegionCodes}) 결과 쪽들을 잇는다. TourAPI 는 좌표 없는 항목을
+	 * 빼고 돌려줘 두 결과를 항목 단위로 잘라 붙일 수 없어 쪽 단위로 잇는다. 그래서 고른 시·군·구의 마지막 쪽은 limit 보다 적을 수
+	 * 있다. 쪽마다 TourAPI 를 두 번 부른다(고른 시·군·구 쪽으로 그 결과 수를, 옛 코드 쪽으로 나머지를).
+	 */
+	private Result joined(String keyword, String sido, String selected, String legacy, int pageNo, int size) {
+		TourSearchPage first = tourApiClient.searchKeyword(new TourKeywordQuery(keyword, sido, selected, pageNo, size));
+		int firstPages = pages(first.totalCount(), size);
+		boolean inFirst = pageNo <= firstPages;
+		// 고른 시·군·구 쪽이면 옛 코드는 결과 수만 필요해 한 건만 받는다.
+		TourSearchPage second = tourApiClient.searchKeyword(inFirst
+			? new TourKeywordQuery(keyword, sido, legacy, 1, 1)
+			: new TourKeywordQuery(keyword, sido, legacy, pageNo - firstPages, size));
+		int lastPage = firstPages + pages(second.totalCount(), size);
+		return new Result(inFirst ? first.places() : second.places(), first.totalCount() + second.totalCount(),
+			pageNo < lastPage);
+	}
+
+	private static int pages(int totalCount, int size) {
+		return (totalCount + size - 1) / size;
 	}
 
 	private static String keyword(String q) {

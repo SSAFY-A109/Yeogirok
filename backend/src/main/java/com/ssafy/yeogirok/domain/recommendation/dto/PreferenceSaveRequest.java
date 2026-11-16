@@ -17,7 +17,7 @@ import tools.jackson.databind.JsonNode;
  * API-033 요청.
  * <ul>
  *   <li>version: 조건 version. 생략 C001, null·정수 아님 C002</li>
- *   <li>regionCode: 생략·null C001, 문자열 아님 C002, 시/군/구 법정동 코드 5자리 숫자가 아니면 C003</li>
+ *   <li>regionCode: 생략·null C001, 문자열 아님 C002, 시/군/구 법정동 코드 5자리 숫자가 아니면 C003(지역 목록에 없는 코드도 서비스에서 C003)</li>
  *   <li>categoryCodes: 생략·null C001, 배열 아님·문자열 아닌 항목 C002, 비었거나 없는 코드 C003. 중복은 합친다</li>
  *   <li>skipped: 생략·null 이면 false, 불리언 아님 C002, true 면 C003(건너뛰기 없음)</li>
  * </ul>

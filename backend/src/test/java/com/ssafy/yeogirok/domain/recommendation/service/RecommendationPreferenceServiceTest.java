@@ -28,6 +28,7 @@ import com.ssafy.yeogirok.domain.room.service.RoomService;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestRegions;
 import com.ssafy.yeogirok.support.TestUsers;
 
 @DataJpaTest
@@ -58,6 +59,7 @@ class RecommendationPreferenceServiceTest {
 	void setUp() {
 		clock.set(NOW);
 		TestUsers.insertActive(em.getEntityManager(), OWNER, FRIEND, STRANGER);
+		TestRegions.insertGangwon(em.getEntityManager());
 		roomId = roomService.create(OWNER, new RoomCreateCommand("강릉 여행", null, null, TransportMode.CAR)).id();
 		roomInvitationService.accept(FRIEND,
 			roomInvitationService.getOrCreateInvitation(OWNER, roomId).inviteToken());
@@ -103,6 +105,18 @@ class RecommendationPreferenceServiceTest {
 			new PreferenceSaveCommand(1, "51210", List.of("FOOD"))))
 			.isInstanceOfSatisfying(BusinessException.class,
 				e -> assertThat(e.getExceptionType()).isEqualTo(ExceptionType.VERSION_MISMATCH));
+	}
+
+	@Test
+	void 지역_목록에_없거나_시도인_regionCode는_C003이고_저장하지_않는다() {
+		for (String regionCode : List.of("99999", "46110", "51")) {
+			assertThatThrownBy(() -> preferenceService.save(OWNER, roomId,
+				new PreferenceSaveCommand(1, regionCode, List.of("CAFE"))))
+				.isInstanceOfSatisfying(BusinessException.class,
+					e -> assertThat(e.getExceptionType()).isEqualTo(ExceptionType.NOT_ALLOWED_VALUE));
+		}
+
+		assertThat(preferenceService.get(OWNER, roomId).version()).isEqualTo(1);
 	}
 
 	@Test

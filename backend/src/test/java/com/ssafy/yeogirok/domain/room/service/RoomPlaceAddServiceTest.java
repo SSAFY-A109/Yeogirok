@@ -54,6 +54,7 @@ import com.ssafy.yeogirok.support.CommittedRoomData;
 import com.ssafy.yeogirok.support.FakeTourApiClient;
 import com.ssafy.yeogirok.support.FixedLegalDongResolver;
 import com.ssafy.yeogirok.support.MutableClock;
+import com.ssafy.yeogirok.support.TestRegions;
 import com.ssafy.yeogirok.support.TestUsers;
 
 /**
@@ -117,7 +118,10 @@ class RoomPlaceAddServiceTest {
 		addService.externalTimeout(RoomPlaceAddService.DEFAULT_EXTERNAL_TIMEOUT);
 		owner = newUserId();
 		friend = newUserId();
-		inTransaction(() -> TestUsers.insertActive(em.getEntityManager(), owner, friend));
+		inTransaction(() -> {
+			TestUsers.insertActive(em.getEntityManager(), owner, friend);
+			TestRegions.insertGangwon(em.getEntityManager());
+		});
 		roomId = room(owner);
 		roomInvitationService.accept(friend, roomInvitationService.getOrCreateInvitation(owner, roomId).inviteToken());
 		cafe = String.valueOf(nextContentId++);
