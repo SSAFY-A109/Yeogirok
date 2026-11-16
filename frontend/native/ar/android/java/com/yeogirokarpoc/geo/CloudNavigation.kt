@@ -317,7 +317,8 @@ class CloudNavigation(private val activity: Activity, private val viewport: Fram
             if (fresh) for (i in 0 until points.length()) {
                 val point = points.getJSONObject(i)
                 if (PublicTipPolicy.inMap(NavigationPolicy.distance(sample!!.latitude, sample.longitude,
-                        point.getDouble("latitude"), point.getDouble("longitude")))) visible.put(point)
+                        point.getDouble("latitude"), point.getDouble("longitude")),
+                        point.optDouble("radiusMeters", PublicTipPolicy.MAP_RADIUS_METERS))) visible.put(point)
             }
             mapView?.updatePoints(visible)
             if (!placing) visitLocation?.let { onLocation?.invoke(JSONObject(it)) }

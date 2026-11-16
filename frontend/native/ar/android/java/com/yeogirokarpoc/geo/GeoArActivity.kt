@@ -307,7 +307,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                     text = if (publicTips) "주변 공개 팁 ${count}개" else if (exploring || localTip != null) "저장한 팁 " + count + "개" else "팁 남길 자리"
                     textSize = 12f; typeface = theme.medium; setTextColor(theme.foreground); includeFontPadding = false
                 }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(4) })
-                contentDescription = if (publicTips) "지도는 50m 이내 팁 표시. 눌러 5m 이내 팁 선택" else "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
+                contentDescription = if (publicTips) "지도는 주변 공개 팁 위치 표시. 눌러 5m 이내 팁 선택" else "이 기기에 저장한 팁. 눌러 복원할 팁 선택"
                 setOnClickListener {
                     val choices = if (publicTips) explorerTips.filter { PublicTipPolicy.inCamera(restoredTipDistances.get()[it.getString("id")]) } else explorerTips
                     if (choices.isEmpty()) {
@@ -670,7 +670,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
             next.forEach { points.put(it.getJSONObject("cloudRecord").getJSONObject("discoveryLocation")) }
         })
         nearbyLabel?.text = "주변 공개 팁 ${next.size}개"
-        nearbyLabel?.contentDescription = "지도 50m 이내 팁 ${next.size}개, 카메라 5m 이내 표시"
+        nearbyLabel?.contentDescription = "지도에 주변 팁 ${next.size}개, 카메라 5m 이내 표시"
         return true
     }
 
@@ -1339,7 +1339,7 @@ class GeoArActivity : Activity(), GLSurfaceView.Renderer {
                         publicTips && nearbyFailed -> "일부 팁의 위치를 복원하지 못했어요."
                         else -> trackingMessage
                     }
-                } else if (exploring && explorerTips.isEmpty()) if (publicTips) "50m 안에 공개된 팁이 없어요. ＋로 첫 팁을 남겨 보세요." else "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
+                } else if (exploring && explorerTips.isEmpty()) if (publicTips) "주변에 공개된 팁이 없어요. ＋로 첫 팁을 남겨 보세요." else "아직 저장한 팁이 없어요. ＋로 첫 팁을 남겨 보세요."
                 else if (exploring) centerHint else productSaveHint
                 if (status.text.toString() != nextStatus) status.text = nextStatus
                 if (publicTips) retry.visibility = if (!placingTip && restoreFailed) View.VISIBLE else View.GONE

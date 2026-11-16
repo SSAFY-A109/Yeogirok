@@ -4,6 +4,8 @@ import { parseServerDateTime } from "../../lib/date";
 import { isWithinAdjustRadius } from "../footprint/model";
 
 export const TIP_SEARCH_RADIUS_METERS = 50;
+/** 서버가 알려 주는 탐색 반경(`appliedRadiusMeters`)의 상한. 앱은 반경을 보내지 않고 서버 설정을 따른다(2026-11-16, 100m 확대 대비). */
+const MAX_TIP_SEARCH_RADIUS_METERS = 1000;
 export const TIP_INTERACTION_RADIUS_METERS = 50;
 export const TIP_BODY_MAX_LENGTH = 120;
 export const TIP_TYPE_LABELS = { PHOTO: "포토", FOOD: "맛집", CAFE: "카페", TIP: "꿀팁", TMI: "TMI" } as const;
@@ -86,7 +88,7 @@ export type TipSearchItemDto = {
 export type SearchTipsResponseDto = {
   items: TipSearchItemDto[];
   nextCursor: string | null;
-  appliedRadiusMeters: 50;
+  appliedRadiusMeters: number;
   totalCount: number;
   interactionRadiusMeters: 5 | typeof TIP_INTERACTION_RADIUS_METERS;
 };
@@ -268,14 +270,16 @@ export function toTipSearchPage(value: unknown) {
   const dto = object(value, "tipSearch");
   const { interactionRadiusMeters } = dto;
 
-  if (!Array.isArray(dto.items) || dto.items.length > 10 || dto.appliedRadiusMeters !== TIP_SEARCH_RADIUS_METERS ||
+  const appliedRadiusMeters = number(dto.appliedRadiusMeters, "appliedRadiusMeters", MAX_TIP_SEARCH_RADIUS_METERS);
+
+  if (!Array.isArray(dto.items) || dto.items.length > 10 || appliedRadiusMeters <= 0 ||
     (interactionRadiusMeters !== 5 && interactionRadiusMeters !== TIP_INTERACTION_RADIUS_METERS)) {
     throw new ContractMismatchError("tipSearch");
   }
 
   const items = dto.items.map((value: unknown) => {
     const item = object(value, "items");
-    const distanceMeters = number(item.distanceMeters, "distanceMeters", TIP_SEARCH_RADIUS_METERS);
+    const distanceMeters = number(item.distanceMeters, "distanceMeters", appliedRadiusMeters);
     const canInteract = boolean(item.canInteract, "canInteract");
 
     if (canInteract !== (distanceMeters <= interactionRadiusMeters)) {
@@ -294,7 +298,7 @@ export function toTipSearchPage(value: unknown) {
     };
   });
 
-  return { items, nextCursor: cursor(dto.nextCursor), totalCount: count(dto.totalCount, "totalCount"), appliedRadiusMeters: TIP_SEARCH_RADIUS_METERS, interactionRadiusMeters };
+  return { items, nextCursor: cursor(dto.nextCursor), totalCount: count(dto.totalCount, "totalCount"), appliedRadiusMeters, interactionRadiusMeters };
 }
 
 export function toTipDetail(value: unknown) {
