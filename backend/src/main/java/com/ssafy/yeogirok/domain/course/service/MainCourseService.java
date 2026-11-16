@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ssafy.yeogirok.domain.category.CategoryNames;
 import com.ssafy.yeogirok.domain.category.TravelCategory;
 import com.ssafy.yeogirok.domain.course.OfficialAccount;
+import com.ssafy.yeogirok.domain.course.seed.CourseSeedProperties;
 import com.ssafy.yeogirok.domain.course.dto.CourseSearchCondition;
 import com.ssafy.yeogirok.domain.course.dto.MainCourseListResponse;
 import com.ssafy.yeogirok.domain.course.repository.CourseCandidate;
@@ -48,6 +49,7 @@ public class MainCourseService {
 	private final CourseCards courseCards;
 	private final PublicCourseReader publicCourseReader;
 	private final CategoryNames categoryNames;
+	private final CourseSeedProperties seedProperties;
 	private final Clock clock;
 
 	/** 없는 category CO004, regionCode 형식 C003. 다음 쪽이 없어 nextCursor 는 늘 null(옛 앱의 cursor·limit 는 받지 않는다). */
@@ -71,7 +73,8 @@ public class MainCourseService {
 		for (int from = 0; from < ids.size(); from += STATS_CHUNK) {
 			List<Long> chunk = ids.subList(from, Math.min(from + STATS_CHUNK, ids.size()));
 			publicCourseRepository.countPhotos(chunk).forEach(stat -> stats.put(stat.recordId(), stat));
-			official.addAll(publicCourseRepository.findOfficialIds(chunk, OfficialAccount.PROVIDER, OfficialAccount.SUBJECT));
+			official.addAll(publicCourseRepository.findOfficialIds(chunk, OfficialAccount.PROVIDER, OfficialAccount.SUBJECT,
+				seedProperties.ownerUserId()));
 		}
 		return candidates.stream().map(course -> {
 			CoursePhotoStats stat = stats.get(course.id());

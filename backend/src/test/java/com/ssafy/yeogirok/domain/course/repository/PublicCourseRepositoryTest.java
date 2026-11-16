@@ -153,6 +153,25 @@ class PublicCourseRepositoryTest {
 
 		assertThat(repository.findOfficialIds(List.of(course.getId(), byOfficial.getId(), joinedOnly.getId()),
 			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER,
-			com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT)).containsExactly(byOfficial.getId());
+			com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT, null)).containsExactly(byOfficial.getId());
+	}
+
+	/** 227 리뷰: 적재 주인을 설정한 회원이 만든 방도 공식 코스다(공식 계정 코스도 그대로). */
+	@Test
+	void 적재_주인으로_설정한_회원이_만든_방도_공식_코스다() {
+		long official = em.persist(com.ssafy.yeogirok.domain.user.domain.User.signUp(
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER, com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT,
+			null, "공식", null, NOW)).getId();
+		TravelRecord byOfficial = fixture.record(fixture.room(DAY1, official));
+		long owner = em.persist(com.ssafy.yeogirok.domain.user.domain.User.signUp(
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER, "12345", null, "주인", null, NOW)).getId();
+		TravelRecord byOwner = fixture.record(fixture.room(DAY1, owner));
+		em.flush();
+		em.clear();
+
+		assertThat(repository.findOfficialIds(List.of(course.getId(), byOfficial.getId(), byOwner.getId()),
+			com.ssafy.yeogirok.domain.course.OfficialAccount.PROVIDER,
+			com.ssafy.yeogirok.domain.course.OfficialAccount.SUBJECT, owner))
+			.containsExactlyInAnyOrder(byOfficial.getId(), byOwner.getId());
 	}
 }

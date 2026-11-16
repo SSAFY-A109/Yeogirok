@@ -88,9 +88,13 @@ public interface PublicCourseRepository extends Repository<TravelRecord, Long> {
 		+ " where v.recordId in :recordIds group by v.recordId")
 	List<CoursePhotoStats> countPhotos(@Param("recordIds") Collection<Long> recordIds);
 
-	/** 공식 계정({@code OfficialAccount})이 만든 방의 기록 ID(API-015 사용자 코스 자리 구분). */
+	/**
+	 * 공식 계정({@code OfficialAccount}) 또는 적재 주인으로 설정한 회원이 만든 방의 기록 ID(API-015 사용자 코스 자리 구분).
+	 * 적재는 주인 설정이 있으면 그 회원으로 넣으므로(SeedOwner) 둘 다 공식으로 본다. ownerUserId 가 null 이면 공식 계정만.
+	 */
 	@Query("select r.id from TravelRecord r, RoomMember m, User u where m.roomId = r.roomId and m.creator = true"
-		+ " and u.id = m.userId and u.provider = :provider and u.providerSubject = :subject and r.id in :recordIds")
+		+ " and u.id = m.userId and ((u.provider = :provider and u.providerSubject = :subject) or u.id = :ownerUserId)"
+		+ " and r.id in :recordIds")
 	List<Long> findOfficialIds(@Param("recordIds") Collection<Long> recordIds, @Param("provider") OAuthProvider provider,
-		@Param("subject") String subject);
+		@Param("subject") String subject, @Param("ownerUserId") Long ownerUserId);
 }
