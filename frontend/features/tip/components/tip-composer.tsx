@@ -8,7 +8,8 @@ import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useKeyboardFollowingScroll } from "@/hooks/use-keyboard-following-scroll";
 import { isPlacementExpired, type CloudPlacement, type TipPhoto } from "../native/ar/contracts";
-import { TIP_TYPE_LABELS, TIP_TYPE_VALUES, type TipTypeDto } from "../model";
+import { TIP_TYPE_LABELS, TIP_TYPE_VALUES, type TipPoint, type TipTypeDto } from "../model";
+import { TipLocationSection, type TipLocationState } from "./tip-location-section";
 
 const icons = {
   back: require("@/native/ar/android/assets/figma/38bb0.svg"),
@@ -30,6 +31,12 @@ type Props = {
   error: string | null;
   failed: boolean;
   editingLocked?: boolean;
+  location: TipLocationState;
+  /** 지도에서 직접 고친 팁 위치. 없으면 잰 위치. */
+  chosenPoint: TipPoint | null;
+  onRemeasure: () => void;
+  onChoosePoint: (point: TipPoint) => void;
+  onResetPoint: () => void;
   onBody: (value: string) => void;
   onType: (value: TipTypeDto) => void;
   onPhoto: () => void;
@@ -73,6 +80,7 @@ export function TipComposer(props: Props) {
             <Text className="flex-1 text-label" numberOfLines={2}>{expired ? "자리 다시 확인 필요" : "자리 저장됨 · 현재 장소"}</Text>
             <Pressable disabled={editingDisabled} onPress={props.onReplace} accessibilityRole="button" accessibilityLabel="팁 위치 다시 놓기" testID="ar-tip.replace" className="min-h-touch justify-center pl-2"><Text className="text-label text-primary">다시 놓기</Text></Pressable>
           </View>
+          <TipLocationSection location={props.location} chosen={props.chosenPoint} disabled={editingDisabled} onRemeasure={props.onRemeasure} onChoose={props.onChoosePoint} onReset={props.onResetPoint} />
           <View className="gap-3">
             <FieldLabel label="종류" required />
             <View className="flex-row flex-wrap gap-2">

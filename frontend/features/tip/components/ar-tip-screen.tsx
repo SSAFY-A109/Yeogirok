@@ -12,7 +12,7 @@ import type { UploadFile } from "@/features/media/upload";
 import { useCreateTip, useDiscoverTips } from "../api/queries";
 import type { CreateTipInput } from "../api/tip.api";
 import { getTipErrorMessage } from "../errors";
-import { normalizeTipBody, type TipTypeDto } from "../model";
+import { normalizeTipBody, toTipLocationEvidence, type LocationEvidenceDto, type TipPoint, type TipTypeDto } from "../model";
 import { addTipPhoto, arErrorMessage, placeTip } from "../native/ar";
 import type { CloudPlacement, TipPhoto } from "../native/ar/contracts";
 import { measureTipLocation, openPublicTipExplorer, prepareTipPhotoUpload, toTipSpatialRequest } from "../native/ar/public";
@@ -37,6 +37,10 @@ function PublicArTipScreen() {
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const [recoveryStored, setRecoveryStored] = useState(true);
+  const [measured, setMeasured] = useState<LocationEvidenceDto | null>(null);
+  const [measuring, setMeasuring] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [chosenPoint, setChosenPoint] = useState<TipPoint | null>(null);
   const locked = useRef(false);
   const focused = useRef(false);
   const draftPlacement = useRef<CloudPlacement | null>(null);
@@ -45,6 +49,28 @@ function PublicArTipScreen() {
   const { mutateAsync: discover } = useDiscoverTips();
   const create = useCreateTip();
   const upload = useUploadMedia();
+
+  /** 쓰기 화면 지도에 보여 줄 현재 위치를 잰다. 등록할 때는 위치 증거로 다시 잰다. */
+  const refreshLocation = useCallback(async () => {
+    setMeasuring(true);
+    setLocationError(null);
+
+    try {
+      const next = await measureTipLocation();
+
+      if (focused.current) {
+        setMeasured(next);
+      }
+    } catch (cause) {
+      if (focused.current) {
+        setLocationError(arErrorMessage(cause));
+      }
+    } finally {
+      if (focused.current) {
+        setMeasuring(false);
+      }
+    }
+  }, []);
 
   const acceptPlacement = useCallback((next: CloudPlacement | null) => {
     if (!next || !focused.current) {
@@ -56,8 +82,11 @@ function PublicArTipScreen() {
     setPlacement(next);
     setFailed(false);
     setUncertain(false);
+    setMeasured(null);
+    setChosenPoint(null);
     router.setParams({ arMode: "compose" });
-  }, []);
+    void refreshLocation();
+  }, [refreshLocation]);
 
   const run = useCallback(async (label: string, action: () => Promise<void>) => {
     if (locked.current) {
@@ -126,6 +155,8 @@ function PublicArTipScreen() {
     setPlacement(null);
     setFailed(false);
     setUncertain(false);
+    setMeasured(null);
+    setChosenPoint(null);
     submission.current = null;
     router.setParams({ arMode: "explore" });
     returnToCamera();
@@ -166,7 +197,7 @@ function PublicArTipScreen() {
     void run(photo ? "사진 확인 후 팁을 등록하고 있어요" : "팁을 등록하고 있어요", async () => {
       try {
         const normalized = normalizeTipBody(body);
-        const signature = JSON.stringify([normalized, tipType, placement.anchorId, photo?.photoName]);
+        const signature = JSON.stringify([normalized, tipType, placement.anchorId, photo?.photoName, chosenPoint?.latitude, chosenPoint?.longitude]);
 
         if (!submission.current || submission.current.signature !== signature) {
           let uploadIds: string[] = [];
@@ -180,7 +211,18 @@ function PublicArTipScreen() {
             uploadIds = [ready.uploadId];
           }
 
-          const location = await measureTipLocation();
+          const fresh = await measureTipLocation();
+
+          if (focused.current) {
+            setMeasured(fresh);
+          }
+
+          const location = toTipLocationEvidence(fresh, chosenPoint);
+
+          if (location === null) {
+            throw new Error("TIP_POINT_OUT_OF_RANGE");
+          }
+
           submission.current = { signature, input: { idempotencyKey: createIdempotencyKey(), request: {
             body: normalized, category: tipType, uploadIds, location, ...toTipSpatialRequest(placement),
           } } };
@@ -194,6 +236,8 @@ function PublicArTipScreen() {
         setBody("");
         setPhoto(null);
         setTipType(null);
+        setMeasured(null);
+        setChosenPoint(null);
         setFailed(false);
         setUncertain(false);
         submission.current = null;
@@ -215,6 +259,14 @@ function PublicArTipScreen() {
 
   return <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background" testID="ar-tip.screen">
     {pendingId !== null ? <TipPublication tipId={pendingId} recoveryStored={recoveryStored} onClose={returnToCamera} onComplete={returnToCamera} /> : placement ? <TipComposer placement={placement} body={body} tipType={tipType} photo={photo} busy={busy} error={error} failed={failed} editingLocked={uncertain}
+      location={{ measured, measuring, error: locationError }} chosenPoint={chosenPoint}
+      onRemeasure={() => {
+        void refreshLocation();
+      }}
+      onChoosePoint={setChosenPoint}
+      onResetPoint={() => {
+        setChosenPoint(null);
+      }}
       onBody={(value) => {
         setBody(value.replace(/\r\n?/g, "\n"));
       }} onType={setTipType} onPhoto={selectPhoto}

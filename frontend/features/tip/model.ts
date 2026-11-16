@@ -1,6 +1,7 @@
 import { ApiError } from "../../api/errors";
 import { assertId, ContractMismatchError, toKnownEnum } from "../../lib/contract";
 import { parseServerDateTime } from "../../lib/date";
+import { isWithinAdjustRadius } from "../footprint/model";
 
 export const TIP_SEARCH_RADIUS_METERS = 50;
 export const TIP_INTERACTION_RADIUS_METERS = 50;
@@ -407,6 +408,26 @@ export function validateTipLocation(location: LocationEvidenceDto): LocationEvid
   number(location.accuracyMeters, "location.accuracyMeters");
   parseServerDateTime(location.capturedAt, "location.capturedAt");
   return { latitude: location.latitude, longitude: location.longitude, accuracyMeters: location.accuracyMeters, capturedAt: location.capturedAt };
+}
+
+/** 지도에서 직접 고친 팁 위치. */
+export type TipPoint = { latitude: number; longitude: number };
+
+/**
+ * 서버에 보낼 위치 증거. 지도에서 핀을 고쳤으면 그 좌표를 쓰고, 정확도와 잰 시각은 방금 잰 값을 그대로 쓴다.
+ * 고친 핀이 방금 잰 위치에서 발자취와 같은 범위(`FOOTPRINT_ADJUST_RADIUS_METERS`, 2026-11-16 사용자 결정)를 넘으면 `null`이다.
+ * 서버가 고친 좌표를 사용자 위치로 받아도 되는지는 백엔드 확인 전이다(TBD).
+ */
+export function toTipLocationEvidence(measured: LocationEvidenceDto, chosen: TipPoint | null): LocationEvidenceDto | null {
+  if (chosen === null) {
+    return measured;
+  }
+
+  if (!isWithinAdjustRadius(measured, chosen)) {
+    return null;
+  }
+
+  return { ...measured, latitude: chosen.latitude, longitude: chosen.longitude };
 }
 
 export function validateTipUploads(value: string[] | undefined): string[] | undefined {
