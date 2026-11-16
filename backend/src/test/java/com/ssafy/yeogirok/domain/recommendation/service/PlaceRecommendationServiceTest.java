@@ -357,6 +357,30 @@ class PlaceRecommendationServiceTest {
 	}
 
 	@Test
+	void 화성시_일반구는_옛_화성시_590도_같은_분류로_부른다() {
+		// TourAPI 에 화성 장소 다수가 아직 41590 으로 있다. 랜드마크 3번 × (동탄구 597, 화성시 590).
+		assertThat(PlaceRecommendationService.planQueries(List.of(TravelCategory.SIGHT), "41597", 100, 12))
+			.extracting(TourAreaQuery::lDongRegnCd, TourAreaQuery::lDongSignguCd, TourAreaQuery::lclsSystm2)
+			.containsExactly(
+				tuple("41", "597", "VE01"), tuple("41", "597", "VE04"), tuple("41", "597", "VE05"),
+				tuple("41", "590", "VE01"), tuple("41", "590", "VE04"), tuple("41", "590", "VE05"));
+	}
+
+	@Test
+	void 화성시_일반구에서_두_배로_부르면_상한을_넘을_때_590은_분류_없이_한_번만_부른다() {
+		List<TourAreaQuery> queries = PlaceRecommendationService.planQueries(List.of(TravelCategory.values()),
+			"41591", 100, 12);
+
+		// 대분류 8번 × 2 = 16 > 12 → 만세구 591 은 대분류 8번, 화성시 590 은 분류 없이 1번.
+		assertThat(queries).hasSize(9);
+		assertThat(queries.subList(0, 8)).allSatisfy(query -> {
+			assertThat(query.lDongSignguCd()).isEqualTo("591");
+			assertThat(query.lclsSystm1()).isNotNull();
+		});
+		assertThat(queries.getLast()).isEqualTo(new TourAreaQuery("41", "590", null, null, 100));
+	}
+
+	@Test
 	void TourAPI_결과가_없으면_빈_목록으로_성공한다() {
 		savePreferences("NATURE");
 

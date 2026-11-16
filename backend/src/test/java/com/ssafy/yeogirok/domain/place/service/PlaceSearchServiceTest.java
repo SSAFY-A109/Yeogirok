@@ -81,6 +81,49 @@ class PlaceSearchServiceTest {
 			new TourKeywordQuery("카페", "51", "150", 1, 10));
 	}
 
+	static final TourPlace DONGTAN = new TourPlace("1", "동탄 카페", "경기 화성시 동탄구", new BigDecimal("37.2"),
+		new BigDecimal("127.07"), null, "FD", "FD02", "FD020100");
+	static final TourPlace HWASEONG = new TourPlace("2", "화성 카페", "경기도 화성시", new BigDecimal("37.19"),
+		new BigDecimal("126.83"), null, "FD", "FD02", "FD020100");
+
+	@Test
+	void 화성시_일반구는_일반구_결과_쪽들_뒤에_옛_화성시_590_결과_쪽들을_잇는다() {
+		// 동탄구 597 은 25건(10개씩 3쪽), 옛 화성시 590 은 15건(2쪽). 합쳐 40건, 5쪽.
+		tourApi.willFind("카페", "597", 25, DONGTAN);
+		tourApi.willFind("카페", "590", 15, HWASEONG);
+
+		PlaceSearchResponse first = service.search("카페", "41597", null, 10);
+		PlaceSearchResponse third = service.search("카페", "41597", PlaceSearchService.encodePage(3, 10), 10);
+		PlaceSearchResponse fourth = service.search("카페", "41597", PlaceSearchService.encodePage(4, 10), 10);
+		PlaceSearchResponse fifth = service.search("카페", "41597", PlaceSearchService.encodePage(5, 10), 10);
+
+		assertThat(first.items()).extracting(PlaceSearchResponse.Item::providerPlaceId).containsExactly("1");
+		assertThat(first.totalCount()).isEqualTo(40);
+		assertThat(first.nextCursor()).isEqualTo(PlaceSearchService.encodePage(2, 10));
+		assertThat(third.items()).extracting(PlaceSearchResponse.Item::providerPlaceId).containsExactly("1");
+		assertThat(third.nextCursor()).isEqualTo(PlaceSearchService.encodePage(4, 10));
+		assertThat(fourth.items()).extracting(PlaceSearchResponse.Item::providerPlaceId).containsExactly("2");
+		assertThat(fourth.nextCursor()).isEqualTo(PlaceSearchService.encodePage(5, 10));
+		assertThat(fifth.nextCursor()).isNull();
+		assertThat(tourApi.keywordCalls()).containsExactly(
+			// 일반구 쪽이면 590 은 결과 수만 보려고 한 건만 받는다.
+			new TourKeywordQuery("카페", "41", "597", 1, 10), new TourKeywordQuery("카페", "41", "590", 1, 1),
+			new TourKeywordQuery("카페", "41", "597", 3, 10), new TourKeywordQuery("카페", "41", "590", 1, 1),
+			new TourKeywordQuery("카페", "41", "597", 4, 10), new TourKeywordQuery("카페", "41", "590", 1, 10),
+			new TourKeywordQuery("카페", "41", "597", 5, 10), new TourKeywordQuery("카페", "41", "590", 2, 10));
+	}
+
+	@Test
+	void 화성시_일반구에_결과가_없으면_첫_쪽부터_옛_화성시_결과다() {
+		tourApi.willFind("카페", "590", 3, HWASEONG);
+
+		PlaceSearchResponse response = service.search("카페", "41591", null, 10);
+
+		assertThat(response.items()).extracting(PlaceSearchResponse.Item::providerPlaceId).containsExactly("2");
+		assertThat(response.totalCount()).isEqualTo(3);
+		assertThat(response.nextCursor()).isNull();
+	}
+
 	@ParameterizedTest
 	@NullSource
 	@ValueSource(strings = {"", "   "})

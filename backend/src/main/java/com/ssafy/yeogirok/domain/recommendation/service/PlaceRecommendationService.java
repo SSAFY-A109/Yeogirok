@@ -30,6 +30,7 @@ import com.ssafy.yeogirok.domain.place.tour.TourApiClient;
 import com.ssafy.yeogirok.domain.place.tour.TourAreaQuery;
 import com.ssafy.yeogirok.domain.place.tour.TourCategoryMapper;
 import com.ssafy.yeogirok.domain.place.tour.TourPlace;
+import com.ssafy.yeogirok.domain.place.tour.TourRegionCodes;
 import com.ssafy.yeogirok.domain.recommendation.RecommendationPreferences;
 import com.ssafy.yeogirok.domain.recommendation.RecommendationProperties;
 import com.ssafy.yeogirok.domain.recommendation.dto.PlaceRecommendationCommand;
@@ -246,10 +247,39 @@ public class PlaceRecommendationService {
 	 *   <li>일부만 쓰면 중분류마다 부른다. 대분류 전체로 받으면 쓰지 않는 중분류가 받을 개수를 차지해 고른 카테고리 후보가
 	 *       비어 버린다(예: 랜드마크만 고르면 VE 12개 중 3개만 필요).</li>
 	 *   <li>합이 {@code maxCalls} 를 넘으면 중분류가 가장 많은 대분류부터 대분류 전체 조회로 바꿔 줄인다(TourAPI 일일 한도).</li>
+	 *   <li>TourAPI 에 옛 시 코드로 남은 장소가 많은 곳(화성시 일반구 → 41590, {@link TourRegionCodes})은 옛 코드도 같은 분류로
+	 *       부른다. 그러면 상한을 넘는 경우(예: 모든 카테고리 8번 × 2)에는 고른 시·군·구는 분류대로, 옛 코드는 분류 없이 한 번만
+	 *       부른다. 받은 장소는 어차피 확정 매핑으로 고른 카테고리만 남긴다.</li>
 	 * </ul>
 	 */
 	public static List<TourAreaQuery> planQueries(List<TravelCategory> categories, String regionCode, int rows,
 		int maxCalls) {
+		// regionCode 는 지역 목록(API-078)의 법정동 코드라 TourAPI lDongRegnCd·lDongSignguCd 와 같은 체계다(전남광주 12).
+		String sido = TourRegionCodes.sido(regionCode);
+		List<String> sigungus = TourRegionCodes.sigungus(regionCode);
+		String selected = sigungus.getFirst();
+		List<String> legacies = sigungus.subList(1, sigungus.size());
+
+		List<TourAreaQuery> queries = new ArrayList<>();
+		List<Classification> shared = classify(categories, maxCalls / sigungus.size());
+		if (shared.size() * sigungus.size() <= maxCalls) {
+			sigungus.forEach(sigungu -> shared.forEach(c -> queries.add(c.query(sido, sigungu, rows))));
+			return queries;
+		}
+		classify(categories, maxCalls - legacies.size()).forEach(c -> queries.add(c.query(sido, selected, rows)));
+		legacies.forEach(legacy -> queries.add(new TourAreaQuery(sido, legacy, null, null, rows)));
+		return queries;
+	}
+
+	/** 조회 한 번의 분류 조건. middle 이 null 이면 대분류 전체다. */
+	private record Classification(String large, String middle) {
+
+		TourAreaQuery query(String sido, String sigungu, int rows) {
+			return new TourAreaQuery(sido, sigungu, large, middle, rows);
+		}
+	}
+
+	private static List<Classification> classify(List<TravelCategory> categories, int maxCalls) {
 		Map<String, Set<String>> middlesByLarge = new LinkedHashMap<>();
 		for (TravelCategory category : categories) {
 			for (String middle : TourCategoryMapper.middleCodesOf(category)) {
@@ -273,18 +303,15 @@ public class PlaceRecommendationService {
 			wholeLarges.add(widest);
 		}
 
-		// regionCode 는 지역 목록(API-078)의 법정동 코드라 TourAPI lDongRegnCd·lDongSignguCd 와 같은 체계다(전남광주 12).
-		String sido = regionCode.substring(0, 2);
-		String sigungu = regionCode.substring(2);
-		List<TourAreaQuery> queries = new ArrayList<>();
+		List<Classification> classifications = new ArrayList<>();
 		middlesByLarge.forEach((large, middles) -> {
 			if (wholeLarges.contains(large)) {
-				queries.add(new TourAreaQuery(sido, sigungu, large, null, rows));
+				classifications.add(new Classification(large, null));
 			} else {
-				middles.forEach(middle -> queries.add(new TourAreaQuery(sido, sigungu, large, middle, rows)));
+				middles.forEach(middle -> classifications.add(new Classification(large, middle)));
 			}
 		});
-		return queries;
+		return classifications;
 	}
 
 	private static int callCount(Map<String, Set<String>> middlesByLarge, Set<String> wholeLarges) {

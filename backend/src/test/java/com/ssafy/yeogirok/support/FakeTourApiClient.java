@@ -21,6 +21,9 @@ import com.ssafy.yeogirok.domain.place.tour.TourSearchPage;
  */
 public class FakeTourApiClient implements TourApiClient {
 
+	/** 분류 조건 없이(lclsSystm1 없음) 부른 지역 조회의 결과 키. */
+	public static final String ALL = "ALL";
+
 	private final Map<String, List<TourPlace>> results = new ConcurrentHashMap<>();
 	private final Set<String> failing = ConcurrentHashMap.newKeySet();
 	private final Map<String, Duration> delays = new ConcurrentHashMap<>();
@@ -48,6 +51,11 @@ public class FakeTourApiClient implements TourApiClient {
 	/** 이 검색어로 찾으면 쪽 번호와 관계없이 이 결과를 준다. */
 	public void willFind(String keyword, int totalCount, TourPlace... places) {
 		keywordResults.put(keyword, new TourSearchPage(List.of(places), totalCount));
+	}
+
+	/** 이 검색어를 이 시군구 코드(3자리)로 찾으면 쪽 번호와 관계없이 이 결과를 준다. 시군구 없는 결과보다 먼저 본다. */
+	public void willFind(String keyword, String sigungu, int totalCount, TourPlace... places) {
+		keywordResults.put(keyword + "@" + sigungu, new TourSearchPage(List.of(places), totalCount));
 	}
 
 	/** 상세 조회에 이 장소를 준다. */
@@ -93,8 +101,8 @@ public class FakeTourApiClient implements TourApiClient {
 	@Override
 	public List<TourPlace> areaBasedList(TourAreaQuery query) {
 		calls.add(query);
-		String classification = query.lclsSystm2() == null ? query.lclsSystm1()
-			: query.lclsSystm1() + "/" + query.lclsSystm2();
+		String classification = query.lclsSystm1() == null ? ALL
+			: query.lclsSystm2() == null ? query.lclsSystm1() : query.lclsSystm1() + "/" + query.lclsSystm2();
 		Duration delay = delays.get(classification);
 		if (delay != null) {
 			try {
@@ -116,7 +124,9 @@ public class FakeTourApiClient implements TourApiClient {
 		if (searchFailure != null) {
 			throw searchFailure;
 		}
-		return keywordResults.getOrDefault(query.keyword(), new TourSearchPage(List.of(), 0));
+		TourSearchPage bySigungu = keywordResults.get(query.keyword() + "@" + query.lDongSignguCd());
+		return bySigungu != null ? bySigungu
+			: keywordResults.getOrDefault(query.keyword(), new TourSearchPage(List.of(), 0));
 	}
 
 	/** 상세 조회가 응답 전에 기다린다(마감 시간 확인용). */
