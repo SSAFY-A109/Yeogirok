@@ -20,6 +20,7 @@ import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRemoveResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceRestoreResponse;
 import com.ssafy.yeogirok.domain.room.dto.RoomPlaceState;
+import com.ssafy.yeogirok.domain.room.dto.SourceRecordResponse;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
 import com.ssafy.yeogirok.domain.room.repository.RoomPlaceRepository;
@@ -31,7 +32,7 @@ import com.ssafy.yeogirok.global.geo.LegalDong;
 import com.ssafy.yeogirok.global.geo.LegalDongResolver;
 
 /**
- * 여행방 후보 장소 조회·직접 추가·빼기·복원(API-028·031·032·094).
+ * 여행방 후보 장소 조회·직접 추가·빼기·복원(API-028·031·032·094). 후보 목록의 원본 코스(sourceRecord)는 {@link RoomPlaceSources}.
  *
  * <p>후보를 바꾸는 요청은 방 행을 잠가 한 줄로 세우고, 실제로 바뀐 경우에만 여행방 version 을 1 올린다. 이미 뺀 후보 빼기·
  * 이미 있는 후보 복원은 바꾸는 것이 없어 version 을 보지도 올리지도 않고 성공한다(동시에 같은 요청이 와도 오류 없이).
@@ -51,13 +52,15 @@ public class RoomPlaceService {
 	private final RoomVersions roomVersions;
 	private final ScheduleItemRepository scheduleItemRepository;
 	private final LegalDongResolver legalDongResolver;
+	private final RoomPlaceSources roomPlaceSources;
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
 
 	public RoomPlaceService(RoomPlaceRepository roomPlaceRepository, PlaceRepository placeRepository,
 		CategoryNames categoryNames, RoomFinder roomFinder, RoomVersions roomVersions,
 		ScheduleItemRepository scheduleItemRepository, LegalDongResolver legalDongResolver,
-		PlatformTransactionManager transactionManager, Clock clock) {
+		RoomPlaceSources roomPlaceSources, PlatformTransactionManager transactionManager, Clock clock) {
+		this.roomPlaceSources = roomPlaceSources;
 		this.roomPlaceRepository = roomPlaceRepository;
 		this.placeRepository = placeRepository;
 		this.categoryNames = categoryNames;
@@ -79,8 +82,9 @@ public class RoomPlaceService {
 			case ALL -> roomPlaceRepository.findByRoomIdOrderByIdAsc(roomId);
 		};
 		Map<String, String> names = categoryNamesOf(places);
-		return new RoomPlaceListResponse(places.stream().map(place -> RoomPlaceListResponse.Item.from(place, names))
-			.toList(), room.getVersion());
+		Map<Long, SourceRecordResponse> sourceRecords = roomPlaceSources.of(places);
+		return new RoomPlaceListResponse(places.stream()
+			.map(place -> RoomPlaceListResponse.Item.from(place, names, sourceRecords)).toList(), room.getVersion());
 	}
 
 	/**

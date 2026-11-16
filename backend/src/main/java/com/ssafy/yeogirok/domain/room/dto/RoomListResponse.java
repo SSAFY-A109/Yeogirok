@@ -9,7 +9,7 @@ import com.ssafy.yeogirok.domain.room.repository.RoomMemberView;
 
 /**
  * API-020 참여 여행방 목록. 다음 쪽이 없으면 nextCursor 는 null.
- * placeCount 는 빼지 않은 후보 수. recordIds 는 여행 기록 API 를 만들기 전이라 빈 배열이다.
+ * placeCount 는 빼지 않은 후보 수. recordIds 는 이 방의 여행 기록 ID 다(방마다 하나라 비었거나 하나, 앱은 첫 값을 쓴다).
  */
 public record RoomListResponse(List<Item> items, String nextCursor) {
 
@@ -29,18 +29,19 @@ public record RoomListResponse(List<Item> items, String nextCursor) {
 		/**
 		 * @param members    이 방의 현재 참여자(요청자 포함)
 		 * @param placeCount 빼지 않은 후보 수
+		 * @param recordIds  이 방의 여행 기록 ID(방마다 하나라 비었거나 하나)
 		 * @param hasUnread  요청자에게 안 읽은 타인 메시지가 있는지
 		 */
-		public static Item of(TravelRoom room, List<RoomMemberView> members, int placeCount, Long requesterId,
-			boolean hasUnread) {
+		public static Item of(TravelRoom room, List<RoomMemberView> members, int placeCount, List<Long> recordIds,
+			Long requesterId, boolean hasUnread) {
 			Long lastRead = members.stream()
 				.filter(member -> member.userId().equals(requesterId))
 				.findFirst()
 				.map(RoomMemberView::lastReadMessageId)
 				.orElse(null);
 			return new Item(room.getId(), room.getTitle(), room.getStartDate(), room.getEndDate(),
-				room.getTransportMode(), members.size(), members.stream().map(Member::from).toList(), placeCount, List.of(),
-				new ChatReadState(lastRead, hasUnread));
+				room.getTransportMode(), members.size(), members.stream().map(Member::from).toList(), placeCount,
+				List.copyOf(recordIds), new ChatReadState(lastRead, hasUnread));
 		}
 	}
 

@@ -25,8 +25,8 @@ import lombok.NoArgsConstructor;
  * 여행방 후보 장소. 노션 DDL {@code room_places} 와 맞춘다. 장소 정보는 공통 {@link Place} 에 두고 place_id 로 참조하며,
  * 이 행은 누가·어떤 경로로 담았는지와 삭제 상태만 갖는다. 같은 장소를 여러 번 담으면 후보도 여러 개다.
  *
- * <p>DDL 과 다른 점: {@code source_record_id} FK 를 걸지 않는다. API-030 이 원본 기록을 확인한 뒤에만 채운다.
- * TODO {@code source_record_id → travel_records(id)} FK 는 기록 삭제 정책과 함께 정해 새 Flyway 파일로 건다.
+ * <p>{@code source_record_id → travel_records(id)} FK 는 Flyway V5 에 있다(ON DELETE SET NULL, 엔티티는 ID 만 갖는다).
+ * API-030 이 원본 기록을 확인한 뒤에만 채운다.
  * 부분 인덱스(WHERE removed_at IS NULL)·컬럼 기본값은 H2 비호환이라 일반 인덱스로 두고 Flyway V1 에 맡긴다.
  *
  * <p>후보를 빼면 {@code removed_at} 만 채우고 행은 지우지 않는다. 일정 항목이 이 행을 계속 참조하고, 언제든 복원할 수 있다.
@@ -64,7 +64,7 @@ public class RoomPlace {
 	@Column(name = "source_type", nullable = false, length = 20)
 	private PlaceSourceType sourceType;
 
-	/** COURSE 로 가져온 원본 기록. 원본이 지워져도 후보는 남는다. */
+	/** COURSE 로 가져온 원본 기록. 원본이 지워져도 후보는 남고 이 값만 null 이 된다(FK ON DELETE SET NULL). */
 	@Column(name = "source_record_id")
 	private Long sourceRecordId;
 

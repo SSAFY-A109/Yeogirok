@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 
+import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.room.RoomTestConfig;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateCommand;
 import com.ssafy.yeogirok.domain.room.dto.RoomCreateResponse;
@@ -216,6 +217,20 @@ class RoomServiceTest {
 		assertThat(detail.version()).isEqualTo(1);
 		assertThat(detail.places()).isEmpty();
 		assertThat(detail.schedule()).isNull();
+	}
+
+	@Test
+	void 기록이_있는_방은_목록과_상세의_recordIds_에_그_기록_ID_가_있다() {
+		Long withRecord = createRoom(OWNER);
+		Long withoutRecord = createRoom(OWNER);
+		Long recordId = em.persistAndFlush(TravelRecord.create(withRecord, "강릉 여행", NOW)).getId();
+		em.clear();
+
+		assertThat(roomService.getMyRooms(OWNER, null, null).items())
+			.extracting(RoomListResponse.Item::id, RoomListResponse.Item::recordIds)
+			.containsExactly(tuple(withoutRecord, List.of()), tuple(withRecord, List.of(recordId)));
+		assertThat(roomService.getRoom(OWNER, withRecord).recordIds()).containsExactly(recordId);
+		assertThat(roomService.getRoom(OWNER, withoutRecord).recordIds()).isEmpty();
 	}
 
 	@Test

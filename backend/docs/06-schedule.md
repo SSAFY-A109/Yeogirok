@@ -145,8 +145,7 @@
 ## 3. 남은 일
 
 - **API-029 검색·AI 추천 장소 담기**: 완료. 추천 담기(AI)와 검색 담기(SEARCH, 장소 검색 API-026)를 `RoomPlaceAddService` 가 한다.
-- **API-030 공개 코스에서 가져오기**: `RoomPlaceImportService` 에 만들었다. 남은 것은 아래 둘이다.
-  - `room_places.source_record_id` FK(`RoomPlace` TODO)는 기록 삭제 정책과 함께 정해 새 Flyway 파일로 건다.
-  - API-028·022의 `sourceRecord` 는 아직 null 이다(`RoomPlaceListResponse` TODO).
+- **API-030 공개 코스에서 가져오기**: 완료(`RoomPlaceImportService`). API-028·022 의 `sourceRecord` 는 `RoomPlaceSources` 가
+  채우고, `room_places.source_record_id` FK 는 V5 에 걸었다(원본 기록이 지워지면 출처만 비운다).
 - **API-011 기록 작업 권한**: `RECORD_GENERATION`·`RECEIPT_OCR` 조회 정책은 기록 도메인에서 추가한다(`JobAccessPolicy` TODO).
 - 029·030 도 후보를 바꾸면 `RoomVersions.increaseAfterPlacesChanged` 를 거쳐야 `scheduleNeedsRecalculation` 이 켜진다.

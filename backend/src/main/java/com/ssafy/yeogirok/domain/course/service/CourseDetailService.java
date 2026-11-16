@@ -6,11 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ssafy.yeogirok.domain.course.dto.CourseDetailResponse;
+import com.ssafy.yeogirok.domain.course.repository.PublicCourseRepository;
+import com.ssafy.yeogirok.domain.course.repository.ViewableCourse;
 import com.ssafy.yeogirok.domain.record.entity.ActualVisit;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
-import com.ssafy.yeogirok.domain.record.repository.TravelRecordRepository;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
-import com.ssafy.yeogirok.domain.room.repository.TravelRoomRepository;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 
@@ -24,19 +24,17 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CourseDetailService {
 
-	private final TravelRecordRepository travelRecordRepository;
-	private final TravelRoomRepository travelRoomRepository;
+	private final PublicCourseRepository publicCourseRepository;
 	private final PublicCourseReader publicCourseReader;
 	private final CourseAuthors courseAuthors;
 
-	/** 없음·방 삭제·미게시는 구분하지 않고 CO001. */
+	/** 없음·방 삭제·미게시는 구분하지 않고 CO001({@link PublicCourseRepository#findViewable}). */
 	@Transactional(readOnly = true)
 	public CourseDetailResponse getDetail(Long courseId) {
-		TravelRecord record = travelRecordRepository.findById(courseId)
-			.filter(found -> found.getPublishedAt() != null)
+		ViewableCourse course = publicCourseRepository.findViewable(courseId)
 			.orElseThrow(() -> new BusinessException(ExceptionType.COURSE_UNAVAILABLE));
-		TravelRoom room = travelRoomRepository.findByIdAndDeletedAtIsNull(record.getRoomId())
-			.orElseThrow(() -> new BusinessException(ExceptionType.COURSE_UNAVAILABLE));
+		TravelRecord record = course.record();
+		TravelRoom room = course.room();
 		CourseSnapshot snapshot = publicCourseReader.snapshot(courseId);
 		List<ActualVisit> visits = snapshot.visits();
 		CoursePeriod period = CoursePeriod.of(room.getStartDate(), room.getEndDate(),

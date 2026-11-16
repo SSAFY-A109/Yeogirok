@@ -1,5 +1,6 @@
 package com.ssafy.yeogirok.domain.record.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,6 +36,11 @@ public interface TravelRecordRepository extends JpaRepository<TravelRecord, Long
 		+ " and room.deletedAt is null and r.publishedAt is not null and r.id < :beforeId order by r.id desc")
 	List<TravelRecord> findJoinedPublishedRecords(@Param("userId") Long userId, @Param("beforeId") Long beforeId,
 		Limit limit);
+
+	/** 방들의 기록 ID(방마다 하나, 상태 무관). 기록이 없는 방은 결과에 없다. 여행방 목록·상세(API-020·022) recordIds. */
+	@Query("select new com.ssafy.yeogirok.domain.record.repository.RoomRecordId(r.roomId, r.id)"
+		+ " from TravelRecord r where r.roomId in :roomIds")
+	List<RoomRecordId> findIdsByRoomIds(@Param("roomIds") Collection<Long> roomIds);
 
 	@Query("select r.roomId from TravelRecord r where r.id = :id")
 	Optional<Long> findRoomIdById(@Param("id") Long id);

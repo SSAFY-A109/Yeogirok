@@ -59,7 +59,7 @@ docker compose -f infra/docker-compose.local.yml up -d
 
 | 항목 | 해당 테이블 | 넣기 전에 확인할 것 |
 | --- | --- | --- |
-| FK | 거의 모든 테이블(`room_messages`, `footprints`, `ar_tips`, `actual_visits`, `visit_images`, `room_members`, `room_places.source_record_id`, `user_push_tokens` 등) | 지금 코드의 저장·삭제 순서가 FK 를 어기지 않는지. H2 테스트에는 FK 가 없어 잡히지 않는다 |
+| FK | 거의 모든 테이블(`room_messages`, `footprints`, `ar_tips`, `actual_visits`, `visit_images`, `room_members`, `user_push_tokens` 등). `room_places.source_record_id` 는 V5 에서 걸었다 | 지금 코드의 저장·삭제 순서가 FK 를 어기지 않는지. H2 테스트에는 FK 가 없어 잡히지 않는다 |
 | ENUM 타입 | `places`, `travel_rooms`, `travel_records`, `actual_visits`, `ar_tips`, `ar_tip_reactions`, `users` | 지금은 `varchar` + CHECK 다. ENUM 타입으로 바꾸면 엔티티 매핑도 바꿔야 저장이 된다 |
 | 열 기본값 | 여러 테이블의 `created_at`·`updated_at` 등 | 지금은 서비스 시계로 값을 넣는다 |
 | 부분 인덱스 | `room_places`(`WHERE removed_at IS NULL`), `room_members`(`uq_room_members_creator`), `footprints` | 지금은 일반 인덱스다 |
