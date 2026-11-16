@@ -189,8 +189,9 @@ function selectPlaces(list: RoomPlaceList) {
   return list.places;
 }
 
-export function useRooms() {
-  return useQuery(roomsOptions());
+/** 시트처럼 열 때만 필요한 곳은 `enabled: false`로 미룬다. */
+export function useRooms({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ ...roomsOptions(), enabled });
 }
 
 export function useRoom(roomId: number) {

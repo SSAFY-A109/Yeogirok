@@ -200,7 +200,7 @@ function CategoryGrid({ categories, selected, onSelect }: { categories: Category
   );
 }
 
-/** 새 여행방에 이어 담을 때(API-029) 장소를 가리키는 값. 공급자를 모르거나 장소 식별값이 없으면 담을 수 없어 `null`이다. */
+/** 여행방에 담을 때(API-029) 장소를 가리키는 값. 공급자를 모르거나 장소 식별값이 없으면 담을 수 없어 `null`이다. */
 function toCarryOverPlaceRef(place: PopularPlace): PlaceRefDto | null {
   if (place.provider === "UNKNOWN" || !place.providerPlaceId) {
     return null;
@@ -253,7 +253,7 @@ function RankingSection({ category }: { category: string | null }) {
       )}
       <RoomSelectSheet
         visible={sheetPlace !== undefined}
-        placeIds={sheetPlace ? [sheetPlace.key] : []}
+        places={{ kind: "search", placeRefs: carryOverPlaceRef === null ? [] : [carryOverPlaceRef] }}
         placeNames={sheetPlace ? [[sheetPlace.name, sheetPlace.areaName].filter(Boolean).join(" · ")] : []}
         onClose={() => {
           setSheetPlace(undefined);

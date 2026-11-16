@@ -1,16 +1,6 @@
 import type { CourseSearchCondition } from "@/features/course/api/course.api";
 import { COURSE_DURATIONS, COURSE_TRANSPORT_MODES, COURSE_TRANSPORT_MODE_LABEL, type CourseTransportModeDto } from "@/features/course/model";
 
-export type Room = {
-  id: string;
-  name: string;
-  dates: string;
-  memberCount: number;
-  placeCount: number;
-};
-
-export type AddPlacesInput = { roomId: string; placeIds: string[] };
-
 export type AddPlacesResult = { roomName: string; addedCount: number };
 
 // #region 코스 검색 조건

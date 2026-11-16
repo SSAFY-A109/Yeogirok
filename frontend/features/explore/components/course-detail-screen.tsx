@@ -95,9 +95,14 @@ function PlacePicker({ course }: { course: CourseDetail }) {
       }} />
       <RoomSelectSheet
         visible={sheetOpen}
-        placeIds={selectedPlaces.map((place) => {
-          return place.id;
-        })}
+        places={{
+          kind: "course",
+          recordId: course.id,
+
+          visitIds: selectedPlaces.map((place) => {
+            return place.visitId;
+          }),
+        }}
         placeNames={selectedNames}
         onClose={() => {
           setSheetOpen(false);
