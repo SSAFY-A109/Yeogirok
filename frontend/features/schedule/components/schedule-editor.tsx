@@ -1,9 +1,10 @@
 import { router } from "expo-router";
-import { ArrowLeftRight, ChevronRight, GripVertical, Hourglass, Info, Trash2, TriangleAlert, type LucideIcon } from "lucide-react-native";
+import { ArrowLeftRight, Bus, Car, ChevronRight, Clock, GripVertical, Hourglass, Info, MapPin, Trash2, TriangleAlert, type LucideIcon } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 
 import { BottomCta } from "@/components/ui/bottom-cta";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Screen } from "@/components/ui/screen";
@@ -12,7 +13,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { MapViewToggle } from "@/features/room/components/map-view-toggle";
 import { PlaceRouteMap } from "@/features/room/components/place-route-map";
-import { TRANSPORT_MODE_LABEL, type RoomDetail } from "@/features/room/model";
+import { TRANSPORT_MODE_LABEL, type RoomDetail, type TransportMode } from "@/features/room/model";
 import { SCHEDULE_DRAFT_MAX_WAIT_MS, useAdjustScheduleDraft, useRoomSchedule, useSaveSchedule } from "@/features/schedule/api/queries";
 import { DayChips, type DayChipItem } from "@/features/schedule/components/day-chips";
 import { DayPickerSheet } from "@/features/schedule/components/day-picker-sheet";
@@ -810,26 +811,55 @@ function UnplacedAction({ label, accessibilityLabel, locked, onPress, testID }: 
 
 // #region 하루 일정과 조정
 
-/** `10:00–18:00 · 5곳 · 머무는 시간 4시간 30분 · 이동 1시간 10분`. 계산 전 구간이 있으면 이동 시간을 빼고, 서버가 모르는 구간이 있으면 "정보 없음". */
-function getDaySummary(day: ScheduleDay, pendingTravel: boolean): string {
-  const parts: string[] = [];
+/** 하루 요약 한 칸. `known`이 아니면(계산 전·정보 없음) 값을 흐리게 보여 준다. */
+type DaySummaryCell = { icon: LucideIcon; label: string; value: string; known: boolean };
 
-  if (day.startTime !== null && day.endTime !== null) {
-    parts.push(`${day.startTime}–${day.endTime}`);
+/** 그날 이동 시간 합계. 계산 전 구간이 있으면 합계를 내지 않고, 서버가 모르는 구간이 있으면 "정보 없음". */
+function getTravelSummary(day: ScheduleDay, pendingTravel: boolean, calculating: boolean): Pick<DaySummaryCell, "value" | "known"> {
+  if (pendingTravel) {
+    return { value: calculating ? "계산하는 중" : "계산 전", known: false };
   }
 
-  parts.push(`${day.items.length}곳`);
-
-  if (day.items.length > 0) {
-    parts.push(`머무는 시간 ${formatDuration(getTotalStayMinutes(day.items))}`);
+  if (day.legs.length === 0) {
+    return { value: "없음", known: true };
   }
 
-  if (!pendingTravel && day.legs.length > 0) {
-    const travel = getTotalTravelMinutes(day.legs);
-    parts.push(travel === null ? "이동 시간 정보 없음" : `이동 ${formatDuration(travel)}`);
-  }
+  const travel = getTotalTravelMinutes(day.legs);
+  return travel === null ? { value: "정보 없음", known: false } : { value: formatDuration(travel), known: true };
+}
 
-  return parts.join(" · ");
+function getDaySummaryCells(day: ScheduleDay, transportMode: TransportMode, pendingTravel: boolean, calculating: boolean): DaySummaryCell[] {
+  const hasTime = day.startTime !== null && day.endTime !== null;
+
+  return [
+    { icon: Clock, label: "시간", value: hasTime ? `${day.startTime}–${day.endTime}` : "정하지 않음", known: hasTime },
+    { icon: MapPin, label: "장소", value: `${day.items.length}곳`, known: true },
+    { icon: Hourglass, label: "머무는 시간", value: formatDuration(getTotalStayMinutes(day.items)), known: true },
+    { icon: transportMode === "TRANSIT" ? Bus : Car, label: "이동", ...getTravelSummary(day, pendingTravel, calculating) },
+  ];
+}
+
+type DaySummaryProps = { day: ScheduleDay; transportMode: TransportMode; pendingTravel: boolean; calculating: boolean };
+
+/** 하루 요약(시간·장소 수·머무는 시간·이동)을 아이콘과 함께 2×2 칸으로 보여 준다. */
+function DaySummary({ day, transportMode, pendingTravel, calculating }: DaySummaryProps) {
+  return (
+    <View className="mx-5 flex-row flex-wrap gap-y-3 rounded-md bg-muted p-3" testID="schedule-draft.day-summary">
+      {getDaySummaryCells(day, transportMode, pendingTravel, calculating).map((cell) => {
+        return (
+          <View key={cell.label} accessible accessibilityLabel={`${cell.label} ${cell.value}`} className="w-1/2 flex-row items-center gap-2 pr-2">
+            <View className="h-8 w-8 items-center justify-center rounded-sm bg-card">
+              <Icon as={cell.icon} size={16} className="text-primary" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-caption text-muted-foreground">{cell.label}</Text>
+              <Text className={cn("text-label tabular-nums", cell.known ? "text-foreground" : "text-muted-foreground")}>{cell.value}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 type DraftDayProps = {
@@ -854,10 +884,8 @@ function DraftDay({ day, dayNumber, pendingTravelMessage, calculating, onExtendE
 
   return (
     <View className="gap-3" testID={`schedule-draft.day-${day.date}`}>
-      <View className="gap-1 px-5">
-        <Text accessibilityRole="header" className="text-label text-foreground">{`${dayNumber}일차 ${formatShortMonthDay(day.date)}`}</Text>
-        <Text className="text-caption text-foreground-secondary tabular-nums">{getDaySummary(day, pendingTravel)}</Text>
-      </View>
+      <Text accessibilityRole="header" className="px-5 text-label text-foreground">{`${dayNumber}일차 ${formatShortMonthDay(day.date)}`}</Text>
+      <DaySummary day={day} transportMode={draft.transportMode} pendingTravel={pendingTravel} calculating={calculating} />
       {pendingTravelMessage === null ? null : (
         <Notice testID="schedule-draft.uncalculated">
           <Text accessibilityLiveRegion="polite" className="text-caption text-foreground-secondary">{pendingTravelMessage}</Text>
@@ -869,7 +897,7 @@ function DraftDay({ day, dayNumber, pendingTravelMessage, calculating, onExtendE
         <Text className="px-5 text-caption text-muted-foreground">이날은 넣은 장소가 없어요</Text>
       ) : (
         <>
-          <ActionLegend />
+          <EditHelp />
           <ScheduleDayTimeline
             key={day.date}
             day={day}
@@ -908,26 +936,57 @@ function OverflowAction({ endTime, locked, onExtend }: { endTime: LocalTime | nu
   );
 }
 
-const ACTION_LEGEND: readonly { icon: LucideIcon; label: string }[] = [
-  { icon: ArrowLeftRight, label: "다른 날로 옮기기" },
-  { icon: Hourglass, label: "머무는 시간" },
-  { icon: GripVertical, label: "길게 눌러 끌어서 순서 바꾸기" },
-  { icon: Trash2, label: "왼쪽으로 밀어서 빼기" },
+const EDIT_HELP: readonly { icon: LucideIcon; title: string; description: string }[] = [
+  { icon: ArrowLeftRight, title: "다른 날로 옮기기", description: "다른 날에 넣거나 일정에서 빼요" },
+  { icon: Hourglass, title: "머무는 시간", description: "눌러서 이 장소에 머무는 시간을 바꿔요" },
+  { icon: GripVertical, title: "순서 바꾸기", description: "손잡이를 길게 누른 채 위아래로 끌어요" },
+  { icon: Trash2, title: "빼기", description: "카드를 왼쪽으로 밀면 빼기 버튼이 나와요" },
 ];
 
-/** 장소 카드 버튼 설명(W14). 버튼마다 접근성 이름이 있어 화면 낭독에서는 뺀다. */
-function ActionLegend() {
+/** "카드 편집 방법" 글자 버튼과 시트. 카드의 버튼·숨은 동작(길게 눌러 끌기, 밀어서 빼기)을 설명한다. */
+function EditHelp() {
+  const [open, setOpen] = useState(false);
+
+  const close = () => {
+    setOpen(false);
+  };
+
   return (
-    <View accessible={false} importantForAccessibility="no-hide-descendants" className="flex-row flex-wrap gap-x-4 gap-y-1 px-5">
-      {ACTION_LEGEND.map((item) => {
-        return (
-          <View key={item.label} className="flex-row items-center gap-1">
-            <Icon as={item.icon} size={14} className="text-muted-foreground" />
-            <Text className="text-caption text-muted-foreground">{item.label}</Text>
-          </View>
-        );
-      })}
-    </View>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="카드 편집 방법 보기"
+        className="h-touch flex-row items-center gap-1 self-start px-5"
+
+        onPress={() => {
+          setOpen(true);
+        }}
+
+        testID="schedule-draft.edit-help"
+      >
+        <Icon as={Info} size={16} className="text-icon" />
+        <Text className="text-label text-foreground-secondary">카드 편집 방법</Text>
+        <Icon as={ChevronRight} size={16} className="text-icon" />
+      </Pressable>
+      <BottomSheet visible={open} onClose={close} closeLabel="카드 편집 방법 닫기" expandable={false}>
+        <View className="gap-4 px-5 pb-4 pt-2" testID="schedule-draft.edit-help-sheet">
+          <Text accessibilityRole="header" className="text-h3 text-foreground">카드 편집 방법</Text>
+          {EDIT_HELP.map((item) => {
+            return (
+              <View key={item.title} accessible accessibilityLabel={`${item.title}. ${item.description}`} className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-md bg-muted">
+                  <Icon as={item.icon} size={20} className="text-icon" />
+                </View>
+                <View className="flex-1 gap-0.5">
+                  <Text className="text-label text-foreground">{item.title}</Text>
+                  <Text className="text-caption text-foreground-secondary">{item.description}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </BottomSheet>
+    </>
   );
 }
 
