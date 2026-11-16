@@ -40,8 +40,10 @@ public class DraftApplication {
 	/**
 	 * 판정 순서: 초안 없음·만료·다른 기록·SUCCEEDED 아님 RE011 → 반영됨 RE012 → draftVersion C004 → itemId 없음·중복 C003 →
 	 * 반영 항목의 영수증 자료 version 이 바뀜(키가 남아 있을 때만) 또는 근거 사진이 지워짐 C004 → 이미 이 초안으로 만든 방문 RE012.
+	 *
+	 * @return 반영할 초안 항목의 itemId → 근거 사진 ID(초안 순서). 방문을 저장한 뒤 사진을 연결하는 데 쓴다
 	 */
-	public void check(Long recordId, VisitAddCommand command) {
+	public Map<Integer, List<Long>> check(Long recordId, VisitAddCommand command) {
 		RecordDraft draft = draftStore.find(command.draftKey())
 			.filter(found -> found.recordId().equals(recordId))
 			.map(found -> found.asOf(clock.instant()))
@@ -59,6 +61,7 @@ public class DraftApplication {
 		if (actualVisitRepository.existsByRecordIdAndSourceDraftKey(recordId, draft.draftKey())) {
 			throw new BusinessException(ExceptionType.RECORD_DRAFT_ALREADY_APPLIED);
 		}
+		return applying.stream().collect(Collectors.toMap(RecordDraft.Item::itemId, RecordDraft.Item::sourcePhotoIds));
 	}
 
 	/**

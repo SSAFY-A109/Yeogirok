@@ -145,6 +145,40 @@ class DraftApplyServiceTest {
 		assertThat(draftStore.find(draftKey).orElseThrow().applied()).isTrue();
 	}
 
+	/** 235: 반영하면 초안 항목 방문에 근거 사진이 초안 순서대로 붙고(공개 선택 꺼짐), 직접 추가한 방문에는 안 붙는다. */
+	@Test
+	void 초안_항목_방문에_근거_사진을_순서대로_연결하고_직접_추가_방문에는_연결하지_않는다() {
+		Long second = em.persist(VisitImage.unlinked(recordId, FRIEND, "record-photo/b", NOW)).getId();
+		em.flush();
+		metadataReader.put("record-photo/b", new PhotoMetadata(PAID_AT.plusSeconds(1200), null, null));
+		String key = draftService.create(ME, recordId, new DraftCreateCommand(1, List.of(second, imageId),
+			List.of(new DraftCreateCommand.MaterialRef(MATERIAL_ID, 3)))).draftKey();
+
+		VisitAddResponse response = apply(1, key, 1, draftItem(1, 1), manualItem(2));
+
+		em.flush();  // 테스트 트랜잭션은 커밋하지 않아 연결 변경을 먼저 내보낸다
+		em.clear();
+		Long draftVisit = response.visitIds().get(0);
+		assertThat(List.of(em.find(VisitImage.class, imageId), em.find(VisitImage.class, second)))
+			.extracting(VisitImage::getVisitId, VisitImage::getPosition, VisitImage::isPublicSelected)
+			.containsExactly(tuple(draftVisit, 1, false), tuple(draftVisit, 2, false));  // 촬영 시각 순(초안 순서)
+	}
+
+	/** 235: 초안을 만든 뒤 사용자가 다른 방문에 연결한 사진은 반영할 때 옮기지 않는다. */
+	@Test
+	void 이미_다른_방문에_연결된_근거_사진은_그대로_둔다() {
+		Long other = apply(1, null, 0, manualItem(1)).visitIds().getFirst();
+		em.find(VisitImage.class, imageId).linkTo(other, 1);
+		em.flush();
+
+		VisitAddResponse response = apply(2, draftKey, 1, draftItem(1, 1));
+
+		em.flush();
+		em.clear();
+		assertThat(response.visitIds()).hasSize(1);
+		assertThat(em.find(VisitImage.class, imageId).getVisitId()).isEqualTo(other);
+	}
+
 	@Test
 	void 같은_초안을_두_번_반영하면_RE012_반영_표시를_지워도_DB_로_RE012() {
 		apply(1, draftKey, 1, draftItem(1, 1));
