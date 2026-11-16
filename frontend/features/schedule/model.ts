@@ -3,7 +3,7 @@ import { assertId, ContractMismatchError, toKnownEnum } from "../../lib/contract
 import { addDays, compareLocalDate, diffDays, formatServerDateTime, parseLocalDate, parseServerDateTime, type LocalDate } from "../../lib/date";
 
 // 일정(API-036~039·084) DTO는 서버 계약을 따른다. backend/dev의 schedule dto·draft 서비스와 backend/docs/06-schedule.md(2026-11-10)와 대조했다.
-// - 흐름: 초안 생성(037, 작업) → 초안 조회(038) → 화면에서 고치기(서버 호출 없음) → 다시 계산(084, 선택) → 저장(039).
+// - 흐름: 초안 생성(037, 작업) → 초안 조회(038) → 화면에서 고치기 → 다시 계산(084, 새 구간이 생기면 자동) → 저장(039).
 // - 서버는 장소 이름·카테고리를 주지 않는다. `roomPlaceId`로 여행방 후보 목록과 묶는다.
 // - 도착·출발 시각과 이동 시간은 서버가 계산한 값만 쓴다. 서버가 모르면 `null`이고 화면에서 만들지 않는다.
 
@@ -120,12 +120,13 @@ export type CreateScheduleDraftRequestDto = {
 /** API-084 요청의 항목. `fixed`를 생략하면 지금 값을 유지한다. */
 export type AdjustDraftItemDto = { itemId: number; roomPlaceId: number; visitDate: string; order: number; stayMinutes: number };
 
-/** API-084 요청. 바꿀 항목과 뺄 항목만 보낸다. */
+/** API-084 요청. 바꿀 항목과 뺄 항목만 보낸다. `days`는 일차 시각을 바꿀 때만 여행의 모든 날짜를 보낸다(생략하면 그대로). */
 export type AdjustScheduleDraftRequestDto = {
   baseVersion: number;
   draftVersion: number;
   items: AdjustDraftItemDto[];
   removeItemIds: number[];
+  days?: DayConditionDto[];
 };
 
 export type SaveScheduleItemDto = { itemId: number; roomPlaceId: number; order: number; stayMinutes: number; fixed: boolean };
@@ -728,25 +729,23 @@ export function moveItemToDay(layout: DraftLayout, itemId: number, toDate: Local
   };
 }
 
-/** 그날 안에서 항목을 한 칸 앞(-1)이나 뒤(1)로 옮긴다. 끝에서 더 갈 수 없으면 그대로 돌려준다. */
-export function moveItemWithinDay(layout: DraftLayout, itemId: number, direction: -1 | 1): DraftLayout {
+/** 그날 안에서 항목을 `toIndex` 자리로 옮긴다(끌어서 순서 바꾸기). 자리를 벗어나면 처음이나 끝으로 맞추고, 그날에 없는 항목이면 그날은 그대로 둔다. */
+export function moveItemToIndex(layout: DraftLayout, itemId: number, toIndex: number): DraftLayout {
   return {
     ...layout,
 
     days: layout.days.map((day) => {
-      const index = day.items.findIndex((item) => {
-        return item.itemId === itemId;
+      const item = day.items.find((candidate) => {
+        return candidate.itemId === itemId;
       });
 
-      const target = index + direction;
-
-      if (index === -1 || target < 0 || target >= day.items.length) {
+      if (item === undefined) {
         return day;
       }
 
-      const items = [...day.items];
-      [items[index], items[target]] = [items[target], items[index]];
-      return { ...day, items };
+      const rest = day.items.filter(isOtherItem(itemId));
+      const index = Math.min(Math.max(toIndex, 0), rest.length);
+      return { ...day, items: [...rest.slice(0, index), item, ...rest.slice(index)] };
     }),
   };
 }
@@ -770,6 +769,17 @@ export function setItemStay(layout: DraftLayout, itemId: number, stayMinutes: nu
           return item.itemId === itemId ? { ...item, stayMinutes: minutes } : item;
         }),
       };
+    }),
+  };
+}
+
+/** 그날 종료 시각을 바꾼다(시간이 모자랄 때 "종료 시각 늘리기"). 다시 계산·저장할 때 `days`로 함께 보낸다. */
+export function setDayEndTime(layout: DraftLayout, date: LocalDate, endTime: LocalTime): DraftLayout {
+  return {
+    ...layout,
+
+    days: layout.days.map((day) => {
+      return day.date === date ? { ...day, endTime } : day;
     }),
   };
 }
@@ -811,17 +821,10 @@ function itemIdsOf(items: readonly DraftLayoutItem[]): number[] {
   });
 }
 
-/** 그날 항목의 순서와 머무는 시간이 같은지. 다르면 그날 시각과 이동 시간은 다시 계산해야 맞다. */
+/** 그날 항목의 순서와 머무는 시간이 같은지. 다르면 그날 시각을 다시 맞춰야 한다. */
 function isSameDayItems(a: readonly DraftLayoutItem[], b: readonly DraftLayoutItem[]): boolean {
   return isSameSequence(itemIdsOf(a), itemIdsOf(b)) && a.every((item, index) => {
     return item.stayMinutes === b[index].stayMinutes;
-  });
-}
-
-/** 날마다 항목의 순서가 같은지. "순서 바꾸기"에서 바뀐 것이 있는지 볼 때 쓴다. */
-export function isSameLayoutOrder(a: DraftLayout, b: DraftLayout): boolean {
-  return a.days.length === b.days.length && a.days.every((day, index) => {
-    return isSameSequence(itemIdsOf(day.items), itemIdsOf(b.days[index].items));
   });
 }
 
@@ -831,31 +834,154 @@ function findLayoutDay(layout: DraftLayout, date: LocalDate): DraftLayoutDay | u
   });
 }
 
-/** 받은 초안과 달라진 날. 그날은 다시 계산하기 전까지 시각과 이동 시간을 보여 주지 않는다. */
+function isSameDayTimes(a: DayTimeRange | undefined, b: DayTimeRange): boolean {
+  return a !== undefined && a.startTime === b.startTime && a.endTime === b.endTime;
+}
+
+/** 받은 초안과 달라진 날(항목·순서·머무는 시간·일차 시각). 그날 시각은 화면에서 다시 맞춘다(`estimateEditedDay`). */
 export function getEditedDates(original: DraftLayout, edited: DraftLayout): LocalDate[] {
   return edited.days
     .filter((day) => {
-      return !isSameDayItems(findLayoutDay(original, day.date)?.items ?? [], day.items);
+      const before = findLayoutDay(original, day.date);
+      return !isSameDayTimes(before, day) || !isSameDayItems(before?.items ?? [], day.items);
     })
     .map((day) => {
       return day.date;
     });
 }
 
-/** 고친 뒤 아직 다시 계산하지 않은 날. 시각·이동 구간·경고는 낡아서 비운다. */
-export function toUncalculatedDay(day: DraftLayoutDay): ScheduleDay {
-  return {
-    date: day.date,
-    startTime: day.startTime,
-    endTime: day.endTime,
+/** 배치한 항목이 들어 있는 날(`itemId` → 날짜). 다시 계산 뒤 서버가 시간이 모자라 뺀 항목을 찾을 때 쓴다. */
+export function getPlacedDates(layout: DraftLayout): Map<number, LocalDate> {
+  return new Map(layout.days.flatMap((day) => {
+    return day.items.map((item) => {
+      return [item.itemId, day.date] as const;
+    });
+  }));
+}
 
-    items: day.items.map((item) => {
-      return { id: item.itemId, roomPlaceId: item.roomPlaceId, arrivalTime: null, departureTime: null, stayMinutes: item.stayMinutes, fixed: item.fixed };
-    }),
+/** 구간을 찾는 키. 첫날 출발지는 `start`, 마지막 날 도착지는 `end`로 적는다. */
+function legKeyOf(fromItemId: number | null, toItemId: number | null): string {
+  return `${fromItemId ?? "start"}>${toItemId ?? "end"}`;
+}
 
-    legs: [],
-    warnings: [],
+/** 받은 초안이 계산한 구간. 같은 두 곳 사이 이동 시간은 순서나 날을 바꿔도 같아서 고친 날에 다시 쓴다. */
+function collectKnownLegs(days: readonly ScheduleDay[]): Map<string, ScheduleLeg> {
+  return new Map(days.flatMap((day) => {
+    return day.legs.map((leg) => {
+      return [legKeyOf(leg.fromItemId, leg.toItemId), leg] as const;
+    });
+  }));
+}
+
+/** 도착 시각(그날 0시부터 분). 직전 지점이 없으면 이동 없이 바로 도착하고, 직전 시각이나 이동 시간을 모르면 `null`이다. */
+function arrivalAfter(cursor: number | null, leg: ScheduleLeg | undefined): number | null {
+  if (cursor === null) {
+    return null;
+  }
+
+  if (leg === undefined) {
+    return cursor;
+  }
+
+  return leg.travelMinutes === null ? null : cursor + leg.travelMinutes;
+}
+
+/** 그날 0시부터 센 분을 시각으로. 서버처럼 자정을 넘기면 다음 날 시각으로 보여 준다. */
+function toClockTime(minutes: number | null): LocalTime | null {
+  return minutes === null ? null : fromMinutesOfDay(minutes % MINUTES_PER_DAY);
+}
+
+/** 고친 날을 다시 맞추는 데 쓰는 받은 초안의 값. */
+export type TravelEstimateSource = Pick<ReadyScheduleDraft, "conditions" | "schedule" | "startPoint" | "endPoint" | "transportMode">;
+
+/** 고친 날을 화면에서 다시 맞춘 결과. `pendingTravel`이면 받은 초안에 없는 구간이 있어 다시 계산(084)해야 그 구간과 뒤 시각을 안다. */
+export type EditedDayEstimate = { day: ScheduleDay; pendingTravel: boolean };
+
+/**
+ * 고친 날의 시각·구간·경고를 서버와 같은 규칙으로 다시 맞춘다(백엔드 ScheduleCalculator·ScheduleViews).
+ * - 도착 = 직전 출발(첫 장소는 일차 시작 시각) + 이동 시간, 출발 = 도착 + 머무는 시간. 첫날 출발지·마지막 날 도착지 구간도 같다.
+ * - 이동 시간은 받은 초안의 같은 구간 값을 쓴다. 머무는 시간만 바꿨으면 모든 구간이 있어 서버 계산과 같다.
+ * - 없는 구간은 이동 시간을 모르는 구간으로 두고, 계산 전이라 경고는 붙이지 않는다.
+ */
+export function estimateEditedDay(day: DraftLayoutDay, source: TravelEstimateSource): EditedDayEstimate {
+  const knownLegs = collectKnownLegs(source.schedule.days);
+  const legs: ScheduleLeg[] = [];
+  const items: ScheduleItem[] = [];
+  const warnings = new Set<ScheduleWarning>();
+
+  const legBetween = (fromItemId: number | null, toItemId: number | null): ScheduleLeg => {
+    return knownLegs.get(legKeyOf(fromItemId, toItemId)) ?? { fromItemId, toItemId, transportMode: source.transportMode, travelMinutes: null };
   };
+
+  const startsFromPoint = source.startPoint !== null && day.date === source.conditions.at(0)?.date;
+  let previousId: number | null | undefined = startsFromPoint ? null : undefined;
+  let cursor: number | null = toMinutesOfDay(day.startTime);
+
+  for (const item of day.items) {
+    const leg = previousId === undefined ? undefined : legBetween(previousId, item.itemId);
+    const arrival = arrivalAfter(cursor, leg);
+    const departure = arrival === null ? null : arrival + item.stayMinutes;
+
+    if (leg !== undefined) {
+      legs.push(leg);
+    }
+
+    items.push({
+      id: item.itemId,
+      roomPlaceId: item.roomPlaceId,
+      arrivalTime: toClockTime(arrival),
+      departureTime: toClockTime(departure),
+      stayMinutes: item.stayMinutes,
+      fixed: item.fixed,
+    });
+
+    cursor = departure;
+    previousId = item.itemId;
+  }
+
+  const lastItemId = day.items.at(-1)?.itemId;
+  const endsAtPoint = source.endPoint !== null && day.date === source.conditions.at(-1)?.date;
+  const endLeg = endsAtPoint && lastItemId !== undefined ? legBetween(lastItemId, null) : undefined;
+
+  if (endLeg !== undefined) {
+    legs.push(endLeg);
+  }
+
+  const pendingTravel = legs.some((leg) => {
+    return !knownLegs.has(legKeyOf(leg.fromItemId, leg.toItemId));
+  });
+
+  if (legs.some((leg) => {
+    return leg.travelMinutes === null;
+  })) {
+    warnings.add("TRAVEL_TIME_UNAVAILABLE");
+  }
+
+  if (items.some((item) => {
+    return item.arrivalTime === null;
+  })) {
+    warnings.add("ARRIVAL_TIME_UNKNOWN");
+  }
+
+  const endMinutes = cursor === null ? null : cursor + (endLeg?.travelMinutes ?? 0);
+
+  if (endMinutes !== null && endMinutes > toMinutesOfDay(day.endTime)) {
+    warnings.add("END_TIME_EXCEEDED");
+  }
+
+  return {
+    day: { date: day.date, startTime: day.startTime, endTime: day.endTime, items, legs, warnings: pendingTravel ? [] : [...warnings] },
+    pendingTravel,
+  };
+}
+
+/** 고친 날 가운데 받은 초안에 없는 구간이 생겨 서버에 다시 계산(084)을 맡겨야 하는 날이 있는지. */
+export function hasPendingTravel(source: TravelEstimateSource, original: DraftLayout, edited: DraftLayout): boolean {
+  const editedDates = getEditedDates(original, edited);
+
+  return edited.days.some((day) => {
+    return editedDates.includes(day.date) && estimateEditedDay(day, source).pendingTravel;
+  });
 }
 
 type DraftVersions = Pick<ReadyScheduleDraft, "baseVersion" | "draftVersion">;
@@ -863,12 +989,18 @@ type DraftVersions = Pick<ReadyScheduleDraft, "baseVersion" | "draftVersion">;
 /**
  * API-084 "다시 계산" 요청. 받은 초안에서 달라진 날의 항목 전부와, 일정에서 뺀 항목만 보낸다.
  * 서버는 보낸 항목과 그대로 둔 항목의 순서가 겹치면 거절하므로(SC005) 달라진 날은 모든 항목의 순서를 함께 보낸다.
+ * 일차 시각을 바꿨으면 서버가 여행의 모든 날짜를 함께 요구하므로 모든 날의 시각을 `days`로 보낸다.
  */
 export function toAdjustDraftRequest(draft: DraftVersions, original: DraftLayout, edited: DraftLayout): AdjustScheduleDraftRequestDto {
   const editedDates = getEditedDates(original, edited);
   const originalUnassigned = itemIdsOf(original.unassigned);
 
+  const timesChanged = edited.days.some((day) => {
+    return !isSameDayTimes(findLayoutDay(original, day.date), day);
+  });
+
   return {
+    ...(timesChanged ? { days: edited.days.map(toDayCondition) } : {}),
     baseVersion: draft.baseVersion,
     draftVersion: draft.draftVersion,
 

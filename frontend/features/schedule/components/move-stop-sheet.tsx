@@ -106,7 +106,7 @@ function MoveStopContent({ target, days, onMove, onRemove }: Omit<MoveStopSheetP
       <View className="flex-row gap-2 rounded-md bg-muted p-3">
         <Icon as={Info} size={16} className="mt-0.5 text-icon" />
         <Text className="flex-1 text-caption text-foreground-secondary">
-          {toLabel === undefined ? "옮길 수 있는 다른 날이 없어요" : "옮긴 뒤 다시 계산하면 도착·출발 시각과 이동 시간을 볼 수 있어요"}
+          {toLabel === undefined ? "옮길 수 있는 다른 날이 없어요" : "옮기면 잠시 뒤 도착·출발 시각과 이동 시간을 다시 계산해요"}
         </Text>
       </View>
       <Button

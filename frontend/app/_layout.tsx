@@ -5,6 +5,7 @@ import { router, Stack, useRootNavigationState } from "expo-router";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { PortalHost } from "@rn-primitives/portal";
 import { View } from "react-native";
+import { GestureRoot } from "@/components/gesture-root";
 import { KeyboardStateKeeper } from "@/components/keyboard-state-keeper";
 import { MainTabBar } from "@/components/main-tab-bar";
 import { useFonts } from "expo-font";
@@ -26,12 +27,14 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <KeyboardStateKeeper />
-      <ToastProvider>
-        <RootNavigator />
-      </ToastProvider>
-    </QueryClientProvider>
+    <GestureRoot>
+      <QueryClientProvider client={queryClient}>
+        <KeyboardStateKeeper />
+        <ToastProvider>
+          <RootNavigator />
+        </ToastProvider>
+      </QueryClientProvider>
+    </GestureRoot>
   );
 }
 
