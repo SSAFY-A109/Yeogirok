@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Platform, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { cn } from "@/lib/utils";
@@ -38,12 +39,30 @@ export function Dropdown({ options, value, onValueChange, onOpenChange, disabled
         <SelectValue placeholder={placeholder} className={cn("min-w-0 flex-1 font-sans text-label", disabled && "text-muted-foreground")} />
       </SelectTrigger>
       <SelectContent insets={insets} sideOffset={4} style={width > 0 ? { width } : undefined}>
-        {options.map((option) => {
-          return (
-            <SelectItem key={option.value} value={option.value} label={option.label} disabled={option.disabled} className={cn("min-h-touch", option.value === value && "bg-brand-muted")} />
-          );
-        })}
+        <OptionList>
+          {options.map((option) => {
+            return (
+              <SelectItem key={option.value} value={option.value} label={option.label} disabled={option.disabled} className={cn("min-h-touch", option.value === value && "bg-brand-muted")} />
+            );
+          })}
+        </OptionList>
       </SelectContent>
     </Select>
+  );
+}
+
+/**
+ * 펼친 목록. 앱에서는 항목 5개(`min-h-touch` 44 × 5 + 간격 4 × 4 = 236)만큼만 보이고 나머지는 목록 안에서 스크롤한다(`max-h-60` 240).
+ * 시·군·구(최대 30여 개)처럼 긴 목록이 화면 밖으로 넘치지 않게 한다. 웹은 벤더 목록이 이미 높이를 제한하고 스크롤한다.
+ */
+function OptionList({ children }: { children: ReactNode }) {
+  if (Platform.OS === "web") {
+    return <>{children}</>;
+  }
+
+  return (
+    <ScrollView className="max-h-60" contentContainerClassName="gap-1" persistentScrollbar nestedScrollEnabled keyboardShouldPersistTaps="handled">
+      {children}
+    </ScrollView>
   );
 }
