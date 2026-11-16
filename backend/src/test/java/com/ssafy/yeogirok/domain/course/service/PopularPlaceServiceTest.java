@@ -8,24 +8,30 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 
 import com.ssafy.yeogirok.domain.course.CourseFixture;
 import com.ssafy.yeogirok.domain.course.CourseTestConfig;
+import com.ssafy.yeogirok.domain.course.OfficialAccount;
 import com.ssafy.yeogirok.domain.course.dto.PopularPlaceListResponse;
 import com.ssafy.yeogirok.domain.place.entity.Place;
 import com.ssafy.yeogirok.domain.place.entity.PlaceProvider;
 import com.ssafy.yeogirok.domain.record.entity.TravelRecord;
 import com.ssafy.yeogirok.domain.room.entity.RoomPlace;
 import com.ssafy.yeogirok.domain.room.entity.TravelRoom;
+import com.ssafy.yeogirok.domain.user.domain.User;
 import com.ssafy.yeogirok.global.exception.BusinessException;
 import com.ssafy.yeogirok.global.exception.ExceptionType;
 import com.ssafy.yeogirok.support.MutableClock;
@@ -144,8 +150,8 @@ class PopularPlaceServiceTest {
 
 		assertThat(popular(null).items()).extracting(item -> item.place().name(), item -> item.place().address(),
 				PopularPlaceListResponse.Item::importCount30d)
-			.containsExactly(Tuple.tuple("우리 카페", "강릉시 교동", 2L), Tuple.tuple("주소 없는 곳", null, 2L),
-				Tuple.tuple("우리 카페", "강릉시 포남동", 1L));
+			.containsExactlyInAnyOrder(Tuple.tuple("우리 카페", "강릉시 교동", 2L), Tuple.tuple("주소 없는 곳", null, 2L),
+				Tuple.tuple("우리 카페", "강릉시 포남동", 1L));  // 같은 수끼리 순서는 무작위(231)
 	}
 
 	@Test
@@ -204,21 +210,104 @@ class PopularPlaceServiceTest {
 			.extracting("exceptionType").isEqualTo(ExceptionType.NOT_ALLOWED_VALUE);
 	}
 
+	/** 231: 방 수가 같으면 무작위(기존: 장소 식별값 오름차순). */
 	@Test
-	void 방_수_내림차순_같으면_장소_식별값_오름차순으로_5개까지_순위를_붙인다() {
+	void 방_수_내림차순_같으면_무작위로_5개까지_순위를_붙인다() {
 		Place top = tour("900", null);
 		imported(room(), top);
 		imported(room(), top);
-		for (String id : List.of("500", "100", "300", "200", "400")) {
+		for (String id : List.of("500", "100", "300", "200", "400", "600")) {
 			imported(room(), tour(id, null));
 		}
+		em.flush();
+		em.clear();
 
-		PopularPlaceListResponse response = popular(null);
+		Set<List<String>> orders = new HashSet<>();
+		for (int i = 0; i < 30; i++) {
+			PopularPlaceListResponse response = service.popular(null);
+			assertThat(response.items()).extracting(PopularPlaceListResponse.Item::rank).containsExactly(1, 2, 3, 4, 5);
+			assertThat(response.items().getFirst().place().providerPlaceId()).isEqualTo("900");
+			assertThat(response.items().getFirst().place().provider()).isEqualTo(PlaceProvider.TOUR_API);
+			orders.add(response.items().stream().skip(1).map(item -> item.place().providerPlaceId()).toList());
+		}
+		// 1곳씩 담긴 6곳 중 4곳이 무작위 순서로 나온다(30번이면 한 가지 순서만 나올 확률은 사실상 0).
+		assertThat(orders).hasSizeGreaterThan(1);
+		assertThat(orders).allSatisfy(order -> assertThat(order).isSubsetOf("100", "200", "300", "400", "500", "600"));
+	}
 
-		assertThat(response.items()).extracting(PopularPlaceListResponse.Item::rank, item -> item.place().providerPlaceId())
-			.containsExactly(Tuple.tuple(1, "900"), Tuple.tuple(2, "100"), Tuple.tuple(3, "200"), Tuple.tuple(4, "300"),
-				Tuple.tuple(5, "400"));
-		assertThat(response.items().getFirst().place().provider()).isEqualTo(PlaceProvider.TOUR_API);
+	/** 231: 공식 코스 방을 "그 장소를 담은 여행방 1곳"으로 기간 없이 센다. */
+	@Nested
+	class 공식_코스 {
+
+		long official;
+
+		@BeforeEach
+		void officialAccount() {
+			official = em.persistAndGetId(User.signUp(OfficialAccount.PROVIDER, OfficialAccount.SUBJECT, null, "공식",
+				null, NOW), Long.class);
+		}
+
+		/** 공식 계정이 만든 방의 게시 코스. publishedAt 은 30일보다 오래돼도 센다. */
+		private TravelRecord officialCourse(Instant publishedAt, Place... places) {
+			return course(official, publishedAt, places);
+		}
+
+		private TravelRecord course(long owner, Instant publishedAt, Place... places) {
+			TravelRecord record = fixture.record(fixture.room(DAY1, owner));
+			record.changeCourse("공식 코스", "", publishedAt, true, NOW);
+			for (int i = 0; i < places.length; i++) {
+				fixture.visit(record.getId(), places[i].getId(), DAY1, i + 1);
+			}
+			return record;
+		}
+
+		@Test
+		void 공식_코스마다_1곳으로_세고_같은_코스에_두_번_나와도_한_번이며_사용자가_가져간_수와_합친다() {
+			Place both = tour("1", "CULTURE");
+			Place officialOnly = tour("2", "CULTURE");
+			officialCourse(NOW.minus(Duration.ofDays(60)), both, both, officialOnly);  // 같은 코스에 두 번
+			officialCourse(NOW, both);
+			imported(room(), both);  // 사용자가 가져간 1곳
+
+			assertThat(rows(popular(null))).containsExactly(Tuple.tuple(1, "투어 1", 3L), Tuple.tuple(2, "투어 2", 1L));
+		}
+
+		@Test
+		void 게시_해제_방_삭제된_공식_코스와_일반_회원이_만든_코스는_세지_않는다() {
+			Place place = tour("1", null);
+			officialCourse(NOW, place);
+			officialCourse(NOW, place).changeCourse("공식 코스", "", null, false, NOW);
+			TravelRecord deleted = officialCourse(NOW, place);
+			em.find(TravelRoom.class, deleted.getRoomId()).softDelete(NOW);
+			course(ME, NOW, place);  // 일반 회원(ME)이 만든 게시 코스
+
+			assertThat(rows(popular(null))).containsExactly(Tuple.tuple(1, "투어 1", 1L));
+		}
+
+		@Test
+		void 카테고리로_거른다() {
+			officialCourse(NOW, tour("1", "CAFE"), tour("2", "NATURE"));
+
+			assertThat(popular("CAFE").items()).extracting(item -> item.place().providerPlaceId()).containsExactly("1");
+		}
+	}
+
+	/** 231: 설정을 끄면 사용자가 가져간 것만 센다(이전과 같음). */
+	@Nested
+	@TestPropertySource(properties = "yeogirok.main.include-official-courses=false")
+	class 공식_코스_끔 {
+
+		@Test
+		void 공식_코스는_세지_않는다() {
+			long official = em.persistAndGetId(User.signUp(OfficialAccount.PROVIDER, OfficialAccount.SUBJECT, null,
+				"공식", null, NOW), Long.class);
+			TravelRecord record = fixture.record(fixture.room(DAY1, official));
+			record.changeCourse("공식 코스", "", NOW, true, NOW);
+			fixture.visit(record.getId(), tour("1", null).getId(), DAY1, 1);
+			imported(room(), tour("2", null));
+
+			assertThat(rows(popular(null))).containsExactly(Tuple.tuple(1, "투어 2", 1L));
+		}
 	}
 
 	@Test
