@@ -195,7 +195,7 @@ def judge(course, info_items, info_total, intro_item, dictionary):
         for order, ((item, place), time) in enumerate(zip(valid[begin:end], visit_times(end - begin)), start=1):
             entry = {
                 "subnum": parse_subnum(item),
-                "contentId": str(item.get("subcontentid")), "name": item.get("subname") or place.get("title"),
+                "contentId": str(item.get("subcontentid")), "name": (place.get("title") or "").strip() or item.get("subname"),
                 "overview": item.get("subdetailoverview"), "day": day, "order": order,
                 "visitDate": visit_date, "visitTime": time, "hasPhoto": has_photo(place),
                 "contentTypeId": place.get("contenttypeid"),
