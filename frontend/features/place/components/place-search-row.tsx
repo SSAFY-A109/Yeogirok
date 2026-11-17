@@ -13,12 +13,17 @@ import { cn } from "@/lib/utils";
  */
 export type PlaceSearchRowState = "unselected" | "selected" | "added" | "unavailable";
 
-type PlaceSearchRowProps = {
-  place: Place;
+/** 행이 그리는 값. 투어API 검색 결과(`Place`)와 지도에서 찾은 장소(`MapPlace`)가 함께 쓴다. */
+type PlaceSearchRowItem = Pick<Place, "key" | "name" | "address" | "photoUrl">;
+
+type PlaceSearchRowProps<T extends PlaceSearchRowItem> = {
+  place: T;
   /** 공통 카테고리 목록에서 찾은 이름. 못 찾았으면 `null`. */
   categoryName: string | null;
   state: PlaceSearchRowState;
-  onToggle: (place: Place) => void;
+  onToggle: (place: T) => void;
+  /** 기본값은 `place-search.row-<key>`. */
+  testID?: string;
 };
 
 const DISABLED_HINT: Readonly<Partial<Record<PlaceSearchRowState, string>>> = {
@@ -36,7 +41,7 @@ function getPlaceSubtitle(categoryName: string | null, address: string | null): 
 }
 
 /** 여행지 검색 결과 한 줄(Figma W12 `Result`). 행 전체를 눌러 고른다. */
-export function PlaceSearchRow({ place, categoryName, state, onToggle }: PlaceSearchRowProps) {
+export function PlaceSearchRow<T extends PlaceSearchRowItem>({ place, categoryName, state, onToggle, testID }: PlaceSearchRowProps<T>) {
   const isAdded = state === "added";
   const isDisabled = isAdded || state === "unavailable";
   const isChecked = state === "selected" || isAdded;
@@ -55,7 +60,7 @@ export function PlaceSearchRow({ place, categoryName, state, onToggle }: PlaceSe
       className="mx-5 flex-row items-center gap-3 py-3 active:bg-muted"
       disabled={isDisabled}
       onPress={handleToggle}
-      testID={`place-search.row-${place.key}`}
+      testID={testID ?? `place-search.row-${place.key}`}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Checkbox checked={isChecked} disabled={isDisabled} onCheckedChange={handleToggle} />

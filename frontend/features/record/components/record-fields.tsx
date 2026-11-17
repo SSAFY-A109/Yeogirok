@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { size } from "@/lib/theme";
 import { toPlaceInput, type RecordPlace } from "../model";
-import { KakaoPlaceSearch, type KakaoPlace } from "../native/kakao-place-search";
+import { KakaoPlaceSearch, type KakaoPlace } from "@/lib/native/kakao-place-search";
 
 const kakaoJavascriptKey = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY?.trim();
 const MAX_VISIBLE_PLACE_RESULTS = 6;
