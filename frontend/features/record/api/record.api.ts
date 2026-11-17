@@ -41,6 +41,11 @@ export async function publishRecord(id: number, body: PublicationInput & { selec
   return data;
 }
 
+/** 공개 코스 해제(API-075). 코스 ID는 기록 ID다. 멱등키 없이 기록 version으로 중복 저장을 막는다. */
+export async function unpublishCourse(id: number, version: number) {
+  await api.patch(`/courses/${id}`, { version, published: false }, { timeout: TIMEOUT_MUTATION_MS });
+}
+
 export async function getMaterials(id: number, signal?: AbortSignal) {
   const { data } = await api.get<{ items: Material[] }>(`/records/${id}/materials`, { signal });
   return data.items;

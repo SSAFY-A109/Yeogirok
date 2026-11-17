@@ -11,13 +11,14 @@ import { HeaderIconButton } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { isApiError } from "@/api/errors";
+import { courseKeys } from "@/features/course/api/queries";
 import { useUploadMedia } from "@/features/media/api/queries";
 import type { UploadFile } from "@/features/media/upload";
 import { AvatarStack, MemberAvatar } from "@/features/room/components/member-avatar";
 import { useMe } from "@/features/user/api/queries";
 import { formatMonthDay } from "@/lib/date";
 import { recordKeys, useRecordWrite } from "../api/queries";
-import { addVisits, completeRecord, connectPhotos, deleteRecordPhoto, saveStory, updateVisits } from "../api/record.api";
+import { addVisits, completeRecord, connectPhotos, deleteRecordPhoto, saveStory, unpublishCourse, updateVisits } from "../api/record.api";
 import { recordError } from "../errors";
 import { plannedDelayMinutes, recordDateLabel, toPlaceInput, type ActualVisit, type RecordDetail, type RecordStory } from "../model";
 import { pickRecordFile } from "../native/pick-record-file";
@@ -44,8 +45,10 @@ export function RecordTimeline({ record, editing, onBack, onEdit, onOpenPublicat
   const [panel, setPanel] = useState<Panel | null>(null);
   const [deletion, setDeletion] = useState<{ visit: ActualVisit; version: number } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [unpublishing, setUnpublishing] = useState(false);
   const write = useRecordWrite(record.id);
   const me = useMe();
+  const client = useQueryClient();
 
   const visits = [...record.actualVisits].sort((a, b) => {
     return a.visitDate.localeCompare(b.visitDate) || visitClock(a).localeCompare(visitClock(b)) || a.order - b.order;
@@ -113,9 +116,15 @@ export function RecordTimeline({ record, editing, onBack, onEdit, onOpenPublicat
         })) {
           onComplete();
         }
-      }}><Text>여행기 완성</Text></Button> : <Button className="w-full" size="lg" onPress={onOpenPublication}
-      testID={published ? "memo.view-published-course" : "memo.publish"}>
-      <Text>{published ? "공개 코스 보기" : "코스로 공개"}</Text>
+      }}><Text>여행기 완성</Text></Button> : published ? <View className="flex-row gap-2">
+      <Button variant="outline" className="flex-1" size="lg" disabled={write.isPending} onPress={() => {
+        return setUnpublishing(true);
+      }} testID="memo.unpublish"><Text>공개 해제</Text></Button>
+      <Button className="flex-1" size="lg" onPress={onOpenPublication} testID="memo.view-published-course">
+        <Text>공개 코스 보기</Text>
+      </Button>
+    </View> : <Button className="w-full" size="lg" onPress={onOpenPublication} testID="memo.publish">
+      <Text>코스로 공개</Text>
     </Button>}>
     {!editing && <>
       <View className="flex-row flex-wrap items-center gap-2">
@@ -266,6 +275,19 @@ export function RecordTimeline({ record, editing, onBack, onEdit, onOpenPublicat
 
       setDeletion(null);
     }} />
+    <ConfirmDialog open={unpublishing} onOpenChange={setUnpublishing}
+      title="코스 공개를 해제할까요?" description={"메인과 검색에서 바로 내려가요.\n이미 장소를 가져간 여행방에는 그대로 남아요."}
+      confirmLabel="공개 해제" confirmTone="destructive" loading={write.isPending} onConfirm={async () => {
+        const ok = await write.run(`unpublish:${record.version}`, () => {
+          return unpublishCourse(record.id, record.version);
+        });
+
+        setUnpublishing(false);
+
+        if (ok) {
+          void client.invalidateQueries({ queryKey: courseKeys.all });
+        }
+      }} />
   </RecordFrame>;
 }
 
