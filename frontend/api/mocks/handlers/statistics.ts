@@ -30,6 +30,25 @@ const COORDINATE_DIGITS = 7;
 const KOREA = { west: 124, south: 33, east: 132, north: 39 };
 const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+// 전국 보기(2026-11-17). 서버 VisitProvince·application.yaml province-below-zoom과 같은 도 9곳·마커 위치다.
+// 서버는 법정동 코드로 도를 고르지만, 목의 예시 묶음에는 코드가 없어 모두 마커 위치가 가장 가까운 도로 넣는다(서버가 코드 없는 발자취에 쓰는 방법).
+const PROVINCE_BELOW_ZOOM = 9;
+const PROVINCE_UNIT = "PROVINCE";
+const PROVINCE_PRECISION = "province";
+/** 경도 1도는 위도 36도에서 위도 1도의 cos(36°)배 길이다(서버와 같은 근사). */
+const PROVINCE_LONGITUDE_SCALE = Math.cos((36 * Math.PI) / 180);
+const PROVINCES = [
+  { code: "41", name: "서울·인천·경기", latitude: 37.5, longitude: 127.2 },
+  { code: "51", name: "강원", latitude: 37.75, longitude: 128.3 },
+  { code: "43", name: "충북", latitude: 36.75, longitude: 127.75 },
+  { code: "44", name: "대전·세종·충남", latitude: 36.5, longitude: 126.85 },
+  { code: "52", name: "전북", latitude: 35.72, longitude: 127.15 },
+  { code: "12", name: "전남광주", latitude: 34.9, longitude: 126.95 },
+  { code: "47", name: "대구·경북", latitude: 36.35, longitude: 128.75 },
+  { code: "48", name: "부산·울산·경남", latitude: 35.35, longitude: 128.35 },
+  { code: "50", name: "제주", latitude: 33.38, longitude: 126.55 },
+] as const;
+
 type Box = { west: number; south: number; east: number; north: number };
 type ParseResult<T> = { value: T } | { error: ReturnType<typeof fail> };
 
@@ -173,15 +192,7 @@ function toCells(points: readonly MockFootprintSeed[], area: Box, size: number, 
   }).sort((a, b) => {
     return b.latitudeIndex - a.latitudeIndex || a.longitudeIndex - b.longitudeIndex;
   }).map((tally) => {
-    const categoryCounts: Record<string, number> = {};
-
-    for (const { code } of categoriesFixture.categories) {
-      const count = tally.byCategory.get(code);
-
-      if (count !== undefined) {
-        categoryCounts[code] = count;
-      }
-    }
+    const categoryCounts = categoryCountsOf(tally.byCategory);
 
     return {
       cellId: `${multiplier}:${tally.latitudeIndex}:${tally.longitudeIndex}`,
@@ -192,6 +203,72 @@ function toCells(points: readonly MockFootprintSeed[], area: Box, size: number, 
       count: tally.count,
       categoryCounts,
     };
+  });
+}
+
+function categoryCountsOf(byCategory: ReadonlyMap<string, number>): Record<string, number> {
+  const categoryCounts: Record<string, number> = {};
+
+  for (const { code } of categoriesFixture.categories) {
+    const count = byCategory.get(code);
+
+    if (count !== undefined) {
+      categoryCounts[code] = count;
+    }
+  }
+
+  return categoryCounts;
+}
+
+function nearestProvinceIndex(latitude: number, longitude: number): number {
+  let nearest = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  PROVINCES.forEach((province, index) => {
+    const dLat = latitude - province.latitude;
+    const dLng = (longitude - province.longitude) * PROVINCE_LONGITUDE_SCALE;
+    const distance = dLat * dLat + dLng * dLng;
+
+    if (distance < nearestDistance) {
+      nearest = index;
+      nearestDistance = distance;
+    }
+  });
+
+  return nearest;
+}
+
+/** 전국 보기. 화면 영역과 상관없이 한국 전체를 도 9곳으로 세고, 마커는 도마다 정한 위치에 둔다(서버 `countProvinces`). */
+function toProvinceCells(points: readonly MockFootprintSeed[], category: string | null): VisitCellDto[] {
+  const tallies = PROVINCES.map(() => {
+    return { count: 0, byCategory: new Map<string, number>() };
+  });
+
+  for (const point of points) {
+    const isInside = point.latitude >= KOREA.south && point.latitude < KOREA.north && point.longitude >= KOREA.west && point.longitude < KOREA.east;
+
+    if (!isInside || (category !== null && !point.categoryCodes.includes(category))) {
+      continue;
+    }
+
+    const tally = tallies[nearestProvinceIndex(point.latitude, point.longitude)];
+    tally.count += point.count;
+
+    for (const code of point.categoryCodes) {
+      tally.byCategory.set(code, (tally.byCategory.get(code) ?? 0) + point.count);
+    }
+  }
+
+  return PROVINCES.flatMap((province, index) => {
+    const tally = tallies[index];
+
+    return tally.count < MIN_COUNT ? [] : [{
+      cellId: `province:${province.code}`,
+      center: { latitude: province.latitude, longitude: province.longitude },
+      count: tally.count,
+      categoryCounts: categoryCountsOf(tally.byCategory),
+      regionName: province.name,
+    }];
   });
 }
 
@@ -235,9 +312,20 @@ export const statisticsHandlers = [
       return fail(400, "C012", "from 이 to 보다 늦습니다.");
     }
 
+    const korea = intersect(bbox.value, KOREA);
+
+    if (zoom.value < PROVINCE_BELOW_ZOOM) {
+      return ok({
+        metric: VISIT_COUNT_METRIC,
+        period: { from: from.value, to: to.value },
+        aggregation: { unit: PROVINCE_UNIT, version: AGGREGATION_VERSION, precision: PROVINCE_PRECISION, minCount: MIN_COUNT },
+        cells: korea === null ? [] : toProvinceCells(countedFootprints(from.value, to.value), category),
+        updatedAt: formatServerDateTime(new Date()),
+      } satisfies VisitStatisticsResponseDto);
+    }
+
     const multiplier = multiplierFor(zoom.value);
     const size = BASE_CELL_DEGREES * multiplier;
-    const korea = intersect(bbox.value, KOREA);
     let cells: VisitCellDto[] = [];
 
     if (korea !== null) {
