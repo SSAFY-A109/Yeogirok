@@ -9,3 +9,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+# AR 팁 거리 규칙 테스트(경계 포함·밖이면 T004)는 5m 기준 좌표로 짜여 있어 운영 값(300m)과 따로 5m 로 고정한다.
+yeogirok:
+  tip:
+    interaction-radius-meters: 5
