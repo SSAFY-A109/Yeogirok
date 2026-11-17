@@ -13,13 +13,14 @@ type RecommendResultsProps = {
   /** 사용자가 고른 카테고리 이름. "○○ 기준" 줄에 쓴다. */
   criteria: readonly string[];
   addedPlaceKeys: ReadonlySet<string>;
-  excludedPlaceKeys: ReadonlySet<string>;
+  /** 사용자가 고른 장소. 처음에는 비어 있다. */
+  selectedPlaceKeys: ReadonlySet<string>;
   onToggle: (placeKey: string) => void;
   onReselect: () => void;
 };
 
 /** AI 추천 결과(Figma W11). 추천은 자동으로 담기지 않고, 고른 장소만 하단 버튼으로 담는다. */
-export function RecommendResults({ result, categories, criteria, addedPlaceKeys, excludedPlaceKeys, onToggle, onReselect }: RecommendResultsProps) {
+export function RecommendResults({ result, categories, criteria, addedPlaceKeys, selectedPlaceKeys, onToggle, onReselect }: RecommendResultsProps) {
   if (result.places.length === 0) {
     return (
       <View className="flex-1 items-center justify-center gap-4 px-5" testID="recommend.empty">
@@ -45,7 +46,7 @@ export function RecommendResults({ result, categories, criteria, addedPlaceKeys,
       return "unavailable";
     }
 
-    return excludedPlaceKeys.has(place.key) ? "unselected" : "selected";
+    return selectedPlaceKeys.has(place.key) ? "selected" : "unselected";
   }
 
   return (
@@ -53,7 +54,7 @@ export function RecommendResults({ result, categories, criteria, addedPlaceKeys,
       className="flex-1"
       contentContainerClassName="px-5 pb-6 pt-4"
       data={result.places}
-      extraData={{ addedPlaceKeys, excludedPlaceKeys }}
+      extraData={{ addedPlaceKeys, selectedPlaceKeys }}
       keyExtractor={(recommendation) => {
         return recommendation.place.key;
       }}
