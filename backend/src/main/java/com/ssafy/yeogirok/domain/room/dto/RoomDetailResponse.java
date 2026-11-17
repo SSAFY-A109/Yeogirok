@@ -60,10 +60,12 @@ public record RoomDetailResponse(
 		}
 	}
 
-	public record Member(Long userId, String nickname, @JsonProperty("isCreator") boolean isCreator) {
+	/** profileImageUrl 은 소셜 로그인에서 받은 외부 주소 그대로이고 없으면 null 이다(API-020 목록의 참여자와 같다). */
+	public record Member(Long userId, String nickname, String profileImageUrl,
+		@JsonProperty("isCreator") boolean isCreator) {
 
 		static Member from(RoomMemberView view) {
-			return new Member(view.userId(), view.nickname(), view.creator());
+			return new Member(view.userId(), view.nickname(), view.profileImageUrl(), view.creator());
 		}
 	}
 }

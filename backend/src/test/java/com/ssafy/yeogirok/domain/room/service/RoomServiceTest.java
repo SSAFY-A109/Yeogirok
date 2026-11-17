@@ -220,6 +220,22 @@ class RoomServiceTest {
 	}
 
 	@Test
+	void 상세의_참여자에는_로그인할_때_받은_프로필_사진_주소가_있고_없으면_null() {
+		Long roomId = createRoom(OWNER);
+		join(FRIEND, roomId);
+		em.getEntityManager().createNativeQuery("UPDATE users SET profile_image_url = :url WHERE id = :id")
+			.setParameter("url", "https://img.example.com/friend.jpg")
+			.setParameter("id", FRIEND)
+			.executeUpdate();
+
+		RoomDetailResponse detail = roomService.getRoom(OWNER, roomId);
+
+		assertThat(detail.members())
+			.extracting(RoomDetailResponse.Member::userId, RoomDetailResponse.Member::profileImageUrl)
+			.containsExactly(tuple(OWNER, null), tuple(FRIEND, "https://img.example.com/friend.jpg"));
+	}
+
+	@Test
 	void 기록이_있는_방은_목록과_상세의_recordIds_에_그_기록_ID_가_있다() {
 		Long withRecord = createRoom(OWNER);
 		Long withoutRecord = createRoom(OWNER);
