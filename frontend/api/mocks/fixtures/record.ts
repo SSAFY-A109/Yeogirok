@@ -23,12 +23,12 @@ export function makeMockRecord(id: number, room: MockRoom, title = room.title): 
       plannedSchedule: room.schedule && {
         roomId, version: room.version,
 
-        days: room.schedule.days.map((day) => {
-          return { date: day.date,
+        // 서버(API-059)는 기록을 만들 때 확정 일정을 그대로 복사하고 항목마다 장소를 붙인다. 목은 장소를 비워 둔다.
+        days: room.schedule.days.map(({ date, startTime, endTime, items }) => {
+          return { date, startTime, endTime,
 
-            // 확정 일정의 도착 시각(`yyyy-MM-dd HH:mm:ss+09`)에서 시·분만 쓴다. 모르면 null이다.
-            stops: day.items.map((item) => {
-              return { roomPlaceId: item.roomPlaceId, arrivalTime: item.arrivalAt === null ? null : item.arrivalAt.slice(11, 16) };
+            items: items.map((item) => {
+              return { ...item, place: null };
             }) };
         }),
       },
