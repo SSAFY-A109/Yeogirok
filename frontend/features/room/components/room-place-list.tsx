@@ -178,7 +178,7 @@ function RoomPlaceRow({ place, addedBy, toneIndex, showDivider, onDelete }: Room
               </Text>
             ) : null}
           </View>
-          {addedBy ? <MemberAvatar initial={addedBy.initial} toneIndex={toneIndex} size="sm" /> : null}
+          {addedBy ? <MemberAvatar initial={addedBy.initial} photoUrl={addedBy.profileImageUrl} toneIndex={toneIndex} size="sm" /> : null}
         </View>
         <Pressable
           accessibilityRole="button"

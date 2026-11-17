@@ -99,8 +99,8 @@ export function toRoomDetail(room: MockRoom, chatReadState: ChatReadStateDto): R
     endDate: room.endDate,
     transportMode: room.transportMode,
 
-    members: room.members.map(({ userId, nickname, isCreator }) => {
-      return { userId, nickname, isCreator };
+    members: room.members.map(({ userId, nickname, profileImageUrl, isCreator }) => {
+      return { userId, nickname, profileImageUrl, isCreator };
     }),
 
     // 상세의 후보에는 removedAt 을 싣지 않는다(서버 `RoomDetailResponse.Place`).

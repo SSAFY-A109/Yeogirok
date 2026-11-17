@@ -284,9 +284,10 @@ function toBase(dto: RecordBaseDto) {
   };
 }
 
-export function recordMembers(members: Member[]) {
-  return members.map(({ userId, nickname }) => {
-    return { id: userId, nickname, initial: nickname.slice(0, 1) };
+/** 기록 목록(API-058)의 참여자에는 프로필 사진이 있고, 기록 상세에는 없어 `null`이다. */
+export function recordMembers(members: (Member & { profileImageUrl?: string | null })[]) {
+  return members.map(({ userId, nickname, profileImageUrl }) => {
+    return { id: userId, nickname, initial: nickname.slice(0, 1), profileImageUrl: profileImageUrl ?? null };
   });
 }
 

@@ -216,7 +216,7 @@ export function RecordTimeline({ record, editing, onBack, onEdit, onOpenPublicat
           const mine = editing && story.authorId !== null && story.authorId === me.data?.id;
 
           return <View key={story.id} className="flex-row items-start gap-2">
-            <MemberAvatar size="sm" initial={author?.initial ?? "?"} toneIndex={author?.id ?? 0} />
+            <MemberAvatar size="sm" initial={author?.initial ?? "?"} photoUrl={author?.profileImageUrl} toneIndex={author?.id ?? 0} />
             <View className="flex-1 rounded-md bg-muted p-3">
               <Text className="text-caption text-muted-foreground">{author?.nickname ?? (story.authorId === null ? "익명 작성자" : "이전 일행")}</Text>
               <Text className="text-body-sm">{story.body}</Text>

@@ -55,6 +55,13 @@ function getSenderToneIndex(members: RoomMember[], senderId: number | null): num
   return index === -1 ? senderId : index;
 }
 
+/** 보낸 사람의 프로필 사진. 채팅 메시지에는 사진이 없어 일행 목록에서 찾는다. 목록에 없으면 이름 첫 글자를 그린다. */
+function getSenderPhotoUrl(members: RoomMember[], senderId: number | null): string | null {
+  return members.find((member) => {
+    return member.id === senderId;
+  })?.profileImageUrl ?? null;
+}
+
 export type ChatMessageListHandle = {
   /** 가장 최신 메시지가 보이게 맨 아래로 내린다. */
   scrollToLatest: () => void;
@@ -139,7 +146,13 @@ export function ChatMessageList({
           return <MyMessage message={item.message} />;
         }
 
-        return <MemberMessage message={item.message} toneIndex={getSenderToneIndex(members, item.message.senderId)} />;
+        return (
+          <MemberMessage
+            message={item.message}
+            toneIndex={getSenderToneIndex(members, item.message.senderId)}
+            photoUrl={getSenderPhotoUrl(members, item.message.senderId)}
+          />
+        );
       }}
 
       ListFooterComponent={
@@ -178,7 +191,7 @@ function ChatDateChip({ date }: { date: LocalDate }) {
   );
 }
 
-function MemberMessage({ message, toneIndex }: { message: ChatMessage; toneIndex: number }) {
+function MemberMessage({ message, toneIndex, photoUrl }: { message: ChatMessage; toneIndex: number; photoUrl: string | null }) {
   return (
     <View
       accessible
@@ -186,7 +199,7 @@ function MemberMessage({ message, toneIndex }: { message: ChatMessage; toneIndex
       className="flex-row gap-2 pr-4"
       testID={`chat.message-${message.id}`}
     >
-      <MemberAvatar initial={message.senderInitial} toneIndex={toneIndex} className="h-8 w-8" />
+      <MemberAvatar initial={message.senderInitial} photoUrl={photoUrl} toneIndex={toneIndex} className="h-8 w-8" />
       <View className="flex-1 gap-1">
         <Text className="text-caption text-foreground-secondary" numberOfLines={1}>
           {message.senderName}
