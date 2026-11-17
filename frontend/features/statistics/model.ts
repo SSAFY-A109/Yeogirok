@@ -5,6 +5,7 @@ import { formatMonthDay, parseNullableLocalDate, parseServerDateTime, type Local
 // VisitStatisticsResponse·VisitGrid에서 옮겼다. Swagger(k15a109)는 502로 응답이 없어 대조하지 못했다(TBD).
 // 서버가 지도 영역을 위경도 격자 칸으로 나눠 칸마다 발자취 수를 센다. 멀리 볼수록(zoom이 작을수록) 칸이 커져 여러 칸이 하나로 묶인다.
 // 칸 크기·묶는 단계·최소 집계 수(DEC-07)는 서버 설정이라 클라이언트는 받은 칸을 그대로 그린다.
+// 전국 보기(zoom이 서버 province-below-zoom보다 작을 때, 2026-11-17)는 서버가 격자 대신 도 9곳으로 묶고 도 이름(regionName)을 함께 준다.
 
 /** 서버가 받는 지표. 지금은 방문(발자취) 수 하나뿐이다. */
 export const VISIT_COUNT_METRIC = "VISIT_COUNT";
@@ -30,6 +31,8 @@ export type VisitCellDto = {
   count: number;
   /** 카테고리별 수. 여러 개 고른 발자취는 각 코드에 1씩 세므로 합이 `count`보다 클 수 있다. 0인 코드는 없다. */
   categoryCounts: Record<string, number>;
+  /** 전국 보기의 도 이름("서울·인천·경기" 등). 격자 칸에는 없다. */
+  regionName?: string | null;
 };
 
 export type VisitStatisticsResponseDto = {
@@ -47,13 +50,15 @@ export type VisitMapArea = { south: number; west: number; north: number; east: n
 
 export type CategoryCount = { code: string; count: number };
 
-/** 서버가 묶은 격자 칸 하나. 발자취 수와 카테고리별 수만 있고, 누가 남겼는지는 없다(규칙 80). */
+/** 서버가 묶은 격자 칸 하나(전국 보기에서는 도 하나). 발자취 수와 카테고리별 수만 있고, 누가 남겼는지는 없다(규칙 80). */
 export type VisitCell = {
   id: string;
   latitude: number;
   longitude: number;
   count: number;
   categoryCounts: CategoryCount[];
+  /** 전국 보기의 도 이름. 격자 칸이면 `null`. */
+  regionName: string | null;
 };
 
 export type VisitStatistics = {
@@ -139,6 +144,11 @@ function toCategoryCounts(value: unknown): CategoryCount[] {
   });
 }
 
+/** 격자 칸에는 `regionName`이 없다(서버가 빼고 보낸다). 있으면 비지 않은 문자열이어야 한다. */
+function toRegionName(value: unknown): string | null {
+  return value === undefined || value === null ? null : assertText(value, "cells.regionName");
+}
+
 function toVisitCell(dto: VisitCellDto): VisitCell {
   const latitude = assertNumber(dto.center?.latitude, "cells.center.latitude");
   const longitude = assertNumber(dto.center?.longitude, "cells.center.longitude");
@@ -153,6 +163,7 @@ function toVisitCell(dto: VisitCellDto): VisitCell {
     longitude,
     count: assertNumber(dto.count, "cells.count"),
     categoryCounts: toCategoryCounts(dto.categoryCounts),
+    regionName: toRegionName(dto.regionName),
   };
 }
 

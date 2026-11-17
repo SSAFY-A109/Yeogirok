@@ -224,21 +224,26 @@ type CreateFootprintResponse = { /* 상세 미확인 */ };
 type VisitStatisticsResponseDto = {
   metric: "VISIT_COUNT";
   period: { from: string | null; to: string | null };
-  aggregation: { unit: "LAT_LNG_GRID"; version: string; precision: string; minCount: number }; // precision 예 "0.01deg"
+  aggregation: { unit: "LAT_LNG_GRID" | "PROVINCE"; version: string; precision: string; minCount: number }; // precision 예 "0.01deg", 전국 보기는 "province"
   cells: {
-    cellId: string; // "배수:위도칸:경도칸"
+    cellId: string; // "배수:위도칸:경도칸", 전국 보기는 "province:41"
     center: { latitude: number; longitude: number };
     count: number; // 이 칸의 발자취 수(탈퇴자 보존분 포함)
     categoryCounts: Record<string, number>; // 여러 개 고른 발자취는 각 code에 1씩 → 합이 count보다 클 수 있다. 0인 code는 없다
-  }[]; // 북쪽 칸부터, 같은 줄은 서쪽부터
+    regionName?: string; // 전국 보기에만 있는 도 이름("서울·인천·경기" 등). 격자 칸에는 없다
+  }[]; // 북쪽 칸부터, 같은 줄은 서쪽부터. 전국 보기는 도 순서
   updatedAt: string; // 응답을 만든 시각
 };
 ```
 
 - 서버가 격자로 묶는다: 기본 칸(설정 `base-cell-size-degrees`, 로컬 0.005°)에 zoom별 배수(설정 `zoom-multipliers`, 로컬 `15:1,13:2,11:8,9:32,0:128`)를 곱한 크기로 센다. 멀리 볼수록 칸이 커져 발바닥이 합쳐진다. 앱은 따로 묶거나 수를 더하지 않는다(규칙 80).
 - 조회 영역을 한국 범위(124~132E, 33~39N)로 자르고, 걸치는 칸 전체를 덮도록 칸 경계까지 넓혀 센다. 그래서 큰 칸에서는 화면 가장자리 밖 발자취가 포함될 수 있다. 넓힌 영역의 칸 수가 `max-cells`(2500)를 넘으면 400 C013이다.
-- `min-count`(DEC-07, 로컬 1)보다 적게 남은 칸은 응답에서 빠진다. 배포 값은 환경 변수다(TBD).
-- 지역 이름·다녀간 사람 수·카테고리 비율은 응답에 없다. W15-A 카드는 칸의 발자취 수와 카테고리별 수, 기간·기준 시각만 보여 준다(2026-11-06 사용자 결정).
+- **전국 보기(2026-11-17 사용자 요청):** zoom이 서버 설정 `province-below-zoom`(공통 9)보다 작으면, 곧 카카오 level 12 이상이면 격자 대신 도 9곳으로 센다. 전국을 볼 때 격자 칸(0.64°)이 너무 많아서다. 특별시·광역시·세종은 둘러싼 도에 합친다: 서울·인천·경기, 강원, 충북, 대전·세종·충남, 전북, 전남광주, 대구·경북, 부산·울산·경남, 제주.
+  - 발자취는 저장할 때 받은 법정동 코드 앞 2자리로 도를 고른다. 코드가 없는 발자취(역지오코딩 실패)와 탈퇴자 보존분은 위치가 가장 가까운 도로 넣는다(경계 근처는 근사).
+  - `center`는 도마다 서버가 정해 둔 땅 위 한 점이다(발자취 평균이 아니다). 화면 영역과 상관없이 한국 전체를 세어 도 전체 수를 준다. 화면이 한국 밖만 보면 빈 결과다. 칸 수 제한(C013)은 없다.
+  - 앱은 받은 칸을 그대로 그린다. 도 칸을 누르면 카드 제목에 `regionName`을 쓴다("서울·인천·경기에 남은 발자취 N개").
+- `min-count`(DEC-07, 로컬 1)보다 적게 남은 칸은 응답에서 빠진다. 전국 보기의 도도 같다. 배포 값은 환경 변수다(TBD).
+- 다녀간 사람 수·카테고리 비율은 응답에 없다. 지역 이름은 전국 보기의 도 이름(`regionName`)만 있다. W15-A 카드는 칸의 발자취 수와 카테고리별 수, 기간·기준 시각만 보여 준다(2026-11-06 사용자 결정).
 - **마커 위치(백엔드 요청, TBD):** 서버의 `center`는 칸 한가운데라, 해안에 걸친 칸은 발자취가 육지에 있어도 마커가 바다에 찍힌다(실기기에서 확인, 2026-11-06). 칸 안 발자취 좌표의 평균(수로 가중)을 `center`로 달라고 백엔드에 요청한다. 앱은 `center`를 그대로 그리므로 서버가 바꾸면 앱 수정은 없다. 목은 이 평균 위치로 미리 응답한다(`api/mocks/handlers/statistics.ts`).
 
 ### 3-3. 발자취 저장 API-041 — 백엔드 코드 대조 (2026-11-06)

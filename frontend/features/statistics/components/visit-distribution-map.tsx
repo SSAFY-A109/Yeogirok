@@ -119,7 +119,7 @@ function toFootprints(cells: readonly VisitCell[], selectedCellId: string | null
       lat: cell.latitude,
       lng: cell.longitude,
       label: toBadgeLabel(cell.count),
-      accessibilityLabel: `발자취 ${cell.count}개가 남은 곳`,
+      accessibilityLabel: cell.regionName === null ? `발자취 ${cell.count}개가 남은 곳` : `${cell.regionName}에 남은 발자취 ${cell.count}개`,
       scale: toFootprintScale(cell.count, maxCount),
       selected: cell.id === selectedCellId,
     };
@@ -127,7 +127,7 @@ function toFootprints(cells: readonly VisitCell[], selectedCellId: string | null
 }
 
 type VisitDistributionMapProps = {
-  /** 서버가 묶은 격자 칸. 멀리 볼수록 칸이 커져 여러 칸이 하나로 묶여 온다. */
+  /** 서버가 묶은 격자 칸. 멀리 볼수록 칸이 커져 여러 칸이 하나로 묶여 오고, 전국을 보면 도 9곳으로 온다. */
   cells: readonly VisitCell[];
   selectedCellId: string | null;
   /** 잰 내 위치. 권한이 없거나 아직 못 쟀으면 `null`. */

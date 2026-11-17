@@ -21,10 +21,12 @@ type VisitAreaCardProps = {
 
 /**
  * 발바닥을 눌렀을 때 보여 주는 그 칸의 집계(Figma W15-A를 서버 값에 맞춤). 서버가 준 발자취 수와 카테고리별 수만 보여 주고,
- * 지역 이름·인원·비율은 서버가 주지 않아 만들지 않는다. 방명록은 보여 주지 않는다(규칙 80).
+ * 인원·비율은 서버가 주지 않아 만들지 않는다. 방명록은 보여 주지 않는다(규칙 80).
+ * 지역 이름은 전국 보기에서 서버가 도로 묶어 준 칸에만 있고(`regionName`), 격자 칸은 "이 일대"라고 적는다.
  */
 export function VisitAreaCard({ cell, statistics, categoryFilterName, onClose }: VisitAreaCardProps) {
   const categories = useCategories();
+  const areaName = cell.regionName ?? "이 일대";
 
   const rows = [...cell.categoryCounts].sort((a, b) => {
     return b.count - a.count;
@@ -44,7 +46,7 @@ export function VisitAreaCard({ cell, statistics, categoryFilterName, onClose }:
       <View className="flex-row items-start gap-2">
         <View className="flex-1 gap-1">
           <Text accessibilityRole="header" className="text-h3 tabular-nums text-foreground">
-            {`이 일대에 남은 발자취 ${cell.count}개`}
+            {`${areaName}에 남은 발자취 ${cell.count}개`}
           </Text>
           <Text className="text-caption text-foreground-secondary">
             {categoryFilterName === null ? basis : `${basis} · '${categoryFilterName}' 카테고리 발자취만 셌어요`}
@@ -52,7 +54,7 @@ export function VisitAreaCard({ cell, statistics, categoryFilterName, onClose }:
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="이 일대 정보 닫기"
+          accessibilityLabel={`${areaName} 정보 닫기`}
           onPress={onClose}
           className="-mr-2 -mt-2 h-touch w-touch items-center justify-center"
           testID="visit-map.area-card-close"
