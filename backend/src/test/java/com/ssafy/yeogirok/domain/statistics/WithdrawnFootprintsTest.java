@@ -24,7 +24,7 @@ import com.ssafy.yeogirok.global.oauth.OAuthProvider;
 import com.ssafy.yeogirok.support.WithdrawalJpaTestConfig;
 
 /**
- * 탈퇴 정리 중 발자취. 설정은 withdrawal-test.properties(기본 셀 0.01도, zoom 10 이상 ×1, 10 미만 ×4).
+ * 탈퇴 정리 중 발자취. 설정은 withdrawal-test.properties(기본 셀 0.01도, zoom 10 이상 ×1, 10 미만 ×4, 5 미만 도 9곳).
  * 탈퇴 전후로 방문 분포(API-046) 응답이 같아야 한다.
  */
 @DataJpaTest
@@ -54,6 +54,7 @@ class WithdrawnFootprintsTest {
 		Long othersFootprint = save(OTHER, "37.503", "127.003", List.of("CAFE"), "2026-11-04T03:00:00Z");
 		VisitStatisticsResponse before = statisticsService.getStatistics(SEOUL_BOX, 10, null, null, null, null);
 		VisitStatisticsResponse beforeZoomedOut = statisticsService.getStatistics(SEOUL_BOX, 7, null, null, null, null);
+		VisitStatisticsResponse beforeProvinces = statisticsService.getStatistics(SEOUL_BOX, 4, null, null, null, null);
 		VisitStatisticsResponse beforeNov5 = statisticsService.getStatistics(SEOUL_BOX, 10, null,
 			LocalDate.parse("2026-11-05"), LocalDate.parse("2026-11-05"), null);
 
@@ -63,6 +64,12 @@ class WithdrawnFootprintsTest {
 			.isEqualTo(cellsOf(before));
 		assertThat(cellsOf(statisticsService.getStatistics(SEOUL_BOX, 7, null, null, null, null)))
 			.isEqualTo(cellsOf(beforeZoomedOut));
+		// 전국 보기: 발자취는 법정동 코드(서울)로, 보존분은 기본 셀 중심이 가까운 도로 넣어 같은 도에 남는다.
+		assertThat(cellsOf(beforeProvinces)).extracting(VisitStatisticsResponse.Cell::cellId,
+				VisitStatisticsResponse.Cell::count)
+			.containsExactly(org.assertj.core.groups.Tuple.tuple("province:41", 5L));
+		assertThat(cellsOf(statisticsService.getStatistics(SEOUL_BOX, 4, null, null, null, null)))
+			.isEqualTo(cellsOf(beforeProvinces));
 		assertThat(cellsOf(statisticsService.getStatistics(SEOUL_BOX, 10, null,
 			LocalDate.parse("2026-11-05"), LocalDate.parse("2026-11-05"), null))).isEqualTo(cellsOf(beforeNov5));
 		assertThat(footprintIdsOf(ME)).isEmpty();
@@ -144,7 +151,8 @@ class WithdrawnFootprintsTest {
 	 */
 	static List<VisitStatisticsResponse.Cell> cellsOf(VisitStatisticsResponse response) {
 		return response.cells().stream()
-			.map(cell -> new VisitStatisticsResponse.Cell(cell.cellId(), null, cell.count(), cell.categoryCounts()))
+			.map(cell -> new VisitStatisticsResponse.Cell(cell.cellId(), null, cell.count(), cell.categoryCounts(),
+				cell.regionName()))
 			.toList();
 	}
 }

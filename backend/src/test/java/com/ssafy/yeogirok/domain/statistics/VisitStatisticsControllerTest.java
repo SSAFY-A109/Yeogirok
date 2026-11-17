@@ -57,7 +57,7 @@ class VisitStatisticsControllerTest {
 			new VisitStatisticsResponse.Aggregation("LAT_LNG_GRID", "grid-0.005-v1", "0.005deg", 1),
 			List.of(new VisitStatisticsResponse.Cell("1:7501:25401",
 				new VisitStatisticsResponse.Center(new BigDecimal("37.5025000"), new BigDecimal("127.0025000")),
-				2, categoryCounts)),
+				2, categoryCounts, null)),
 			Instant.parse("2026-11-04T05:00:00Z")));
 
 		getAs("/api/v1/visit-statistics?bbox=126.9,37.4,127.1,37.6&zoom=15.5&category=CAFE"
@@ -78,6 +78,23 @@ class VisitStatisticsControllerTest {
 				  }
 				}
 				""", JsonCompareMode.STRICT));
+	}
+
+	@Test
+	void 전국_보기의_도_칸은_regionName을_담는다() throws Exception {
+		given(service.getStatistics(eq("124.0,33.0,132.0,39.0"), eq(7.0), isNull(), isNull(), isNull(), isNull()))
+			.willReturn(new VisitStatisticsResponse("VISIT_COUNT", new VisitStatisticsResponse.Period(null, null),
+				new VisitStatisticsResponse.Aggregation("PROVINCE", "grid-0.005-v1", "province", 1),
+				List.of(new VisitStatisticsResponse.Cell("province:41",
+					new VisitStatisticsResponse.Center(new BigDecimal("37.5000000"), new BigDecimal("127.2000000")),
+					3, Map.of("CAFE", 3L), "서울·인천·경기")),
+				Instant.parse("2026-11-04T05:00:00Z")));
+
+		getAs("/api/v1/visit-statistics?bbox=124.0,33.0,132.0,39.0&zoom=7")
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.aggregation.unit").value("PROVINCE"))
+			.andExpect(jsonPath("$.data.cells[0].cellId").value("province:41"))
+			.andExpect(jsonPath("$.data.cells[0].regionName").value("서울·인천·경기"));
 	}
 
 	@Test

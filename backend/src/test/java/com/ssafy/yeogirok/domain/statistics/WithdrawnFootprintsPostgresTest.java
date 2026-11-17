@@ -60,6 +60,7 @@ class WithdrawnFootprintsPostgresTest {
 		registry.add("yeogirok.visit-statistics.aggregation-version", () -> "test-v1");
 		registry.add("yeogirok.visit-statistics.base-cell-size-degrees", () -> "0.01");
 		registry.add("yeogirok.visit-statistics.zoom-multipliers", () -> "10:1,0:4");
+		registry.add("yeogirok.visit-statistics.province-below-zoom", () -> "5");
 	}
 
 	@TestConfiguration
@@ -84,13 +85,21 @@ class WithdrawnFootprintsPostgresTest {
 		save(ME, "37.509", "127.009", List.of("CAFE", "FOOD"), "2026-11-04T05:00:00Z");
 		save(ME, "37.501", "127.001", List.of("CAFE"), "2026-11-04T15:30:00Z");
 		save(OTHER, "37.503", "127.003", List.of("CAFE"), "2026-11-04T03:00:00Z");
+		// 법정동 코드가 없는 발자취(역지오코딩 실패). 전국 보기에서 가까운 도로 넣는 SQL 갈래를 PostgreSQL 에서 돈다.
+		em.persist(footprintOf(OTHER).latitude(new BigDecimal("37.504")).longitude(new BigDecimal("127.004"))
+			.legalAreaCode(null).categoryCodes(List.of("CAFE")).visitedAt(Instant.parse("2026-11-04T03:00:00Z")).build());
+		em.flush();
 		List<VisitStatisticsResponse.Cell> before = cells(10);
 		List<VisitStatisticsResponse.Cell> beforeZoomedOut = cells(7);
+		List<VisitStatisticsResponse.Cell> beforeProvinces = cells(4);
 
 		withdraw(ME);
 
 		assertThat(cells(10)).isEqualTo(before);
 		assertThat(cells(7)).isEqualTo(beforeZoomedOut);
+		assertThat(beforeProvinces).extracting(VisitStatisticsResponse.Cell::cellId, VisitStatisticsResponse.Cell::count)
+			.containsExactly(org.assertj.core.groups.Tuple.tuple("province:41", 5L));
+		assertThat(cells(4)).isEqualTo(beforeProvinces);
 		assertThat(count("SELECT count(*) FROM footprints WHERE user_id = 1")).isZero();
 		// 같은 칸·날짜·집합(정렬하면 같다)은 한 행이다.
 		assertThat(count("SELECT visit_count FROM footprint_statistics WHERE cell_id = '3750:12700'"

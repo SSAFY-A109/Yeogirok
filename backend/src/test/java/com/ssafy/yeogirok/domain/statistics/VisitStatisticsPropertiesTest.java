@@ -70,7 +70,8 @@ class VisitStatisticsPropertiesTest {
 			"yeogirok.visit-statistics.zoom-multipliers", zoomMultipliers,
 			"yeogirok.visit-statistics.min-count", "1",
 			"yeogirok.visit-statistics.max-cells", "2500",
-			"yeogirok.visit-statistics.center-min-count", "3")))
+			"yeogirok.visit-statistics.center-min-count", "3",
+			"yeogirok.visit-statistics.province-below-zoom", "9")))
 			.bindOrCreate("yeogirok.visit-statistics", VisitStatisticsProperties.class);
 	}
 }
