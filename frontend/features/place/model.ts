@@ -1,5 +1,5 @@
 import type { Category } from "../common/model";
-import { toPlaceKey } from "../room/model";
+import { toPlaceKey, type AddCustomPlaceRequestDto, type RoomPlace } from "../room/model";
 import { ContractMismatchError } from "../../lib/contract";
 
 // API-026 여행지 검색은 서버에 아직 없어 팀 Notion "API 명세" 상세 페이지(2026-11-10)를 따른다. 서버에 올라오면 Swagger로 다시 맞춘다.
@@ -122,4 +122,99 @@ export function findCategoryName(categories: readonly Category[] | undefined, co
   return categories?.find((category) => {
     return category.code === code;
   })?.name ?? null;
+}
+
+/** 지도(카카오)에서 찾은 장소 중 투어API에 없는 곳. 직접 추가(API-031)로 담는다. */
+export type MapPlace = {
+  key: string;
+  name: string;
+  address: string | null;
+  photoUrl: null;
+  coordinate: { latitude: number; longitude: number };
+};
+
+/** 지도 결과와 이름이 같고 이 거리(m) 안인 투어API 장소는 같은 곳으로 보고 투어API 장소로 담는다. */
+const TOUR_MATCH_METERS = 100;
+/** 이미 담은 직접 추가 후보와 이름이 같고 이 거리(m) 안이면 담은 곳으로 본다. */
+const ADDED_MATCH_METERS = 50;
+const EARTH_RADIUS_METERS = 6_371_000;
+const RADIANS_PER_DEGREE = Math.PI / 180;
+
+/** 카카오 장소 검색 결과 한 건(`lib/native/kakao-place-search`의 `KakaoPlace`와 같은 모양). */
+type MapSearchItem = { name: string; address: string | null; latitude: number; longitude: number };
+
+type NamedCoordinate = { name: string; coordinate: { latitude: number; longitude: number } };
+
+/** 두 좌표 사이의 거리(m). 지구를 구로 보고 잰다(하버사인). */
+function distanceMeters(from: NamedCoordinate["coordinate"], to: NamedCoordinate["coordinate"]): number {
+  const latitudeDelta = (to.latitude - from.latitude) * RADIANS_PER_DEGREE;
+  const longitudeDelta = (to.longitude - from.longitude) * RADIANS_PER_DEGREE;
+
+  const haversine = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(from.latitude * RADIANS_PER_DEGREE) * Math.cos(to.latitude * RADIANS_PER_DEGREE) * Math.sin(longitudeDelta / 2) ** 2;
+
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+function normalizePlaceName(name: string): string {
+  return name.replace(/\s+/g, "").toLowerCase();
+}
+
+/** 이름(공백·대소문자 무시)이 같고 `maxMeters` 안에 있으면 같은 장소로 본다. */
+function isSamePlace(a: NamedCoordinate, b: NamedCoordinate, maxMeters: number): boolean {
+  return normalizePlaceName(a.name) === normalizePlaceName(b.name) && distanceMeters(a.coordinate, b.coordinate) <= maxMeters;
+}
+
+/**
+ * 검색 결과 한 줄. 지도(카카오) 결과 순서를 따르되, 투어API에도 있는 곳은 사진·카테고리가 있는 투어API 장소(`tour`, API-029로 담음)로,
+ * 없는 곳은 지도 장소(`map`, API-031로 직접 추가)로 보인다.
+ */
+export type MergedSearchItem = { kind: "tour"; place: Place } | { kind: "map"; place: MapPlace };
+
+/**
+ * 지도 검색 결과를 투어API 결과와 합친다.
+ * 주소 검색 결과(이름이 곧 주소)는 빼고, 지도 결과와 이름이 같고 `TOUR_MATCH_METERS` 안인 투어API 장소(담을 수 있는 곳만)로 바꾼다.
+ * 같은 장소는 한 번만 보인다.
+ */
+export function mergeSearchResults(results: readonly MapSearchItem[], tourPlaces: readonly Place[]): MergedSearchItem[] {
+  const items: MergedSearchItem[] = [];
+  const usedKeys = new Set<string>();
+
+  for (const result of results) {
+    const place: MapPlace = {
+      key: `KAKAO:${result.name}:${result.latitude},${result.longitude}`,
+      name: result.name,
+      address: result.address,
+      photoUrl: null,
+      coordinate: { latitude: result.latitude, longitude: result.longitude },
+    };
+
+    const tourPlace = tourPlaces.find((candidate) => {
+      return candidate.ref !== null && isSamePlace(candidate, place, TOUR_MATCH_METERS);
+    });
+
+    if (tourPlace !== undefined) {
+      if (!usedKeys.has(tourPlace.key)) {
+        usedKeys.add(tourPlace.key);
+        items.push({ kind: "tour", place: tourPlace });
+      }
+    } else if (result.address !== result.name && !usedKeys.has(place.key)) {
+      usedKeys.add(place.key);
+      items.push({ kind: "map", place });
+    }
+  }
+
+  return items;
+}
+
+/** 여행방에 같은 곳을 직접 추가한 후보가 이미 있는지. 서버는 같은 곳도 새로 담으므로 앱에서 막는다. */
+export function isMapPlaceAdded(place: MapPlace, roomPlaces: readonly Pick<RoomPlace, "name" | "coordinate" | "source">[]): boolean {
+  return roomPlaces.some((roomPlace) => {
+    return roomPlace.source === "MANUAL" && isSamePlace(roomPlace, place, ADDED_MATCH_METERS);
+  });
+}
+
+/** 직접 추가(API-031) 요청 본문. 주소가 없으면 보내지 않는다. */
+export function toCustomPlaceRequest({ name, address, coordinate }: MapPlace): AddCustomPlaceRequestDto {
+  return address === null ? { name, ...coordinate } : { name, address, ...coordinate };
 }

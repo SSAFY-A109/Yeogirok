@@ -5,6 +5,7 @@ import { createIdempotencyKey } from "@/api/idempotency";
 import { invalidateCoursesExceptBanner } from "@/features/course/api/queries";
 import {
   acceptRoomInvitation,
+  addCustomPlace,
   addRoomPlaces,
   createRoom,
   createRoomInvitation,
@@ -308,6 +309,24 @@ export function useAddRoomPlaces() {
 
   return useMutation({
     mutationFn: addRoomPlaces,
+    retry: false,
+    scope: ROOM_VERSION_SCOPE,
+
+    onSuccess: ({ version }, { roomId }) => {
+      storeRoomVersion(queryClient, roomId, version);
+    },
+
+    onSettled: (_result, _error, { roomId }) => {
+      invalidateAfterPlacesChanged(queryClient, roomId);
+    },
+  });
+}
+
+export function useAddCustomPlace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: addCustomPlace,
     retry: false,
     scope: ROOM_VERSION_SCOPE,
 

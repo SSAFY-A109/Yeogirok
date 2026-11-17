@@ -9,6 +9,8 @@ import {
   toUpdateRoomRequest,
   type AcceptRoomInvitationRequestDto,
   type AcceptRoomInvitationResponseDto,
+  type AddCustomPlaceRequestDto,
+  type AddCustomPlaceResponseDto,
   type AddRoomPlaceItemDto,
   type AddRoomPlacesRequestDto,
   type AddRoomPlacesResponseDto,
@@ -143,6 +145,16 @@ export async function addRoomPlaces({ roomId, items, idempotencyKey }: AddRoomPl
   const request: AddRoomPlacesRequestDto = { items };
   const { data } = await api.post<AddRoomPlacesResponseDto>(`/rooms/${roomId}/places`, request, idempotentRequestConfig(idempotencyKey));
   return { places: data.added.map(toRoomPlace), version: data.version };
+}
+
+export type AddCustomPlaceInput = { roomId: number; request: AddCustomPlaceRequestDto; idempotencyKey: string };
+
+export type AddCustomPlaceResult = { place: RoomPlace; version: number };
+
+/** API-031 투어API에 없는 장소를 이름·좌표로 직접 추가 후보에 담는다. */
+export async function addCustomPlace({ roomId, request, idempotencyKey }: AddCustomPlaceInput): Promise<AddCustomPlaceResult> {
+  const { data } = await api.post<AddCustomPlaceResponseDto>(`/rooms/${roomId}/custom-places`, request, idempotentRequestConfig(idempotencyKey));
+  return { place: toRoomPlace(data.roomPlace), version: data.version };
 }
 
 export type ImportCoursePlacesInput = { roomId: number; request: ImportCoursePlacesRequestDto; idempotencyKey: string };

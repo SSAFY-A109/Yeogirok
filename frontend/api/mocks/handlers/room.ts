@@ -3,6 +3,7 @@ import { delay, http } from "msw";
 import { IDEMPOTENCY_HEADER } from "../../idempotency";
 import type {
   AcceptRoomInvitationResponseDto,
+  AddCustomPlaceResponseDto,
   AddRoomPlacesResponseDto,
   AffectedScheduleItemDto,
   CreateRoomResponseDto,
@@ -36,6 +37,8 @@ const TITLE_MAX_LENGTH = 200;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 const PLACE_STATES = ["ACTIVE", "REMOVED", "ALL"];
+/** API-031 장소 이름 최대 길이(코드 포인트). */
+const CUSTOM_PLACE_NAME_MAX_LENGTH = 255;
 
 type JsonBody = Record<string, unknown>;
 
@@ -456,6 +459,67 @@ export const roomHandlers = [
     touchAfterPlacesChanged(room);
     const response: AddRoomPlacesResponseDto = { added: added.map(toAddedPlace), addedCount: added.length, version: room.version };
     mockDb.roomPlaceRequests.set(scopedKey, { requestBody, response });
+    return ok(response, 201);
+  }),
+
+  http.post("*/api/v1/rooms/:roomId/custom-places", async ({ params, request }) => {
+    await delay(MOCK_DELAY_MS);
+    const key = request.headers.get(IDEMPOTENCY_HEADER)?.trim();
+    const body = await readBody(request);
+
+    if (!key || body.name == null || body.latitude == null || body.longitude == null) {
+      return fail(400, "C001", "Idempotency-Key와 name·latitude·longitude가 필요합니다.");
+    }
+
+    const { name, latitude, longitude, address } = body;
+
+    if (typeof name !== "string" || typeof latitude !== "number" || typeof longitude !== "number" ||
+      (address !== undefined && typeof address !== "string")) {
+      return fail(400, "C002", "요청 값의 형식이 올바르지 않습니다.");
+    }
+
+    const trimmedName = name.trim();
+
+    if (trimmedName === "" || [...trimmedName].length > CUSTOM_PLACE_NAME_MAX_LENGTH) {
+      return fail(400, "P004", "장소 이름은 1~255자여야 합니다.");
+    }
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      return fail(400, "C011", "위도·경도가 허용 범위를 벗어났습니다.");
+    }
+
+    const room = findMemberRoom(params.roomId);
+
+    if (room instanceof Response) {
+      return room;
+    }
+
+    const scopedKey = `${room.id}:${key}`;
+    const requestBody = JSON.stringify(body);
+    const previous = mockDb.customPlaceRequests.get(scopedKey);
+
+    if (previous) {
+      return previous.requestBody === requestBody ? ok(previous.response, 201) : fail(409, "C005", "같은 멱등키로 다른 요청을 보냈습니다.");
+    }
+
+    // 서버처럼 같은 이름·좌표여도 새 장소·후보를 만든다.
+    const id = mockDb.nextRoomPlaceId;
+    mockDb.nextRoomPlaceId += 1;
+
+    const added: RoomPlaceDto = {
+      id,
+      place: {
+        provider: "MANUAL", providerPlaceId: null, name: trimmedName, latitude, longitude,
+        address: address?.trim() || null, categoryCode: null, categoryName: null,
+        regionCode: null, regionName: null, imageUrl: null, imageAttribution: null,
+      },
+      sourceType: "MANUAL", sourceRecordId: null, sourceRecord: null, addedBy: MOCK_ME.userId, removedAt: null,
+    };
+
+    room.places = [...room.places, added];
+    touchAfterPlacesChanged(room);
+    const response: AddCustomPlaceResponseDto = { roomPlace: toAddedPlace(added), version: room.version };
+    mockDb.customPlaceRequests.set(scopedKey, { requestBody, response });
     return ok(response, 201);
   }),
 

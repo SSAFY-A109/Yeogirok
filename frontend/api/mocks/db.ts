@@ -1,7 +1,7 @@
 import type { CreateFootprintResponseDto } from "../../features/footprint/model";
 import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
 import type { ChatMessageDto, ChatTicketResponseDto } from "../../features/room/chat-model";
-import type { AddRoomPlacesResponseDto, ChatReadStateDto, CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
+import type { AddCustomPlaceResponseDto, AddRoomPlacesResponseDto, ChatReadStateDto, CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
 
 import { chatReadKey, createChatMessageFixtures, createChatReadFixtures, toChatReadState } from "./fixtures/chat";
 import { createRoomFixtures, type MockRoom } from "./fixtures/room";
@@ -37,6 +37,8 @@ type MockDb = {
   courseImportRequests: Map<string, { requestBody: string; response: ImportCoursePlacesResponseDto }>;
   /** API-029 담기 요청. 키는 `여행방 id:멱등키`다. */
   roomPlaceRequests: Map<string, { requestBody: string; response: AddRoomPlacesResponseDto }>;
+  /** API-031 직접 추가 요청. 키는 `여행방 id:멱등키`다. */
+  customPlaceRequests: Map<string, { requestBody: string; response: AddCustomPlaceResponseDto }>;
   preferences: Map<number, RecommendationPreferenceDto>;
   footprints: Map<number, MockFootprint>;
   footprintRequests: Map<string, MockIdempotencyRecord>;
@@ -76,6 +78,7 @@ function createDb(): MockDb {
     roomCreateRequests: new Map(),
     courseImportRequests: new Map(),
     roomPlaceRequests: new Map(),
+    customPlaceRequests: new Map(),
 
     preferences: new Map(),
 

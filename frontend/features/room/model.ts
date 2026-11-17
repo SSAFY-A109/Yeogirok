@@ -162,6 +162,12 @@ export type AddRoomPlacesRequestDto = { items: AddRoomPlaceItemDto[] };
 
 export type AddRoomPlacesResponseDto = { added: RoomPlaceDto[]; addedCount: number; version: number };
 
+/** API-031 요청. 같은 이름·좌표여도 서버는 매번 새 직접 추가(MANUAL) 후보를 만든다. */
+export type AddCustomPlaceRequestDto = { name: string; latitude: number; longitude: number; address?: string };
+
+/** API-031 응답. `version`은 담은 뒤의 여행방 version이다. */
+export type AddCustomPlaceResponseDto = { roomPlace: RoomPlaceDto; version: number };
+
 export type ImportCoursePlacesRequestDto = { recordId: number; visitIds: number[] };
 
 export type ImportedCoursePlaceDto = {
