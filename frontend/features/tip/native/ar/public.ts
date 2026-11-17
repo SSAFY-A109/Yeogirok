@@ -3,12 +3,12 @@ import { DeviceEventEmitter, NativeModules, PermissionsAndroid, Platform } from 
 import type { UploadFile } from "@/features/media/upload";
 import { TIP_TYPE_LABELS, toSpatialReference, validateTipLocation, type LocationEvidenceDto, type TipSearchPage } from "@/features/tip/model";
 import { ContractMismatchError } from "@/lib/contract";
+import { LocationMeasureError, measureCurrentPosition } from "@/lib/native/location";
 import { createIdempotencyKey } from "@/api/idempotency";
 import { getTipErrorMessage } from "../../errors";
 import { parsePlacement, type CloudPlacement, type TipPhoto } from "./contracts";
 
 type PublicBridge = {
-  getCurrentLocation: () => Promise<string>;
   readPhoto: (name: string) => Promise<string>;
 };
 type ExplorerBridge = {
@@ -19,7 +19,7 @@ type ExplorerBridge = {
 function bridge(): PublicBridge {
   const value = NativeModules.TipExperience;
 
-  if (Platform.OS !== "android" || !value?.getCurrentLocation || !value?.readPhoto) {
+  if (Platform.OS !== "android" || !value?.readPhoto) {
     throw new Error("NATIVE_MODULE_MISSING");
   }
 
@@ -41,8 +41,6 @@ export async function measureTipLocation(): Promise<LocationEvidenceDto> {
     throw new Error("UNSUPPORTED_PLATFORM");
   }
 
-  const native = bridge();
-
   const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
     title: "주변 AR 팁을 위한 현재 위치", message: "주변 팁을 찾고 상세 보기나 반응을 남길 수 있는 거리인지 확인하는 데 현재 위치를 사용해요.", buttonPositive: "위치 확인",
   });
@@ -51,8 +49,30 @@ export async function measureTipLocation(): Promise<LocationEvidenceDto> {
     throw new Error("LOCATION_PERMISSION");
   }
 
-  const location = JSON.parse(await native.getCurrentLocation());
-  return validateTipLocation({ ...location, capturedAt: toServerDateTime(location.capturedAt) });
+  const position = await measureRefinedPosition();
+
+  if (position.accuracyMeters === null) {
+    throw new Error("LOCATION_UNAVAILABLE");
+  }
+
+  return validateTipLocation({
+    latitude: position.latitude, longitude: position.longitude, accuracyMeters: position.accuracyMeters, capturedAt: toServerDateTime(position.measuredAt),
+  });
+}
+
+/** 첫 위치(대개 Wi-Fi 기반)에서 멈추지 않고 GPS가 잡힐 때까지 잠시 더 받아 가장 정확한 값을 고른다. 팁 API는 정확도가 낮으면 C010으로 거절한다. */
+async function measureRefinedPosition() {
+  try {
+    return await measureCurrentPosition();
+  } catch (error) {
+    const reason = error instanceof LocationMeasureError ? error.reason : "unavailable";
+
+    if (reason === "permission") {
+      throw new Error("LOCATION_PERMISSION");
+    }
+
+    throw new Error(reason === "services-off" ? "LOCATION_SERVICES_OFF" : "LOCATION_UNAVAILABLE");
+  }
 }
 
 export function toTipSpatialRequest(placement: CloudPlacement) {

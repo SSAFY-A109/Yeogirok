@@ -229,6 +229,8 @@ export function arErrorMessage(error: unknown): string {
     case "CAPTURE_FAILED": return "카메라를 열지 못했어요. 사진 선택으로 다시 시도해 주세요.";
     case "LOCATION_REQUIRED": return "지도에 탐색 위치를 먼저 찍어 주세요.";
     case "LOCATION_PERMISSION": return "현재 위치 권한을 허용한 뒤 다시 시도해 주세요.";
+    case "LOCATION_SERVICES_OFF": return "휴대폰의 위치 서비스가 꺼져 있어요. 위치를 켠 뒤 다시 시도해 주세요.";
+    case "LOCATION_UNAVAILABLE": return "현재 위치를 측정하지 못했어요. 탁 트인 곳에서 다시 시도해 주세요.";
     case "TIP_POINT_OUT_OF_RANGE": return `지금 위치에서 ${FOOTPRINT_ADJUST_RADIUS_METERS}m 넘게 떨어진 곳으로 핀을 옮겼어요. 위치를 다시 수정하거나 되돌려 주세요.`;
     case "CAMERA_PERMISSION": return "카메라 권한을 허용하거나 기존 사진을 선택해 주세요.";
     case "ANCHOR_EXPIRED": return "공간 정보의 예상 유효 시간이 지났어요. 현장에서 자리를 다시 저장해 주세요.";
