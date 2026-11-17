@@ -26,6 +26,7 @@ public class VisitStatisticsController {
 	@GetMapping("/api/v1/visit-statistics")
 	public ResponseEntity<ApiResponseBody<VisitStatisticsResponse>> getStatistics(
 		@Parameter(description = "west,south,east,north") @RequestParam String bbox,
+		@Parameter(description = "웹 지도 zoom(0 이상). province-below-zoom(9)보다 작으면 격자 대신 도 9곳으로 센다")
 		@RequestParam double zoom,
 		@RequestParam(required = false) String category,
 		@RequestParam(required = false) LocalDate from,

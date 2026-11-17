@@ -28,12 +28,7 @@ class VisitStatisticsQuery {
 
 	/** 삭제하지 않은 발자취. 칸 번호는 이 격자 기준. officialUserId 의 발자취는 실제 사용자 수에서 뺀다(공식 계정이 없으면 -1). */
 	List<Row> countFootprints(VisitGrid grid, BoundingBox area, DateRange dates, String category, long officialUserId) {
-		Where where = new Where("deleted_at IS NULL", Map.of())
-			.and("latitude >= :south AND latitude < :north AND longitude >= :west AND longitude < :east", area(area))
-			.andIf(dates.startInclusive() != null, "visited_at >= :visitedFrom", "visitedFrom", dates.startInclusive())
-			.andIf(dates.endExclusive() != null, "visited_at < :visitedTo", "visitedTo", dates.endExclusive())
-			.andIf(category != null, "CAST(category_codes AS VARCHAR) LIKE :categoryPattern",
-				"categoryPattern", category == null ? null : FootprintCategories.containsPattern(category));
+		Where where = footprintWhere(area, dates, category);
 		Query query = where.bind(entityManager.createNativeQuery("""
 			SELECT lat_index, lng_index, codes, COUNT(*), SUM(latitude), SUM(longitude),
 			       SUM(CASE WHEN user_id = :officialUserId THEN 0 ELSE 1 END)
@@ -48,6 +43,46 @@ class VisitStatisticsQuery {
 		query.setParameter("cellSize", grid.cellSize());
 		query.setParameter("officialUserId", officialUserId);
 		return toRows(query, grid, false);
+	}
+
+	/**
+	 * 전국 보기(도 9곳). 법정동 코드가 있는 발자취는 코드 앞 2자리·카테고리 집합별로 센다. 코드가 없는 발자취는
+	 * fallbackCellSize 칸별로 따로 세어, 서비스가 칸의 평균 위치로 가까운 도를 고르게 한다(좌표 합은 그때만 쓴다).
+	 * 실제 사용자 수는 세지 않는다(도는 정해 둔 위치를 주므로 쓰지 않는다).
+	 */
+	@SuppressWarnings("unchecked")
+	List<ProvinceRow> countFootprintsByProvince(BoundingBox area, DateRange dates, String category,
+		BigDecimal fallbackCellSize) {
+		Where where = footprintWhere(area, dates, category);
+		Query query = where.bind(entityManager.createNativeQuery("""
+			SELECT prefix, lat_index, lng_index, codes, COUNT(*), SUM(latitude), SUM(longitude)
+			FROM (
+			    SELECT SUBSTRING(legal_area_code, 1, 2) AS prefix,
+			           CASE WHEN legal_area_code IS NULL THEN FLOOR(latitude / :cellSize) ELSE 0 END AS lat_index,
+			           CASE WHEN legal_area_code IS NULL THEN FLOOR(longitude / :cellSize) ELSE 0 END AS lng_index,
+			           CAST(category_codes AS VARCHAR) AS codes, latitude, longitude
+			    FROM footprints
+			    WHERE %s
+			) provinces
+			GROUP BY prefix, lat_index, lng_index, codes
+			""".formatted(where.sql())));
+		query.setParameter("cellSize", fallbackCellSize);
+		List<ProvinceRow> rows = new ArrayList<>();
+		for (Object[] result : (List<Object[]>)query.getResultList()) {
+			rows.add(new ProvinceRow((String)result[0], new Row(toLong(result[1]), toLong(result[2]), (String)result[3],
+				toLong(result[4]), toDecimal(result[5]), toDecimal(result[6]), 0)));
+		}
+		return rows;
+	}
+
+	/** 삭제하지 않은 발자취 중 영역·방문 날짜·카테고리에 맞는 것. */
+	private static Where footprintWhere(BoundingBox area, DateRange dates, String category) {
+		return new Where("deleted_at IS NULL", Map.of())
+			.and("latitude >= :south AND latitude < :north AND longitude >= :west AND longitude < :east", area(area))
+			.andIf(dates.startInclusive() != null, "visited_at >= :visitedFrom", "visitedFrom", dates.startInclusive())
+			.andIf(dates.endExclusive() != null, "visited_at < :visitedTo", "visitedTo", dates.endExclusive())
+			.andIf(category != null, "CAST(category_codes AS VARCHAR) LIKE :categoryPattern",
+				"categoryPattern", category == null ? null : FootprintCategories.containsPattern(category));
 	}
 
 	/**
@@ -147,5 +182,9 @@ class VisitStatisticsQuery {
 	/** 한 셀·한 카테고리 집합의 횟수·좌표 합과 그중 실제 사용자(공식 계정 아님) 횟수. codes 는 JSON 배열 문자열. */
 	record Row(long latitudeIndex, long longitudeIndex, String codes, long count, BigDecimal latitudeSum,
 		BigDecimal longitudeSum, long userCount) {
+	}
+
+	/** 전국 보기 한 행. legalAreaPrefix 는 법정동 코드 앞 2자리이고, 코드가 없는 발자취면 null(row 의 칸 번호가 그 칸). */
+	record ProvinceRow(String legalAreaPrefix, Row row) {
 	}
 }

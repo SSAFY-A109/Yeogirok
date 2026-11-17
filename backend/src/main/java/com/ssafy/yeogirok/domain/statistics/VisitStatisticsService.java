@@ -36,6 +36,7 @@ import lombok.RequiredArgsConstructor;
  * category 를 주면 그 코드를 고른 발자취만 세고, categoryCounts 에는 함께 고른 코드도 센다.
  * center 는 셀 발자취의 평균 위치다. 단 실제 사용자 발자취가 1개 이상 center-min-count 미만이면 셀 중심을 준다
  * (공식 계정 발자취는 공개된 장소라 섞인 평균에서 한두 명의 위치를 역산할 수 있다. specs/visit-stats-center.md 3-1).
+ * zoom 이 province-below-zoom 보다 작으면(전국 보기) 격자 대신 도 9곳({@link VisitProvince})으로 센다.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,6 +45,10 @@ public class VisitStatisticsService {
 
 	public static final String METRIC_VISIT_COUNT = "VISIT_COUNT";
 	static final String UNIT = "LAT_LNG_GRID";
+	static final String PROVINCE_UNIT = "PROVINCE";
+	static final String PROVINCE_PRECISION = "province";
+	/** 법정동 코드가 없는 발자취를 가까운 도로 넣을 때 묶는 칸(약 5km). 도 마커끼리 80km 넘게 떨어져 있어 이 정도면 충분하다. */
+	private static final BigDecimal PROVINCE_FALLBACK_CELL_SIZE = new BigDecimal("0.05");
 	private static final int COORDINATE_SCALE = 7;
 
 	private static final Pattern CATEGORY_CODE = Pattern.compile("\"([A-Z_]+)\"");
@@ -69,6 +74,10 @@ public class VisitStatisticsService {
 		DateRange dates = new DateRange(from, to);
 
 		BoundingBox korea = intersect(box, KOREA);
+		if (zoom < properties.provinceBelowZoom()) {
+			return response(dates, PROVINCE_UNIT, PROVINCE_PRECISION,
+				korea == null ? List.of() : countProvinces(dates, category));
+		}
 		if (korea == null) {
 			return response(dates, grid, List.of());
 		}
@@ -95,11 +104,47 @@ public class VisitStatisticsService {
 		return response(dates, grid, cells);
 	}
 
+	/**
+	 * 전국 보기. bbox 와 상관없이 한국 전체를 도 9곳으로 센다(도 전체 수라 화면을 옮겨도 같은 도의 수는 그대로다).
+	 * 법정동 코드가 있는 발자취는 코드로, 코드가 없는 발자취와 탈퇴자 보존분(기본 셀 중심)은 위치가 가까운 도로 넣는다.
+	 */
+	private List<VisitStatisticsResponse.Cell> countProvinces(DateRange dates, String category) {
+		Map<VisitProvince, Tally> tallies = new EnumMap<>(VisitProvince.class);
+		for (VisitStatisticsQuery.ProvinceRow row : query.countFootprintsByProvince(KOREA, dates, category,
+			PROVINCE_FALLBACK_CELL_SIZE)) {
+			VisitProvince province = VisitProvince.ofLegalAreaPrefix(row.legalAreaPrefix())
+				.orElseGet(() -> nearestProvince(row.row()));
+			tallies.computeIfAbsent(province, key -> new Tally()).add(row.row());
+		}
+		VisitGrid baseGrid = new VisitGrid(properties.baseCellSizeDegrees(), 1);
+		for (VisitStatisticsQuery.Row row : query.countPreserved(baseGrid, properties.aggregationVersion(), KOREA,
+			dates, category)) {
+			tallies.computeIfAbsent(nearestProvince(row), key -> new Tally()).add(row);
+		}
+
+		return tallies.entrySet().stream()  // EnumMap 이라 도 순서다
+			.filter(entry -> entry.getValue().count >= properties.minCount())
+			.map(entry -> toProvinceCell(entry.getKey(), entry.getValue()))
+			.toList();
+	}
+
+	/** 행의 평균 위치(보존분은 기본 셀 중심)에서 마커 위치가 가장 가까운 도. */
+	private static VisitProvince nearestProvince(VisitStatisticsQuery.Row row) {
+		BigDecimal count = BigDecimal.valueOf(row.count());
+		return VisitProvince.nearest(row.latitudeSum().divide(count, COORDINATE_SCALE, RoundingMode.HALF_UP),
+			row.longitudeSum().divide(count, COORDINATE_SCALE, RoundingMode.HALF_UP));
+	}
+
 	private VisitStatisticsResponse response(DateRange dates, VisitGrid grid, List<VisitStatisticsResponse.Cell> cells) {
+		return response(dates, UNIT, grid.precision(), cells);
+	}
+
+	private VisitStatisticsResponse response(DateRange dates, String unit, String precision,
+		List<VisitStatisticsResponse.Cell> cells) {
 		return new VisitStatisticsResponse(
 			METRIC_VISIT_COUNT,
 			new VisitStatisticsResponse.Period(dates.from(), dates.to()),
-			new VisitStatisticsResponse.Aggregation(UNIT, properties.aggregationVersion(), grid.precision(),
+			new VisitStatisticsResponse.Aggregation(unit, properties.aggregationVersion(), precision,
 				properties.minCount()),
 			cells,
 			clock.instant());
@@ -138,7 +183,14 @@ public class VisitStatisticsService {
 			? new VisitStatisticsResponse.Center(tally.average(tally.latitudeSum), tally.average(tally.longitudeSum))
 			: new VisitStatisticsResponse.Center(grid.center(key.latitudeIndex), grid.center(key.longitudeIndex));
 		return new VisitStatisticsResponse.Cell(grid.cellId(key.latitudeIndex, key.longitudeIndex), center, tally.count,
-			tally.categoryCounts());
+			tally.categoryCounts(), null);
+	}
+
+	/** 도 마커는 정해 둔 위치에 둔다. 발자취 평균을 쓰지 않아 센 수와 상관없이 한 사람의 위치가 드러나지 않는다. */
+	private static VisitStatisticsResponse.Cell toProvinceCell(VisitProvince province, Tally tally) {
+		return new VisitStatisticsResponse.Cell(province.cellId(),
+			new VisitStatisticsResponse.Center(province.latitude(), province.longitude()), tally.count,
+			tally.categoryCounts(), province.displayName());
 	}
 
 	/** 북쪽(위도 칸 큰 쪽)부터, 같은 줄은 서쪽부터. */

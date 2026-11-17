@@ -3,6 +3,7 @@ package com.ssafy.yeogirok.domain.statistics;
 import static com.ssafy.yeogirok.domain.footprint.FootprintFixture.footprintOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,6 +33,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 /**
  * API-046. 테스트 설정: 기본 셀 0.01도, zoom 10 이상 ×1(0.01도), 10 미만 ×4(0.04도). 최대 셀 수는 공통 설정 2500.
  * 역삼동 근처 (37.505, 127.005) 는 zoom 10 에서 칸 (3750, 12700) 이다.
+ * 격자를 보는 테스트는 도로 묶지 않게(province-below-zoom 0) 두고, 전국 보기는 {@link 전국_보기} 가 본다.
  */
 @DataJpaTest
 @Import({VisitStatisticsService.class, VisitStatisticsQuery.class, ClockConfig.class})
@@ -39,7 +41,8 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 	"yeogirok.visit-statistics.aggregation-version=test-v1",
 	"yeogirok.visit-statistics.base-cell-size-degrees=0.01",
 	"yeogirok.visit-statistics.zoom-multipliers=10:1,0:4",
-	"yeogirok.visit-statistics.min-count=1"
+	"yeogirok.visit-statistics.min-count=1",
+	"yeogirok.visit-statistics.province-below-zoom=0"
 })
 class VisitStatisticsServiceTest {
 
@@ -312,6 +315,135 @@ class VisitStatisticsServiceTest {
 
 			assertThat(response.aggregation().minCount()).isEqualTo(2);
 			assertThat(response.cells()).extracting(VisitStatisticsResponse.Cell::cellId).containsExactly("1:3751:12700");
+		}
+	}
+
+	/** 전국 보기(zoom 9 미만, 운영 설정과 같다). 도 9곳으로 세고 특별시·광역시는 둘러싼 도에 합친다. */
+	@Nested
+	@TestPropertySource(properties = "yeogirok.visit-statistics.province-below-zoom=9")
+	class 전국_보기 {
+
+		static final String KOREA_BOX = "124.0,33.0,132.0,39.0";
+
+		@Test
+		void 법정동_코드_앞_2자리로_도를_나누고_광역시는_둘러싼_도에_더하며_도마다_정한_위치를_준다() {
+			saveIn("1168010100", at("37.501", "127.039"), List.of("CAFE"));    // 서울 강남
+			saveIn("2818510100", at("37.386", "126.639"), List.of("FOOD"));    // 인천 연수
+			saveIn("4111710100", at("37.263", "127.028"), List.of("FOOD"));    // 경기 수원
+			saveIn("2611010100", at("35.106", "129.032"), List.of("CAFE"));    // 부산 중구
+			saveIn("5011010100", at("33.499", "126.531"), List.of("NATURE"));  // 제주시
+
+			VisitStatisticsResponse response = get(KOREA_BOX, 8, null, null, null);
+
+			assertThat(response.aggregation().unit()).isEqualTo("PROVINCE");
+			assertThat(response.aggregation().precision()).isEqualTo("province");
+			assertThat(response.cells())  // 도 순서
+				.extracting(VisitStatisticsResponse.Cell::cellId, VisitStatisticsResponse.Cell::regionName,
+					VisitStatisticsResponse.Cell::count)
+				.containsExactly(
+					tuple("province:41", "서울·인천·경기", 3L),
+					tuple("province:48", "부산·울산·경남", 1L),
+					tuple("province:50", "제주", 1L));
+			VisitStatisticsResponse.Cell capital = response.cells().getFirst();
+			assertThat(capital.categoryCounts()).containsExactly(Map.entry("FOOD", 2L), Map.entry("CAFE", 1L));
+			assertThat(capital.center().latitude()).isEqualByComparingTo("37.5");  // 발자취 평균이 아니다
+			assertThat(capital.center().longitude()).isEqualByComparingTo("127.2");
+		}
+
+		@Test
+		void 화면_영역과_상관없이_도_전체를_세고_한국_밖만_보면_빈_결과다() {
+			saveIn("4719010100", at("36.119", "128.344"), List.of("CAFE"));  // 경북 구미. 서울 화면 밖
+
+			assertThat(get(SEOUL_BOX, 8, null, null, null).cells())
+				.extracting(VisitStatisticsResponse.Cell::cellId).containsExactly("province:47");
+			VisitStatisticsResponse outside = get("140.0,40.0,140.1,40.1", 8, null, null, null);
+			assertThat(outside.aggregation().unit()).isEqualTo("PROVINCE");
+			assertThat(outside.cells()).isEmpty();
+		}
+
+		@Test
+		void 법정동_코드가_없거나_모르는_코드면_위치가_가까운_도로_넣는다() {
+			saveIn(null, at("35.180", "129.075"), List.of("CAFE"));          // 부산 앞바다(역지오코딩 실패)
+			saveIn(null, at("37.881", "127.730"), List.of("CAFE"));          // 춘천
+			saveIn("9911010100", at("33.253", "126.560"), List.of("CAFE"));  // 모르는 코드, 서귀포
+
+			assertThat(get(KOREA_BOX, 8, null, null, null).cells())
+				.extracting(VisitStatisticsResponse.Cell::cellId, VisitStatisticsResponse.Cell::count)
+				.containsExactly(tuple("province:51", 1L), tuple("province:48", 1L), tuple("province:50", 1L));
+		}
+
+		@Test
+		void 바뀌기_전_법정동_코드도_지금의_도로_센다() {
+			saveIn("4215010100", at("37.752", "128.876"), List.of("CAFE"));  // 강원도 강릉(42)
+			saveIn("4511310100", at("35.824", "127.148"), List.of("CAFE"));  // 전라북도 전주(45)
+			saveIn("2911010100", at("35.146", "126.923"), List.of("CAFE"));  // 광주광역시(29)
+			saveIn("4611010100", at("34.812", "126.392"), List.of("CAFE"));  // 전라남도 목포(46)
+
+			assertThat(get(KOREA_BOX, 8, null, null, null).cells())
+				.extracting(VisitStatisticsResponse.Cell::cellId, VisitStatisticsResponse.Cell::count)
+				.containsExactly(tuple("province:51", 1L), tuple("province:52", 1L), tuple("province:12", 2L));
+		}
+
+		@Test
+		void 탈퇴자_보존분은_기본_셀_중심이_가까운_도에_더하고_다른_집계_버전은_더하지_않는다() {
+			saveIn("2711010100", at("35.869", "128.596"), List.of("CAFE"));  // 대구
+			preserve("test-v1", "3586:12859", "2026-11-01", "[\"CAFE\"]", "35.865", "128.595", 3);  // 대구 기본 셀
+			preserve("old-v0", "3586:12859", "2026-11-01", "[\"CAFE\"]", "35.865", "128.595", 100);
+
+			assertThat(get(KOREA_BOX, 8, null, null, null).cells())
+				.extracting(VisitStatisticsResponse.Cell::cellId, VisitStatisticsResponse.Cell::count)
+				.containsExactly(tuple("province:47", 4L));
+		}
+
+		@Test
+		void category와_기간으로_거른다() {
+			saveIn("1168010100", at("37.501", "127.039"), List.of("CAFE", "FOOD"));
+			saveIn("1168010100", at("37.502", "127.039"), List.of("NATURE"));
+			saveIn("1168010100", at("37.503", "127.039"), List.of("CAFE"), "2026-10-01T03:00:00Z");  // 기간 밖
+
+			VisitStatisticsResponse.Cell cell = get(KOREA_BOX, 8, "CAFE", LocalDate.parse("2026-11-01"), null)
+				.cells().getFirst();
+
+			assertThat(cell.count()).isEqualTo(1);
+			assertThat(cell.categoryCounts()).containsExactly(Map.entry("FOOD", 1L), Map.entry("CAFE", 1L));
+		}
+
+		@Test
+		void zoom이_9_이상이면_격자로_세고_9보다_조금이라도_작으면_도로_센다() {
+			saveIn("1168010100", at("37.501", "127.001"), List.of("CAFE"));
+
+			assertThat(get(SEOUL_BOX, 9, null, null, null).aggregation().unit()).isEqualTo("LAT_LNG_GRID");
+			assertThat(get(SEOUL_BOX, 8.9, null, null, null).aggregation().unit()).isEqualTo("PROVINCE");
+		}
+
+		@Test
+		void 한국_전체를_봐도_셀_수_제한에_걸리지_않는다() {
+			assertThat(get(KOREA_BOX, 0, null, null, null).cells()).isEmpty();
+		}
+
+		@Nested
+		@TestPropertySource(properties = "yeogirok.visit-statistics.min-count=2")
+		class 최소_집계_수 {
+
+			@Test
+			void 최소_집계_수보다_적은_도는_뺀다() {
+				saveIn("1168010100", at("37.501", "127.039"), List.of("CAFE"));
+				saveIn("4111710100", at("37.263", "127.028"), List.of("CAFE"));  // 서울과 합쳐 2 → 보임
+				saveIn("5011010100", at("33.499", "126.531"), List.of("CAFE"));  // 1 → 빠짐
+
+				assertThat(get(KOREA_BOX, 8, null, null, null).cells())
+					.extracting(VisitStatisticsResponse.Cell::cellId).containsExactly("province:41");
+			}
+		}
+
+		private void saveIn(String legalAreaCode, BigDecimal[] point, List<String> categories) {
+			saveIn(legalAreaCode, point, categories, "2026-11-04T03:00:00Z");
+		}
+
+		private void saveIn(String legalAreaCode, BigDecimal[] point, List<String> categories, String visitedAt) {
+			em.persist(footprintOf(1L).latitude(point[0]).longitude(point[1]).legalAreaCode(legalAreaCode)
+				.categoryCodes(categories).visitedAt(Instant.parse(visitedAt)).build());
+			em.flush();
 		}
 	}
 
