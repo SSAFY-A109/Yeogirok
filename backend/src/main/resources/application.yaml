@@ -72,12 +72,13 @@ yeogirok:
     # 0 이면 늘 격자다(2026-11-17, 전국을 볼 때 격자 칸이 너무 많아서).
     province-below-zoom: 9
   tip:
-    # AR 팁 거리·개수: 주변 탐색 100m(11/16 50m 에서 넓힘), 상세·반응 300m(경계 포함), 탐색 결과 가까운 순 최대 10개(11/6 확정).
-    # 상세·반응은 11/17 5m 에서 300m 로 넓힘: 실내 위치 오차(10~100m)로 팁 앞에서도 T004 가 났다. 위치 정확도 기준(150m)의 두 배로 둔다(정확도 값은 약 68% 반경이라 실제 오차가 더 클 수 있음).
+    # AR 팁 거리·개수: 주변 탐색 100m(11/16 50m 에서 넓힘), 상세·반응 50m(경계 포함), 탐색 결과 가까운 순 최대 10개(11/6 확정).
+    # 상세·반응은 11/17 5m 에서 50m 로 넓힘: 실내 위치 오차(10~20m)로 팁 앞에서도 T004 가 났다.
+    # 앱은 047 interactionRadiusMeters 를 5 또는 50 만 받는다(frontend features/tip/model.ts). 다른 값이면 AR 이 안 열린다.
     # 가까이 가야 보이는 것은 앱이 AR 거리 5m 로 막는다.
     # 앱은 응답 appliedRadiusMeters 를 따라야 한다. 50 으로 고정한 옛 앱이 남아 있으면 이 값을 바꾼 배포 전에 앱부터 내보낸다.
     search-radius-meters: 100
-    interaction-radius-meters: 300
+    interaction-radius-meters: 50
     max-search-results: 10
     # placement JSON 최대 크기(11/8 결정 8KB). 앱은 3개 필드만 보낸다.
     placement-max-bytes: 8192
