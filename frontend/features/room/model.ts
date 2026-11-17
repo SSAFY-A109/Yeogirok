@@ -32,8 +32,8 @@ export const ROOM_MEMBER_LIMIT = 10;
 /** API-020 목록의 참여자. */
 export type RoomListMemberDto = { userId: number; nickname: string; profileImageUrl: string | null };
 
-/** API-022 상세의 참여자. 사진 주소는 주지 않는다. */
-export type RoomDetailMemberDto = { userId: number; nickname: string; isCreator: boolean };
+/** API-022 상세의 참여자. `profileImageUrl`은 2026-11-17 서버에 추가했다(그 전 서버는 주지 않는다). */
+export type RoomDetailMemberDto = { userId: number; nickname: string; profileImageUrl?: string | null; isCreator: boolean };
 
 export type ChatReadStateDto = { lastReadMessageId: number | null; hasUnreadMessages: boolean };
 
@@ -196,7 +196,7 @@ export type RoomMember = {
   nickname: string;
   /** 아바타에 쓰는 이름 첫 글자. */
   initial: string;
-  /** 목록 응답에만 있다. 상세 응답은 사진을 주지 않아 `null`이다. */
+  /** 소셜 로그인 때 받은 프로필 사진. 없으면 `null`이고 아바타는 이름 첫 글자를 그린다. */
   profileImageUrl: string | null;
 };
 

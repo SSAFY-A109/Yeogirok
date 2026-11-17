@@ -44,6 +44,6 @@ export function RecordPhoto({ record, photo, className, showUploader = true }: {
           setFailedUri(uri);
         }} style={{ width: "100%", height: "100%" }} />
     )}
-    {showUploader && <MemberAvatar size="sm" initial={member?.initial ?? "?"} toneIndex={member?.id ?? 0} bordered className="absolute bottom-1 right-1" />}
+    {showUploader && <MemberAvatar size="sm" initial={member?.initial ?? "?"} photoUrl={member?.profileImageUrl} toneIndex={member?.id ?? 0} bordered className="absolute bottom-1 right-1" />}
   </View>;
 }

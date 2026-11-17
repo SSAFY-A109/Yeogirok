@@ -144,7 +144,7 @@ function InviteMemberRow({ member, isMe, toneIndex }: { member: RoomMember; isMe
       accessibilityLabel={isMe ? `${member.nickname}, 나` : member.nickname}
       className="mt-2 flex-row items-center gap-3 py-2"
     >
-      <MemberAvatar initial={member.initial} toneIndex={toneIndex} size="lg" />
+      <MemberAvatar initial={member.initial} photoUrl={member.profileImageUrl} toneIndex={toneIndex} size="lg" />
       <View className="flex-1">
         <Text className="text-label text-foreground" numberOfLines={1}>
           {member.nickname}
