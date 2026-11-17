@@ -33,7 +33,8 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 /**
  * API-046. 테스트 설정: 기본 셀 0.01도, zoom 10 이상 ×1(0.01도), 10 미만 ×4(0.04도). 최대 셀 수는 공통 설정 2500.
  * 역삼동 근처 (37.505, 127.005) 는 zoom 10 에서 칸 (3750, 12700) 이다.
- * 격자를 보는 테스트는 도로 묶지 않게(province-below-zoom 0) 두고, 전국 보기는 {@link 전국_보기} 가 본다.
+ * zoom 9 미만은 운영 설정처럼 도 9곳으로 세므로(province-below-zoom 9) 격자는 zoom 9 이상으로 보고, 전국 보기는 {@link 전국_보기} 가 본다.
+ * 전국 보기도 같은 설정을 써서 테스트 컨텍스트를 새로 만들지 않는다.
  */
 @DataJpaTest
 @Import({VisitStatisticsService.class, VisitStatisticsQuery.class, ClockConfig.class})
@@ -42,7 +43,7 @@ import com.ssafy.yeogirok.global.exception.ExceptionType;
 	"yeogirok.visit-statistics.base-cell-size-degrees=0.01",
 	"yeogirok.visit-statistics.zoom-multipliers=10:1,0:4",
 	"yeogirok.visit-statistics.min-count=1",
-	"yeogirok.visit-statistics.province-below-zoom=0"
+	"yeogirok.visit-statistics.province-below-zoom=9"
 })
 class VisitStatisticsServiceTest {
 
@@ -94,7 +95,7 @@ class VisitStatisticsServiceTest {
 		save(at("37.519", "127.035"), List.of("FOOD"));   // 0.01 칸 (3751, 12703) → 0.04 칸 (937, 3175) 같은 칸
 		save(at("37.521", "127.001"), List.of("FOOD"));   // 0.01 칸 (3752, 12700) → 0.04 칸 (938, 3175)
 
-		VisitStatisticsResponse response = get(SEOUL_BOX, 7, null, null, null);
+		VisitStatisticsResponse response = get(SEOUL_BOX, 9, null, null, null);
 
 		assertThat(response.aggregation().precision()).isEqualTo("0.04deg");
 		assertThat(response.cells()).extracting(VisitStatisticsResponse.Cell::cellId, VisitStatisticsResponse.Cell::count)
@@ -165,7 +166,7 @@ class VisitStatisticsServiceTest {
 		preserve("test-v1", "3750:12700", "2026-11-01", "[\"FOOD\"]", "37.505", "127.005", 100);  // 카테고리 밖
 		preserve("old-v0", "3750:12700", "2026-11-01", "[\"CAFE\"]", "37.505", "127.005", 100);   // 다른 버전
 
-		VisitStatisticsResponse response = get(SEOUL_BOX, 7, "CAFE", LocalDate.parse("2026-11-01"), null);
+		VisitStatisticsResponse response = get(SEOUL_BOX, 9, "CAFE", LocalDate.parse("2026-11-01"), null);
 
 		assertThat(response.cells()).singleElement()
 			.satisfies(cell -> {
@@ -204,7 +205,7 @@ class VisitStatisticsServiceTest {
 		save(at("38.505", "127.005"), List.of("CAFE"));
 		save(at("39.505", "127.005"), List.of("CAFE"));  // 위도 39 밖
 
-		assertThat(get("127.0,38.0,127.1,40.0", 0, null, null, null).cells())
+		assertThat(get("127.0,38.0,127.1,40.0", 9, null, null, null).cells())
 			.extracting(VisitStatisticsResponse.Cell::count).containsExactly(1L);
 		assertThat(get("140.0,40.0,140.1,40.1", 10, null, null, null).cells()).isEmpty();
 	}
@@ -213,7 +214,7 @@ class VisitStatisticsServiceTest {
 	void 셀_경계로_넓힌_영역의_셀_수가_2500을_넘으면_C013() {
 		assertThat(get("127.0,37.0,127.49,37.49", 10, null, null, null).cells()).isEmpty();  // 50 × 50 = 2500
 		expect(() -> get("127.0,37.0,127.5,37.5", 10, null, null, null), ExceptionType.INVALID_BBOX);  // 51 × 51
-		expect(() -> get("124.0,33.0,132.0,39.0", 0, null, null, null), ExceptionType.INVALID_BBOX);  // 한국 전체 × 0.04도
+		expect(() -> get("124.0,33.0,132.0,39.0", 9, null, null, null), ExceptionType.INVALID_BBOX);  // 한국 전체 × 0.04도
 	}
 
 	/** 230: center 는 발자취 평균 위치. 실제 사용자 발자취가 1~2개(center-min-count 3 미만)면 셀 중심(3-1). */
@@ -320,7 +321,6 @@ class VisitStatisticsServiceTest {
 
 	/** 전국 보기(zoom 9 미만, 운영 설정과 같다). 도 9곳으로 세고 특별시·광역시는 둘러싼 도에 합친다. */
 	@Nested
-	@TestPropertySource(properties = "yeogirok.visit-statistics.province-below-zoom=9")
 	class 전국_보기 {
 
 		static final String KOREA_BOX = "124.0,33.0,132.0,39.0";
