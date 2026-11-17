@@ -250,13 +250,19 @@ async function check() {
     assert.deepEqual((await tipApi.viewTip({ tipId: 1, location })).photos, []);
     assert.equal(model.toTipDetail({ ...tipFixture, author: { id: null, nickname: "탈퇴한 사용자" } }).author.id, null);
 
-    for (const interactionRadiusMeters of [5, 50]) {
-      const item = { id: 1, ...location, summary: "팁", spatialReference: tipFixture.spatialReference, placement: {}, distanceMeters: 50, canInteract: interactionRadiusMeters === 50 };
+    for (const interactionRadiusMeters of [5, 50, 300]) {
+      const item = { id: 1, ...location, summary: "팁", spatialReference: tipFixture.spatialReference, placement: {}, distanceMeters: 50, canInteract: interactionRadiusMeters >= 50 };
       const response = { items: [item], nextCursor: null, totalCount: 1, appliedRadiusMeters: 50, interactionRadiusMeters };
       assert.equal(model.toTipSearchPage(response).items[0].canInteract, item.canInteract);
 
       assert.throws(() => {
         model.toTipSearchPage({ ...response, items: [{ ...item, canInteract: !item.canInteract }] });
+      }, /계약/);
+    }
+
+    for (const interactionRadiusMeters of [0, -1, "50", undefined]) {
+      assert.throws(() => {
+        model.toTipSearchPage({ items: [], nextCursor: null, totalCount: 0, appliedRadiusMeters: 50, interactionRadiusMeters });
       }, /계약/);
     }
 
