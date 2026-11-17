@@ -149,6 +149,10 @@ services:
       # 2026-11-17 30 → 150: 실내에서는 휴대폰 위치가 Wi-Fi 기반(정확도 100m 안팎)으로만 잡혀 AR 팁 탭이 늘 막혔다.
       # 대신 위치가 최대 150m 빗나간 채로 팁을 보거나 등록할 수 있다. 바꾸면 백엔드 컨테이너만 다시 만들면 된다(README 9단계).
       LOCATION_EVIDENCE_MAX_ACCURACY_METERS: "150"
+      # AR 팁 상세·반응 허용 거리(미터, 백엔드 yeogirok.tip.interaction-radius-meters). 넘으면 T004("팁에서 너무 멀어요").
+      # 백엔드 application.yaml 기본값 5 를 덮어쓴다. 2026-11-17 5 → 150(백엔드 개발자와 합의): GPS 오차(실기기 7~11m)가 5m 보다 커서
+      # AR 에서 팁 1m 앞에 서 있어도 T004 가 났다. 주변 탐색 반경(100m)보다 크므로 AR 에 보이는 팁은 모두 열고 반응할 수 있다.
+      YEOGIROK_TIP_INTERACTIONRADIUSMETERS: "150"
       # 투어API 공식 코스 적재(백엔드 S15P31A109-221, 일회성). 값은 .env. 비어 있으면 꺼져 있어 아무 일도 하지 않는다.
       # 켜 두면 백엔드가 새로 뜰 때마다(Jenkins 자동 배포 포함) 다시 돈다. 다 돌면 ENABLED=false 로 돌리고 UNPUBLISH·RESEED 를 비운다.
       # 기본값은 백엔드 application.yaml 기본값과 같다. 켜고 끄는 법은 README 9단계 "공식 코스 적재".
