@@ -2,8 +2,28 @@ import { assertId, ContractMismatchError, toKnownEnum } from "@/lib/contract";
 import { formatDateRange, formatMonthDay, formatServerDateTime, parseLocalDate, parseNullableLocalDate, parseServerDateTime } from "@/lib/date";
 import type { CoursePreviewDto } from "@/features/course/model";
 
-/** 여행방 확정 일정에서 가져온 참고 계획의 하루. 서버는 일정 연동 전이라 아직 `plannedSchedule`을 항상 `null`로 준다. */
-type PlannedDayDto = { date: string; stops: { roomPlaceId: number; arrivalTime: string | null }[] };
+/** 여행방 확정 일정에서 가져온 참고 계획의 항목(노션 API-059 ScheduleDay). `id`는 일정 항목 ID라 방문의 `plannedItemId`가 가리킨다. */
+type PlannedItemDto = {
+  id: number;
+  roomPlaceId: number;
+  order: number;
+  arrivalAt: string | null;
+  departureAt: string | null;
+  stayMinutes: number;
+  fixed: boolean;
+  place: RecordPlace | null;
+};
+/** 참고 계획의 하루. 기록을 만들 때 여행방에 확정 일정이 없었으면 `plannedSchedule`이 `null`이다. */
+type PlannedDayDto = { date: string; startTime: string | null; endTime: string | null; items: PlannedItemDto[] };
+
+const PLANNED_TIME_START = 11;
+const PLANNED_TIME_END = 16;
+
+/** 계획 도착 시각(`yyyy-MM-dd HH:mm:ss+09`)을 서울 기준 `HH:mm`으로. 모르면 null이다. */
+function toPlannedArrivalTime(value: string | null): string | null {
+  return value === null ? null
+    : formatServerDateTime(parseServerDateTime(value, "plannedSchedule.items.arrivalAt")).slice(PLANNED_TIME_START, PLANNED_TIME_END);
+}
 
 const LOCAL_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -287,8 +307,8 @@ export function toRecordDetail(dto: RecordDetailDto) {
         return {
           date: day.date,
 
-          stops: day.stops.map((stop) => {
-            return { id: stop.roomPlaceId, arrivalTime: stop.arrivalTime || null };
+          stops: day.items.map((item) => {
+            return { id: assertId(item.id, "plannedSchedule.items.id"), arrivalTime: toPlannedArrivalTime(item.arrivalAt) };
           }),
         };
       }) },
