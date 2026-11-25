@@ -1,0 +1,43 @@
+# Jenkins(CI/CD) 서버용 Compose. 앱(../docker-compose.yml)과 따로 켜고 끈다 (가이드 10단계).
+# 서버의 ~/yeogirok/infra-src/infra/jenkins 에서 실행한다.
+#
+#   docker compose up -d     # 켜기
+#   docker compose ps        # 상태 보기
+#   docker compose logs -f   # 로그 보기
+#
+# 같은 폴더의 .env 에 DOCKER_GID 한 줄이 있어야 한다 (가이드 10-1, 커밋 금지).
+#
+# 앱과 파일을 나눈 이유: 앱을 다시 띄워도 Jenkins 는 그대로 있고, Jenkins 를 껐다 켜도 앱은 영향을 받지 않는다.
+
+name: yeogirok-jenkins
+
+services:
+  jenkins:
+    # LTS(장기 지원) 버전 + Java 21. 백엔드 테스트(Gradle)도 이 Java 로 돌린다.
+    image: jenkins/jenkins:lts-jdk21
+    restart: unless-stopped
+    environment:
+      # Nginx 가 https://<도메인>/jenkins/ 로 넘겨주므로 Jenkins 주소 앞에 /jenkins 를 붙인다.
+      JENKINS_OPTS: --prefix=/jenkins
+      # Jenkins 자체가 쓰는 메모리 상한. 테스트(Gradle)는 이와 별도로 메모리를 더 쓴다.
+      JAVA_OPTS: -Xmx1g -Duser.timezone=Asia/Seoul
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:9090:8080"   # 8080 은 백엔드가 쓰고 있어 9090 으로 연다. Nginx 만 접근
+    volumes:
+      # 설정·job·빌드 기록·Gradle 캐시가 모두 여기에 남는다. 컨테이너를 지워도 사라지지 않는다.
+      - jenkins-home:/var/jenkins_home
+      # 백엔드 테스트(Testcontainers)가 Redis 컨테이너를 띄울 때 서버 Docker 를 쓴다.
+      # 주의: 이 연결 때문에 Jenkins 관리자 계정은 서버 root 와 같은 권한을 갖는다. 계정을 꼭 필요한 사람에게만 준다.
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      # docker.sock 을 쓸 수 있게 서버 docker 그룹 번호를 준다. 서버마다 번호가 달라 .env 에서 읽는다.
+      - "${DOCKER_GID:?.env 에 DOCKER_GID 를 넣어야 한다 (가이드 10-1)}"
+    extra_hosts:
+      # 컨테이너 안에서 서버(호스트)를 host.docker.internal 이라는 이름으로 부른다. 배포할 때 이 주소로 SSH 접속한다.
+      - "host.docker.internal:host-gateway"
+    # Jenkins 와 테스트가 앱 메모리까지 다 쓰지 않게 상한을 둔다 (서버 전체 15GB).
+    mem_limit: 4g
+
+volumes:
+  jenkins-home:

@@ -1,0 +1,5 @@
+# 서버 비밀값
+.env
+# DB 백업 파일
+backups/
+*.sql.gz
