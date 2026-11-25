@@ -1,0 +1,6 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="150" height="48" viewBox="0 0 150 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<mask id="stroke0_0_32" fill="white">
+<path d="M150 24C150 37.2548 116.421 48 75 48C33.5786 48 0 37.2548 0 24C0 10.7452 33.5786 0 75 0C116.421 0 150 10.7452 150 24Z"/>
+</mask>
+<path id="Placement reticle" d="M150 24C150 37.2548 116.421 48 75 48C33.5786 48 0 37.2548 0 24C0 10.7452 33.5786 0 75 0C116.421 0 150 10.7452 150 24Z" stroke-width="6" stroke="white" mask="url(#stroke0_0_32)"/>
+</svg>

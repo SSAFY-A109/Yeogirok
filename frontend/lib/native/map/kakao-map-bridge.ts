@@ -5,8 +5,107 @@ export type MapCamera = {
 };
 
 export type MapMarker = {
+  id?: string;
   lat: number;
   lng: number;
+};
+
+/** WebView에서 읽을 data URI 이미지. 기본은 아래 가운데를 좌표에 맞추며 offset으로 기준점을 바꿀 수 있다. */
+export type MapMarkerImage = {
+  uri: string;
+  width: number;
+  height: number;
+  offset?: { x: number; y: number };
+};
+
+export type MapClusterBadge = {
+  background: string;
+  foreground: string;
+  border: string;
+};
+
+/** 코스 경로의 한 지점. order는 코스 안 순서(1부터)이고, selected는 핀 강조 여부다. */
+export type MapRoutePoint = {
+  id: string;
+  lat: number;
+  lng: number;
+  order: number;
+  selected: boolean;
+};
+
+export type MapRouteColors = {
+  line: string;
+  pinSelected: string;
+  pinSelectedText: string;
+  pinDefault: string;
+  pinDefaultText: string;
+  pinBorder: string;
+  pinSelectedBorder: string;
+};
+
+export type MapRoute = {
+  points: readonly MapRoutePoint[];
+  colors: MapRouteColors;
+  connectPoints?: boolean;
+};
+
+/** 지도에 보이는 영역(남서·북동 좌표)과 확대 단계. 카카오 지도는 level이 작을수록 가깝다. */
+export type MapRegion = {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  level: number;
+};
+
+/** 방문 분포 발바닥 마커(Figma `Map / FootprintMarker`). label은 배지 숫자, scale은 기본 크기 56×64 대비 배율이다. 선택하면 배지 대신 선택 링을 그린다. */
+export type MapFootprint = {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
+  accessibilityLabel: string;
+  scale: number;
+  selected: boolean;
+};
+
+/** 발바닥 마커 모양. image는 WebView에서 바로 읽히는 data URI이고, 색은 `lib/theme.ts` 값을 넘긴다. */
+export type MapFootprintStyle = {
+  image: string;
+  badgeBackground: string;
+  badgeBorder: string;
+  badgeText: string;
+  selectionBorder: string;
+  selectionFill: string;
+};
+
+/**
+ * 내 위치 표시(Figma W15 `Current location`, W16 `Accuracy`). 정확도(m)가 있으면 반경 원을 함께 그린다.
+ * `showDot`이 false면 점 없이 원만 그린다(그 자리에 발바닥 마커를 따로 그릴 때).
+ * `rangeMeters`를 주면 내 위치에서 그 거리까지를 점과 같은 색의 테두리 원으로 그린다(발자취 위치를 고칠 수 있는 범위).
+ */
+export type MapCurrentLocation = {
+  lat: number;
+  lng: number;
+  accuracyMeters: number | null;
+  showDot: boolean;
+  rangeMeters?: number;
+};
+
+/** 내 위치 색. className이 닿지 않으므로 `lib/theme.ts` 값을 넘긴다. */
+export type MapCurrentLocationStyle = {
+  dot: string;
+  dotBorder: string;
+  halo: string;
+  accuracy: string;
+};
+
+/** 지도 가운데를 옮겨 달라는 요청. id가 바뀔 때마다 한 번 옮기고, level보다 멀리 보고 있으면 level까지 당긴다. */
+export type MapFocusRequest = {
+  id: number;
+  lat: number;
+  lng: number;
+  level: number;
 };
 
 export type KakaoMapFailure = "sdk-load" | "map-init" | "timeout" | "network" | "no-response";
@@ -17,6 +116,9 @@ export type KakaoMapMessage =
   | { type: "ready" }
   | { type: "error"; reason: KakaoMapFailure }
   | { type: "markers-rendered"; count: number; renderMs: number }
+  | { type: "point-pressed"; id: string }
+  | { type: "map-pressed" }
+  | { type: "region-changed"; region: MapRegion }
   | {
       type: "interaction-perf";
       kind: MapInteractionKind;
@@ -37,11 +139,14 @@ export type MapPerformanceReport =
       heapMb: number | null;
     };
 
-export const KAKAO_JS_SDK_DOMAIN = "http://localhost";
+// Kakao loads its map scripts over the page's protocol. Android release blocks HTTP.
+export const KAKAO_JS_SDK_DOMAIN = "https://localhost";
 
 const TILES_TIMEOUT_MS = 15000;
 const CLUSTER_MIN_LEVEL = 5;
 const MIN_PERF_SAMPLE_FRAMES = 5;
+/** 마커를 누른 직후의 지도 탭은 마커 누름으로 보고 지도 빈 곳 탭으로 알리지 않는다. */
+const OVERLAY_PRESS_GUARD_MS = 500;
 const pageFailureReasons: readonly KakaoMapFailure[] = ["sdk-load", "map-init", "timeout"];
 
 function toScriptLiteral(value: unknown): string {
@@ -65,6 +170,16 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   var settled = false;
   var map = null;
   var clusterer = null;
+  var clusterImage = null;
+  var clusterBadge = null;
+  var routeLine = null;
+  var routeOverlays = [];
+  var footprintOverlays = [];
+  var currentLocationOverlay = null;
+  var accuracyCircle = null;
+  var rangeCircle = null;
+  var overlayPressedAt = 0;
+  var anchor = null;
 
   function post(message) {
     if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
@@ -134,29 +249,325 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
   }
 
   window.yeogirokMap = {
-    setMarkers: function (points) {
+    setMarkers: function (points, image, fit, badge) {
       if (!clusterer) return;
+      clusterImage = image;
+      clusterBadge = badge;
       var startedAt = performance.now();
+      var markerImage = image
+        ? new kakao.maps.MarkerImage(image.uri, new kakao.maps.Size(image.width, image.height), { offset: new kakao.maps.Point(image.offset ? image.offset.x : image.width / 2, image.offset ? image.offset.y : image.height) })
+        : null;
       clusterer.clear();
       clusterer.addMarkers(points.map(function (point) {
-        return new kakao.maps.Marker({ position: new kakao.maps.LatLng(point.lat, point.lng) });
+        var options = { position: new kakao.maps.LatLng(point.lat, point.lng) };
+        if (markerImage) options.image = markerImage;
+        var marker = new kakao.maps.Marker(options);
+        if (typeof point.id === "string") {
+          kakao.maps.event.addListener(marker, "click", function () {
+            post({ type: "point-pressed", id: point.id });
+          });
+        }
+        return marker;
       }));
+      if (fit && points.length === 1) {
+        map.setCenter(new kakao.maps.LatLng(points[0].lat, points[0].lng));
+      } else if (fit && points.length > 1) {
+        var bounds = new kakao.maps.LatLngBounds();
+        points.forEach(function (point) { bounds.extend(new kakao.maps.LatLng(point.lat, point.lng)); });
+        var padding = badge ? 48 : 32;
+        map.setBounds(bounds, padding, padding, padding, padding);
+      }
       afterNextPaint(function () {
         post({ type: "markers-rendered", count: points.length, renderMs: Math.round(performance.now() - startedAt) });
       });
     }
   };
 
+  function styleFootprintClusters(clusters) {
+    if (!clusterImage || !clusterBadge) return;
+    clusters.forEach(function (cluster) {
+      var count = cluster.getSize();
+      if (count < 2) return;
+      var marker = cluster.getClusterMarker();
+      var content = marker.getContent();
+      content.style.cssText = "position:relative;width:70px;height:80px;box-sizing:border-box;background:transparent;cursor:pointer;";
+      content.setAttribute("role", "button");
+      content.setAttribute("aria-label", "발자취 " + count + "개 확대");
+      content.tabIndex = 0;
+      content.onkeydown = function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          content.click();
+        }
+      };
+      var paw = document.createElement("img");
+      paw.src = clusterImage.uri;
+      paw.alt = "";
+      paw.style.cssText = "position:absolute;left:7.5px;top:1.25px;width:55px;height:55px;object-fit:contain;pointer-events:none;";
+      var badge = document.createElement("span");
+      badge.textContent = count > 999 ? "999+" : String(count);
+      badge.style.cssText = "position:absolute;left:7.5px;top:50px;width:55px;height:27.5px;box-sizing:border-box;" +
+        "display:flex;align-items:center;justify-content:center;border:2px solid " + clusterBadge.border +
+        ";border-radius:9999px;background:" + clusterBadge.background + ";color:" + clusterBadge.foreground +
+        ";font:500 12px/16px 'Noto Sans KR',sans-serif;pointer-events:none;";
+      content.textContent = "";
+      content.appendChild(paw);
+      content.appendChild(badge);
+      marker.setContent(content);
+    });
+  }
+
+  function pinElement(point, colors) {
+    var wrapper = document.createElement("div");
+    wrapper.style.cssText = "width:44px;height:44px;display:flex;align-items:center;justify-content:center;";
+    var pin = document.createElement("div");
+    pin.textContent = String(point.order);
+    pin.style.cssText = "width:26px;height:26px;border-radius:13px;box-sizing:border-box;border:2px solid " +
+      (point.selected ? colors.pinSelectedBorder : colors.pinBorder) +
+      ";background:" + (point.selected ? colors.pinSelected : colors.pinDefault) +
+      ";color:" + (point.selected ? colors.pinSelectedText : colors.pinDefaultText) +
+      ";font:500 12px/22px sans-serif;text-align:center;";
+    wrapper.appendChild(pin);
+    wrapper.addEventListener("click", function () {
+      post({ type: "point-pressed", id: point.id });
+    });
+    return wrapper;
+  }
+
+  window.yeogirokMap.setRoute = function (route, fit) {
+    if (!map) return;
+    if (routeLine) routeLine.setMap(null);
+    routeLine = null;
+    routeOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    routeOverlays = [];
+    var path = route.points.map(function (point) { return new kakao.maps.LatLng(point.lat, point.lng); });
+    if (route.connectPoints !== false && path.length > 1) {
+      routeLine = new kakao.maps.Polyline({
+        path: path,
+        strokeWeight: 4,
+        strokeColor: route.colors.line,
+        strokeOpacity: 0.95,
+        strokeStyle: "solid"
+      });
+      routeLine.setMap(map);
+    }
+    route.points.forEach(function (point, index) {
+      var overlay = new kakao.maps.CustomOverlay({
+        position: path[index],
+        content: pinElement(point, route.colors),
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: point.selected ? 100 + point.order : point.order
+      });
+      overlay.setMap(map);
+      routeOverlays.push(overlay);
+    });
+    if (fit && path.length > 0) {
+      var bounds = new kakao.maps.LatLngBounds();
+      path.forEach(function (position) { bounds.extend(position); });
+      map.setBounds(bounds, 48, 48, 48, 48);
+      anchor = map.getCenter();
+    }
+  };
+
+  function currentRegion() {
+    var bounds = map.getBounds();
+    var southWest = bounds.getSouthWest();
+    var northEast = bounds.getNorthEast();
+    return {
+      south: southWest.getLat(),
+      west: southWest.getLng(),
+      north: northEast.getLat(),
+      east: northEast.getLng(),
+      level: map.getLevel()
+    };
+  }
+
+  function markOverlayPress() {
+    overlayPressedAt = Date.now();
+  }
+
+  function footprintElement(point, style) {
+    var pawTop = point.selected ? 10 : 1;
+    var pawCenter = pawTop + 22;
+    var wrapper = document.createElement("div");
+    wrapper.setAttribute("role", "button");
+    wrapper.setAttribute("aria-label", point.accessibilityLabel);
+    wrapper.style.cssText = "position:relative;width:56px;height:64px;cursor:pointer;-webkit-tap-highlight-color:transparent;" +
+      "transform:scale(" + point.scale + ");transform-origin:50% " + pawCenter + "px;";
+    if (point.selected) {
+      var ring = document.createElement("div");
+      ring.style.cssText = "position:absolute;left:2px;top:6px;width:52px;height:52px;box-sizing:border-box;border-radius:26px;" +
+        "border:2px solid " + style.selectionBorder + ";background:" + style.selectionFill + ";";
+      wrapper.appendChild(ring);
+    }
+    var paw = document.createElement("img");
+    paw.src = style.image;
+    paw.alt = "";
+    paw.draggable = false;
+    paw.style.cssText = "position:absolute;left:6px;top:" + pawTop + "px;width:44px;height:44px;";
+    wrapper.appendChild(paw);
+    if (!point.selected) {
+      var badge = document.createElement("div");
+      badge.textContent = point.label;
+      badge.style.cssText = "position:absolute;left:50%;top:40px;transform:translateX(-50%);min-width:44px;box-sizing:border-box;" +
+        "padding:1px 4px;border-radius:9999px;border:2px solid " + style.badgeBorder + ";background:" + style.badgeBackground +
+        ";color:" + style.badgeText + ";font:500 12px/16px sans-serif;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;";
+      wrapper.appendChild(badge);
+    }
+    wrapper.addEventListener("touchstart", markOverlayPress, { passive: true });
+    wrapper.addEventListener("mousedown", markOverlayPress);
+    wrapper.addEventListener("click", function () {
+      markOverlayPress();
+      post({ type: "point-pressed", id: point.id });
+    });
+    return { element: wrapper, yAnchor: pawCenter / 64 };
+  }
+
+  window.yeogirokMap.setFootprints = function (points, style) {
+    if (!map) return;
+    footprintOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    footprintOverlays = points.map(function (point) {
+      var marker = footprintElement(point, style);
+      var overlay = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(point.lat, point.lng),
+        content: marker.element,
+        clickable: true,
+        xAnchor: 0.5,
+        yAnchor: marker.yAnchor,
+        zIndex: point.selected ? 1000 : Math.round(point.scale * 100)
+      });
+      overlay.setMap(map);
+      return overlay;
+    });
+  };
+
+  function currentLocationElement(style) {
+    var wrapper = document.createElement("div");
+    wrapper.setAttribute("aria-hidden", "true");
+    wrapper.style.cssText = "position:relative;width:44px;height:44px;pointer-events:none;";
+    var halo = document.createElement("div");
+    halo.style.cssText = "position:absolute;left:0;top:0;width:44px;height:44px;border-radius:22px;opacity:0.3;background:" + style.halo + ";";
+    var dot = document.createElement("div");
+    dot.style.cssText = "position:absolute;left:12px;top:12px;width:20px;height:20px;box-sizing:border-box;border-radius:10px;" +
+      "border:3px solid " + style.dotBorder + ";background:" + style.dot + ";";
+    wrapper.appendChild(halo);
+    wrapper.appendChild(dot);
+    return wrapper;
+  }
+
+  window.yeogirokMap.setCurrentLocation = function (location, style) {
+    if (!map) return;
+    if (currentLocationOverlay) currentLocationOverlay.setMap(null);
+    if (accuracyCircle) accuracyCircle.setMap(null);
+    if (rangeCircle) rangeCircle.setMap(null);
+    currentLocationOverlay = null;
+    accuracyCircle = null;
+    rangeCircle = null;
+    if (!location) return;
+    var position = new kakao.maps.LatLng(location.lat, location.lng);
+    if (location.rangeMeters !== null && location.rangeMeters > 0) {
+      rangeCircle = new kakao.maps.Circle({
+        center: position,
+        radius: location.rangeMeters,
+        strokeWeight: 2,
+        strokeColor: style.dot,
+        strokeOpacity: 0.8,
+        fillOpacity: 0
+      });
+      rangeCircle.setMap(map);
+    }
+    if (location.accuracyMeters !== null && location.accuracyMeters > 0) {
+      accuracyCircle = new kakao.maps.Circle({
+        center: position,
+        radius: location.accuracyMeters,
+        strokeWeight: 1,
+        strokeColor: style.accuracy,
+        strokeOpacity: 0.5,
+        fillColor: style.accuracy,
+        fillOpacity: 0.15
+      });
+      accuracyCircle.setMap(map);
+    }
+    if (location.showDot) {
+      currentLocationOverlay = new kakao.maps.CustomOverlay({
+        position: position,
+        content: currentLocationElement(style),
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 2000
+      });
+      currentLocationOverlay.setMap(map);
+    }
+  };
+
+  window.yeogirokMap.focus = function (target) {
+    if (!map) return;
+    var position = new kakao.maps.LatLng(target.lat, target.lng);
+    if (map.getLevel() > target.level) map.setLevel(target.level);
+    anchor = position;
+    map.panTo(position);
+  };
+
+  function watchRegionAndTaps() {
+    kakao.maps.event.addListener(map, "idle", function () {
+      post({ type: "region-changed", region: currentRegion() });
+    });
+    kakao.maps.event.addListener(map, "click", function () {
+      if (Date.now() - overlayPressedAt < ${OVERLAY_PRESS_GUARD_MS}) return;
+      post({ type: "map-pressed" });
+    });
+  }
+
+  function recenterOnAnchor() {
+    map.relayout();
+    map.setCenter(anchor);
+  }
+
+  function keepCenterOnResize(container) {
+    var lastWidth = container.clientWidth;
+    var lastHeight = container.clientHeight;
+    var userMoving = false;
+
+    kakao.maps.event.addListener(map, "dragstart", function () { userMoving = true; });
+    kakao.maps.event.addListener(map, "zoom_start", function () { userMoving = true; });
+    kakao.maps.event.addListener(map, "idle", function () {
+      if (!userMoving) return;
+      userMoving = false;
+      anchor = map.getCenter();
+    });
+
+    function handleResize() {
+      var width = container.clientWidth;
+      var height = container.clientHeight;
+      if (width === 0 || height === 0 || (width === lastWidth && height === lastHeight)) return;
+      lastWidth = width;
+      lastHeight = height;
+      recenterOnAnchor();
+    }
+
+    if (window.ResizeObserver) {
+      new ResizeObserver(handleResize).observe(container);
+    } else {
+      window.addEventListener("resize", handleResize);
+    }
+  }
+
   function createMap() {
     try {
-      map = new kakao.maps.Map(document.getElementById("map"), {
-        center: new kakao.maps.LatLng(camera.lat, camera.lng),
-        level: camera.level
-      });
+      var container = document.getElementById("map");
+      anchor = new kakao.maps.LatLng(camera.lat, camera.lng);
+      map = new kakao.maps.Map(container, { center: anchor, level: camera.level });
       clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: ${CLUSTER_MIN_LEVEL} });
+      kakao.maps.event.addListener(clusterer, "clustered", styleFootprintClusters);
       kakao.maps.event.addListener(map, "tilesloaded", function () {
+        if (settled) return;
+        recenterOnAnchor();
         settle({ type: "ready" });
+        post({ type: "region-changed", region: currentRegion() });
       });
+      keepCenterOnResize(container);
+      watchRegionAndTaps();
       watchInteractionPerformance();
     } catch (error) {
       settle({ type: "error", reason: "map-init" });
@@ -182,13 +593,50 @@ export function buildKakaoMapHtml(javascriptKey: string, camera: MapCamera): str
 </html>`;
 }
 
-export function buildSetMarkersScript(markers: readonly MapMarker[]): string {
-  const points = markers.map(({ lat, lng }) => ({ lat, lng }));
-  return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}); true;`;
+export function buildSetRouteScript(route: MapRoute, fit: boolean): string {
+  const points = route.points.map(({ id, lat, lng, order, selected }) => {
+    return { id, lat, lng, order, selected };
+  });
+
+  return `window.yeogirokMap && window.yeogirokMap.setRoute(${toScriptLiteral({ points, colors: route.colors, connectPoints: route.connectPoints })}, ${fit ? "true" : "false"}); true;`;
+}
+
+export function buildSetMarkersScript(markers: readonly MapMarker[], image?: MapMarkerImage, fit = false, clusterBadge?: MapClusterBadge): string {
+  const points = markers.map(({ id, lat, lng }) => {
+    return { id, lat, lng };
+  });
+
+  return `window.yeogirokMap && window.yeogirokMap.setMarkers(${toScriptLiteral(points)}, ${toScriptLiteral(image ?? null)}, ${fit ? "true" : "false"}, ${toScriptLiteral(clusterBadge ?? null)}); true;`;
+}
+
+export function buildSetFootprintsScript(footprints: readonly MapFootprint[], style: MapFootprintStyle): string {
+  const points = footprints.map(({ id, lat, lng, label, accessibilityLabel, scale, selected }) => {
+    return { id, lat, lng, label, accessibilityLabel, scale, selected };
+  });
+
+  return `window.yeogirokMap && window.yeogirokMap.setFootprints && window.yeogirokMap.setFootprints(${toScriptLiteral(points)}, ${toScriptLiteral(style)}); true;`;
+}
+
+export function buildSetCurrentLocationScript(location: MapCurrentLocation | null, style: MapCurrentLocationStyle): string {
+  const point = location === null ? null : {
+    lat: location.lat,
+    lng: location.lng,
+    accuracyMeters: location.accuracyMeters,
+    showDot: location.showDot,
+    rangeMeters: location.rangeMeters ?? null,
+  };
+
+  return `window.yeogirokMap && window.yeogirokMap.setCurrentLocation && window.yeogirokMap.setCurrentLocation(${toScriptLiteral(point)}, ${toScriptLiteral(style)}); true;`;
+}
+
+export function buildFocusScript({ lat, lng, level }: MapFocusRequest): string {
+  return `window.yeogirokMap && window.yeogirokMap.focus && window.yeogirokMap.focus(${toScriptLiteral({ lat, lng, level })}); true;`;
 }
 
 function isPageFailureReason(value: unknown): value is KakaoMapFailure {
-  return pageFailureReasons.some((reason) => reason === value);
+  return pageFailureReasons.some((reason) => {
+    return reason === value;
+  });
 }
 
 function isInteractionKind(value: unknown): value is MapInteractionKind {
@@ -199,19 +647,62 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function toMapRegion(value: unknown): MapRegion | null {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("south" in value) ||
+    !("west" in value) ||
+    !("north" in value) ||
+    !("east" in value) ||
+    !("level" in value)
+  ) {
+    return null;
+  }
+
+  const { south, west, north, east, level } = value;
+
+  if (!isFiniteNumber(south) || !isFiniteNumber(west) || !isFiniteNumber(north) || !isFiniteNumber(east) || !isFiniteNumber(level)) {
+    return null;
+  }
+
+  return { south, west, north, east, level };
+}
+
 export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
   let value: unknown;
+
   try {
     value = JSON.parse(data);
   } catch {
     return null;
   }
-  if (typeof value !== "object" || value === null || !("type" in value)) return null;
 
-  if (value.type === "ready") return { type: "ready" };
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return null;
+  }
+
+  if (value.type === "ready") {
+    return { type: "ready" };
+  }
+
+  if (value.type === "point-pressed" && "id" in value && typeof value.id === "string") {
+    return { type: "point-pressed", id: value.id };
+  }
+
+  if (value.type === "map-pressed") {
+    return { type: "map-pressed" };
+  }
+
+  if (value.type === "region-changed" && "region" in value) {
+    const region = toMapRegion(value.region);
+    return region ? { type: "region-changed", region } : null;
+  }
+
   if (value.type === "error" && "reason" in value && isPageFailureReason(value.reason)) {
     return { type: "error", reason: value.reason };
   }
+
   if (
     value.type === "markers-rendered" &&
     "count" in value &&
@@ -221,6 +712,7 @@ export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
   ) {
     return { type: "markers-rendered", count: value.count, renderMs: value.renderMs };
   }
+
   if (
     value.type === "interaction-perf" &&
     "kind" in value &&
@@ -243,5 +735,6 @@ export function parseKakaoMapMessage(data: string): KakaoMapMessage | null {
       heapMb: value.heapMb,
     };
   }
+
   return null;
 }

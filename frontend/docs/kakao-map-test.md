@@ -36,8 +36,7 @@ EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY=여기에_JavaScript_키
 
 1. [카카오 Developers](https://developers.kakao.com) › 내 애플리케이션 › 여기록 앱을 연다.
 2. **[앱] › [플랫폼 키] › [JavaScript 키]**에서 키를 복사한다.
-3. 키를 눌러 들어간 **JavaScript 키 수정** 화면의 **JavaScript SDK 도메인**에 `http://localhost`를 **포트 없이** 추가하고 저장한다. WebView 페이지를 이 주소 기준으로 열기 때문이다(`KAKAO_JS_SDK_DOMAIN`).
-   - 카카오는 포트까지 비교한다. `http://localhost:8081`만 등록되어 있으면 `http://localhost`는 거부된다(401 `domain mismatched! caller=http://localhost`, 2026-10-28 확인).
+3. 키를 눌러 들어간 **JavaScript 키 수정** 화면의 **JavaScript SDK 도메인**에 `https://localhost`를 **포트 없이** 추가하고 저장한다. WebView는 이 주소를 기준으로 페이지를 열고, 카카오 SDK는 페이지의 프로토콜로 후속 스크립트를 요청한다. Android 출시 빌드에서 평문 HTTP가 차단되므로 HTTPS를 사용한다.
    - 앱에 넣은 키(`.env.local`)와 도메인을 등록한 키가 같은지 확인한다. 이 앱에는 JavaScript 키가 여러 개 있을 수 있다.
 
 네이티브 앱 키, Android 패키지명, 키 해시 등록은 이 방식에 필요하지 않다.
@@ -62,7 +61,7 @@ pnpm exec expo start --go
 키와 도메인 등록은 PC에서 먼저 확인할 수 있다. 등록 여부는 SDK 요청의 응답 코드로 알 수 있다(200 통과, 401 거부).
 
 ```sh
-curl -s -o /dev/null -w "%{http_code}\n" -H "Referer: http://localhost/" "https://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey=<JavaScript 키>"
+curl -s -o /dev/null -w "%{http_code}\n" -H "Referer: https://localhost/" "https://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey=<JavaScript 키>"
 ```
 
 개발 빌드·Expo Go에서는 WebView 디버깅이 켜져 있다(`webviewDebuggingEnabled={__DEV__}`). Android 폰을 USB 디버깅으로 PC에 연결하면 PC 크롬의 `chrome://inspect`에서 지도 페이지의 콘솔과 네트워크를 볼 수 있다.

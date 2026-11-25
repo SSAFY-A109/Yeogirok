@@ -20,7 +20,10 @@ const PREV = path.join(ROOT, "prev");
 const TARGETS = [".agents", "docs", "AGENTS.md", "CLAUDE.md", "skills-lock.json", "design.pen"];
 
 // 원본이 이미 비어 있는데 백업을 덮으면 멀쩡한 사본을 잃는다. 그래서 먼저 막는다.
-const missing = TARGETS.filter((t) => !fs.existsSync(t));
+const missing = TARGETS.filter((t) => {
+  return !fs.existsSync(t);
+});
+
 if (missing.length) {
   console.error("백업 중단: 원본이 없다 → " + missing.join(", "));
   console.error("파일이 사라진 상태라면 백업이 아니라 `pnpm harness:restore` 가 필요하다.");
@@ -29,14 +32,20 @@ if (missing.length) {
 
 // 직전 백업을 한 세대 남긴다.
 fs.rmSync(PREV, { recursive: true, force: true });
-if (fs.existsSync(CURRENT)) fs.renameSync(CURRENT, PREV);
+
+if (fs.existsSync(CURRENT)) {
+  fs.renameSync(CURRENT, PREV);
+}
+
 fs.mkdirSync(CURRENT, { recursive: true });
 
 let files = 0;
 let bytes = 0;
+
 for (const t of TARGETS) {
   const dst = path.join(CURRENT, t);
   fs.cpSync(t, dst, { recursive: true });
+
   for (const f of walk(dst)) {
     files++;
     bytes += fs.statSync(f).size;
@@ -58,13 +67,20 @@ fs.writeFileSync(
 
 console.log(`백업 완료: ${files}개 파일 / ${(bytes / 1048576).toFixed(1)}MB`);
 console.log("위치: " + CURRENT);
-if (fs.existsSync(PREV)) console.log("직전 백업은 prev/ 로 보관했다.");
+
+if (fs.existsSync(PREV)) {
+  console.log("직전 백업은 prev/ 로 보관했다.");
+}
 
 function* walk(p) {
   const st = fs.statSync(p);
+
   if (st.isFile()) {
     yield p;
     return;
   }
-  for (const e of fs.readdirSync(p)) yield* walk(path.join(p, e));
+
+  for (const e of fs.readdirSync(p)) {
+    yield* walk(path.join(p, e));
+  }
 }

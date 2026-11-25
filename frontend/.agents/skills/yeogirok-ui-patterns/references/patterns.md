@@ -1,6 +1,6 @@
 # 여기록 화면 패턴 체크리스트
 
-각 항목의 기능 ID는 `docs/frontend-spec.md` §1, API 번호는 `docs/api-contract.md` §2와 같다. "결정 필요(DEC-xx)"는 결정 전까지 기본값으로 만들고, 보고서에 `TBD`로 남긴다.
+각 항목의 기능 ID는 `docs/frontend-spec.md` §1, API 번호는 팀 Notion "API 명세"와 같다. "결정 필요(DEC-xx)"는 결정 전까지 기본값으로 만들고, 보고서에 `TBD`로 남긴다.
 
 ## TabBar (COM-02)
 

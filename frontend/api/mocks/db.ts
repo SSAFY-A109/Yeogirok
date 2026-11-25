@@ -1,0 +1,115 @@
+import type { CreateFootprintResponseDto } from "../../features/footprint/model";
+import type { RecommendationPreferenceDto } from "../../features/recommendation/model";
+import type { ChatMessageDto, ChatTicketResponseDto } from "../../features/room/chat-model";
+import type { AddCustomPlaceResponseDto, AddRoomPlacesResponseDto, ChatReadStateDto, CreateRoomResponseDto, ImportCoursePlacesResponseDto } from "../../features/room/model";
+
+import { chatReadKey, createChatMessageFixtures, createChatReadFixtures, toChatReadState } from "./fixtures/chat";
+import { createRoomFixtures, type MockRoom } from "./fixtures/room";
+import type { MockScheduleDraft } from "./fixtures/schedule";
+import { createFootprintFixtures, type MockFootprint } from "./fixtures/footprint";
+import { createTipFixtures, type MockTip } from "./fixtures/tip";
+import type { MockIdempotentResponse, MockUpload } from "./fixtures/media";
+import { createRecordFixtures, type MockRecord } from "./fixtures/record";
+
+/** 처리한 멱등키. 같은 키로 같은 내용이 오면 저장한 발자취를 다시 돌려준다(backend `IdempotencyService`). */
+type MockIdempotencyRecord = { requestHash: string; response: CreateFootprintResponseDto };
+
+type MockDb = {
+  tips: Map<number, MockTip>;
+  uploads: Map<string, MockUpload>;
+  tipIdempotency: Map<string, MockIdempotentResponse>;
+  uploadIdempotency: Map<string, MockIdempotentResponse>;
+  records: Map<number, MockRecord>;
+  recordIdempotency: Map<string, MockIdempotentResponse>;
+  nextRecordEntityId: number;
+  nextTipId: number;
+  nextUploadId: number;
+  rooms: Map<number, MockRoom>;
+  /** 여행방별 채팅 메시지(오래된 → 최신). 키는 여행방 id다. */
+  roomMessages: Map<number, ChatMessageDto[]>;
+  /** 참여자별 채팅 읽은 위치(메시지 id). 키는 `chatReadKey(여행방 id, 사용자 id)`다. */
+  chatLastReadIds: Map<string, number>;
+  /** 발급했고 아직 쓰지 않은 실시간 연결 티켓. 키는 티켓이고, 연결에 쓰면 지운다. */
+  chatTickets: Map<string, { userId: number; roomId: number }>;
+  /** API-077 발급 요청. 키는 `여행방 id:멱등키`다. 같은 키로 다시 오면 처음 응답을 돌려준다. */
+  chatTicketRequests: Map<string, ChatTicketResponseDto>;
+  roomCreateRequests: Map<string, { requestBody: string; response: CreateRoomResponseDto }>;
+  courseImportRequests: Map<string, { requestBody: string; response: ImportCoursePlacesResponseDto }>;
+  /** API-029 담기 요청. 키는 `여행방 id:멱등키`다. */
+  roomPlaceRequests: Map<string, { requestBody: string; response: AddRoomPlacesResponseDto }>;
+  /** API-031 직접 추가 요청. 키는 `여행방 id:멱등키`다. */
+  customPlaceRequests: Map<string, { requestBody: string; response: AddCustomPlaceResponseDto }>;
+  preferences: Map<number, RecommendationPreferenceDto>;
+  footprints: Map<number, MockFootprint>;
+  footprintRequests: Map<string, MockIdempotencyRecord>;
+  /** 일정 초안. 키는 `draftKey`다. */
+  scheduleDrafts: Map<string, MockScheduleDraft>;
+  nextRoomId: number;
+  nextRoomPlaceId: number;
+  nextRecommendationRequestId: number;
+  nextFootprintId: number;
+  /** 일정 초안 키·작업 id를 만들 때 쓰는 일련번호. */
+  nextScheduleSeq: number;
+};
+
+function createDb(): MockDb {
+  const rooms = createRoomFixtures();
+  const footprints = createFootprintFixtures();
+
+  return {
+    tips: createTipFixtures(),
+    uploads: new Map(),
+    tipIdempotency: new Map(),
+    uploadIdempotency: new Map(),
+    records: createRecordFixtures(rooms),
+    recordIdempotency: new Map(),
+    nextRecordEntityId: 2000,
+    nextTipId: 100,
+    nextUploadId: 1,
+
+    rooms: new Map(rooms.map((room) => {
+      return [room.id, room];
+    })),
+
+    roomMessages: createChatMessageFixtures(),
+    chatLastReadIds: createChatReadFixtures(),
+    chatTickets: new Map(),
+    chatTicketRequests: new Map(),
+    roomCreateRequests: new Map(),
+    courseImportRequests: new Map(),
+    roomPlaceRequests: new Map(),
+    customPlaceRequests: new Map(),
+
+    preferences: new Map(),
+
+    footprints: new Map(footprints.map((item) => {
+      return [item.id, item];
+    })),
+
+    footprintRequests: new Map(),
+    scheduleDrafts: new Map(),
+    nextRoomId: 100,
+    nextRoomPlaceId: 9000,
+    nextRecommendationRequestId: 1,
+
+    nextFootprintId: Math.max(...footprints.map((item) => {
+      return item.id;
+    })) + 1,
+
+    nextScheduleSeq: 1,
+  };
+}
+
+/** 앱 실행 중 목 서버의 메모리 상태. 생성·수정·담기·빼기 결과가 화면 사이에서 이어지게 한다. */
+export const mockDb: MockDb = createDb();
+
+/** 참여자의 채팅 읽음 상태(API-020·022·076·088이 함께 쓴다). 저장된 메시지와 읽은 위치로 계산한다. */
+export function getMockChatReadState(roomId: number, userId: number): ChatReadStateDto {
+  const lastReadMessageId = mockDb.chatLastReadIds.get(chatReadKey(roomId, userId)) ?? null;
+  return toChatReadState(mockDb.roomMessages.get(roomId) ?? [], lastReadMessageId, userId);
+}
+
+/** 테스트에서 목 상태를 처음으로 되돌린다. */
+export function resetMockDb(): void {
+  Object.assign(mockDb, createDb());
+}

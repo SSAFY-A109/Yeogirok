@@ -1,0 +1,84 @@
+appId: ${MAESTRO_APP_ID}
+name: My에서 팁과 방명록을 수정하고 계정 동작을 취소한다
+---
+- launchApp:
+    clearState: false
+- runFlow:
+    when:
+      visible:
+        id: "login.screen"
+    commands:
+      - tapOn:
+          id: "login.kakao"
+      - assertVisible:
+          id: "home.screen"
+- tapOn:
+    id: "tabs.my"
+- assertVisible:
+    id: "my.screen"
+- tapOn:
+    id: "my.tips"
+- assertVisible: "내가 남긴 AR 팁"
+- tapOn:
+    id: "my-tips.edit-2"
+- assertVisible:
+    id: "my-tip-edit.body"
+- tapOn:
+    id: "my-tip-edit.category-TMI"
+- tapOn:
+    id: "my-tip-edit.save"
+- extendedWaitUntil:
+    visible: "팁 수정을 완료했어요"
+    timeout: 10000
+- tapOn:
+    id: "my-tip-edit.publication-close"
+- assertVisible: "TMI · 공개 중"
+- tapOn:
+    id: "my-tips.delete-2"
+- tapOn:
+    id: "my-tips.delete-dialog.cancel"
+- assertVisible:
+    id: "my-tips.card-2"
+- tapOn:
+    id: "my-tips.delete-2"
+- tapOn:
+    id: "my-tips.delete-dialog.confirm"
+- assertNotVisible:
+    id: "my-tips.card-2"
+- back
+- tapOn:
+    id: "my.footprints"
+- tapOn:
+    id: "my-footprints.row-1"
+- tapOn:
+    id: "my-guestbook.body"
+- eraseText
+- inputText: "My page guestbook note"
+- hideKeyboard
+- tapOn:
+    id: "my-guestbook.save"
+- assertVisible: "My page guestbook note"
+- back
+- scrollUntilVisible:
+    element:
+      id: "my.logout"
+- tapOn:
+    id: "my.logout"
+- assertVisible: "로그아웃할까요?"
+- tapOn:
+    id: "my.logout-dialog.cancel"
+- tapOn:
+    id: "my.withdraw"
+- assertVisible:
+    id: "my-withdrawal.verify"
+- tapOn:
+    id: "my-withdrawal.consent"
+- tapOn:
+    id: "my-withdrawal.verify"
+- assertVisible: "정말 탈퇴할까요?"
+- tapOn:
+    id: "my-withdrawal.dialog.cancel"
+- tapOn:
+    id: "my-withdrawal.cancel"
+- assertVisible:
+    id: "my.screen"

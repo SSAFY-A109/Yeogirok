@@ -38,6 +38,9 @@ export const colors = {
     "map-route": "#49B5E7",
     "map-pin": "#1A73A3",
     "map-footprint": "#FFAA8D",
+    "auth-kakao": "#FEE500",
+    "auth-google-border": "#747775",
+    "auth-google-foreground": "#1F1F1F",
     white: "#FFFFFF",
     black: "#000000",
   },
@@ -76,6 +79,9 @@ export const colors = {
     "map-route": "#49B5E7",
     "map-pin": "#1A73A3",
     "map-footprint": "#FFAA8D",
+    "auth-kakao": "#FEE500",
+    "auth-google-border": "#747775",
+    "auth-google-foreground": "#1F1F1F",
     white: "#FFFFFF",
     black: "#000000",
   },
@@ -141,6 +147,13 @@ export const typography = {
     fontWeight: "500",
     letterSpacing: 0,
   },
+  "label-sm": {
+    fontFamily: "Noto Sans KR",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    letterSpacing: 0,
+  },
   caption: {
     fontFamily: "Noto Sans KR",
     fontSize: 12,
@@ -159,6 +172,13 @@ export const typography = {
     fontFamily: "Noto Sans KR",
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: "500",
+    letterSpacing: 0,
+  },
+  "button-lg": {
+    fontFamily: "Noto Sans KR",
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: "500",
     letterSpacing: 0,
   },
@@ -185,6 +205,8 @@ export const size = {
   input: 52,
   icon: 24,
   "icon-sm": 20,
+  "skeleton-heading": 116,
+  "skeleton-line": 168,
 } as const;
 
 export const motion = {

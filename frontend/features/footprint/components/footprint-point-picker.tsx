@@ -1,0 +1,196 @@
+import { RotateCcw, X } from "lucide-react-native";
+import { useMemo, useState, type ReactNode } from "react";
+import { Modal, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+
+import { BottomCta } from "@/components/ui/bottom-cta";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Screen } from "@/components/ui/screen";
+import { HeaderIconButton, ScreenHeader } from "@/components/ui/screen-header";
+import { Spinner } from "@/components/ui/spinner";
+import { Text } from "@/components/ui/text";
+import {
+  CURRENT_LOCATION_STYLE,
+  KAKAO_JAVASCRIPT_KEY,
+  PawImage,
+} from "@/features/footprint/components/footprint-location-map";
+import { FOOTPRINT_ADJUST_RADIUS_METERS, isWithinAdjustRadius, type FootprintPoint, type FootprintPosition } from "@/features/footprint/model";
+import { KakaoMapView, type MapCamera, type MapCurrentLocation, type MapFocusRequest, type MapRegion } from "@/lib/native/map";
+
+/** 위치를 고를 때의 확대 단계. 골목 단위로 맞출 수 있게 가깝게 본다. */
+const PICKER_LEVEL = 3;
+
+type MapPhase = "loading" | "ready" | "error";
+
+/** 위치를 고르는 대상마다 다른 문구. 범위(m)는 `FOOTPRINT_ADJUST_RADIUS_METERS`를 넣어 만든다. */
+export type PointPickerCopy = {
+  /** 지도의 화면 낭독 이름. */
+  mapLabel: string;
+  guide: string;
+  outOfRange: string;
+};
+
+const FOOTPRINT_COPY: PointPickerCopy = {
+  mapLabel: "지도를 움직여 발자취를 남길 곳을 고르는 지도",
+  guide: `지도를 움직여 발바닥을 실제로 있는 곳에 맞춰 주세요. 파란 점이 기기가 잰 위치이고, 원 안(${FOOTPRINT_ADJUST_RADIUS_METERS}m)에서만 정할 수 있어요.`,
+  outOfRange: `잰 위치에서 ${FOOTPRINT_ADJUST_RADIUS_METERS}m 넘게 벗어났어요. 발바닥을 원 안으로 옮겨 주세요.`,
+};
+
+type FootprintPointPickerProps = {
+  visible: boolean;
+  /** 기기가 잰 위치. 파란 점과 정확도 원, 고칠 수 있는 범위 원으로 보여 준다. */
+  measured: Pick<FootprintPosition, "latitude" | "longitude" | "accuracyMeters">;
+  /** 처음 맞출 곳. 이미 고른 위치가 있으면 그곳, 없으면 잰 위치다. 범위 안이어야 한다. */
+  initialPoint: FootprintPoint;
+  /** 지도 가운데 고정해 그릴 표시. 없으면 발바닥이다. 표시의 기준점이 지도 가운데에 오게 넘긴다. */
+  marker?: ReactNode;
+  /** 없으면 발자취 문구다. */
+  copy?: PointPickerCopy;
+  /** 시험용 id 앞부분. */
+  testID?: string;
+  onConfirm: (point: FootprintPoint) => void;
+  onClose: () => void;
+};
+
+/**
+ * 발자취를 남길 위치를 지도에서 직접 고르는 화면(2026-11-06 사용자 결정, Figma 시안 없음).
+ * 지도 가운데 고정된 발바닥에 맞춰 지도를 움직이고, 기기가 잰 위치는 파란 점과 정확도 원으로 함께 보여 준다.
+ * 잰 위치에서 `FOOTPRINT_ADJUST_RADIUS_METERS` 안에서만 정할 수 있다(2026-11-11 사용자 결정). 그 범위를 테두리 원으로 그리고, 벗어나면 정하기 버튼을 막는다.
+ * AR 팁 쓰기의 지도 핀 수정도 같은 범위로 이 화면을 쓴다(2026-11-16 사용자 결정). 표시와 문구만 바꿔 넘긴다.
+ * Modal은 새 창이라 바깥 화면의 안전 영역 값이 맞지 않는다. 창 안에 SafeAreaProvider를 따로 두어
+ * 상태 바·내비게이션 바 높이를 이 창 기준으로 재고, 헤더와 아래 버튼이 그 밑에 가리지 않게 한다.
+ */
+export function FootprintPointPicker({ visible, onClose, ...props }: FootprintPointPickerProps) {
+  return (
+    <Modal visible={visible} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+      <SafeAreaProvider>
+        {visible ? <PickerContent {...props} onClose={onClose} /> : null}
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+function PickerContent({ measured, initialPoint, marker, copy = FOOTPRINT_COPY, testID = "footprint-picker", onConfirm, onClose }: Omit<FootprintPointPickerProps, "visible">) {
+  const [center, setCenter] = useState<FootprintPoint>(initialPoint);
+  const [phase, setPhase] = useState<MapPhase>("loading");
+  const [attempt, setAttempt] = useState(0);
+  const [focusRequest, setFocusRequest] = useState<MapFocusRequest | null>(null);
+
+  const [initialCamera] = useState<MapCamera>(() => {
+    return { lat: initialPoint.latitude, lng: initialPoint.longitude, level: PICKER_LEVEL };
+  });
+
+  const currentLocation = useMemo<MapCurrentLocation>(() => {
+    return {
+      lat: measured.latitude,
+      lng: measured.longitude,
+      accuracyMeters: measured.accuracyMeters,
+      showDot: true,
+      rangeMeters: FOOTPRINT_ADJUST_RADIUS_METERS,
+    };
+  }, [measured]);
+
+  const isInRange = isWithinAdjustRadius(measured, center);
+
+  const followMapCenter = ({ south, west, north, east }: MapRegion) => {
+    setCenter({ latitude: (south + north) / 2, longitude: (west + east) / 2 });
+  };
+
+  const backToMeasured = () => {
+    setFocusRequest((previous) => {
+      return { id: (previous?.id ?? 0) + 1, lat: measured.latitude, lng: measured.longitude, level: PICKER_LEVEL };
+    });
+  };
+
+  return (
+    <Screen>
+      <ScreenHeader
+        title="위치 수정"
+        leading={null}
+        trailing={<HeaderIconButton icon={X} accessibilityLabel="위치 수정 닫기" onPress={onClose} testID={`${testID}.close`} />}
+        testID={`${testID}.header`}
+      />
+      <View className="flex-1 bg-brand-muted" testID={`${testID}.map`}>
+        {phase === "error" ? (
+          <View className="flex-1 items-center justify-center gap-3 px-5">
+            <Text accessibilityRole="alert" className="text-center text-body-sm text-foreground-secondary">
+              지도를 불러오지 못했어요. 연결을 확인하고 다시 시도해 주세요.
+            </Text>
+            <Button
+              variant="outline"
+              onPress={() => {
+                setPhase("loading");
+                setAttempt(attempt + 1);
+              }}
+              testID={`${testID}.map-retry`}
+            >
+              <Text>다시 시도</Text>
+            </Button>
+          </View>
+        ) : (
+          <>
+            <KakaoMapView
+              key={attempt}
+              accessibilityLabel={copy.mapLabel}
+              javascriptKey={KAKAO_JAVASCRIPT_KEY}
+              initialCamera={initialCamera}
+              currentLocation={currentLocation}
+              currentLocationStyle={CURRENT_LOCATION_STYLE}
+              focusRequest={focusRequest}
+              onRegionChange={followMapCenter}
+              onReady={() => {
+                setPhase("ready");
+              }}
+              onError={() => {
+                setPhase("error");
+              }}
+            />
+            <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
+              {marker ?? <PawImage />}
+            </View>
+            {phase === "loading" ? (
+              <View accessibilityLabel="지도 불러오는 중" className="absolute inset-0 items-center justify-center gap-2 bg-brand-muted">
+                <Spinner tone="brand" accessible={false} />
+                <Text className="text-caption text-foreground-secondary">지도를 불러오고 있어요</Text>
+              </View>
+            ) : null}
+          </>
+        )}
+      </View>
+      <BottomCta className="items-stretch">
+        {isInRange ? (
+          <Text className="text-caption text-foreground-secondary">{copy.guide}</Text>
+        ) : (
+          <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="text-caption text-destructive" testID={`${testID}.out-of-range`}>
+            {copy.outOfRange}
+          </Text>
+        )}
+        <View className="flex-row gap-3">
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-button-lg px-0"
+            accessibilityLabel="잰 위치로 되돌리기"
+            onPress={backToMeasured}
+            disabled={phase !== "ready"}
+            testID={`${testID}.reset`}
+          >
+            <Icon as={RotateCcw} size={20} className={phase === "ready" ? "text-icon-active" : "text-disabled-foreground"} />
+          </Button>
+          <Button
+            size="lg"
+            className="flex-1"
+            disabled={phase !== "ready" || !isInRange}
+            onPress={() => {
+              onConfirm(center);
+            }}
+            testID={`${testID}.confirm`}
+          >
+            <Text>이 위치로 정하기</Text>
+          </Button>
+        </View>
+      </BottomCta>
+    </Screen>
+  );
+}

@@ -39,15 +39,20 @@ pnpm expo install expo-secure-store
 
 `api/client.ts`·`api/envelope.ts`·`api/errors.ts`는 `docs/api-guide.md` §3 목표 형태로 만든다.
 
+- `EXPO_PUBLIC_API_URL`에는 호스트만 지정한다(`/api/v1` 제외). 개발은 MSW 요청용 HTTPS 주소, 배포는 실제 백엔드 HTTPS 주소를 설정한다.
+- 개발 환경에서는 아래 MSW 구성을 함께 적용한다. 배포 환경에서는 MSW를 불러오거나 시작하지 않는다.
+
 ## 4. 테스트 — jest-expo · Testing Library · MSW
 
 ```bash
 pnpm expo install jest-expo jest
-pnpm add -D @testing-library/react-native msw@2 react-native-url-polyfill fast-text-encoding
+pnpm add -D @testing-library/react-native msw@2.3.5 react-native-url-polyfill fast-text-encoding
 ```
 
 - `package.json`에 `"test": "jest"`, jest preset `jest-expo`를 추가한다.
 - MSW는 **v2**로 고정한다(v3은 React Native용 `msw/native`가 없다). 앱 목·jest 목 구성은 `docs/api-guide.md` §9.
+- 현재 MSW와 앱용 폴리필은 설치되어 있다. MSW `2.3.5` 고정 이유, 실행·핸들러 추가·검증 방법은 `docs/msw.md`를 따른다. jest-expo와 Testing Library는 아직 설치하지 않았다.
+- 개발은 전체 API 핸들러를 라우터 시작 전에 준비한다. 서비스 API의 미처리 요청은 오류로 처리한다. 서버 없는 Maestro E2E도 `__DEV__ === true`인 개발 빌드를 사용한다.
 - Maestro CLI는 npm 패키지가 아니다 — https://maestro.dev 에서 각자 설치한다(`.maestro/README.md`).
 
 ## 5. 확인
@@ -59,4 +64,5 @@ pnpm typecheck && pnpm lint && pnpm tokens:check && pnpm harness:check
 ## 결정 전이라 아직 설치하지 않는 것
 
 - 지도 SDK, AR 라이브러리(규칙 85, 명세 DEC-08·14)
-- 위치·카메라 모듈(`expo-location`, `expo-camera`, `expo-image-picker`)은 해당 화면을 만들 때 승인 후 설치한다
+- 카메라 모듈(`expo-camera`, `expo-image-picker`)은 해당 화면을 만들 때 승인 후 설치한다
+- `expo-location`은 발자취 남기기(W15-P·W16)를 만들며 승인 후 설치했다(2026-11-06, `~58.0.20`). `app.json`의 config plugin으로 앱 사용 중 권한 문구만 한국어로 넣고, 항상 허용·백그라운드 권한은 끈다. 개발 빌드는 다시 만들어야 한다

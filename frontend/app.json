@@ -8,15 +8,22 @@
     "scheme": "yeogirokfe",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.ssafya109.yeogirok"
+      "bundleIdentifier": "com.ssafya109.yeogirok",
+      "associatedDomains": ["applinks:k15a109.p.ssafy.io"]
     },
     "android": {
       "package": "com.ssafya109.yeogirok",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "k15a109.p.ssafy.io", "pathPrefix": "/invite/" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
@@ -27,12 +34,26 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-ar-tip.cjs",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "지금 있는 곳에 발자취를 남기거나 주변 AR 팁을 찾을 때 현재 위치를 확인해요. 앱을 쓰는 동안에만 위치를 사용해요.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FFFFFF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 160
         }
       ]
     ],

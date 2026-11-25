@@ -1,0 +1,41 @@
+appId: ${MAESTRO_APP_ID}
+name: AR 팁 카메라 권한을 거부하면 안내 후 탐색 재진입 화면으로 돌아온다
+---
+- launchApp:
+    clearState: false
+    permissions:
+      camera: deny
+      location: allow
+- setLocation:
+    latitude: 37.5665
+    longitude: 126.978
+- runFlow:
+    when:
+      visible:
+        id: "login.screen"
+    commands:
+      - tapOn:
+          id: "login.kakao"
+      - assertVisible:
+          id: "home.screen"
+- tapOn:
+    id: "tabs.ar-tip"
+- runFlow:
+    when:
+      visible: "AR 팁 이용 안내"
+    commands:
+      - assertVisible: ".*주변 팁을 찾고 팁을 놓을 자리를 인식하기 위해 카메라를 사용해요.*"
+      - tapOn: "동의하고 시작"
+- assertVisible: "앱 설정에서 카메라를 허용해 주세요."
+- tapOn: "닫기"
+- assertVisible: "AR 카메라가 닫혔어요"
+- assertNotVisible: "주변의 여행 팁을 만나 보세요"
+- assertNotVisible: "팁 상태를 확인해 주세요"
+- assertVisible:
+    id: "ar-tip.explore"
+- assertVisible:
+    id: "tabs.ar-tip"
+- tapOn:
+    id: "tabs.rooms"
+- assertVisible:
+    id: "tabs.rooms"

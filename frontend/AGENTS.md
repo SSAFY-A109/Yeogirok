@@ -12,7 +12,7 @@
   - 플랫폼은 Android·iOS(390pt 기준 디자인)이고, 배포 방식은 `TBD`다.
 - 기능 범위·화면·우선순위(P0~P3)는 `docs/frontend-spec.md`가 기준이다. 원천은 팀 Notion "기능 명세서 v2"다.
 - 백엔드의 위치·기술은 `TBD`다. 계약의 원천은 팀 Notion "API 명세"이며, 서버에 반영된 API는 Swagger가 우선이다.
-  - OpenAPI가 나오기 전까지 `docs/api-contract.md`가 클라이언트 쪽 계약 사본이다.
+  - 개발 환경에서는 전체 API를 MSW로 처리하고, 배포 환경에서는 MSW 없이 실제 백엔드 서버에 연결한다. API 명세는 Notion·Swagger를 직접 확인하며 별도 계약 사본은 두지 않는다.
   - 통신 코드 작성 절차는 `docs/api-guide.md`, 계약 규칙은 `.agents/rules/90-backend-contract.md`를 따른다.
 - Expo 기반이다. 기술 스택은 Expo SDK 58, React Native 0.88, React 19.3, TypeScript 6(`strict`)다(2026-10-27 `create-expo-app` 기본 템플릿으로 생성).
 - Expo는 SDK마다 API가 바뀐다. Expo·EAS·React Native API를 쓰기 전에 `package.json`의 `expo` 메이저 버전을 확인하고, 그 버전의 문서(`https://docs.expo.dev/versions/v58.0.0/`)나 `https://docs.expo.dev/llms.txt`에서 확인한다. 기억에 의존해 쓰지 않는다.
@@ -46,7 +46,7 @@
 - `api/`
   - `client.ts`: axios 인스턴스·인터셉터
   - `envelope.ts`, `errors.ts`
-  - `mocks/`: MSW 핸들러·fixture·`network.ts`(앱)·`server.ts`(jest)
+  - `mocks/`: MSW 핸들러·fixture·`native.ts`(앱)·`polyfills.ts`·`server.ts`(jest)
   - `generated/`: OpenAPI 생성물. 백엔드가 스펙을 내보내기 전까지는 없다.
 - `design/` — 코드가 읽는 디자인 파일.
   - `tokens.json`: 값. `design.pen` 변수에서 생성한다.
@@ -68,8 +68,8 @@
 - 코드 품질 기준(가독성·예측 가능성·응집도·결합도)은 `.agents/rules/00-baseline.md`에 있다.
 - 작업 종류별로 읽는 문서
   - 화면·기능을 만들거나 범위를 판단할 때: `docs/frontend-spec.md`(기능 ID·화면·이동 흐름·비즈니스 규칙·TBD)
-  - 서버 통신 코드를 쓸 때: `docs/api-guide.md`(절차·예시)와 `docs/api-contract.md`(엔드포인트·오류 코드·공통 규약)
-  - 세 문서는 팀 Notion(기능 명세서 v2, API 명세)을 대조해 만든 요약이다. 원천과 다르면 원천이 이기고 문서를 고친다. 원천 위치와 대조 일시는 각 문서 머리말에 적는다.
+  - 서버 통신 코드를 쓸 때: `docs/api-guide.md`(환경별 연결·절차·예시), 팀 Notion "API 명세"와 Swagger(엔드포인트·오류 코드·공통 규약)
+  - 기능 명세 요약과 API 가이드는 팀 Notion(기능 명세서 v2, API 명세)을 참고한다. 원천과 다르면 원천이 이기고 문서를 고친다. 원천을 대조한 경우 위치와 대조 일시를 문서에 적는다.
 - 스킬은 `.agents/skills/`에 `pencil-design`, `yeogirok-ui-patterns` 둘만 있다. 외부 스킬 5종(`frontend-design`, `ui-ux-pro-max`, `vercel-react-best-practices`, `design-system`, `brand`)은 웹 전제 지침이고 규칙과 겹쳐서 2026-09-08 제거했다. 다시 들이지 않는다.
 - 사용자 요청과 프로젝트 문서가 충돌하면 사용자 요청을 우선한다. 단, `80-location-media-ugc.md`의 공개 범위·위치 정보·민감 정보 규칙을 완화하는 요청은 위험을 먼저 알린 뒤 진행한다. 문서끼리 충돌하거나 필수 문서를 읽을 수 없으면 임의로 판단하지 말고 그 사실을 보고한다.
 - 명세가 "결정 필요(DEC-xx)"로 둔 정책은 임의로 정하지 않는다. 규칙·스킬에 적힌 기본값으로 구현하고, 보고서에 `TBD`로 남긴다.

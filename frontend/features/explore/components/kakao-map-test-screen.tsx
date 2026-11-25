@@ -25,25 +25,37 @@ type InteractionReport = Extract<MapPerformanceReport, { type: "interaction" }>;
 
 function createLoadTestMarkers(count: number): MapMarker[] {
   let seed = LOAD_TEST_SEED;
+
   const nextRandom = () => {
     seed = (seed * 1664525 + 1013904223) % 4294967296;
     return seed / 4294967296;
   };
-  const randomOffset = () => (nextRandom() * 2 - 1) * LOAD_TEST_SPREAD_DEGREES;
 
-  return Array.from({ length: count }, () => ({
-    lat: seoulCityHall.lat + randomOffset(),
-    lng: seoulCityHall.lng + randomOffset(),
-  }));
+  const randomOffset = () => {
+    return (nextRandom() * 2 - 1) * LOAD_TEST_SPREAD_DEGREES;
+  };
+
+  return Array.from({ length: count }, () => {
+    return {
+      lat: seoulCityHall.lat + randomOffset(),
+      lng: seoulCityHall.lng + randomOffset(),
+    };
+  });
 }
 
 function describeMarkersReport(report: MarkersReport | null): string {
-  if (!report) return "핀 개수를 골라주세요.";
+  if (!report) {
+    return "핀 개수를 골라주세요.";
+  }
+
   return `핀 ${report.count}개 그리기 ${report.renderMs}ms (앱에서 보낸 뒤 표시까지 ${report.totalMs}ms)`;
 }
 
 function describeInteractionReport(report: InteractionReport | null): string {
-  if (!report) return "지도를 드래그하거나 확대·축소해 보세요.";
+  if (!report) {
+    return "지도를 드래그하거나 확대·축소해 보세요.";
+  }
+
   const kind = report.kind === "drag" ? "드래그" : "확대·축소";
   const heap = report.heapMb === null ? "측정 불가" : `${report.heapMb}MB`;
   return `${kind} 평균 ${report.avgFps}fps · 가장 느린 프레임 ${report.worstFrameMs}ms · ${(report.durationMs / 1000).toFixed(1)}초 · 지도 메모리 ${heap}`;
@@ -60,12 +72,22 @@ const failureMessages: Record<KakaoMapFailure, string> = {
 };
 
 function getStatusMessage(state: MapState, isWeb: boolean): string {
-  if (isWeb) return "Android 또는 iOS 앱에서 열어주세요.";
+  if (isWeb) {
+    return "Android 또는 iOS 앱에서 열어주세요.";
+  }
+
   if (!javascriptKey) {
     return ".env.local에 EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY를 입력한 후 개발 서버를 다시 시작해주세요.";
   }
-  if (state.phase === "error") return failureMessages[state.reason];
-  if (state.phase === "ready") return "지도 타일 표시 완료. 아래 지도가 드래그·확대되는지 확인해주세요.";
+
+  if (state.phase === "error") {
+    return failureMessages[state.reason];
+  }
+
+  if (state.phase === "ready") {
+    return "지도 타일 표시 완료. 아래 지도가 드래그·확대되는지 확인해주세요.";
+  }
+
   return "지도를 불러오고 있어요.";
 }
 
@@ -75,16 +97,25 @@ export function KakaoMapTestScreen() {
   const [markerCount, setMarkerCount] = useState<number | null>(null);
   const [markersReport, setMarkersReport] = useState<MarkersReport | null>(null);
   const [interactionReport, setInteractionReport] = useState<InteractionReport | null>(null);
+
   const markers = useMemo(
-    () => (markerCount === null ? undefined : createLoadTestMarkers(markerCount)),
+    () => {
+      return (markerCount === null ? undefined : createLoadTestMarkers(markerCount));
+    },
     [markerCount],
   );
+
   const isWeb = Platform.OS === "web";
   const canLoad = !isWeb && Boolean(javascriptKey);
 
   function handlePerformance(report: MapPerformanceReport) {
-    if (report.type === "markers") setMarkersReport(report);
-    if (report.type === "interaction") setInteractionReport(report);
+    if (report.type === "markers") {
+      setMarkersReport(report);
+    }
+
+    if (report.type === "interaction") {
+      setInteractionReport(report);
+    }
   }
 
   return (
@@ -115,7 +146,10 @@ export function KakaoMapTestScreen() {
               className="min-h-touch items-center justify-center rounded-md bg-primary px-4 active:bg-primary-pressed"
               onPress={() => {
                 setState({ phase: "loading" });
-                setAttempt((value) => value + 1);
+
+                setAttempt((value) => {
+                  return value + 1;
+                });
               }}
               testID="kakao-map-test.retry"
             >
@@ -132,9 +166,13 @@ export function KakaoMapTestScreen() {
               initialCamera={seoulCityHall}
               javascriptKey={javascriptKey}
               markers={markers}
-              onError={(reason) => setState({ phase: "error", reason })}
+              onError={(reason) => {
+                return setState({ phase: "error", reason });
+              }}
               onPerformance={handlePerformance}
-              onReady={() => setState({ phase: "ready" })}
+              onReady={() => {
+                return setState({ phase: "ready" });
+              }}
             />
           ) : (
             <View className="flex-1 items-center justify-center p-5">
@@ -153,6 +191,7 @@ export function KakaoMapTestScreen() {
             <View className="flex-row gap-2">
               {LOAD_TEST_MARKER_COUNTS.map((count) => {
                 const isSelected = markerCount === count;
+
                 return (
                   <Pressable
                     key={count}
@@ -164,7 +203,9 @@ export function KakaoMapTestScreen() {
                         ? "min-h-touch flex-1 items-center justify-center rounded-md bg-primary active:bg-primary-pressed"
                         : "min-h-touch flex-1 items-center justify-center rounded-md bg-secondary active:bg-accent"
                     }
-                    onPress={() => setMarkerCount(count)}
+                    onPress={() => {
+                      return setMarkerCount(count);
+                    }}
                     testID={`kakao-map-test.markers-${count}`}
                   >
                     <Text

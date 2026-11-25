@@ -6,8 +6,24 @@ export {
   KAKAO_JS_SDK_DOMAIN,
   type KakaoMapFailure,
   type MapCamera,
+  type MapClusterBadge,
+  type MapCurrentLocation,
+  type MapCurrentLocationStyle,
+  type MapFocusRequest,
+  type MapFootprint,
+  type MapFootprintStyle,
   type MapMarker,
+  type MapMarkerImage,
   type MapPerformanceReport,
+  type MapRegion,
+  type MapRoute,
+  type MapRouteColors,
+  type MapRoutePoint,
 } from "./kakao-map-bridge";
 
-export const KakaoMapView: (props: ComponentProps<typeof NativeKakaoMapView>) => null = () => null;
+export { footprintPinImage } from "./footprint-pin";
+export { placePinImage } from "./place-pin";
+
+export const KakaoMapView: (props: ComponentProps<typeof NativeKakaoMapView>) => null = () => {
+  return null;
+};
