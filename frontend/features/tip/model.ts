@@ -90,7 +90,8 @@ export type SearchTipsResponseDto = {
   nextCursor: string | null;
   appliedRadiusMeters: number;
   totalCount: number;
-  interactionRadiusMeters: 5 | typeof TIP_INTERACTION_RADIUS_METERS;
+  /** 상세·반응 허용 거리(m). 서버 설정값이라 앱은 받은 값을 그대로 따른다(규칙 80). */
+  interactionRadiusMeters: number;
 };
 export type PublicTipPhotoDto = { imageId: number; url: string; attribution: string | null };
 export type TipReactionsDto = { likes: number; dislikes: number; myReaction: string | null };
@@ -268,12 +269,10 @@ export function toTipReactions(value: unknown) {
 
 export function toTipSearchPage(value: unknown) {
   const dto = object(value, "tipSearch");
-  const { interactionRadiusMeters } = dto;
-
   const appliedRadiusMeters = number(dto.appliedRadiusMeters, "appliedRadiusMeters", MAX_TIP_SEARCH_RADIUS_METERS);
+  const interactionRadiusMeters = number(dto.interactionRadiusMeters, "interactionRadiusMeters");
 
-  if (!Array.isArray(dto.items) || dto.items.length > 10 || appliedRadiusMeters <= 0 ||
-    (interactionRadiusMeters !== 5 && interactionRadiusMeters !== TIP_INTERACTION_RADIUS_METERS)) {
+  if (!Array.isArray(dto.items) || dto.items.length > 10 || appliedRadiusMeters <= 0 || interactionRadiusMeters <= 0) {
     throw new ContractMismatchError("tipSearch");
   }
 
