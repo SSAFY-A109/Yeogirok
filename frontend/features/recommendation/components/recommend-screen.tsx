@@ -128,7 +128,8 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
     return getInitialConditions(preference, categories, regions);
   });
 
-  const [excludedPlaceKeys, setExcludedPlaceKeys] = useState<ReadonlySet<string>>(() => {
+  // 추천 결과는 하나도 고르지 않은 상태로 시작한다(2026-11-17 사용자 요청). 사용자가 누른 곳만 담는다.
+  const [selectedPlaceKeys, setSelectedPlaceKeys] = useState<ReadonlySet<string>>(() => {
     return new Set();
   });
 
@@ -166,7 +167,7 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
       return;
     }
 
-    setExcludedPlaceKeys(new Set());
+    setSelectedPlaceKeys(new Set());
     addRoomPlaces.reset();
     setStep("recommend");
 
@@ -177,7 +178,7 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
   }
 
   function togglePlace(placeKey: string) {
-    setExcludedPlaceKeys((previous) => {
+    setSelectedPlaceKeys((previous) => {
       const next = new Set(previous);
 
       if (!next.delete(placeKey)) {
@@ -188,12 +189,12 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
     });
   }
 
-  /** 고른 추천 장소를 담기 요청 항목으로 바꾼다. 이미 담긴 곳, 뺀 곳, 담을 수 없는 곳은 넣지 않는다. */
+  /** 고른 추천 장소를 담기 요청 항목으로 바꾼다. 이미 담긴 곳, 고르지 않은 곳, 담을 수 없는 곳은 넣지 않는다. */
   function getSelectedItems(result: PlaceRecommendations): AddRoomPlaceItemDto[] {
     const items: AddRoomPlaceItemDto[] = [];
 
     for (const { place, rank } of result.places) {
-      if (place.ref !== null && !addedPlaceKeys.has(place.key) && !excludedPlaceKeys.has(place.key)) {
+      if (place.ref !== null && !addedPlaceKeys.has(place.key) && selectedPlaceKeys.has(place.key)) {
         items.push({ placeRef: place.ref, sourceType: "AI", recommendationRequestId: result.requestId, rank });
       }
     }
@@ -269,7 +270,7 @@ function RecommendFlow({ roomId, room, roomPlaces, categories, regions, preferen
             categories={categories}
             criteria={getSelectedCategoryNames(knownConditions, categories)}
             addedPlaceKeys={addedPlaceKeys}
-            excludedPlaceKeys={excludedPlaceKeys}
+            selectedPlaceKeys={selectedPlaceKeys}
             onToggle={togglePlace}
             onReselect={returnToConditions}
           />
