@@ -109,10 +109,19 @@ function ChatRoom({ roomId }: { roomId: number }) {
   const connection = useChatConnection(roomId, history.isSuccess);
   const reportSeenMessage = useChatReadReporter(roomId);
   const messageList = useRef<ChatMessageListHandle>(null);
+  const historyPages = history.data?.pages;
+
+  const historyMessages = useMemo(() => {
+    return historyPages === undefined ? null : joinChatPages(historyPages);
+  }, [historyPages]);
 
   const messages = useMemo(() => {
-    return history.data ? mergeChatMessages(joinChatPages(history.data.pages), connection.liveMessages) : [];
-  }, [history.data, connection.liveMessages]);
+    if (historyMessages === null) {
+      return [];
+    }
+
+    return connection.liveMessages.length === 0 ? historyMessages : mergeChatMessages(historyMessages, connection.liveMessages);
+  }, [historyMessages, connection.liveMessages]);
 
   const accessError = [history.error, room.error].find(isRoomAccessError);
 

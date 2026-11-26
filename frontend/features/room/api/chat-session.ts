@@ -2,7 +2,7 @@ import { isApiError } from "@/api/errors";
 import { createIdempotencyKey } from "@/api/idempotency";
 import { openChatSocket, type ChatSocket, type ChatSocketError } from "@/features/room/api/chat-socket";
 import { getChatMessagesAfter, issueChatTicket } from "@/features/room/api/chat.api";
-import { mergeChatMessages, type ChatMessage, type ChatTicket, type PendingChatMessage, type RoomChange } from "@/features/room/chat-model";
+import { mergeChatMessages, normalizeChatMessages, type ChatMessage, type ChatTicket, type PendingChatMessage, type RoomChange } from "@/features/room/chat-model";
 import { ROOM_ACCESS_ERROR_CODES } from "@/features/room/errors";
 
 /** 다시 연결하기 전 대기 시간의 시작값. 실패할 때마다 두 배로 늘린다. */
@@ -110,13 +110,13 @@ export function createChatSession(
     onAccessLost();
   };
 
-  const receive = (messages: readonly ChatMessage[]) => {
+  const receive = (messages: ChatMessage[]) => {
     const savedClientIds = new Set(messages.flatMap((message) => {
       return message.senderId === myUserId && message.clientMessageId !== null ? [message.clientMessageId] : [];
     }));
 
     setState({
-      liveMessages: mergeChatMessages(state.liveMessages, messages),
+      liveMessages: mergeChatMessages(state.liveMessages, normalizeChatMessages(messages)),
 
       pendingMessages: state.pendingMessages.filter((pending) => {
         return !savedClientIds.has(pending.clientMessageId);

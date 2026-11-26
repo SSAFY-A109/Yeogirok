@@ -306,29 +306,98 @@ export function parseChatServerFrame(text: string): ChatServerFrame {
 
 /** 이력의 쪽들(가장 최근 쪽이 맨 앞)을 오래된 → 최신 순의 한 목록으로 잇는다. */
 export function joinChatPages(pages: readonly ChatMessagePage[]): ChatMessage[] {
-  return [...pages].reverse().flatMap((page) => {
+  const messages = [...pages].reverse().flatMap((page) => {
     return page.messages;
   });
+
+  return normalizeChatMessages(messages);
 }
 
-/**
- * 두 목록을 메시지 id로 합쳐 오래된 → 최신 순으로 돌려준다. 같은 id는 하나만 남긴다.
- * 실시간 수신은 순서가 바뀌거나 겹칠 수 있어, 이력·복구·실시간 메시지를 모두 서버 id로 맞춘다.
- */
-export function mergeChatMessages(base: readonly ChatMessage[], added: readonly ChatMessage[]): ChatMessage[] {
-  const byId = new Map<number, ChatMessage>();
+/** 이력이나 복구 목록이 ID 오름차순이면 그대로 쓴다. 순서가 뒤섞이거나 중복되면 같은 ID의 마지막 값을 남긴다. */
+export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
+  const isOrdered = messages.every((message, index) => {
+    return index === 0 || messages[index - 1].id < message.id;
+  });
 
-  for (const message of base) {
-    byId.set(message.id, message);
+  if (isOrdered) {
+    return messages;
   }
 
-  for (const message of added) {
+  const byId = new Map<number, ChatMessage>();
+
+  for (const message of messages) {
     byId.set(message.id, message);
   }
 
   return [...byId.values()].sort((left, right) => {
     return left.id - right.id;
   });
+}
+
+function insertChatMessage(base: readonly ChatMessage[], message: ChatMessage): ChatMessage[] {
+  let start = 0;
+  let end = base.length;
+
+  while (start < end) {
+    const middle = start + Math.floor((end - start) / 2);
+
+    if (base[middle].id < message.id) {
+      start = middle + 1;
+    } else {
+      end = middle;
+    }
+  }
+
+  const messages = base.slice();
+  const deleteCount = base[start]?.id === message.id ? 1 : 0;
+  messages.splice(start, deleteCount, message);
+  return messages;
+}
+
+/** ID가 중복 없이 오름차순인 두 목록을 합친다. 같은 ID는 `added`의 값을 쓴다. */
+export function mergeChatMessages(base: readonly ChatMessage[], added: readonly ChatMessage[]): ChatMessage[] {
+  if (base.length === 0 || added.length === 0 || base[base.length - 1].id < added[0].id) {
+    return base.concat(added);
+  }
+
+  if (added[added.length - 1].id < base[0].id) {
+    return added.concat(base);
+  }
+
+  if (added.length === 1) {
+    return insertChatMessage(base, added[0]);
+  }
+
+  const messages: ChatMessage[] = [];
+  let baseIndex = 0;
+  let addedIndex = 0;
+
+  while (baseIndex < base.length && addedIndex < added.length) {
+    const baseMessage = base[baseIndex];
+    const addedMessage = added[addedIndex];
+
+    if (baseMessage.id < addedMessage.id) {
+      messages.push(baseMessage);
+      baseIndex += 1;
+    } else {
+      messages.push(addedMessage);
+      addedIndex += 1;
+
+      if (baseMessage.id === addedMessage.id) {
+        baseIndex += 1;
+      }
+    }
+  }
+
+  for (; baseIndex < base.length; baseIndex += 1) {
+    messages.push(base[baseIndex]);
+  }
+
+  for (; addedIndex < added.length; addedIndex += 1) {
+    messages.push(added[addedIndex]);
+  }
+
+  return messages;
 }
 
 /** 본문 글자 수. 서버와 같이 코드 포인트로 센다(이모지 하나가 한 글자). */
